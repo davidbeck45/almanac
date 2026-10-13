@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Same engine as the app, from the terminal.
 //   node scripts/recommend.mjs --city "New York" [--occasion date] [--slot day|night] [--json]
-//   node scripts/recommend.mjs --loc 40.71,-74.01 --exclude "Sauvage,Jake"
+//   node scripts/recommend.mjs --loc "40.71,-74.01[,New York]" --exclude "Sauvage,Jake"
 //   node scripts/recommend.mjs --city "New York" --week   (day + night plan for the next 7 days)
 //   node scripts/recommend.mjs --layer "Liquid Brun"       (what layers with it; --layer all for the best pairs)
 //   node scripts/recommend.mjs --layer "Liquid Brun" --city "New York" [--slot night]   (for that weather)
@@ -113,11 +113,14 @@ async function main() {
 
   async function resolvePlace() {
     if (args.loc) {
-      const [lat, lon, ...rest] = args.loc.split(',').map(s => Number(s.trim()));
-      if (rest.length || !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
-        fail(`--loc takes LAT,LON in degrees, like 40.71,-74.01 (got "${args.loc}")`);
+      // LAT,LON[,Name], like the app's ?loc=.
+      const [latS, lonS, ...name] = args.loc.split(',');
+      const num = s => (s?.trim() ? Number(s) : NaN);
+      const lat = num(latS), lon = num(lonS);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+        fail(`--loc takes LAT,LON in degrees and an optional name, like 40.71,-74.01,New York (got "${args.loc}")`);
       }
-      return { name: args.loc, lat, lon };
+      return { name: name.join(',').trim() || `${lat},${lon}`, lat, lon };
     }
     let hit;
     try {
@@ -305,8 +308,8 @@ async function main() {
   }
 }
 
-const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON) [--occasion ${OCCASIONS.map(o => o.id).join('|')}] [--slot day|night] [--week] [--journal FILE] [--exclude NAME,NAME] [--demo] [--top N] [--json]
-       node scripts/recommend.mjs --layer NAME|all [--city NAME | --loc LAT,LON] [--slot day|night] [--exclude NAME,NAME] [--json]
+const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,NAME]) [--occasion ${OCCASIONS.map(o => o.id).join('|')}] [--slot day|night] [--week] [--journal FILE] [--exclude NAME,NAME] [--demo] [--top N] [--json]
+       node scripts/recommend.mjs --layer NAME|all [--city NAME | --loc LAT,LON[,NAME]] [--slot day|night] [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --ideal NAME [--exclude NAME,NAME] [--json]`;
 
 if (import.meta.main) await main();

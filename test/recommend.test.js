@@ -41,6 +41,15 @@ test('bad arguments stop with a message before any request', () => {
   assert.equal(loc.status, 1);
   assert.match(loc.stderr, /--loc takes LAT,LON/);
   assert.doesNotMatch(loc.stderr, /at .*\.mjs:\d+/, 'no stack trace');
+  assert.equal(cli('--loc', ',-74').status, 1, 'an empty latitude isn’t 0');
+});
+
+test('--loc takes an optional name after the coordinates, like the app\'s ?loc=', () => {
+  const named = cli('--loc', '40.71,-74.01,New York', '--slot', 'night', '--json');
+  assert.equal(named.status, 0, named.stderr);
+  assert.deepEqual(JSON.parse(named.stdout).place, { name: 'New York', lat: 40.71, lon: -74.01 });
+  const bare = cli('--loc', '40.71, -74.01', '--slot', 'night', '--json');
+  assert.equal(JSON.parse(bare.stdout).place.name, '40.71,-74.01');
 });
 
 test('no network reads as a plain message, not a stack trace', () => {
