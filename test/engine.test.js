@@ -32,15 +32,44 @@ test('calendar breaks the spring/fall tie and flips south of the equator', () =>
   assert.ok(w.fall > w.spring);
   assert.equal(calendarSeason(SEP, -33), 'spring');
   // Spring and fall weather overlap, so mid-October and mid-April mirror each other.
-  const oct = targetSeasonWeights(50, new Date('2026-10-15T12:00:00'), 40);
-  const apr = targetSeasonWeights(50, new Date('2026-04-15T12:00:00'), 40);
+  const oct = targetSeasonWeights(60, new Date('2026-10-15T12:00:00'), 40);
+  const apr = targetSeasonWeights(60, new Date('2026-04-15T12:00:00'), 40);
   assert.ok(oct.fall > 3 * oct.spring && apr.spring > 3 * apr.fall);
   assert.ok(Math.abs(oct.fall - apr.spring) < 1e-3);
-  const sydneyOct = targetSeasonWeights(50, new Date('2026-10-15T12:00:00'), -33);
+  const sydneyOct = targetSeasonWeights(60, new Date('2026-10-15T12:00:00'), -33);
   assert.ok(sydneyOct.spring > 3 * sydneyOct.fall);
   // A 70°F day is summer weather for most voters, even in October.
   const warmOct = targetSeasonWeights(70, new Date('2026-10-15T12:00:00'), 40);
   assert.equal(Object.entries(warmOct).sort((a, b) => b[1] - a[1])[0][0], 'summer');
+});
+
+test('a cold spring night is no more \'spring\' than a cold fall one', () => {
+  const apr = targetSeasonWeights(40, new Date('2026-04-15T12:00:00'), 40);
+  const oct = targetSeasonWeights(40, new Date('2026-10-15T12:00:00'), 40);
+  assert.ok(apr.spring < 1.3 * apr.fall, JSON.stringify(apr));
+  assert.ok(Math.abs(apr.winter - oct.winter) < 0.01);
+  // A 45°F April night picks much like a 45°F October one: the heavy bottles stay up.
+  const night = iso => ({ feelsF: 45, humidity: 60, dewF: 35, category: 'clear', date: new Date(`${iso}T12:00:00`), lat: 40 });
+  const [april, october] = ['2026-04-15', '2026-10-15'].map(iso => rank(fragrances, night(iso), 'night'));
+  for (const n of ['Amber Empire', 'CH Men Prive']) {
+    const r = april.find(x => x.fragrance.name === n);
+    assert.ok(r.tier === 'S' || r.tier === 'A', `${n} is ${r.tier}: ${r.reasons.map(x => x.text).join(' | ')}`);
+  }
+  const shared = names(april.slice(0, 5)).filter(n => names(october.slice(0, 5)).includes(n));
+  assert.ok(shared.length >= 3, `${names(april.slice(0, 5))} vs ${names(october.slice(0, 5))}`);
+});
+
+test('the calendar eases across month boundaries and fades in the tropics', () => {
+  const at = (iso, f = 40, lat = 40) => targetSeasonWeights(f, new Date(`${iso}T12:00:00`), lat);
+  for (const [a, b, f] of [['2026-11-30', '2026-12-01', 40], ['2026-02-28', '2026-03-01', 40], ['2026-05-31', '2026-06-01', 72], ['2026-08-31', '2026-09-01', 72]]) {
+    for (const s of ['winter', 'spring', 'summer', 'fall']) assert.ok(Math.abs(at(a, f)[s] - at(b, f)[s]) < 0.03, `${a} vs ${b}: ${s}`);
+  }
+  // Quito (just south of the equator) and Bogotá (just north) read the same weather the same way.
+  for (const iso of ['2026-06-15', '2026-12-15']) {
+    const [n, s] = [at(iso, 58, 0.2), at(iso, 58, -0.2)];
+    for (const k of ['winter', 'spring', 'summer', 'fall']) assert.ok(Math.abs(n[k] - s[k]) < 1e-9, `${iso} ${k}`);
+    assert.ok(Math.abs(n.spring - n.fall) < 1e-9, 'no spring or fall at the equator');
+  }
 });
 
 test('mugginess follows the dew point, not relative humidity', () => {
@@ -108,7 +137,7 @@ test('cold night: heavy scents on top, fresh ones at the bottom', () => {
 });
 
 test('comfort range: heavy scents open toward the cold, fresh ones toward the heat', () => {
-  const byName = name => comfortRange(fragrances.find(f => f.name === name), { date: SEP, lat: 40 });
+  const byName = name => comfortRange(fragrances.find(f => f.name === name));
   const amber = byName('Amber Empire');
   assert.equal(amber.lowF, null);
   assert.ok(amber.highF >= 40 && amber.highF <= 58, `Amber Empire tops out at ${amber.highF}°F`);
@@ -120,7 +149,7 @@ test('comfort range: heavy scents open toward the cold, fresh ones toward the he
   assert.ok(allRounder.lowF < 60 && allRounder.highF > 80, JSON.stringify(allRounder));
   assert.ok(allRounder.bestF > allRounder.lowF && allRounder.bestF < allRounder.highF);
   for (const f of fragrances) {
-    const { lowF, highF } = comfortRange(f, { date: SEP, lat: 40 });
+    const { lowF, highF } = comfortRange(f);
     assert.ok(lowF === null || highF === null || lowF < highF, f.name);
   }
 });

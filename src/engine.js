@@ -14,11 +14,20 @@ export const SEASONS = ['winter', 'spring', 'summer', 'fall'];
 const SEASON_CLIMATE = { winter: [34, 12], spring: [51, 13], summer: [76, 10.5], fall: [56, 14.5] };
 // Spring and fall share a temperature range, so the calendar splits it: up to
 // 0.5 + TRANSITION_SPLIT to fall in mid-October, to spring in mid-April, and
-// evenly at midsummer and midwinter.
+// evenly at midsummer and midwinter. Toward winter temperatures the split
+// fades to even, from the full split at TRANSITION_COLD[1] to none at [0]:
+// spring votes go to florals and greens, and a cold April night calls for
+// them no more than a cold October one.
 const TRANSITION_SPLIT = 0.35;
+const TRANSITION_COLD = [40, 65];
 const FALL_PEAK_DAY = 288; // Oct 15
-// A winter or summer day still leans a little toward its calendar season.
+// Midwinter and midsummer days still lean a little toward their calendar
+// season, by up to CALENDAR_BOOST in mid-January and mid-July, easing off
+// smoothly toward the equinoxes (as much in all as three full months).
 const CALENDAR_BOOST = 1.35;
+// The tropics have no spring or fall to speak of: the calendar's say fades
+// out between these latitudes, toward the equator.
+const TROPICS = [15, 25];
 
 // How much each part counts toward a score (scoreOf).
 export const DAILY_WEIGHTS = Object.freeze({ season: 0.5, time: 0.25, weather: 0.2, quality: 0.05 });
@@ -79,17 +88,23 @@ const dayOfYear = date => (Date.UTC(date.getFullYear(), date.getMonth(), date.ge
 
 // How much each season "is" right now, normalized to sum to 1: how typical
 // this temperature is of each season's weather, then the calendar's say.
-export function targetSeasonWeights(feelsF, date, lat) {
+// Without a date the calendar has none (comfortRange: what suits a bottle
+// whatever the time of year).
+export function targetSeasonWeights(feelsF, date, lat = 40) {
   const w = {};
   for (const s of SEASONS) {
     const [mean, spread] = SEASON_CLIMATE[s];
     const z = (feelsF - mean) / spread;
     w[s] = Math.exp(-0.5 * z * z) / spread;
   }
-  const cal = calendarSeason(date, lat);
-  if (cal === 'winter' || cal === 'summer') w[cal] *= CALENDAR_BOOST;
-  const shift = lat < 0 ? 365.25 / 2 : 0;
-  const fallShare = 0.5 + TRANSITION_SPLIT * Math.cos((2 * Math.PI * (dayOfYear(date) - FALL_PEAK_DAY - shift)) / 365.25);
+  const reach = date ? clamp((Math.abs(lat ?? 40) - TROPICS[0]) / (TROPICS[1] - TROPICS[0]), 0, 1) : 0;
+  // 0 in mid-October (north), a quarter turn on in mid-January.
+  const angle = date ? (2 * Math.PI * (dayOfYear(date) - FALL_PEAK_DAY - (lat < 0 ? 365.25 / 2 : 0))) / 365.25 : 0;
+  const lean = Math.sin(angle);
+  w.winter *= 1 + (CALENDAR_BOOST - 1) * reach * Math.max(0, lean) ** 2;
+  w.summer *= 1 + (CALENDAR_BOOST - 1) * reach * Math.max(0, -lean) ** 2;
+  const mild = clamp((feelsF - TRANSITION_COLD[0]) / (TRANSITION_COLD[1] - TRANSITION_COLD[0]), 0, 1);
+  const fallShare = 0.5 + TRANSITION_SPLIT * reach * mild * Math.cos(angle);
   const transition = w.spring + w.fall;
   w.fall = transition * fallShare;
   w.spring = transition * (1 - fallShare);
@@ -184,18 +199,20 @@ export function weatherFit(frag, conditions) {
 }
 
 // Feels-like range a bottle suits on its own: its season and weather fit,
-// weighted as in daily picks, scanned in 1°F steps. The range runs out from
-// the peak to where the fit falls COMFORT_DROP below it; lowF / highF are null
-// when it runs off the scan (nothing is too cold for a winter scent). bestF,
-// the middle of the peak, is only given for a range closed on both ends.
+// weighted as in daily picks, scanned in 1°F steps, whatever the time of year
+// (the calendar would otherwise move a cold-weather bottle's range by 26°F
+// between April and October). The range runs out from the peak to where the
+// fit falls COMFORT_DROP below it; lowF / highF are null when it runs off the
+// scan (nothing is too cold for a winter scent). bestF, the middle of the
+// peak, is only given for a range closed on both ends.
 const COMFORT_SCAN = [0, 105];
 const COMFORT_DROP = 0.1;
 
-export function comfortRange(frag, { date = new Date(), lat = 40, dewF = 55 } = {}) {
+export function comfortRange(frag, { dewF = 55 } = {}) {
   const W = DAILY_WEIGHTS;
   const fits = [];
   for (let feelsF = COMFORT_SCAN[0]; feelsF <= COMFORT_SCAN[1]; feelsF++) {
-    const weights = targetSeasonWeights(feelsF, date, lat);
+    const weights = targetSeasonWeights(feelsF, null);
     const conditions = { feelsF, dewF, category: 'clear' };
     fits.push((W.season * seasonFit(frag, weights) + W.weather * weatherFit(frag, conditions)) / (W.season + W.weather));
   }
