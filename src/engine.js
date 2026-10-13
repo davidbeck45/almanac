@@ -33,8 +33,13 @@ const TROPICS = [15, 25];
 export const DAILY_WEIGHTS = Object.freeze({ season: 0.5, time: 0.25, weather: 0.2, quality: 0.05 });
 export const OCCASION_WEIGHTS = Object.freeze({ occasion: 0.4, season: 0.3, time: 0.1, weather: 0.15, quality: 0.05 });
 
-// Rank cutoffs: first 3 are S, next 5 A, next 6 B, rest C.
+// Rank cutoffs: first 3 are S, next 5 A, next 6 B, rest C. A tier also needs
+// its floor score, so in a small collection on a sweltering day the third
+// best (still "too rich for sticky heat") isn't S; it drops to the first
+// tier whose floor it meets.
 const TIER_SIZES = [['S', 3], ['A', 5], ['B', 6]];
+const TIER_FLOORS = { S: 0.75, A: 0.6, B: 0, C: -Infinity };
+const TIERS = ['S', 'A', 'B', 'C'];
 
 // Worn today, yesterday, 2 days ago … 9 days ago. Top scores sit within a few
 // hundredths of each other, so a 3-day memory cycled the same 3 bottles
@@ -84,6 +89,7 @@ export function calendarSeason(date, lat = 1) {
   return { winter: 'summer', spring: 'fall', summer: 'winter', fall: 'spring' }[north];
 }
 
+const localISO = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const dayOfYear = date => (Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) - Date.UTC(date.getFullYear(), 0, 0)) / 86_400_000;
 
 // How much each season "is" right now, normalized to sum to 1: how typical
@@ -240,8 +246,10 @@ export function comfortRange(frag, { dewF = 55 } = {}) {
 
 // Community rating, trusted more as votes grow; unknowns sit at neutral 0.5.
 export function quality(frag) {
-  const confidence = Math.min(1, Math.log10(Math.max(frag.ratingVotes, 1)) / 3);
-  return clamp((frag.rating - 3.5) / 1.0, 0, 1) * confidence + 0.5 * (1 - confidence);
+  const votes = Number.isFinite(frag.ratingVotes) ? frag.ratingVotes : 0;
+  const rating = Number.isFinite(frag.rating) ? frag.rating : 0;
+  const confidence = Math.min(1, Math.log10(Math.max(votes, 1)) / 3);
+  return clamp((rating - 3.5) / 1.0, 0, 1) * confidence + 0.5 * (1 - confidence);
 }
 
 // Parfumo's longevity and sillage ratings (0–10 averages, `parfumo` from
@@ -459,10 +467,10 @@ function reasonsFor(frag, parts, ctx) {
  * Rank a collection for one time slot.
  * conditions: { feelsF, humidity, dewF?, category, date: Date, lat }
  * slot: 'day' | 'night'
- * opts: { occasion?, history?: [{id, date: 'YYYY-MM-DD'}], todayISO? }
+ * opts: { occasion?, history?: [{id, date: 'YYYY-MM-DD'}], todayISO? (default: the window's dateISO) }
  */
 export function rank(fragrances, conditions, slot, opts = {}) {
-  const { occasion = null, history = [], todayISO = new Date().toISOString().slice(0, 10) } = opts;
+  const { occasion = null, history = [], todayISO = conditions.dateISO ?? localISO(new Date()) } = opts;
   const weights = targetSeasonWeights(conditions.feelsF, conditions.date, conditions.lat);
 
   const scored = fragrances.map(frag => {
@@ -487,6 +495,9 @@ export function rank(fragrances, conditions, slot, opts = {}) {
     for (let n = 0; n < size && i < scored.length; n++, i++) scored[i].tier = tier;
   }
   for (; i < scored.length; i++) scored[i].tier = 'C';
+  for (const s of scored) {
+    while (s.score < TIER_FLOORS[s.tier]) s.tier = TIERS[TIERS.indexOf(s.tier) + 1];
+  }
 
   const ctx = { conditions, slot, weights, occasion };
   for (const s of scored) s.reasons = reasonsFor(s.fragrance, s.parts, ctx);

@@ -159,6 +159,20 @@ test('tiers are 3 / 5 / 6 / rest', () => {
   assert.deepEqual([tiers.S.length, tiers.A.length, tiers.B.length, tiers.C.length], [3, 5, 6, fragrances.length - 14]);
 });
 
+test('a bad fit isn\'t S just because the collection is small', () => {
+  const heavy = fragrances.filter(f => HEAVY.includes(f.name)).slice(0, 4);
+  const ranked = rank(heavy, hotHumidDay, 'day');
+  assert.ok(ranked.every(r => r.tier !== 'S'), ranked.map(r => `${r.fragrance.name} ${r.tier} ${r.score.toFixed(2)}`).join(', '));
+  assert.ok(ranked.every((r, i) => i === 0 || 'SABC'.indexOf(r.tier) >= 'SABC'.indexOf(ranked[i - 1].tier)), 'tiers still run in order');
+});
+
+test('a record without a rating ranks with a neutral quality, not NaN', () => {
+  const stub = { ...fragrances[0], id: 'stub', rating: undefined, ratingVotes: undefined };
+  const ranked = rank([stub, fragrances[1]], mildFallNight, 'night');
+  assert.ok(ranked.every(r => Number.isFinite(r.score)));
+  assert.equal(ranked.find(r => r.fragrance === stub).parts.quality, 0.5);
+});
+
 test('office avoids gourmands, date night prefers them', () => {
   const office = groupTiers(rank(fragrances, { ...mildFallNight, feelsF: 68 }, 'day', { occasion: occasionById('office') }));
   const date = groupTiers(rank(fragrances, mildFallNight, 'night', { occasion: occasionById('date') }));
