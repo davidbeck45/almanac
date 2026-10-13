@@ -6,13 +6,15 @@
 //   node scripts/recommend.mjs --layer "Liquid Brun"       (what layers with it; --layer all for the best pairs)
 //   node scripts/recommend.mjs --layer "Liquid Brun" --city "New York" [--slot night]   (for that weather)
 //   node scripts/recommend.mjs --ideal "Amber Empire"     (the temperatures it wears best in)
+//   node scripts/recommend.mjs --mix                       (the collection's scent styles, bottle by bottle)
+//   node scripts/recommend.mjs --styles "Prada L'Homme"   (one bottle's style scores; any Fragrantica bottle)
 // --journal FILE takes the app's journal export (Export in the wear journal), so
 // recent wears rotate out as they do in the app. --top N gives reasons for the
 // first N picks. Every bottle in the wardrobe counts, Jake included (these
 // answers are for David); --demo leaves out DEFAULT_HIDDEN like the site does
 // for a first-time visitor. Bottles hidden in the app live in the phone's
 // storage; pass them via --exclude (part of a name is enough).
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { rank, planWindows, comfortRange } from '../src/engine.js';
 import { layerPicks, byPick } from '../src/layering.js';
@@ -21,6 +23,8 @@ import { DEFAULT_HIDDEN } from '../src/hidden.js';
 import { parseJournal } from '../src/history.js';
 import { fetchForecast, summarize, week } from '../src/weather.js';
 import { searchCities } from '../src/location.js';
+import { STYLES, STYLE_STRONG, WEARS_CLOSE, styleById, styleScores, topOf, leanOf, closeOf, styleMix } from '../src/scent-styles.js';
+import { fragranticaLibrary } from '../src/fragrantica.js';
 
 const SLOTS = ['day', 'night'];
 const squash = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
@@ -71,6 +75,8 @@ async function main() {
         journal: { type: 'string' },
         demo: { type: 'boolean', default: false },
         top: { type: 'string', default: '1' },
+        mix: { type: 'boolean', default: false },
+        styles: { type: 'string' },
       },
     }));
   } catch (err) {
@@ -220,6 +226,73 @@ async function main() {
     return;
   }
 
+  // The collection's style mix: how many bottles lean each way (each bottle's
+  // leanOf, listed per bottle), and which wear close.
+  if (args.mix) {
+    const scores = new Map(fragrances.map(f => [f.id, styleScores(f)]));
+    const mix = styleMix(fragrances, f => scores.get(f.id));
+    const nameOf = new Map(fragrances.map(f => [f.id, f.name]));
+    const rows = STYLES.filter(s => s.kind === 'scent')
+      .map(s => ({ id: s.id, label: s.label, count: mix.counts[s.id], bottles: mix.ids[s.id].map(id => nameOf.get(id)) }))
+      .sort((a, b) => b.count - a.count);
+    const bottles = fragrances.map(f => ({
+      name: f.name,
+      brand: f.brand,
+      styles: leanOf(scores.get(f.id)),
+      wearsClose: closeOf(scores.get(f.id)),
+    }));
+    if (args.json) {
+      console.log(JSON.stringify({ total: mix.total, mix: rows, wearsClose: mix.intimateIds.map(id => nameOf.get(id)), bottles }, null, 2));
+    } else {
+      const width = Math.max(...rows.map(r => r.label.length));
+      console.log(`Style mix of ${mix.total} bottles (each bottle's top two styles):`);
+      for (const r of rows.filter(r => r.count)) console.log(`  ${r.label.padEnd(width)}  ${String(r.count).padStart(2)}  ${r.bottles.join(', ')}`);
+      console.log(`  None: ${rows.filter(r => !r.count).map(r => r.label).join(', ') || '-'}`);
+      console.log(`Wears close: ${mix.intimate ? mix.intimateIds.map(id => nameOf.get(id)).join(', ') : 'none'}\n`);
+      for (const b of bottles) {
+        const styles = b.styles.length ? b.styles.map(s => `${s.label} ${s.score.toFixed(2)}`).join(', ') : 'no clear style';
+        console.log(`${b.name} (${b.brand}): ${styles}${b.wearsClose ? ' · wears close' : ''}`);
+      }
+    }
+    return;
+  }
+
+  // One bottle's style scores: the collection first, then the Fragrantica dataset.
+  if (args.styles) {
+    let [f] = matchBottles(fragrances, args.styles);
+    if (!f) {
+      const dir = new URL('../data/fragrantica/', import.meta.url);
+      const library = fragranticaLibrary(async path => {
+        const file = new URL(path, dir);
+        return existsSync(file) ? readFileSync(file, 'utf8') : null;
+      });
+      const [hit] = await library.search(args.styles, 1);
+      if (hit) f = (await library.records([hit.id])).get(hit.id);
+    }
+    if (!f) fail(`No bottle matches "${args.styles}"`);
+    const scores = styleScores(f);
+    if (args.json) {
+      console.log(JSON.stringify({
+        name: f.name,
+        brand: f.brand,
+        source: f.source === 'fragrantica' ? 'dataset' : 'collection',
+        styles: topOf(scores),
+        wearsClose: closeOf(scores),
+        scores,
+      }, null, 2));
+    } else {
+      console.log(`${f.name} (${f.brand})${f.source === 'fragrantica' ? ', from the Fragrantica dataset' : ''}`);
+      const width = Math.max(...STYLES.map(s => s.label.length));
+      const shown = new Set(topOf(scores).map(s => s.id));
+      for (const r of topOf(scores, Infinity, 0.15)) {
+        const tags = [shown.has(r.id) && 'shown', r.score >= STYLE_STRONG && 'strong'].filter(Boolean).join(', ');
+        console.log(`  ${r.label.padEnd(width)}  ${r.score.toFixed(2)}${tags ? `  ${tags}` : ''}`);
+      }
+      console.log(`  ${styleById('intimate').label.padEnd(width)}  ${scores.intimate.toFixed(2)}  ${closeOf(scores) ? 'wears close' : `wears close from ${WEARS_CLOSE.toFixed(2)}`}`);
+    }
+    return;
+  }
+
   if (!args.city && !args.loc) fail(USAGE);
 
   const place = await resolvePlace();
@@ -310,6 +383,8 @@ async function main() {
 
 const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,NAME]) [--occasion ${OCCASIONS.map(o => o.id).join('|')}] [--slot day|night] [--week] [--journal FILE] [--exclude NAME,NAME] [--demo] [--top N] [--json]
        node scripts/recommend.mjs --layer NAME|all [--city NAME | --loc LAT,LON[,NAME]] [--slot day|night] [--exclude NAME,NAME] [--json]
-       node scripts/recommend.mjs --ideal NAME [--exclude NAME,NAME] [--json]`;
+       node scripts/recommend.mjs --ideal NAME [--exclude NAME,NAME] [--json]
+       node scripts/recommend.mjs --mix [--exclude NAME,NAME] [--demo] [--json]
+       node scripts/recommend.mjs --styles NAME [--json]`;
 
 if (import.meta.main) await main();
