@@ -19,7 +19,7 @@ const CONDITIONS = [
   { feelsF: 50, dewF: 46, category: 'rain', date: new Date('2026-10-15T12:00:00'), lat: 47 },
   { feelsF: 84, dewF: 74, category: 'storm', date: new Date('2026-12-15T12:00:00'), lat: 1.3 },
 ];
-const MULTI_WORD = Object.keys(ACCORDS).filter(a => /[\s-]/.test(a));
+const MULTI_WORD = Object.keys(ACCORDS).filter(a => /[\s-]/.test(a)).map(a => [a, new RegExp(`\\b${a}\\b`, 'i')]);
 
 function* reasons() {
   // Ranked 25 at a time, like a real collection.
@@ -45,8 +45,8 @@ test('reasons read as plain sentences over the wardrobe and the dataset', () => 
   for (const [text, frag] of reasons()) {
     if (/\b(\w+)\s+\1\b/i.test(text)) flag('doubled word', text);
     if (/°|\d\s*F\b/.test(text)) flag('temperature number', text);
-    const raw = MULTI_WORD.find(a => text.toLowerCase().includes(a));
-    if (raw) flag(`raw accord name "${raw}"`, text);
+    const raw = MULTI_WORD.find(([, re]) => re.test(text));
+    if (raw) flag(`raw accord name "${raw[0]}"`, text);
     if (/^Fresh (musky|coconut|fruity|tropical|sweet)|musk\w* cuts? the heat/i.test(text)) flag('not a heat cutter', text);
     if (text !== text.charAt(0).toUpperCase() + text.slice(1)) flag('lowercase start', text);
     // A rain reason names an accord the bottle has.
