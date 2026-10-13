@@ -1,16 +1,27 @@
 // Offline support. App files: network first so edits show up immediately,
-// cache as fallback. Bottle images and fonts: cache first. Weather is never
-// cached here; the app keeps its own last forecast in localStorage.
+// cache as fallback. Bottle images: cache first. Weather is never cached
+// here; the app keeps its own last forecast in localStorage.
 // App files always revalidate with the server: GitHub Pages lets browsers
 // keep files for 10 minutes, and a fresh main.js importing a stale module
 // fails to load at all.
-const CACHE = 'scentcast-v9';
+const CACHE = 'scentcast-v10';
+// Dataset files (data/fragrantica/) load a shard at a time as people search
+// and add bottles; they keep their own small cache instead of the shell's.
+const DATA_CACHE = 'scentcast-data';
+const DATA_MAX = 60;
+// Bottle photos from other hosts. They come back opaque (no CORS headers),
+// so the worker can't see whether one failed; a capped cache keeps a bad
+// one from sticking around for good, and the cap bounds the padding Chrome
+// counts per opaque response against the quota.
+const IMAGE_CACHE = 'scentcast-images';
+const IMAGE_MAX = 150;
 const SHELL = [
   './',
   'index.html',
   'manifest.webmanifest',
   'data/collection.json',
   'data/catalog.json',
+  'src/tokens.css',
   'src/styles.css',
   'src/main.js',
   'src/ui.js',
@@ -31,9 +42,13 @@ const SHELL = [
   'src/custom.js',
   'src/layering.js',
   'src/theme.js',
+  'fonts/fraunces.woff2',
+  'fonts/fraunces-italic.woff2',
+  'fonts/inter.woff2',
   'icons/icon.svg',
 ];
-const CACHE_FIRST_HOSTS = ['fimgs.net', 'cdn.fragella.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
+const IMAGE_HOSTS = ['fimgs.net', 'cdn.fragella.com'];
+const KEEP = [CACHE, DATA_CACHE, IMAGE_CACHE];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(path => new Request(path, { cache: 'reload' })))).then(() => self.skipWaiting()));
@@ -42,10 +57,22 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys.filter(k => !KEEP.includes(k)).map(k => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
+
+// Drops the oldest entries past `max` (Cache keys come back in insertion order).
+async function trim(cache, max) {
+  const keys = await cache.keys();
+  await Promise.all(keys.slice(0, Math.max(0, keys.length - max)).map(k => cache.delete(k)));
+}
+
+async function put(name, key, res, max) {
+  const cache = await caches.open(name);
+  await cache.put(key, res);
+  if (max) await trim(cache, max);
+}
 
 self.addEventListener('fetch', e => {
   const req = e.request;
@@ -53,20 +80,22 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
 
   if (url.origin === self.location.origin) {
+    // Every navigation (?loc=, ?c=, ?view=…) is the same page: one cache entry.
+    const navigate = req.mode === 'navigate';
+    const key = navigate ? './' : req;
+    const data = url.pathname.includes('/data/fragrantica/');
     e.respondWith(
-      fetch(req.mode === 'navigate' ? req.url : req, { cache: 'no-cache' })
+      fetch(navigate ? req.url : req, { cache: 'no-cache' })
         .then(res => {
-          const copy = res.clone();
-          caches.open(CACHE).then(c => c.put(req, copy));
+          if (res.ok) e.waitUntil(put(data ? DATA_CACHE : CACHE, key, res.clone(), data ? DATA_MAX : 0));
           return res;
         })
-        .catch(() => caches.match(req, { ignoreSearch: true })),
+        .catch(async () => (await caches.match(key, { ignoreSearch: true })) ?? Response.error()),
     );
-  } else if (CACHE_FIRST_HOSTS.includes(url.hostname)) {
+  } else if (IMAGE_HOSTS.includes(url.hostname)) {
     e.respondWith(
       caches.match(req).then(hit => hit ?? fetch(req).then(res => {
-        const copy = res.clone();
-        caches.open(CACHE).then(c => c.put(req, copy));
+        if (res.ok || res.type === 'opaque') e.waitUntil(put(IMAGE_CACHE, req, res.clone(), IMAGE_MAX));
         return res;
       })),
     );

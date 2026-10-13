@@ -35,8 +35,13 @@ export function deviceLocation() {
 
 export async function searchCities(query) {
   const params = new URLSearchParams({ name: query, count: 6, language: 'en', format: 'json' });
-  const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${params}`);
-  if (!res.ok) throw new Error('City search failed.');
+  let res;
+  try {
+    res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${params}`);
+  } catch {
+    throw new Error('Can’t reach city search. Check your connection.');
+  }
+  if (!res.ok) throw new Error('City search isn’t answering. Try again in a minute.');
   const data = await res.json();
   return (data.results ?? []).map(r => ({
     name: r.name,

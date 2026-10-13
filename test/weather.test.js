@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { blendModels, week } from '../src/weather.js';
+import { blendModels, week, cachedForecast, forecastError } from '../src/weather.js';
 
 // Two days of a multi-model response, variables suffixed by model as Open-Meteo returns them.
 function multiModel() {
@@ -40,4 +40,31 @@ test('the forecast averages four models, keeping the default for codes and rain'
   assert.equal(f.daily.sunrise[0], '2026-10-08T07:24');
   const [today] = week(f, Date.parse('2026-10-08T14:00:00Z'));
   assert.equal(today.hiF, 80);
+});
+
+test('the saved forecast opens the app: fresh as is, older dimmed while it refreshes, too old not at all', () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  try {
+    const loc = { lat: 40.71, lon: -74.01 };
+    const save = (fetchedAt, at = loc) => store.set('scentcast.weather', JSON.stringify({ key: `3:${at.lat},${at.lon}`, forecast: { fetchedAt } }));
+    const now = Date.parse('2026-10-12T12:00:00Z');
+    save(now - 5 * 60e3);
+    assert.equal(cachedForecast(loc, now).fresh, true);
+    save(now - 3 * 3600e3);
+    assert.equal(cachedForecast(loc, now).fresh, false);
+    save(now - 30 * 3600e3);
+    assert.equal(cachedForecast(loc, now), null);
+    save(now, { lat: 1, lon: 2 });
+    assert.equal(cachedForecast(loc, now), null, 'another place');
+  } finally {
+    delete globalThis.localStorage;
+  }
+});
+
+test('forecast failures read as sentences, never "Failed to fetch"', () => {
+  assert.equal(forecastError(new TypeError('Failed to fetch')), 'Can’t reach the forecast. Check your connection and try again.');
+  assert.match(forecastError({ status: 429 }), /busy/);
+  assert.match(forecastError({ status: 503 }), /down/);
+  for (const err of [new TypeError('Failed to fetch'), { status: 400 }, { status: 502 }]) assert.match(forecastError(err), /^[A-Z].*\.$/);
 });

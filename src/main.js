@@ -1,6 +1,6 @@
 import { rank, planWindows, comfortRange } from './engine.js';
-import { occasionById } from './occasions.js';
-import { getForecast, summarize, week } from './weather.js';
+import { OCCASIONS, occasionById } from './occasions.js';
+import { getForecast, cachedForecast, forecastError, summarize, week } from './weather.js';
 import { loadLocation, saveLocation, loadRecent, deviceLocation, searchCities } from './location.js';
 import { loadHistory, toggleWear, wornIn, clearHistory, journalStats, journalCalendar, journalExport, shiftISO } from './history.js';
 import { loadHidden, saveHidden } from './hidden.js';
@@ -48,6 +48,7 @@ const state = {
   forecast: null,
   wx: null,
   loading: false,
+  updating: false, // a cached forecast is on screen while a fresh one loads
   error: null,
   view: VIEWS.includes(prefs.view) ? prefs.view : 'today',
   renderedView: null,
@@ -59,7 +60,7 @@ const state = {
   contexts: {}, // ctx key -> { win, occasion, ranked, entries: Map(id -> ranked entry) }
   today: null, // { day: plan, night: plan } where plan = { win, ranked, pick }
   expanded: new Set(), // ctx keys showing B and C tiers
-  sheet: null, // { kind: 'detail' | 'location' | 'collection' | 'add' | 'import' | 'custom' | 'journal', ...sheet state }
+  sheet: null, // { kind: a key of SHEETS, ...sheet state }
   lastRemoved: null, // { record, index } for undo
 };
 ui.setUnits(state.units);
@@ -79,7 +80,7 @@ function activeFragrances() {
 
 function collectionLabel() {
   if (state.shared) return state.shared.name ? `${state.shared.name}’s collection` : 'Shared collection';
-  return state.active === 'mine' ? 'My collection' : 'Demo collection';
+  return state.active === 'mine' ? 'My collection' : 'David’s wardrobe';
 }
 
 // Bottles we scraped ourselves, searched before the rest of Fragrantica.
@@ -111,7 +112,9 @@ function closeShared() {
   const url = new URL(location.href);
   url.searchParams.delete('c');
   url.searchParams.delete('n');
-  history.replaceState(null, '', url);
+  history.replaceState(history.state, '', url);
+  // Under an open sheet's entry, the page's own entry still has the link.
+  if (sheetEntry()) afterSheetEntry = url.href;
 }
 
 // ---------- Rendering ----------
@@ -142,8 +145,8 @@ function heroPicks() {
 function renderHero() {
   state.heroAspect = heroAspect();
   $('#hero').innerHTML = ui.heroHTML(state, state.heroAspect, heroPicks(), collectionLabel());
-  const now = state.wx?.now;
-  const [top, mid] = sceneTint(now?.phase ?? 'night', now?.category ?? 'clear', theme());
+  const sky = ui.sceneNow(state.wx, { error: Boolean(state.error) });
+  const [top, mid] = sceneTint(sky.phase, sky.category, theme());
   document.documentElement.style.setProperty('--tint-top', top);
   document.documentElement.style.setProperty('--tint-mid', mid);
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', top);
@@ -218,18 +221,18 @@ function emptyState() {
     return state.shared.loading
       ? ui.skeletonHTML(2)
       : ui.messageHTML({ glyph: ui.icon.share, title: 'Nothing to show', body: 'None of the bottles in this link could be loaded.',
-        action: `<button class="primary-btn" data-action="shared-close"><span>Back to my picks</span></button>` });
+        action: `<button class="btn primary" data-action="shared-close"><span>Back to my picks</span></button>` });
   }
   if (!sourceRecords().length) {
     return ui.messageHTML({ glyph: ui.icon.bottle, title: 'Your collection is empty', body: 'Add the bottles you own and picks start right away.',
       action: `<div class="message-actions">
-        <button class="primary-btn" data-action="add">${ui.icon.plus}<span>Add bottles</span></button>
-        <button class="ghost-btn" data-action="import">${ui.icon.paste}Paste a list</button>
-        <button class="link-btn" data-collection-tab="demo">Use the demo collection</button>
+        <button class="btn primary" data-action="add">${ui.icon.plus}<span>Add bottles</span></button>
+        <button class="btn secondary" data-action="import">${ui.icon.paste}Paste a list</button>
+        <button class="btn tertiary" data-collection-tab="demo">Use David’s wardrobe</button>
       </div>` });
   }
   return ui.messageHTML({ glyph: ui.icon.hide, title: 'Every bottle is hidden', body: 'Turn some back on to get picks.',
-    action: `<button class="primary-btn" data-action="collection"><span>Manage collection</span></button>` });
+    action: `<button class="btn primary" data-action="collection"><span>Manage collection</span></button>` });
 }
 
 function journalTeaser() {
@@ -249,6 +252,15 @@ function journalTeaser() {
   return ui.journalTeaserHTML({ strip, stats: journalStats(state.history, todayISO) }, findRecord);
 }
 
+// The page's one h1 (visually hidden) names the view and the place.
+function pageTitle() {
+  if (!state.loc) return 'Scentcast';
+  const place = state.loc.name;
+  if (state.view === 'week') return `The week ahead in ${place}`;
+  if (state.view === 'occasion') return `Picks for ${(occasionById(state.occasion) ?? occasionById('casual')).label} in ${place}`;
+  return `Today’s picks in ${place}`;
+}
+
 function renderView() {
   const tabs = document.querySelectorAll('[data-view]');
   tabs.forEach(b => {
@@ -257,8 +269,12 @@ function renderView() {
     b.tabIndex = on ? 0 : -1;
   });
   $('.tabs').style.setProperty('--i', VIEWS.indexOf(state.view));
+  $('.tabs').style.setProperty('--n', VIEWS.length);
+  $('#page-title').textContent = pageTitle();
   const view = $('#view');
   view.setAttribute('aria-labelledby', `tab-${state.view}`);
+  view.classList.toggle('updating', state.updating);
+  view.setAttribute('aria-busy', String(state.updating));
   const banner = state.shared ? ui.sharedBannerHTML(state.shared, state.mine.records.length) : '';
 
   if (state.renderedView !== state.view) {
@@ -272,13 +288,13 @@ function renderView() {
 
   if (!state.loc) {
     view.innerHTML = ui.messageHTML({ glyph: ui.icon.pin, title: 'Set your location', body: 'Picks are based on your local forecast.',
-      action: `<button class="primary-btn" data-action="location">${ui.icon.pin}<span>Choose location</span></button>` });
+      action: `<button class="btn primary" data-action="location">${ui.icon.pin}<span>Choose location</span></button>` });
     return;
   }
   if (!state.wx) {
     view.innerHTML = state.error
       ? ui.messageHTML({ glyph: ui.icon.cloud, title: 'Couldn’t load the weather', body: state.error,
-        action: `<button class="primary-btn" data-action="refresh">${ui.icon.refresh}<span>Try again</span></button>` })
+        action: `<button class="btn primary" data-action="refresh">${ui.icon.refresh}<span>Try again</span></button>` })
       : ui.skeletonHTML(state.view === 'today' ? 2 : 1);
     return;
   }
@@ -293,7 +309,7 @@ function renderView() {
     </div>${journalTeaser()}`;
   } else if (state.view === 'week') {
     view.innerHTML = banner + ui.weekHTML(computeWeek());
-  } else {
+  } else if (state.view === 'occasion') {
     const occasion = occasionById(state.occasion) ?? occasionById('casual');
     const slot = state.occasionSlot ?? occasion.slot;
     const win = state.wx[slot];
@@ -302,7 +318,17 @@ function renderView() {
       ${ui.occasionPickerHTML(occasion.id)}
       <div class="occ-bar">${ui.slotToggleHTML(slot, state.wx)}</div>
       <div class="slots single">${slotSection('occ', { win, ranked, pick: ranked[0] }, `Best for ${occasion.label.toLowerCase()}`)}</div>`;
+  } else {
+    throw new Error(`No view called "${state.view}"`);
   }
+}
+
+// Views re-render whole, which replaces the control that asked for it; put
+// focus on its successor so keyboard and screen reader users keep their place.
+function renderViewKeepingFocus(trigger) {
+  const focused = trigger && document.activeElement === trigger;
+  renderView();
+  if (focused) refocus(trigger);
 }
 
 function renderFooter() {
@@ -371,17 +397,16 @@ function applyCollectionFilter() {
   if (empty) empty.hidden = shown > 0 || !rows.length;
 }
 
-function renderSheet({ keepScroll = false } = {}) {
-  const el = $('#sheet');
-  const s = state.sheet;
-  const scroll = keepScroll ? el.querySelector('.sheet-panel')?.scrollTop : 0;
-  if (s.kind === 'detail') {
+// One renderer per sheet kind. A renderer returns the sheet's HTML, or null
+// when there's nothing to show any more (the sheet then closes).
+const SHEETS = {
+  detail(s) {
     const ctx = state.contexts[s.ctx];
     const entry = ctx?.entries.get(s.id);
-    if (!entry) return closeSheet();
+    if (!entry) return null;
     const label = ctx.occasion ? `${ctx.occasion.label} · ${ctx.win.label.toLowerCase()}` : ctx.win.label;
     const worn = wornIn(state.history, ctx.win.dateISO, ctx.win.slot)?.id ?? null;
-    el.innerHTML = ui.sheetHTML(entry, label, s.ctx, worn, {
+    return ui.sheetHTML(entry, label, s.ctx, worn, {
       canWear: canWear(ctx.win),
       wears: wearInfo(s.id),
       todayISO: state.wx?.todayISO,
@@ -389,50 +414,100 @@ function renderSheet({ keepScroll = false } = {}) {
       partners: activeFragrances().length > 1 ? layerPicks(entry.fragrance, activeFragrances(), 3, ctx.win) : null,
       comfort: comfortRange(entry.fragrance, { date: ctx.win.date, lat: ctx.win.lat }),
     });
-  } else if (s.kind === 'collection') {
-    el.innerHTML = ui.collectionSheetHTML({
-      tab: state.shared ? null : state.active,
-      demo: state.demo?.fragrances ?? [],
-      mine: state.mine,
-      hidden: state.hidden,
-      shared: state.shared,
-      filter: s.filter,
-    });
-    applyCollectionFilter();
-  } else if (s.kind === 'add') {
-    el.innerHTML = ui.addSheetHTML(s, new Set(state.mine.records.map(r => r.id)));
-  } else if (s.kind === 'import') {
-    el.innerHTML = ui.importSheetHTML(s, MAX_IMPORT_LINES);
-  } else if (s.kind === 'custom') {
-    el.innerHTML = ui.customSheetHTML(s, MAX_CUSTOM_ACCORDS);
-  } else if (s.kind === 'journal') {
-    el.innerHTML = ui.journalSheetHTML(journalData(), findRecord);
-  } else {
-    el.innerHTML = ui.locationSheetHTML(s, loadRecent());
-  }
-  if (keepScroll) el.querySelector('.sheet-panel').scrollTop = scroll;
+  },
+  collection: s => ui.collectionSheetHTML({
+    tab: state.shared ? null : state.active,
+    demo: state.demo?.fragrances ?? [],
+    mine: state.mine,
+    hidden: state.hidden,
+    shared: state.shared,
+    filter: s.filter,
+  }),
+  add: s => ui.addSheetHTML(s, new Set(state.mine.records.map(r => r.id))),
+  import: s => ui.importSheetHTML(s, MAX_IMPORT_LINES),
+  custom: s => ui.customSheetHTML(s, MAX_CUSTOM_ACCORDS),
+  journal: () => ui.journalSheetHTML(journalData(), findRecord),
+  location: s => ui.locationSheetHTML(s, loadRecent()),
+};
+
+// `fresh` marks a sheet's first render, the one that animates its bars.
+function renderSheet({ keepScroll = false, fresh = false } = {}) {
+  const el = $('#sheet');
+  const s = state.sheet;
+  const render = SHEETS[s.kind];
+  if (!render) throw new Error(`No sheet called "${s.kind}"`);
+  const scroll = keepScroll ? el.querySelector('.sheet-panel')?.scrollTop : 0;
+  const html = render(s);
+  if (html === null) return closeSheet();
+  el.innerHTML = html;
+  if (s.kind === 'collection') applyCollectionFilter();
+  const panel = el.querySelector('.sheet-panel');
+  if (fresh) panel.classList.add('fresh');
+  if (keepScroll) panel.scrollTop = scroll;
 }
 
 let sheetOpener = null;
 
-// Put focus back where the sheet was opened from. Views re-render while a
-// sheet is open, so fall back to the element with the same data attributes.
-function refocus(el) {
+// Put focus back on an element a re-render replaced: itself if it survived,
+// else the element in `scope` with the same tag and data attributes.
+function refocus(el, scope = '#app') {
   if (!el || el === document.body) return;
   if (el.isConnected) return el.focus({ preventScroll: true });
   const attrs = Object.entries(el.dataset ?? {})
     .map(([k, v]) => `[data-${k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)}="${CSS.escape(v)}"]`).join('');
-  if (attrs) document.querySelector(`#app ${el.tagName.toLowerCase()}${attrs}`)?.focus({ preventScroll: true });
+  if (attrs) document.querySelector(`${scope} ${el.tagName.toLowerCase()}${attrs}`)?.focus({ preventScroll: true });
 }
+
+// ---------- History ----------
+// An open sheet owns one history entry, so Back (the browser's, Android's or
+// a home-screen app's back gesture) closes the sheet instead of leaving.
+
+const SHEET_ENTRY = 'scentcastSheet';
+const sheetEntry = () => history.state?.[SHEET_ENTRY] === true;
+let leavingEntry = false; // closeSheet went back itself; that popstate is ours
+let afterSheetEntry = null; // a URL for the page's entry, once back on it
+
+function pushSheetEntry() {
+  if (!sheetEntry()) history.pushState({ [SHEET_ENTRY]: true }, '');
+}
+
+function dropSheetEntry() {
+  if (!sheetEntry()) return;
+  leavingEntry = true;
+  history.back();
+}
+
+window.addEventListener('popstate', () => {
+  if (afterSheetEntry && !sheetEntry()) {
+    history.replaceState(history.state, '', afterSheetEntry);
+    afterSheetEntry = null;
+  }
+  if (leavingEntry) {
+    leavingEntry = false;
+    // A sheet opened again before the browser got back: it needs an entry.
+    if (state.sheet) pushSheetEntry();
+    return;
+  }
+  if (!state.sheet) return;
+  // Back from "Add it yourself" returns to the sheet it came from.
+  if (state.sheet.kind === 'custom' && state.sheet.back) {
+    openSheet(state.sheet.back);
+    return;
+  }
+  dismissSheet({ fromHistory: true });
+});
 
 // `instant` skips the slide, for when a view transition animates the change.
 function openSheet(sheet, { instant = false } = {}) {
   const wasOpen = !!state.sheet;
   const sameKind = state.sheet?.kind === sheet.kind;
   const sameBottle = sameKind && sheet.kind === 'detail' && state.sheet.id === sheet.id;
+  const fresh = !sameKind || (sheet.kind === 'detail' && !sameBottle);
   if (!wasOpen) sheetOpener = document.activeElement;
   state.sheet = sheet;
-  renderSheet({ keepScroll: sameKind && (sheet.kind !== 'detail' || sameBottle) });
+  renderSheet({ keepScroll: sameKind && (sheet.kind !== 'detail' || sameBottle), fresh });
+  if (state.sheet !== sheet) return; // nothing to show, so it closed
+  pushSheetEntry();
   const el = $('#sheet');
   el.hidden = false;
   document.body.classList.add('sheet-open');
@@ -441,7 +516,7 @@ function openSheet(sheet, { instant = false } = {}) {
     if (instant) el.classList.add('open');
     else requestAnimationFrame(() => el.classList.add('open'));
   }
-  if (!sameKind || (sheet.kind === 'detail' && !sameBottle)) {
+  if (fresh) {
     // Don't pop the keyboard on phones just for opening a sheet.
     const typing = ['add', 'import', 'custom', 'location'].includes(sheet.kind) && matchMedia('(hover: hover)').matches;
     el.querySelector(typing ? 'input, textarea' : '.sheet-close')?.focus({ preventScroll: true });
@@ -454,9 +529,14 @@ function updateSheet(patch) {
   renderSheet({ keepScroll: true });
 }
 
-function closeSheet({ instant = false } = {}) {
+// The phone slide-out takes --dur-4 (src/tokens.css).
+const SHEET_OUT_MS = 480;
+
+// `fromHistory`: Back already took the sheet's history entry away.
+function closeSheet({ instant = false, fromHistory = false } = {}) {
   const el = $('#sheet');
   state.sheet = null;
+  if (!fromHistory) dropSheetEntry();
   el.classList.remove('open');
   document.body.classList.remove('sheet-open');
   $('#app').inert = false;
@@ -464,7 +544,7 @@ function closeSheet({ instant = false } = {}) {
   sheetOpener = null;
   const hide = () => { if (!state.sheet) { el.hidden = true; el.innerHTML = ''; } };
   if (instant) hide();
-  else setTimeout(hide, 260);
+  else setTimeout(hide, SHEET_OUT_MS);
 }
 
 // Opening a bottle flies its photo from the card into the sheet, and closing
@@ -501,28 +581,44 @@ function openDetail(sheet, trigger) {
   morph(from, () => openSheet(sheet, { instant: true }), () => $('#sheet .sheet-bottle img'));
 }
 
-// Closing by hand (the close button, the backdrop, Escape).
-function dismissSheet() {
+// Closing by hand (the close button, the backdrop, Escape, Back).
+function dismissSheet({ fromHistory = false } = {}) {
   const id = state.sheet?.kind === 'detail' ? state.sheet.id : null;
   const from = $('#sheet .sheet-bottle img');
   const back = id && [...document.querySelectorAll(`#app [data-open][data-id="${CSS.escape(id)}"] img`)].find(visible);
-  if (!canMorph() || !back || !from) return closeSheet();
-  morph(from, () => closeSheet({ instant: true }), () => back);
+  if (!canMorph() || !back || !from) return closeSheet({ fromHistory });
+  morph(from, () => closeSheet({ instant: true, fromHistory }), () => back);
 }
 
+// The toast stays 5 s, held while it's hovered or focused (WCAG 2.2.1) and
+// given a few more seconds after.
+const TOAST_MS = 5000;
 let toastTimer;
+function armToast(ms = TOAST_MS) {
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, ms);
+}
 function showToast(html) {
   const el = $('#toast');
   el.innerHTML = `${ui.icon.check}${html}`;
   el.hidden = false;
   requestAnimationFrame(() => el.classList.add('show'));
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(hideToast, 5000);
+  armToast();
 }
 function hideToast() {
   const el = $('#toast');
+  clearTimeout(toastTimer);
   el.classList.remove('show');
   setTimeout(() => { if (!el.classList.contains('show')) el.hidden = true; }, 200);
+}
+{
+  const el = $('#toast');
+  const hold = () => clearTimeout(toastTimer);
+  const resume = () => { if (el.classList.contains('show') && !el.matches(':hover, :focus-within')) armToast(3000); };
+  el.addEventListener('pointerenter', hold);
+  el.addEventListener('focusin', hold);
+  el.addEventListener('pointerleave', resume);
+  el.addEventListener('focusout', e => { if (!el.contains(e.relatedTarget)) resume(); });
 }
 
 // ---------- Finding bottles ----------
@@ -560,29 +656,47 @@ async function runSearch(query) {
 async function runImport(text) {
   const lines = importLines(text);
   if (!lines.length) return updateSheet({ text, error: 'Paste at least one fragrance name.' });
+  const job = {};
   const rows = lines.map(l => ({ ...l, status: 'pending', match: null, checked: false, weak: false }));
-  updateSheet({ text, rows, busy: true, error: '' });
+  updateSheet({ text, job, rows, busy: true, error: '' });
   let stopped = '';
-  for (const row of rows) {
-    const local = localMatches(row.line, knownBottles(), 1)[0];
-    if (local) Object.assign(row, { match: local, checked: true, status: 'done' });
-    else if (stopped) Object.assign(row, { status: 'done', note: stopped });
+  for (const [i, { line }] of lines.entries()) {
+    let found;
+    const local = localMatches(line, knownBottles(), 1)[0];
+    if (local) found = { match: local, checked: true };
+    else if (stopped) found = { note: stopped };
     else {
       try {
         // Search answers with near misses too ("Caramello" for "Caramellino"),
         // so a hit whose name wasn't typed is offered unticked.
-        const hits = await library.search(row.line);
-        const hit = hits.find(r => nameMatches(row.line, r));
-        Object.assign(row, { match: hit ?? hits[0] ?? null, checked: Boolean(hit), weak: !hit && hits.length > 0, status: 'done' });
+        const hits = await library.search(line);
+        const hit = hits.find(r => nameMatches(line, r));
+        found = { match: hit ?? hits[0] ?? null, checked: Boolean(hit), weak: !hit && hits.length > 0 };
       } catch (err) {
         stopped = err.message;
-        Object.assign(row, { status: 'done', note: err.message });
+        found = { note: err.message };
       }
     }
-    if (state.sheet?.kind !== 'import') return;
-    updateSheet({ rows: [...rows] });
+    if (!patchImport(job, { row: i, patch: { ...found, status: 'done' } })) return;
   }
-  updateSheet({ busy: false });
+  patchImport(job, { busy: false });
+}
+
+// The list keeps filling in while "Add it yourself" is open over it: each
+// result lands in whichever copy of this import sheet is current (the open
+// one, or the one the custom sheet returns to), one row at a time, so ticks
+// and hand-entered rows made meanwhile stay. False once the list is gone.
+function patchImport(job, { row = -1, patch = {}, busy }) {
+  const s = state.sheet;
+  const target = s?.kind === 'import' && s.job === job ? s
+    : s?.kind === 'custom' && s.back?.kind === 'import' && s.back.job === job ? s.back
+    : null;
+  if (!target) return false;
+  const next = { rows: target.rows.map((r, i) => (i === row ? { ...r, ...patch } : r)) };
+  if (busy !== undefined) next.busy = busy;
+  if (target === s) updateSheet(next);
+  else s.back = { ...target, ...next };
+  return true;
 }
 
 // A bottle entered by hand, opened from Add bottles or from an unmatched row
@@ -647,19 +761,32 @@ async function openSharedLink(link) {
 
 // ---------- Weather ----------
 
+// Opens on the saved forecast when there is one: fresh, it's all we need;
+// older, it shows dimmed under "Updating…" until the new one arrives, so the
+// morning check doesn't wait on the network.
 async function refreshWeather({ force = false } = {}) {
   if (!state.loc) return;
-  state.loading = true;
   state.error = null;
-  if (!state.wx) render();
+  if (!state.wx && !force) {
+    const cached = cachedForecast(state.loc);
+    if (cached) {
+      state.forecast = cached.forecast;
+      state.wx = summarize(cached.forecast);
+      if (cached.fresh) return render();
+    }
+  }
+  state.loading = true;
+  state.updating = Boolean(state.wx);
+  render();
   try {
-    if (force) localStorage.removeItem('scentcast.weather');
-    state.forecast = await getForecast(state.loc);
+    state.forecast = await getForecast(state.loc, { force });
     state.wx = summarize(state.forecast);
   } catch (err) {
-    state.error = err.message;
+    if (state.wx) state.wx = { ...state.wx, stale: true };
+    else state.error = forecastError(err);
   } finally {
     state.loading = false;
+    state.updating = false;
   }
   render();
 }
@@ -743,16 +870,16 @@ document.addEventListener('click', async e => {
   } else if (d.customRow !== undefined) {
     const row = state.sheet.rows[+d.customRow];
     openSheet(customSheet({ name: row.name, brand: row.brand, row: +d.customRow }));
-  } else if (d.accord) {
+  } else if (d.accord && state.sheet?.kind === 'custom') {
     const s = state.sheet;
     const accords = s.accords.includes(d.accord) ? s.accords.filter(a => a !== d.accord) : [...s.accords, d.accord].slice(0, MAX_CUSTOM_ACCORDS);
     updateSheet({ accords, error: '' });
     $(`#sheet [data-accord="${CSS.escape(d.accord)}"]`)?.focus({ preventScroll: true });
-  } else if (d.season) {
+  } else if (d.season && state.sheet?.kind === 'custom') {
     const s = state.sheet;
     updateSheet({ seasons: s.seasons.includes(d.season) ? s.seasons.filter(x => x !== d.season) : [...s.seasons, d.season] });
     $(`#sheet [data-season="${d.season}"]`)?.focus({ preventScroll: true });
-  } else if (d.time) {
+  } else if (d.time && state.sheet?.kind === 'custom') {
     updateSheet({ time: state.sheet.time === d.time ? null : d.time });
     $(`#sheet [data-time="${d.time}"]`)?.focus({ preventScroll: true });
   } else if (d.action === 'custom-back') {
@@ -778,7 +905,7 @@ document.addEventListener('click', async e => {
     if (!s || s.loading) return;
     if (state.mine.records.length && !s.confirmReplace) {
       s.confirmReplace = true;
-      renderView();
+      renderViewKeepingFocus(t);
       return;
     }
     state.mine = { name: state.mine.name, records: s.records };
@@ -804,9 +931,13 @@ document.addEventListener('click', async e => {
     computeToday();
     const picks = $('.hero-picks');
     if (picks) picks.outerHTML = ui.heroPicksHTML(heroPicks());
-    renderView();
+    renderViewKeepingFocus(t);
     renderFooter();
-    if (state.sheet) renderSheet({ keepScroll: true });
+    if (state.sheet) {
+      const focused = document.activeElement === t;
+      renderSheet({ keepScroll: true });
+      if (focused) refocus(t, '#sheet');
+    }
   } else if (d.themeChoice) {
     setTheme(d.themeChoice);
     savePrefs();
@@ -837,20 +968,17 @@ document.addEventListener('click', async e => {
   } else if (d.expand) {
     if (state.expanded.has(d.expand)) state.expanded.delete(d.expand);
     else state.expanded.add(d.expand);
-    renderView();
+    renderViewKeepingFocus(t);
   } else if (d.jump) {
     if (state.view !== 'today') { state.view = 'today'; savePrefs(); renderView(); }
     document.getElementById(`slot-${d.jump}`)?.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' });
   } else if (d.open !== undefined) {
     openDetail({ kind: 'detail', ctx: d.ctx, id: d.id }, t);
   } else if (d.occasion) {
-    state.occasion = d.occasion;
-    state.occasionSlot = null;
-    savePrefs();
-    renderView();
+    selectOccasion(d.occasion, t);
   } else if (d.occSlot) {
     state.occasionSlot = d.occSlot;
-    renderView();
+    renderViewKeepingFocus(t);
   } else if (d.city !== undefined) {
     const r = state.sheet?.results?.[+d.city];
     if (r) await setLocation({ name: r.name, region: r.region, lat: r.lat, lon: r.lon });
@@ -867,6 +995,13 @@ document.addEventListener('click', async e => {
     }
   }
 });
+
+function selectOccasion(id, trigger) {
+  state.occasion = id;
+  state.occasionSlot = null;
+  savePrefs();
+  renderViewKeepingFocus(trigger);
+}
 
 // City search runs as you type. Only the results list re-renders, so the
 // input keeps focus; a newer query makes older responses stale.
@@ -948,15 +1083,32 @@ window.addEventListener('resize', () => {
   }, 150);
 });
 
+// Arrow keys step through a roving group: +1, -1, or to an end.
+const STEPS = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+function stepIn(list, current, key) {
+  const i = list.indexOf(current);
+  if (key === 'Home') return list[0];
+  if (key === 'End') return list.at(-1);
+  return list[(i + STEPS[key] + list.length) % list.length];
+}
+
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && state.sheet) dismissSheet();
-  // Arrow keys move between tabs (roving tabindex).
-  if (e.target.getAttribute?.('role') === 'tab' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-    const i = VIEWS.indexOf(e.target.dataset.view);
-    const next = VIEWS[(i + (e.key === 'ArrowRight' ? 1 : VIEWS.length - 1)) % VIEWS.length];
-    const btn = $(`.tabs [data-view="${next}"]`);
+  const role = e.target.getAttribute?.('role');
+  // Tabs: left and right move between views (roving tabindex).
+  if (role === 'tab' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    const btn = $(`.tabs [data-view="${stepIn(VIEWS, e.target.dataset.view, e.key)}"]`);
     btn.click();
     btn.focus();
+  }
+  // Occasions are a radio group: arrows move the choice, as in a native one.
+  if (role === 'radio' && e.target.dataset.occasion && (e.key in STEPS || e.key === 'Home' || e.key === 'End')) {
+    e.preventDefault();
+    const next = stepIn(OCCASIONS.map(o => o.id), e.target.dataset.occasion, e.key);
+    selectOccasion(next);
+    const btn = $(`.occasions [data-occasion="${next}"]`);
+    btn?.focus();
+    btn?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 });
 
@@ -989,6 +1141,12 @@ document.addEventListener('touchend', e => {
   panel.style.transform = '';
 });
 
+// The scene's loops (stars, rain, chimney smoke) pause while the hero is
+// scrolled out of sight.
+if ('IntersectionObserver' in window) {
+  new IntersectionObserver(([e]) => $('#hero').classList.toggle('offscreen', !e.isIntersecting)).observe($('#hero'));
+}
+
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible' || !state.loc) return;
   if (!state.wx || Date.now() - state.wx.fetchedAt > REFRESH_AFTER) refreshWeather();
@@ -1007,6 +1165,8 @@ function locationFromURL(params) {
 }
 
 async function boot() {
+  // A reload on a sheet's history entry: no sheet is open, so it's the page's.
+  if (sheetEntry()) history.replaceState(null, '');
   const params = new URLSearchParams(location.search);
   const pinned = locationFromURL(params);
   if (pinned) state.loc = pinned;

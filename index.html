@@ -23,9 +23,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Scentcast">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&display=swap">
+  <link rel="preload" href="fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/fraunces.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/fraunces-italic.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="src/tokens.css">
   <link rel="stylesheet" href="src/styles.css">
   <!-- Apply the saved theme before first paint (src/theme.js takes over from there). -->
   <script>
@@ -35,9 +36,29 @@
     } catch {}
   </script>
   <script type="module" src="src/main.js"></script>
+  <!-- Every module main.js imports, fetched in parallel rather than as a waterfall (test/shell.test.js keeps the list whole). -->
+  <link rel="modulepreload" href="src/accords.js">
+  <link rel="modulepreload" href="src/wmo.js">
+  <link rel="modulepreload" href="src/profiles.js">
+  <link rel="modulepreload" href="src/custom.js">
+  <link rel="modulepreload" href="src/engine.js">
+  <link rel="modulepreload" href="src/occasions.js">
+  <link rel="modulepreload" href="src/weather.js">
+  <link rel="modulepreload" href="src/location.js">
+  <link rel="modulepreload" href="src/history.js">
+  <link rel="modulepreload" href="src/hidden.js">
+  <link rel="modulepreload" href="src/collections.js">
+  <link rel="modulepreload" href="src/api.js">
+  <link rel="modulepreload" href="src/fragella.js">
+  <link rel="modulepreload" href="src/fragrantica.js">
+  <link rel="modulepreload" href="src/layering.js">
+  <link rel="modulepreload" href="src/scene.js">
+  <link rel="modulepreload" href="src/theme.js">
+  <link rel="modulepreload" href="src/ui.js">
 </head>
 <body>
   <div id="app">
+    <h1 id="page-title" class="visually-hidden">Scentcast</h1>
     <header id="hero" class="hero"></header>
     <nav class="tabs" role="tablist" aria-label="View">
       <button role="tab" id="tab-today" data-view="today" aria-selected="true" aria-controls="view">Today</button>
