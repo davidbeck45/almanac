@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { noteFamily, noteFamilies, layerPair, layerPicks, layerProfile, complementOf } from '../src/layering.js';
+import { noteFamily, noteFamilies, layerPair, layerPicks, layerProfile, complementOf, commonNotes } from '../src/layering.js';
 import { heaviness } from '../src/accords.js';
 import { DEFAULT_HIDDEN } from '../src/hidden.js';
 
@@ -183,4 +183,38 @@ test('the weather lifts rich pairs on cold nights and fresh ones on hot days', (
   };
   assert.ok(partnerHeaviness(coldNight) > partnerHeaviness(hotHumidDay) + 0.2);
   for (const p of layerPicks(light, demo, 3, hotHumidDay)) assert.ok(!p.reasons.some(r => r.tone === 'bad' && /heat/.test(r.text)));
+});
+
+test('a pair that suits the weather comes before any that doesn\'t, Parfumo votes or not', () => {
+  for (const c of [hotHumidDay, coldNight]) {
+    for (const f of demo) {
+      const picks = layerPicks(f, demo, Infinity, c);
+      const firstOff = picks.findIndex(p => p.offWeather);
+      if (firstOff >= 0) assert.ok(picks.slice(firstOff).every(p => p.offWeather), `${f.name}: ${picks.map(p => `${p.fragrance.name}${p.offWeather ? ' (off)' : ''}`).join(', ')}`);
+      for (const p of picks) assert.equal(p.offWeather, p.reasons.some(r => r.tone === 'bad' && /^Too (rich|light)/.test(r.text)), `${f.name} + ${p.fragrance.name}`);
+    }
+  }
+  // Glorious Oud Royal Blanc's voted partner Liquid Brun is too rich for a muggy 95°F day.
+  const gorb = layerPicks(named('Glorious Oud Royal Blanc'), demo, 3, { ...hotHumidDay, feelsF: 95 });
+  assert.ok(!gorb.some(p => p.fragrance === named('Liquid Brun')), gorb.map(p => p.fragrance.name).join(', '));
+  const brun = layerPair(named('Glorious Oud Royal Blanc'), named('Liquid Brun'), { ...hotHumidDay, feelsF: 95 });
+  assert.ok(brun.community.boost < 0.1, `boost ${brun.community.boost}`);
+});
+
+test('a note most of the collection shares doesn\'t tie a pair together', () => {
+  const common = commonNotes(demo);
+  assert.ok(common.has('bergamot'), [...common].join(', '));
+  assert.ok(!common.has('cardamom'));
+  let ties = 0;
+  for (const f of demo) {
+    for (const p of layerPicks(f, demo)) {
+      if (p.reasons.some(r => /^Shared .*\bbergamot\b/.test(r.text))) ties++;
+    }
+  }
+  assert.equal(ties, 0);
+  // Without a collection to judge by, a shared bergamot still counts.
+  const partner = bottle('partner', { citrus: 100 }, { top: ['Bergamot', 'Lemon'], base: ['Cedar'] });
+  const plain = bottle('plain', { vanilla: 100 }, { top: ['Bergamot'], base: ['Vanilla', 'Cedar'] });
+  assert.equal(layerPair(plain, partner).reasons.find(r => r.text.startsWith('Shared')).text, 'Shared cedar and bergamot tie them together');
+  assert.equal(layerPair(plain, partner, null, { common: new Set(['bergamot']) }).reasons.find(r => r.text.startsWith('Shared')).text, 'Shared cedar ties them together');
 });
