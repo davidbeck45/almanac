@@ -18,10 +18,10 @@ For layering ("what goes with X", "cool layers"): `node scripts/recommend.mjs --
 
 To add or refresh a bottle:
 1. Get its line. A bottle in the Fragrantica dataset (below; `python3 scripts/decant.py similar <id or "name brand">` finds it) needs no browser: `python3 scripts/decant.py add collection <id>` appends or replaces it. A bottle newer than the dataset needs the extractor: open its page with Claude in Chrome (David is logged in as @doeszen), run `scripts/fragrantica-extract.js` on the rendered page with the javascript tool (it returns one JSON line, clicking "Show votes" for the note votes, `noteVotes`, and back off), and append or replace that line in `data/collection.jsonl`.
-2. `npm run build:data`, `npm run fit` and `npm test`.
+2. `python3 scripts/decant.py extras`, `npm run build:data`, `npm run fit` and `npm test`.
 3. If it's a dupe, add its original (below). Add its Parfumo line, and its original's (below).
 
-`python3 scripts/decant.py refresh` takes newer vote counts from a new dataset version into every `data/*.jsonl` line.
+`python3 scripts/decant.py refresh` takes newer vote counts from a new dataset version into every `data/*.jsonl` line, and rewrites `data/extras.jsonl` (below).
 
 Dupes and their originals: `data/dupes.json` pairs a dupe's slug with its original's, and `data/originals.jsonl` holds the originals' lines (`decant.py add originals <id>`). The build gives each dupe a summary of its original's votes as `original`; the engine leans on it for a dupe's season and day/night split, the detail sheet says "Inspired by", and `npm run fit` counts the originals as voted bottles. Find the original in the dataset's "smells like" votes: `python3 scripts/decant.py similar <id>` lists them, and the top bottle from another brand released no later is the curated original for 18 of the 19 dupes. `decant.py dupes` checks every pair against the votes and names unpaired bottles whose votes point to an original. When a dupe's list holds only fellow clones (Essence de Blanc's), run `similar` on one of them, or read the reviews: the raw HTML of a perfume page has its 200 newest `[itemprop="reviewBody"]`, and the most-named perfume after "dupe of", "clone of", "smells like" and the like is nearly always it. Ask David when the votes are split.
 
@@ -47,9 +47,25 @@ Fragrantica gotchas:
 
 ## Fragrantica dataset
 
-`data/fragrantica/` holds every Fragrantica perfume with accords (137,437), from Le Decanteur's Kaggle dataset (CC BY-NC-SA 4.0: the app's footer credits it whenever a list uses it, and `data/fragrantica/README.md` carries the license). The app searches it after the demo and catalog, and share links resolve its ids, which are Fragrantica's like the demo's. `src/fragrantica.js` turns a row into an engine record (`source: 'fragrantica'`), loading one search-index file per query and one record file per added bottle.
+`data/fragrantica/` holds every Fragrantica perfume with accords (137,437), from Le Decanteur's Kaggle dataset (CC BY-NC-SA 4.0: the app's footer always credits it, since even the demo's records carry values derived from it, and `data/fragrantica/README.md` carries the license). The app searches it after the demo and catalog, and share links resolve its ids, which are Fragrantica's like the demo's. `src/fragrantica.js` turns a row into an engine record (`source: 'fragrantica'`), loading one search-index file per query and one record file per added bottle.
 
-`scripts/decant.py` builds it (file layout in its docstring). For a new dataset version: `python3 scripts/decant.py download` (needs David's Kaggle token in `~/.kaggle/access_token`), `build`, then `node scripts/fit-profiles.mjs --write`, `npm run build:data` and `npm test`. The build rewrites most of its 1,300 files, about 26 MB gzipped.
+`scripts/decant.py` builds it (file layout and keys in its docstring). For a new dataset version: `python3 scripts/decant.py download` (needs David's Kaggle token in `~/.kaggle/access_token`), `build`, then `python3 scripts/decant.py extras`, `node scripts/fit-profiles.mjs --write`, `npm run build:data` and `npm test`. The build rewrites most of its 1,800 files, about 32 MB gzipped. `decant.py pool`, `about` and `extras` remake one piece each (every command reads the whole 555 MB dump, about 40 seconds); none of them touch `r/` or `i/`.
+
+Beyond the search and records, the dataset has what a bottle's page shows and signals derived from its votes:
+- `pool.json` and `pool-notes.json`: the suggestion pool for gap filling and Discover, 9,644 bottles: 500+ rating votes, plus rising ones (100–499 votes, recent popularity 1,000+: the new Middle-Eastern releases David buys). Columnar, one array per key, rows by brand then name (sort by `rv` for most voted). It holds everything the engine scores on, exact but for rating, Fragrantica longevity and sillage and the like-shares (2 decimals; `rank()` scores stay within 0.005 of the `r/` record's), and the signals below. `pool-notes.json` holds each bottle's 8 strongest notes, with votes in tenths of the top note's. 1.7 + 0.4 MB raw, 559 + 151 KB gzip -9; `test/pool.test.js` holds them under 750 KB together. `loadPool()` in `src/fragrantica.js` fetches both once (load it when a feature needs it, never on boot) and `fromPool(pool, i)` makes bottle i's engine record (`source: 'fragrantica'`) with the signals as `extras`.
+- `x/<id % 512>.json`: the about data of the 48,291 bottles with 30+ rating votes, 13.8 MB raw, 6.0 MB gzipped. `loadAbout(id)` reads one with readable keys: `sentiment` (the rating histogram), `value` {avg, votes}, `owners` {have, had, want}, `crowdGender` {lean, votes}, `popularity` {all, recent}, `perfumers`, `line` (Fragrantica's collection), `pros` (top 3) and `cons` (top 2) as {text, up, down}, `smellsLike` (top 5 {id, up, down}), `alsoLiked` (10 ids: co-preference, "fans also like", not smells-like), `flags`.
+- `data/extras.jsonl` (`decant.py extras`): the same for every bottle in the wardrobe, catalog and originals, plus their signals. The build joins it like `parfumo.jsonl`: the signals as `extras`, the rest as `about` (and its histogram as `sentiment` where a line has none, as `decant.py add` lines don't).
+
+The signals, on pool and wardrobe records alike (`extras`):
+- `value`: value for money, 1 overpriced to 5 great value, few votes leaning to 3.1. It matches the AI summaries' "affordable" and "overpriced" at AUC 0.98 and barely tracks the rating. The pool's median is 3.0 ("Great value" from 4.0, "Pricey" at 2.4 or less); the wardrobe's is 4.2, so value is a taste for David, not just a badge.
+- `safe`: blind-buy safety, the pool percentile (0–100) of the like + love share less 4 × the hate share. The hate share predicts an AI "not a safe blind buy" far better than the rating does.
+- `keep`: the share of owners who keep it, over what pages that old keep (+0.1 or more: people keep it).
+- `lean`: the crowd's gender vote, −1 feminine to +1 masculine. A soft taste signal, never a filter: David owns crowd-feminine bottles.
+- `now`: the pool percentile of recent popularity (about two years).
+- `like`: up to 3 bottles voters say it smells like. `alt`: up to 3 cheaper alternatives, for bottles valued 2.6 or less: smells-like either way round (10+ net votes, 2:1), valued 1+ higher (Aventus → Club de Nuit Intense Man; it finds 12 of the wardrobe's 19 dupe pairs on its own).
+- `flags`: `discontinued`, `reformulated` and `notBlindBuy` from AI summary items more voters agree with than not; `brigaded`, more than 1.5 ratings per owner (SpongeBob: leave these out of suggestions); `polarizing`, a hate share in the pool's top tenth.
+
+The pros and cons are Fragrantica's AI summary of its members' reviews. Quote them as "Fragrantica members' summary", a few per bottle, with the dataset credit.
 
 Gotchas:
 - Records keep accords as Fragrantica's bar widths, which our extractor reads and the engine's weights are tuned on: 30 + 0.7 × the dataset's strength (`barWidth` and `barStrength` in `src/accords.js`).
