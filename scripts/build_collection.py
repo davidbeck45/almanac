@@ -24,6 +24,13 @@
   like (the engine leans few votes toward them), and `performance`,
   Fragrantica's longevity (1-5) and sillage (1-4) vote averages, which the
   engine reads when Parfumo lacks the bottle.
+- data/extras.jsonl (from `scripts/decant.py extras`): the dataset's about
+  data for each bottle in the wardrobe, catalog and originals, as `about`
+  (value for money, owners, crowd gender, popularity, perfumers, line,
+  Fragrantica members' AI summary pros and cons, smells-like and also-liked
+  bottles, flags), and its derived signals as `extras` (the suggestion pool's
+  keys). Its rating histogram fills `sentiment` for lines built by
+  `decant.py add`, which have none.
 
 Each jsonl line is the output of scripts/fragrantica-extract.js for one
 perfume page, or of `scripts/decant.py add` (built from the dataset, with its
@@ -173,6 +180,13 @@ def layered_with(bottles: list[dict], originals: dict[int, dict], parfumo: dict[
     return out
 
 
+def extras_rows() -> dict[int, dict]:
+    """Fragrantica id -> its line in data/extras.jsonl."""
+    path = ROOT / "data/extras.jsonl"
+    lines = path.read_text().splitlines() if path.exists() else []
+    return {r["id"]: r for r in map(json.loads, filter(str.strip, lines))}
+
+
 def library_rows(ids: set[int]) -> dict[int, dict]:
     """Fragrantica id -> its row in data/fragrantica/r/ (see scripts/decant.py)."""
     out = {}
@@ -195,7 +209,7 @@ def library_extras(row: dict) -> dict:
     return extras
 
 
-def write(stem: str, source: str, rows: list[dict], originals: dict[int, dict], parfumo: dict[int, dict], layered: dict[int, list], library: dict[int, dict]) -> None:
+def write(stem: str, source: str, rows: list[dict], originals: dict[int, dict], parfumo: dict[int, dict], layered: dict[int, list], library: dict[int, dict], extras: dict[int, dict]) -> None:
     out = ROOT / f"data/{stem}.json"
     for f in rows:
         if f["id"] in originals:
@@ -205,6 +219,10 @@ def write(stem: str, source: str, rows: list[dict], originals: dict[int, dict], 
         if f["id"] in layered:
             f["layeredWith"] = layered[f["id"]]
         f.update(library_extras(library.get(f["id"], {})))
+        if x := extras.get(f["id"]):
+            f.setdefault("sentiment", x["sentiment"])
+            f["about"] = {k: v for k, v in x.items() if k not in ("id", "sentiment", "extras")}
+            f["extras"] = x["extras"]
     rows.sort(key=lambda f: (f["brand"].lower(), f["name"].lower()))
     # "fetched" is the last time the data changed, so a rebuild alone keeps it.
     old = json.loads(out.read_text()) if out.exists() else {}
@@ -220,8 +238,9 @@ def main() -> None:
     # Pairs reach across the wardrobe and the catalog: a visitor's list can mix them.
     layered = layered_with(rows["collection"] + rows["catalog"], originals, parfumo)
     library = library_rows({f["id"] for stem_rows in rows.values() for f in stem_rows})
+    extras = extras_rows()
     for stem, source in FILES:
-        write(stem, source, rows[stem], originals, parfumo, layered, library)
+        write(stem, source, rows[stem], originals, parfumo, layered, library, extras)
 
 
 if __name__ == "__main__":
