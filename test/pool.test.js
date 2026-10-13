@@ -90,9 +90,16 @@ test('pool signals: brigaded pages, cheaper alternatives, value', () => {
 test('wardrobe, catalog and originals carry the about data and signals', async () => {
   for (const stem of ['collection', 'catalog', 'originals']) {
     for (const f of built(stem)) {
+      // A bottle newer than the dataset (added with the extractor) has neither.
+      if (!inLibrary.has(Number(f.id))) {
+        assert.ok(!f.about && !f.extras, f.name);
+        continue;
+      }
       assert.ok(f.about && f.extras && f.sentiment, `${f.name}: run python3 scripts/decant.py extras`);
       assert.equal(typeof f.extras.safe, 'number', f.name);
-      const { sentiment, ...about } = await loadAbout(f.id, load);
+      const shard = await loadAbout(f.id, load);
+      if (!shard) continue; // under 30 rating votes
+      const { sentiment, ...about } = shard;
       assert.deepEqual(about, f.about, `${f.name}: about shard and extras.jsonl agree`);
       assert.equal(Object.keys(sentiment).length, 5);
     }
@@ -130,4 +137,15 @@ test('about shards parse, for bottles with 30 or more votes', async () => {
   assert.ok(aventus.value.avg < 2 && aventus.owners.have > aventus.owners.had);
   assert.equal(await loadAbout('999999999', load), null);
   assert.equal(await loadAbout('my:abc', load), null);
+});
+
+test('the default loader fetches next to this module, so a Worker under src/ finds the files', async t => {
+  const asked = [];
+  t.mock.method(globalThis, 'fetch', async url => {
+    asked.push(String(url));
+    return new Response(readFileSync(new URL(url)));
+  });
+  const aventus = await loadAbout('9828');
+  assert.equal(aventus.line, 'Aventus');
+  assert.deepEqual(asked, [String(new URL(`x/${9828 % 512}.json`, dir))]);
 });

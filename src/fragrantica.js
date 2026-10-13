@@ -229,14 +229,15 @@ export function fragranticaLibrary(load = defaultLoad) {
   return { search, records };
 }
 
+// Resolved against this module, not the page, so it works from a module Worker too.
 async function defaultLoad(path) {
   let res;
   try {
-    res = await fetch(`data/fragrantica/${path}`);
+    res = await fetch(new URL(`../data/fragrantica/${path}`, import.meta.url));
   } catch {
-    throw new Error('Can’t reach fragrance search. Check your connection.');
+    throw new Error('Can’t reach the fragrance library. Check your connection.');
   }
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Search failed (${res.status}).`);
+  if (!res.ok) throw new Error(`The fragrance library didn’t load (${res.status}).`);
   return res.text();
 }
