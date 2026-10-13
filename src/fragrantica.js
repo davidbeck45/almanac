@@ -1,7 +1,9 @@
 // Every Fragrantica perfume, from Le Decanteur's dataset (CC BY-NC-SA 4.0),
 // built into data/fragrantica/ by scripts/decant.py. The app searches it
 // after the demo and catalog, and loads a bottle's record when it's added or
-// opens from a share link. Ids are Fragrantica's, like the demo's.
+// opens from a share link. Ids are Fragrantica's, like the demo's. The
+// suggestion pool (loadPool, fromPool) and a bottle's about data (loadAbout)
+// load on demand.
 import { barWidth, barStrength } from './accords.js';
 import { normalize, nameMatches } from './collections.js';
 import { predictedShares } from './custom.js';
