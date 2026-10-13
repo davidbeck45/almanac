@@ -108,6 +108,50 @@
         "dayNight": {
           "day": 0.485,
           "night": 0.515
+        },
+        "extras": {
+          "value": 1.66,
+          "safe": 51,
+          "keep": 0.044,
+          "lean": 0.79,
+          "now": 97,
+          "like": [
+            98689,
+            93272,
+            9828
+          ],
+          "alt": [
+            98689,
+            93272,
+            106403
+          ],
+          "flags": []
+        },
+        "siblings": [
+          121661,
+          93955,
+          100239,
+          110343
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Creed/absolu-aventus",
+          "longevity": 7.7,
+          "sillage": 7.4,
+          "votes": 1263,
+          "occasion": {
+            "Leisure": 0.192,
+            "Daily": 0.192,
+            "Evening": 0.192,
+            "Night Out": 0.182,
+            "Business": 0.182,
+            "Sport": 0.061
+          },
+          "occasionVotes": 1082
+        },
+        "performance": {
+          "longevity": 3.5511,
+          "sillage": 2.2914,
+          "votes": 1949
         }
       },
       "parfumo": {
@@ -265,7 +309,8 @@
           106624
         ],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": []
       }
     },
     {
@@ -380,6 +425,50 @@
         "dayNight": {
           "day": 0.46,
           "night": 0.54
+        },
+        "extras": {
+          "value": 2.35,
+          "safe": 85,
+          "keep": 0.14,
+          "lean": 0.6,
+          "now": 100,
+          "like": [
+            70748,
+            46633,
+            66242
+          ],
+          "alt": [
+            70748,
+            66242,
+            63711
+          ],
+          "flags": []
+        },
+        "siblings": [
+          63711,
+          113924,
+          95630,
+          119178,
+          61291
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Parfums_de_Marly/Layton",
+          "longevity": 8.2,
+          "sillage": 8,
+          "votes": 8761,
+          "occasion": {
+            "Night Out": 0.26,
+            "Evening": 0.26,
+            "Leisure": 0.19,
+            "Daily": 0.17,
+            "Business": 0.12
+          },
+          "occasionVotes": 6525
+        },
+        "performance": {
+          "longevity": 3.7707,
+          "sillage": 2.5942,
+          "votes": 12107
         }
       },
       "parfumo": {
@@ -538,7 +627,12 @@
           63711
         ],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": [
+          95630,
+          113924,
+          119178
+        ]
       }
     },
     {
@@ -645,6 +739,44 @@
         "dayNight": {
           "day": 0.736,
           "night": 0.264
+        },
+        "extras": {
+          "value": 3.03,
+          "safe": 81,
+          "keep": 0.032,
+          "lean": 0.08,
+          "now": 99,
+          "like": [
+            75930,
+            122274,
+            125391
+          ],
+          "alt": [],
+          "flags": []
+        },
+        "siblings": [
+          122274,
+          125861
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Goldfield__Banks/ingenious-ginger",
+          "longevity": 7.2,
+          "sillage": 7.1,
+          "votes": 1335,
+          "occasion": {
+            "Daily": 0.25,
+            "Leisure": 0.25,
+            "Business": 0.17,
+            "Sport": 0.11,
+            "Evening": 0.11,
+            "Night Out": 0.11
+          },
+          "occasionVotes": 1408
+        },
+        "performance": {
+          "longevity": 3.1918,
+          "sillage": 2.0819,
+          "votes": 2295
         }
       },
       "parfumo": {
@@ -771,7 +903,10 @@
           125861
         ],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": [
+          122274
+        ]
       }
     },
     {
@@ -943,7 +1078,8 @@
         "now": 23,
         "like": [],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": []
       }
     },
     {
@@ -1157,7 +1293,11 @@
           72694
         ],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": [
+          91292,
+          49037
+        ]
       }
     },
     {
@@ -1389,6 +1529,14 @@
         "alt": [],
         "flags": [
           "polarizing"
+        ],
+        "clones": [
+          77860,
+          50265,
+          93538,
+          69256,
+          50327,
+          53752
         ]
       }
     },
@@ -1600,7 +1748,8 @@
           76575
         ],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": []
       }
     },
     {
@@ -1708,6 +1857,51 @@
         "dayNight": {
           "day": 0.268,
           "night": 0.732
+        },
+        "extras": {
+          "value": 1.75,
+          "safe": 87,
+          "keep": 0.078,
+          "lean": 0.28,
+          "now": 98,
+          "like": [
+            116876,
+            92425,
+            115637
+          ],
+          "alt": [
+            116876,
+            92425,
+            115637
+          ],
+          "flags": [
+            "notBlindBuy"
+          ]
+        },
+        "siblings": [
+          92425,
+          115637,
+          120486,
+          117832
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Clive_Christian/xxi-art-deco-blonde-amber",
+          "longevity": 8.4,
+          "sillage": 8.2,
+          "votes": 2597,
+          "occasion": {
+            "Night Out": 0.384,
+            "Evening": 0.364,
+            "Leisure": 0.131,
+            "Daily": 0.061,
+            "Business": 0.061
+          },
+          "occasionVotes": 1364
+        },
+        "performance": {
+          "longevity": 3.9352,
+          "sillage": 2.759,
+          "votes": 1415
         }
       },
       "parfumo": {
@@ -1850,7 +2044,11 @@
           92425
         ],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": [
+          115637,
+          120486
+        ]
       }
     },
     {
@@ -1955,6 +2153,44 @@
         "dayNight": {
           "day": 0.843,
           "night": 0.157
+        },
+        "extras": {
+          "value": 2.84,
+          "safe": 32,
+          "keep": -0.024,
+          "lean": -0.26,
+          "now": 96,
+          "like": [
+            113595,
+            103256,
+            135601
+          ],
+          "alt": [],
+          "flags": []
+        },
+        "siblings": [
+          103256,
+          135601
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Room_1015/wavechild",
+          "longevity": 7.2,
+          "sillage": 7,
+          "votes": 346,
+          "occasion": {
+            "Leisure": 0.347,
+            "Daily": 0.267,
+            "Sport": 0.129,
+            "Night Out": 0.089,
+            "Evening": 0.089,
+            "Business": 0.079
+          },
+          "occasionVotes": 355
+        },
+        "performance": {
+          "longevity": 3.2117,
+          "sillage": 2.089,
+          "votes": 865
         }
       },
       "parfumo": {
@@ -2088,7 +2324,11 @@
           103256
         ],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": [
+          135601,
+          103256
+        ]
       }
     },
     {
@@ -2193,6 +2433,44 @@
         "dayNight": {
           "day": 0.71,
           "night": 0.29
+        },
+        "extras": {
+          "value": 1.86,
+          "safe": 88,
+          "keep": 0.114,
+          "lean": 0.4,
+          "now": 100,
+          "like": [
+            122037,
+            99815
+          ],
+          "alt": [
+            99815
+          ],
+          "flags": []
+        },
+        "siblings": [
+          99815
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Louis_Vuitton/imagination",
+          "longevity": 7.7,
+          "sillage": 7.6,
+          "votes": 9434,
+          "occasion": {
+            "Daily": 0.24,
+            "Leisure": 0.22,
+            "Business": 0.18,
+            "Sport": 0.14,
+            "Night Out": 0.12,
+            "Evening": 0.1
+          },
+          "occasionVotes": 8009
+        },
+        "performance": {
+          "longevity": 3.6635,
+          "sillage": 2.3512,
+          "votes": 8331
         }
       },
       "parfumo": {
@@ -2368,7 +2646,11 @@
           112706
         ],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": [
+          107084,
+          112706
+        ]
       }
     },
     {
@@ -2467,6 +2749,47 @@
         "dayNight": {
           "day": 0.711,
           "night": 0.289
+        },
+        "extras": {
+          "value": 2.1,
+          "safe": 59,
+          "keep": 0.046,
+          "lean": -0.35,
+          "now": 99,
+          "like": [
+            91361,
+            99849,
+            96606
+          ],
+          "alt": [
+            91361,
+            99849,
+            98002
+          ],
+          "flags": []
+        },
+        "siblings": [
+          99849
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Initio/musk-therapy-extrait-de-parfum",
+          "longevity": 7.8,
+          "sillage": 7.3,
+          "votes": 2651,
+          "occasion": {
+            "Daily": 0.248,
+            "Leisure": 0.248,
+            "Business": 0.198,
+            "Night Out": 0.119,
+            "Evening": 0.119,
+            "Sport": 0.069
+          },
+          "occasionVotes": 2851
+        },
+        "performance": {
+          "longevity": 3.4645,
+          "sillage": 2.0946,
+          "votes": 3476
         }
       },
       "parfumo": {
@@ -2642,7 +2965,10 @@
           121577
         ],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": [
+          99849
+        ]
       }
     },
     {
@@ -2751,6 +3077,50 @@
         "dayNight": {
           "day": 0.379,
           "night": 0.621
+        },
+        "extras": {
+          "value": 2.23,
+          "safe": 54,
+          "keep": 0.05,
+          "lean": 0.33,
+          "now": 100,
+          "like": [
+            94713,
+            98242,
+            106802
+          ],
+          "alt": [
+            94713,
+            98242,
+            106802
+          ],
+          "flags": []
+        },
+        "siblings": [
+          106802,
+          98242,
+          123526,
+          109081,
+          96320
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Parfums_de_Marly/althair",
+          "longevity": 8.3,
+          "sillage": 8.1,
+          "votes": 5005,
+          "occasion": {
+            "Evening": 0.32,
+            "Night Out": 0.3,
+            "Leisure": 0.18,
+            "Daily": 0.12,
+            "Business": 0.08
+          },
+          "occasionVotes": 3446
+        },
+        "performance": {
+          "longevity": 3.8069,
+          "sillage": 2.4785,
+          "votes": 6339
         }
       },
       "parfumo": {
@@ -2925,7 +3295,15 @@
           98242
         ],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": [
+          98242,
+          106802,
+          109081,
+          98713,
+          96320,
+          98137
+        ]
       }
     },
     {
@@ -3084,7 +3462,8 @@
           86056
         ],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": []
       }
     },
     {
@@ -3188,6 +3567,46 @@
         "dayNight": {
           "day": 0.526,
           "night": 0.474
+        },
+        "extras": {
+          "value": 2.9,
+          "safe": 17,
+          "keep": 0.084,
+          "lean": -0.63,
+          "now": 100,
+          "like": [
+            93628,
+            88999,
+            102358
+          ],
+          "alt": [],
+          "flags": []
+        },
+        "siblings": [
+          93628,
+          98691,
+          105184,
+          119815,
+          101215
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Giardini_di_Toscana/Bianco_Latte",
+          "longevity": 8.6,
+          "sillage": 8.3,
+          "votes": 1657,
+          "occasion": {
+            "Evening": 0.253,
+            "Leisure": 0.242,
+            "Night Out": 0.232,
+            "Daily": 0.192,
+            "Business": 0.081
+          },
+          "occasionVotes": 1216
+        },
+        "performance": {
+          "longevity": 3.8839,
+          "sillage": 2.7008,
+          "votes": 6102
         }
       },
       "parfumo": {
@@ -3346,7 +3765,11 @@
           101562
         ],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": [
+          101562,
+          105184
+        ]
       }
     },
     {
@@ -3455,6 +3878,44 @@
         "dayNight": {
           "day": 0.824,
           "night": 0.176
+        },
+        "extras": {
+          "value": 1.67,
+          "safe": 79,
+          "keep": 0.074,
+          "lean": 0.08,
+          "now": 94,
+          "like": [
+            137096,
+            42250,
+            139667
+          ],
+          "alt": [
+            137096,
+            42250
+          ],
+          "flags": []
+        },
+        "siblings": [],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Guerlain/herbes-troublantes",
+          "longevity": 6.3,
+          "sillage": 6.1,
+          "votes": 564,
+          "occasion": {
+            "Daily": 0.257,
+            "Leisure": 0.248,
+            "Business": 0.218,
+            "Sport": 0.139,
+            "Night Out": 0.069,
+            "Evening": 0.069
+          },
+          "occasionVotes": 763
+        },
+        "performance": {
+          "longevity": 2.7143,
+          "sillage": 1.7748,
+          "votes": 555
         }
       },
       "parfumo": {
@@ -3560,7 +4021,8 @@
           139667
         ],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": []
       }
     },
     {
@@ -3669,6 +4131,44 @@
         "dayNight": {
           "day": 0.507,
           "night": 0.493
+        },
+        "extras": {
+          "value": 2.63,
+          "safe": 52,
+          "keep": 0.075,
+          "lean": -0.01,
+          "now": 99,
+          "like": [
+            85097,
+            73645,
+            93785
+          ],
+          "alt": [],
+          "flags": []
+        },
+        "siblings": [
+          100143,
+          100016,
+          109902
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/bdk_Parfums/gris-charnel-eau-de-parfum",
+          "longevity": 7.8,
+          "sillage": 7.4,
+          "votes": 3223,
+          "occasion": {
+            "Evening": 0.22,
+            "Daily": 0.21,
+            "Leisure": 0.21,
+            "Night Out": 0.19,
+            "Business": 0.17
+          },
+          "occasionVotes": 3682
+        },
+        "performance": {
+          "longevity": 3.3664,
+          "sillage": 2.1198,
+          "votes": 4421
         }
       },
       "parfumo": {
@@ -3827,7 +4327,11 @@
           93785
         ],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": [
+          100016,
+          109902
+        ]
       }
     },
     {
@@ -3932,6 +4436,47 @@
         "dayNight": {
           "day": 0.518,
           "night": 0.482
+        },
+        "extras": {
+          "value": 2.26,
+          "safe": 57,
+          "keep": 0.005,
+          "lean": 0.08,
+          "now": 96,
+          "like": [
+            89454,
+            89762,
+            114754
+          ],
+          "alt": [
+            89454,
+            89762,
+            114754
+          ],
+          "flags": []
+        },
+        "siblings": [
+          89762,
+          114754
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Initio/paragon",
+          "longevity": 8.1,
+          "sillage": 7.7,
+          "votes": 1376,
+          "occasion": {
+            "Leisure": 0.23,
+            "Daily": 0.21,
+            "Evening": 0.21,
+            "Night Out": 0.2,
+            "Business": 0.15
+          },
+          "occasionVotes": 1447
+        },
+        "performance": {
+          "longevity": 3.7333,
+          "sillage": 2.3422,
+          "votes": 1923
         }
       },
       "parfumo": {
@@ -4078,7 +4623,10 @@
           114754
         ],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": [
+          114754
+        ]
       }
     },
     {
@@ -4182,6 +4730,45 @@
         "dayNight": {
           "day": 0.469,
           "night": 0.531
+        },
+        "extras": {
+          "value": 2.41,
+          "safe": 60,
+          "keep": 0.056,
+          "lean": -0.48,
+          "now": 95,
+          "like": [
+            83513,
+            95613,
+            107860
+          ],
+          "alt": [
+            83513,
+            95613
+          ],
+          "flags": []
+        },
+        "siblings": [
+          95613
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Initio/atomic-rose-eau-de-parfum",
+          "longevity": 8.6,
+          "sillage": 8.2,
+          "votes": 874,
+          "occasion": {
+            "Night Out": 0.28,
+            "Evening": 0.28,
+            "Leisure": 0.2,
+            "Daily": 0.14,
+            "Business": 0.1
+          },
+          "occasionVotes": 934
+        },
+        "performance": {
+          "longevity": 4.1302,
+          "sillage": 3.0125,
+          "votes": 2265
         }
       },
       "parfumo": {
@@ -4303,7 +4890,8 @@
           107860
         ],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": []
       }
     },
     {
@@ -4410,6 +4998,49 @@
         "dayNight": {
           "day": 0.7,
           "night": 0.3
+        },
+        "extras": {
+          "value": 2.05,
+          "safe": 43,
+          "keep": 0.012,
+          "lean": -0.06,
+          "now": 100,
+          "like": [
+            105076,
+            108244,
+            110848
+          ],
+          "alt": [
+            105076,
+            108244,
+            136382
+          ],
+          "flags": []
+        },
+        "siblings": [
+          108244,
+          115528,
+          111155
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Ex_Nihilo/blue-talisman-eau-de-parfum",
+          "longevity": 7.7,
+          "sillage": 7.5,
+          "votes": 1613,
+          "occasion": {
+            "Leisure": 0.24,
+            "Daily": 0.23,
+            "Business": 0.19,
+            "Night Out": 0.12,
+            "Sport": 0.11,
+            "Evening": 0.11
+          },
+          "occasionVotes": 1397
+        },
+        "performance": {
+          "longevity": 3.5306,
+          "sillage": 2.332,
+          "votes": 2967
         }
       },
       "parfumo": {
@@ -4565,6 +5196,10 @@
         "alt": [],
         "flags": [
           "discontinued"
+        ],
+        "clones": [
+          101314,
+          108244
         ]
       }
     },
@@ -4774,7 +5409,8 @@
         "now": 94,
         "like": [],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": []
       }
     },
     {
@@ -4877,6 +5513,49 @@
         "dayNight": {
           "day": 0.303,
           "night": 0.697
+        },
+        "extras": {
+          "value": 2.16,
+          "safe": 32,
+          "keep": 0.037,
+          "lean": -0.03,
+          "now": 99,
+          "like": [
+            99060,
+            66238,
+            84258
+          ],
+          "alt": [
+            99060,
+            95174,
+            102788
+          ],
+          "flags": [
+            "discontinued"
+          ]
+        },
+        "siblings": [
+          102788,
+          103380
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Yves_Saint_Laurent/babycat",
+          "longevity": 8.5,
+          "sillage": 8.1,
+          "votes": 1845,
+          "occasion": {
+            "Evening": 0.356,
+            "Night Out": 0.337,
+            "Leisure": 0.168,
+            "Daily": 0.069,
+            "Business": 0.069
+          },
+          "occasionVotes": 1458
+        },
+        "performance": {
+          "longevity": 3.8179,
+          "sillage": 2.556,
+          "votes": 2403
         }
       },
       "parfumo": {
@@ -5031,7 +5710,11 @@
           104191
         ],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": [
+          102788,
+          103380
+        ]
       }
     },
     {
@@ -5138,6 +5821,46 @@
         "dayNight": {
           "day": 0.652,
           "night": 0.348
+        },
+        "extras": {
+          "value": 1.99,
+          "safe": 21,
+          "keep": 0.056,
+          "lean": -0.53,
+          "now": 95,
+          "like": [
+            75874,
+            75078,
+            121449
+          ],
+          "alt": [
+            121449,
+            87157,
+            17882
+          ],
+          "flags": [
+            "notBlindBuy"
+          ]
+        },
+        "siblings": [],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Floraiku/One_Umbrella_for_Two",
+          "longevity": 7.4,
+          "sillage": 6.9,
+          "votes": 336,
+          "occasion": {
+            "Leisure": 0.3,
+            "Evening": 0.21,
+            "Night Out": 0.2,
+            "Daily": 0.17,
+            "Business": 0.12
+          },
+          "occasionVotes": 408
+        },
+        "performance": {
+          "longevity": 3.3456,
+          "sillage": 2.2196,
+          "votes": 1302
         }
       },
       "parfumo": {
@@ -5246,7 +5969,8 @@
         "alt": [],
         "flags": [
           "polarizing"
-        ]
+        ],
+        "clones": []
       }
     },
     {
@@ -5353,6 +6077,46 @@
         "dayNight": {
           "day": 0.298,
           "night": 0.702
+        },
+        "extras": {
+          "value": 3.06,
+          "safe": 80,
+          "keep": 0.069,
+          "lean": 0.67,
+          "now": 100,
+          "like": [
+            97995,
+            95265,
+            101529
+          ],
+          "alt": [],
+          "flags": []
+        },
+        "siblings": [
+          97995,
+          95265,
+          102026,
+          100252,
+          103482
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Jean_Paul_Gaultier/le-male-elixir",
+          "longevity": 8.6,
+          "sillage": 8.3,
+          "votes": 3552,
+          "occasion": {
+            "Night Out": 0.343,
+            "Evening": 0.333,
+            "Leisure": 0.182,
+            "Daily": 0.091,
+            "Business": 0.051
+          },
+          "occasionVotes": 2088
+        },
+        "performance": {
+          "longevity": 4.0246,
+          "sillage": 2.8256,
+          "votes": 19363
         }
       },
       "parfumo": {
@@ -5491,7 +6255,13 @@
           95265
         ],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": [
+          97995,
+          95265,
+          102026,
+          100252
+        ]
       }
     },
     {
@@ -5578,6 +6348,45 @@
         "dayNight": {
           "day": 0.669,
           "night": 0.331
+        },
+        "extras": {
+          "value": 2.12,
+          "safe": 33,
+          "keep": 0.033,
+          "lean": -0.38,
+          "now": 92,
+          "like": [
+            138575,
+            139285,
+            142219
+          ],
+          "alt": [
+            138575
+          ],
+          "flags": [
+            "discontinued"
+          ]
+        },
+        "siblings": [],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Carolina_Herrera/cedar-chic",
+          "longevity": 7.7,
+          "sillage": 7.2,
+          "votes": 82,
+          "occasion": {
+            "Daily": 0.248,
+            "Leisure": 0.248,
+            "Business": 0.198,
+            "Evening": 0.129,
+            "Night Out": 0.109,
+            "Sport": 0.069
+          },
+          "occasionVotes": 117
+        },
+        "performance": {
+          "longevity": 3.4959,
+          "sillage": 2.1667,
+          "votes": 242
         }
       },
       "parfumo": {
@@ -5679,7 +6488,8 @@
           139285
         ],
         "alt": [],
-        "flags": []
+        "flags": [],
+        "clones": []
       }
     },
     {
@@ -5817,6 +6627,47 @@
         "dayNight": {
           "day": 0.377,
           "night": 0.623
+        },
+        "extras": {
+          "value": 1.96,
+          "safe": 43,
+          "keep": 0.046,
+          "lean": 0.37,
+          "now": 99,
+          "like": [
+            118549,
+            115548,
+            132925
+          ],
+          "alt": [
+            118549,
+            115548
+          ],
+          "flags": [
+            "notBlindBuy"
+          ]
+        },
+        "siblings": [
+          115548
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Amouage/outlands",
+          "longevity": 9,
+          "sillage": 8.6,
+          "votes": 1256,
+          "occasion": {
+            "Evening": 0.317,
+            "Night Out": 0.307,
+            "Leisure": 0.188,
+            "Daily": 0.109,
+            "Business": 0.079
+          },
+          "occasionVotes": 818
+        },
+        "performance": {
+          "longevity": 4.356,
+          "sillage": 3.012,
+          "votes": 1665
         }
       },
       "parfumo": {
@@ -5967,6 +6818,9 @@
         "alt": [],
         "flags": [
           "notBlindBuy"
+        ],
+        "clones": [
+          115548
         ]
       }
     }

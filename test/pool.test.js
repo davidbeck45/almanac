@@ -99,6 +99,18 @@ test('wardrobe, catalog and originals carry the about data and signals', async (
   }
 });
 
+test('a dupe’s original carries its signals and sibling clones', () => {
+  const dupes = built('collection').filter(f => f.original);
+  assert.ok(dupes.length >= 18);
+  for (const f of dupes) {
+    assert.ok(f.original.extras && Array.isArray(f.original.siblings), f.name);
+    assert.ok(!f.original.siblings.includes(f.id), `${f.name} is not its own sibling`);
+  }
+  const cream = dupes.find(f => f.name === 'Cream Velvet');
+  assert.ok(cream.original.siblings.includes(93628), 'Bianco Latte’s clones include Lattafa Eclaire');
+  assert.ok(cream.original.extras.value < cream.extras.value, 'the dupe is the better value');
+});
+
 test('about shards parse, for bottles with 30 or more votes', async () => {
   const names = readdirSync(new URL('x/', dir));
   assert.equal(names.length, 512);

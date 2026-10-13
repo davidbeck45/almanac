@@ -30,7 +30,10 @@
   Fragrantica members' AI summary pros and cons, smells-like and also-liked
   bottles, flags), and its derived signals as `extras` (the suggestion pool's
   keys). Its rating histogram fills `sentiment` for lines built by
-  `decant.py add`, which have none.
+  `decant.py add`, which have none. A dupe's `original` gets the original's
+  `extras`, `parfumo` and `performance`, and `siblings`: the original's other
+  clones (`extras.clones`, well-priced bottles from other brands that voters
+  say smell like it).
 
 Each jsonl line is the output of scripts/fragrantica-extract.js for one
 perfume page, or of `scripts/decant.py add` (built from the dataset, with its
@@ -50,7 +53,8 @@ FILES = (
     ("calibration", "fragrantica.com, well-voted bottles for fitting the engine"),
     ("originals", "fragrantica.com, the originals that dupes in data/ are inspired by"),
 )
-# What a dupe keeps of its original: enough to name it and lean on its votes.
+# What a dupe keeps of its original: enough to name it and lean on its votes
+# (main() adds its signals, performance and siblings for the sheet).
 ORIGINAL_KEYS = ("id", "name", "brand", "url", "thumb", "rating", "ratingVotes", "seasonVotes", "timeVotes", "season", "dayNight")
 LIBRARY_SHARDS = 512  # as scripts/decant.py
 
@@ -239,6 +243,17 @@ def main() -> None:
     layered = layered_with(rows["collection"] + rows["catalog"], originals, parfumo)
     library = library_rows({f["id"] for stem_rows in rows.values() for f in stem_rows})
     extras = extras_rows()
+    # A dupe's sheet compares it with its original (the app never loads
+    # originals.json): the original's signals and performance, and its other
+    # clones.
+    for dupe, o in originals.items():
+        if x := extras.get(o["id"]):
+            o["extras"] = {k: v for k, v in x["extras"].items() if k != "clones"}
+            o["siblings"] = [i for i in x["extras"]["clones"] if i != dupe]
+        if summary := parfumo_summary(parfumo.get(o["id"], {})):
+            o["parfumo"] = summary
+        if performance := library_extras(library.get(o["id"], {})).get("performance"):
+            o["performance"] = performance
     for stem, source in FILES:
         write(stem, source, rows[stem], originals, parfumo, layered, library, extras)
 

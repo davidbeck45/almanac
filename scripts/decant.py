@@ -71,7 +71,9 @@ data/extras.jsonl has one line per bottle in data/collection, catalog and
 originals: the about data with readable keys (sentiment, value, owners,
 crowdGender, popularity, perfumers, line, pros, cons, smellsLike, alsoLiked,
 flags) and `extras`, the pool's signals (value, safe, keep, lean, now, like,
-alt, flags). scripts/build_collection.py joins it.
+alt, flags) plus `clones`, up to 6 well-priced bottles from other brands that
+voters say smell like it (an original's are its dupe's siblings).
+scripts/build_collection.py joins it.
 """
 import bisect
 import collections
@@ -132,6 +134,8 @@ CROWD_PRIOR_VOTES = 10
 # Cheaper alternatives: for a bottle valued at most 2.6, smells-like bottles
 # (either way round) voted 10+ net and 2:1, with 100+ ratings, valued 1+ higher.
 PRICEY, CHEAPER_BY, ALT_MIN_NET, ALT_MIN_VOTES = 2.6, 1.0, 10, 100
+# Clones: smells-like bottles from other brands voted 20+ net and 2:1, valued 3.8+.
+CLONE_MIN_NET, CLONE_MIN_VALUE = 20, 3.8
 FLAGS = ("discontinued", "reformulated", "notBlindBuy", "brigaded", "polarizing")  # bit i is 1 << i
 # Flags read from AI summary items more voters agree with than not.
 FLAG_TEXT = {
@@ -412,6 +416,17 @@ class Signals:
                 near[s["id"]] = s
         return [s["id"] for s in by_net(list(near.values()))][:n]
 
+    def clones(self, r: dict, n: int = 6) -> list[int]:
+        """Well-priced bottles from other brands, released no earlier, that voters say smell like it."""
+        near = {}
+        for s in [*self.reverse.get(r["id"], []), *r["similar"]["reminds_me_of"]]:
+            o = self.by_id.get(s["id"])
+            if (o and s["id"] not in near and agreed(s, CLONE_MIN_NET) and votes(o) >= ALT_MIN_VOTES
+                    and o["brand"] != r["brand"] and (value(o) or 0) >= CLONE_MIN_VALUE
+                    and (not o["year"] or not r["year"] or o["year"] >= r["year"])):
+                near[s["id"]] = s
+        return [s["id"] for s in by_net(list(near.values()))][:n]
+
     def flags(self, r: dict) -> int:
         ai = r.get("ai_summary") or {}
         on = {name for name, (keys, pattern) in FLAG_TEXT.items()
@@ -569,8 +584,10 @@ def extras(signals: Signals) -> None:
     """data/extras.jsonl: the about data and signals of every bottle in the
     wardrobe, catalog and originals, which scripts/build_collection.py joins."""
     ids = sorted(set(jsonl_ids("collection", "catalog", "originals")))
-    lines = [{"id": pid, **readable_about(signals.about(signals.by_id[pid])), "extras": signals.extras(signals.by_id[pid])}
-             for pid in ids if pid in signals.by_id]
+    lines = []
+    for pid in ids:
+        if r := signals.by_id.get(pid):
+            lines.append({"id": pid, **readable_about(signals.about(r)), "extras": {**signals.extras(r), "clones": signals.clones(r)}})
     (ROOT / "data/extras.jsonl").write_text("".join(json.dumps(l, ensure_ascii=False, separators=(",", ":")) + "\n" for l in lines))
     missing = len(ids) - len(lines)
     print(f"data/extras.jsonl: {len(lines)} bottles{f' ({missing} newer than the dataset)' if missing else ''}")
