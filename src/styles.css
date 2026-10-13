@@ -555,7 +555,7 @@ input, textarea { font: inherit; }
   flex-direction: column;
   align-items: center;
   gap: var(--s-1);
-  width: 68px;
+  width: 72px;
   padding: var(--s-1) 0 var(--s-2);
   border-radius: var(--r-thumb);
 }
@@ -890,9 +890,8 @@ input, textarea { font: inherit; }
 @media (min-width: 720px) { .sheet-bar { padding-bottom: var(--s-4); } }
 
 .bars { display: grid; gap: var(--s-2); }
-.bar { display: grid; grid-template-columns: 80px 1fr 40px; align-items: center; gap: var(--s-3); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.bar { display: grid; grid-template-columns: 96px 1fr 40px; align-items: center; gap: var(--s-3); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .bars.accords .bar { grid-template-columns: 96px 1fr; }
-.bars.why .bar { grid-template-columns: 96px 1fr 32px; }
 .bar-label { color: var(--text-secondary); }
 .bar-label::first-letter { text-transform: uppercase; }
 .bar-track { height: 8px; overflow: hidden; border-radius: var(--r-pill); background: var(--fill); }
