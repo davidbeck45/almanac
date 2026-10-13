@@ -371,17 +371,14 @@ export function journalSheetHTML({ stats, calendar, dusty, confirmClear, todayIS
     : '<p class="muted small">Every bottle in rotation got worn this month. Nice.</p>';
   return sheetFrame('journal-title', `
     <h2 id="journal-title" class="sheet-title">Wear journal</h2>
-    <p class="muted lede">What you logged with “Wear this”, on this device. The last 30 days.</p>
+    <p class="muted lede">What you logged with “Wear this” in the last 30 days. History stays on this device.</p>
     ${tiles}
     <section><h3>Calendar</h3><div class="calendar">${weekdays}${cells}</div></section>
     <section><h3>Most worn</h3>${mostList}</section>
     <section><h3>Gathering dust</h3>${dustList}</section>
-    <div class="sheet-bar spread">
-      <span class="muted">History stays on this device.</span>
-      <span class="sheet-actions">
-        <button class="btn tertiary" data-action="journal-export">${icon.share}Export</button>
-        <button class="btn ${confirmClear ? 'secondary danger' : 'tertiary'}" data-action="journal-clear">${icon.remove}${confirmClear ? 'Tap again to clear' : 'Clear history'}</button>
-      </span>
+    <div class="sheet-bar">
+      <button class="btn tertiary" data-action="journal-export">${icon.share}Export</button>
+      <button class="btn ${confirmClear ? 'secondary danger' : 'tertiary'}" data-action="journal-clear">${icon.remove}${confirmClear ? 'Tap again to clear' : 'Clear history'}</button>
     </div>`);
 }
 
@@ -418,7 +415,7 @@ function bar(label, pct, color, value, spoken = '') {
 const strength = width => (width >= 85 ? 'dominant' : width >= 65 ? 'strong' : width >= 45 ? 'moderate' : 'light');
 
 const SEASON_COLORS = { winter: '#8fc7f0', spring: '#9be39a', summer: '#f6a08f', fall: '#f2b264', day: '#f5c451', night: '#8ea3d9' };
-const GENDER = { men: 'for men', women: 'for women', 'women and men': 'unisex' };
+const GENDER = { men: 'for\u00a0men', women: 'for\u00a0women', 'women and men': 'unisex' };
 const FACTORS = [
   ['occasion', 'Occasion', '#e7b6ff'],
   ['season', 'Season', '#9be39a'],

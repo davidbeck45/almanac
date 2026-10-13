@@ -100,6 +100,7 @@
   --on-mag: #0a0b10;
   --paper: #ffffff;         /* the brightest neutral: knobs, hover on primary, chip text */
   --on-scene: #ffffff;      /* text and glass over the weather scene */
+  --chip-ink: 50%;          /* how much of an accord's color its chip text keeps (4.5:1 for every accord) */
   --wx: #c9d1de;            /* weather glyphs */
   --wx-bright: #e8f0fb;
   /* Dark tints as RGB channels, for glass, shades and veils at any alpha. */
@@ -157,6 +158,7 @@
   --on-mag: #1d2021;
   --paper: #fbf1c7;
   --on-scene: #fbf1c7;
+  --chip-ink: 40%;
   --wx: #bdae93;
   --wx-bright: #ebdbb2;
   --ink: 29 32 33;

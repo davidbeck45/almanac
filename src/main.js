@@ -449,13 +449,15 @@ function renderSheet({ keepScroll = false, fresh = false } = {}) {
 let sheetOpener = null;
 
 // Put focus back on an element a re-render replaced: itself if it survived,
-// else the element in `scope` with the same tag and data attributes.
+// else the element in `scope` with the same tag and data attributes. False
+// when neither is there (a hidden bottle's card, say).
 function refocus(el, scope = '#app') {
-  if (!el || el === document.body) return;
-  if (el.isConnected) return el.focus({ preventScroll: true });
+  if (!el || el === document.body) return false;
   const attrs = Object.entries(el.dataset ?? {})
     .map(([k, v]) => `[data-${k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)}="${CSS.escape(v)}"]`).join('');
-  if (attrs) document.querySelector(`${scope} ${el.tagName.toLowerCase()}${attrs}`)?.focus({ preventScroll: true });
+  const target = el.isConnected ? el : attrs && document.querySelector(`${scope} ${el.tagName.toLowerCase()}${attrs}`);
+  target?.focus({ preventScroll: true });
+  return Boolean(target);
 }
 
 // ---------- History ----------
@@ -540,7 +542,8 @@ function closeSheet({ instant = false, fromHistory = false } = {}) {
   el.classList.remove('open');
   document.body.classList.remove('sheet-open');
   $('#app').inert = false;
-  refocus(sheetOpener);
+  // Its opener gone, focus lands on the view so Tab carries on from there.
+  if (!refocus(sheetOpener) && sheetOpener && sheetOpener !== document.body) $('#view').focus({ preventScroll: true });
   sheetOpener = null;
   const hide = () => { if (!state.sheet) { el.hidden = true; el.innerHTML = ''; } };
   if (instant) hide();
@@ -818,7 +821,7 @@ document.addEventListener('click', async e => {
       $(`#sheet [data-toggle-hidden="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
     } else if (hide) {
       closeSheet();
-      showToast(`<span>${ui.esc(findRecord(id)?.name ?? 'Bottle')} hidden from picks</span><button data-action="unhide" data-id="${ui.esc(id)}">Undo</button>`);
+      showToast(`<span>${ui.esc(findRecord(id)?.name ?? 'Bottle')} hidden from picks</span><button class="btn primary compact" data-action="unhide" data-id="${ui.esc(id)}">Undo</button>`);
     }
   } else if (d.action === 'unhide') {
     state.hidden.delete(d.id);
@@ -833,7 +836,7 @@ document.addEventListener('click', async e => {
     renderPicks();
     renderSheet({ keepScroll: true });
     state.lastRemoved = { record: removed, index };
-    showToast(`<span>${ui.esc(removed.name)} removed</span><button data-action="undo-remove">Undo</button>`);
+    showToast(`<span>${ui.esc(removed.name)} removed</span><button class="btn primary compact" data-action="undo-remove">Undo</button>`);
   } else if (d.action === 'undo-remove' && state.lastRemoved) {
     const { record, index } = state.lastRemoved;
     state.mine.records.splice(index, 0, record);
