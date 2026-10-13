@@ -29,6 +29,37 @@ const ROTATION_PENALTY = [0.2, 0.12, 0.05]; // worn today, yesterday, 2 days ago
 
 const RAIN_ACCORDS = ['green', 'earthy', 'woody', 'aromatic', 'mossy', 'aquatic'];
 
+// Reasons name accords as nouns ("Warm spice for the cold", "Woods & aromatics
+// suit everyday wear"), never as raw labels ("Warm warm spicy"). An accord not
+// listed reads as its own name (vanilla, leather, iris).
+const ACCORD_NOUN = {
+  woody: 'woods', 'warm spicy': 'warm spice', 'fresh spicy': 'crisp spice', 'soft spicy': 'soft spice',
+  aromatic: 'aromatics', sweet: 'sweetness', fresh: 'fresh notes', green: 'green notes', aquatic: 'aquatic notes',
+  marine: 'marine notes', ozonic: 'airy notes', earthy: 'earthy notes', musky: 'musk', powdery: 'powder',
+  fruity: 'fruit', floral: 'florals', 'white floral': 'white florals', 'yellow floral': 'yellow florals',
+  balsamic: 'resins', animalic: 'animalic notes', smoky: 'smoke', lactonic: 'milky notes', herbal: 'herbs',
+  mossy: 'moss', tropical: 'tropical fruit', salty: 'sea salt', metallic: 'metallic notes', soapy: 'soap',
+  mineral: 'mineral notes', terpenic: 'terpenes', savory: 'savory notes', nutty: 'nuts', gourmand: 'gourmand notes',
+  'coca-cola': 'cola', aldehydic: 'aldehydes', conifer: 'pine', bitter: 'bitter notes', sour: 'sour notes',
+  alcohol: 'boozy notes', anis: 'anise', camphor: 'camphor notes',
+};
+const nounOf = accord => ACCORD_NOUN[accord] ?? accord.toLowerCase();
+const isPlural = noun => /s$/.test(noun) && !/(ss|us|is)$/.test(noun);
+const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
+// What cuts the heat. A light bottle without one of these (fruity, musky,
+// coconut) is only "light enough for the heat".
+const COOLING = {
+  citrus: 'Bright citrus cuts', green: 'Green notes cut', aquatic: 'Aquatic notes cut', marine: 'Marine notes cut',
+  ozonic: 'Airy notes cut', fresh: 'Fresh notes cut', herbal: 'Herbs cut', salty: 'Sea salt cuts', 'fresh spicy': 'Crisp spice cuts',
+};
+const WARMING = {
+  'warm spicy': 'Warm spice', vanilla: 'Warm vanilla', leather: 'Rich leather', oud: 'Deep oud', tobacco: 'Rich tobacco',
+  balsamic: 'Warm resins', animalic: 'A warm animalic base', honey: 'Warm honey', caramel: 'Warm caramel',
+  cacao: 'Warm cacao', chocolate: 'Rich chocolate', coffee: 'Dark coffee', rum: 'Warm rum', whiskey: 'Warm whiskey',
+  cinnamon: 'Warm cinnamon', amber: 'Warm amber', smoky: 'Smoke', sweet: 'Warm sweetness',
+};
+const warmPhrase = accord => WARMING[accord] ?? (nounOf(accord).startsWith('warm ') ? cap(nounOf(accord)) : `Warm ${nounOf(accord)}`);
+
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 const argmax = obj => Object.entries(obj).reduce((best, e) => (e[1] > best[1] ? e : best))[0];
 
@@ -283,19 +314,24 @@ export function rotationPenalty(fragId, history, todayISO, slot) {
   return { penalty, daysAgo, planned };
 }
 
-function topAccord(accords, predicate) {
-  const hit = Object.entries(accords).find(([a]) => ACCORDS[a] && predicate(ACCORDS[a].weight));
-  return hit?.[0];
+// The bottle's strongest accord that passes `keep`.
+function strongest(accords, keep) {
+  let best = null;
+  for (const [a, s] of Object.entries(accords)) if (keep(a) && (!best || s > accords[best])) best = a;
+  return best;
 }
 
 // Plain-language reasons, each with a tone and a strength used for ordering.
 // Tones come from what the votes and accords say, not from blended scores.
+// Reasons about this bottle in particular (its accords against the weather or
+// the occasion, its performance, recent wears) come before the season and
+// time-of-day votes, which read the same on every well-placed bottle.
 function reasonsFor(frag, parts, ctx) {
   const { conditions, slot, weights, occasion } = ctx;
   const W = occasion ? OCCASION_WEIGHTS : DAILY_WEIGHTS;
   const out = [];
-  const good = (text, strength) => out.push({ text, tone: 'good', strength });
-  const bad = (text, strength) => out.push({ text, tone: 'bad', strength });
+  const good = (text, strength, specific = false) => out.push({ text, tone: 'good', strength, specific });
+  const bad = (text, strength, specific = false) => out.push({ text, tone: 'bad', strength, specific });
 
   const nowSeason = argmax(weights);
   const { season, dayNight } = steadyShares(frag);
@@ -316,52 +352,56 @@ function reasonsFor(frag, parts, ctx) {
   const h = heaviness(frag.accords);
   const sticky = isSticky(conditions);
   if (conditions.feelsF >= 78) {
-    const fresh = topAccord(frag.accords, w => w <= -0.3);
-    if (h <= -0.1) good(fresh ? `Fresh ${fresh} cuts the heat` : 'Fresh notes cut the heat', W.weather * 0.8);
-    else if (h >= 0.25) bad(sticky ? 'Too rich for sticky heat' : 'Heavy for this heat', W.weather);
+    const cool = strongest(frag.accords, a => a in COOLING);
+    if (h <= -0.1) good(cool ? `${COOLING[cool]} the heat` : 'Light enough for the heat', W.weather * 0.8, true);
+    else if (h >= 0.25) bad(sticky ? 'Too rich for sticky heat' : 'Heavy for this heat', W.weather, true);
   } else if (conditions.feelsF <= 52) {
-    if (h >= 0.25) good(`Warm ${topAccord(frag.accords, w => w >= 0.7) ?? 'base'} for the cold`, W.weather * 0.8);
-    else if (h <= -0.2) bad('Thin in the cold', W.weather * 0.8);
+    const warm = strongest(frag.accords, a => ACCORDS[a]?.weight >= 0.7);
+    if (h >= 0.25) good(warm ? `${warmPhrase(warm)} for the cold` : 'A warm base for the cold', W.weather * 0.8, true);
+    else if (h <= -0.2) bad('Thin in the cold', W.weather * 0.8, true);
   }
   if (isWet(conditions.category) && accordShare(frag.accords, RAIN_ACCORDS) > 0.3) {
-    good('Woody-green notes suit the rain', 0.02);
+    const noun = nounOf(strongest(frag.accords, a => RAIN_ACCORDS.includes(a)));
+    good(`${cap(noun)} suit${isPlural(noun) ? '' : 's'} the rain`, 0.02);
   }
 
   if (occasion) {
     const contrib = Object.entries(frag.accords)
       .map(([a, s]) => [a, s * (occasion.profile[a] ?? 0)])
       .sort((x, y) => y[1] - x[1]);
-    const fits = contrib.filter(c => c[1] > 20).slice(0, 2).map(c => c[0]);
+    const fits = contrib.filter(c => c[1] > 20).slice(0, 2).map(c => nounOf(c[0]));
     const clash = contrib.filter(c => c[1] < -20).at(-1)?.[0];
-    const label = occasion.label.toLowerCase();
-    if (fits.length) good(`${fits.join(' & ')} suit${fits.length === 1 ? 's' : ''} ${label}`, W.occasion * (0.5 + parts.occasion));
-    if (clash) bad(`${clash} is off for ${label}`, W.occasion * (1.5 - parts.occasion) * 0.5);
+    const phrase = occasion.phrase ?? occasion.label.toLowerCase();
+    const plural = fits.length > 1 || (fits.length && isPlural(fits[0]));
+    if (fits.length) good(`${cap(fits.join(' & '))} suit${plural ? '' : 's'} ${phrase}`, W.occasion * (0.5 + parts.occasion), true);
+    if (clash) bad(`${cap(nounOf(clash))} ${isPlural(nounOf(clash)) ? 'are' : 'is'} off for ${phrase}`, W.occasion * (1.5 - parts.occasion) * 0.5, true);
 
     // Longevity and sillage, where the occasion cares about them.
     const perf = performanceFit(frag, occasion);
     const wish = occasion.performance ?? {};
-    const [loud, quiet] = wish.sillage > 0 ? ['Projects across a room', `Too quiet for ${label}`] : ['Stays close to the skin', `Projects a lot for ${label}`];
-    if (perf.sillage >= PERFORMANCE_REASON) good(loud, W.occasion * perf.sillage * 2);
-    else if (perf.sillage <= -PERFORMANCE_REASON) bad(quiet, W.occasion * -perf.sillage * 2);
-    if (perf.longevity >= PERFORMANCE_REASON) good(`Lasts the whole ${slot === 'night' ? 'night' : 'day'}`, W.occasion * perf.longevity * 2);
-    else if (perf.longevity <= -PERFORMANCE_REASON) bad('Fades early', W.occasion * -perf.longevity * 2);
+    const [loud, quiet] = wish.sillage > 0 ? ['Projects across a room', `Too quiet for ${phrase}`] : ['Stays close to the skin', `Projects a lot for ${phrase}`];
+    if (perf.sillage >= PERFORMANCE_REASON) good(loud, W.occasion * perf.sillage * 2, true);
+    else if (perf.sillage <= -PERFORMANCE_REASON) bad(quiet, W.occasion * -perf.sillage * 2, true);
+    if (perf.longevity >= PERFORMANCE_REASON) good(`Lasts the whole ${slot === 'night' ? 'night' : 'day'}`, W.occasion * perf.longevity * 2, true);
+    else if (perf.longevity <= -PERFORMANCE_REASON) bad('Fades early', W.occasion * -perf.longevity * 2, true);
 
     const voted = votedOccasionFit(frag, occasion);
     const what = VOTED_OCCASIONS[occasion.id]?.[3];
-    if (voted >= PERFORMANCE_REASON) good(`Parfumo voters wear it for ${what}`, W.occasion * voted * 2);
-    else if (voted <= -PERFORMANCE_REASON) bad(`Parfumo voters rarely wear it for ${what}`, W.occasion * -voted * 2);
+    if (voted >= PERFORMANCE_REASON) good(`Parfumo voters wear it for ${what}`, W.occasion * voted * 2, true);
+    else if (voted <= -PERFORMANCE_REASON) bad(`Parfumo voters rarely wear it for ${what}`, W.occasion * -voted * 2, true);
   }
 
   if (frag.rating >= 4.35 && frag.ratingVotes >= 1000) good(`Crowd favorite · ${frag.rating.toFixed(1)}★`, 0.03);
 
+  const d = parts.daysAgo;
   if (parts.planned) {
-    if (parts.daysAgo === 0) bad('Already picked for that day', parts.rotation);
-    else if (parts.daysAgo > 0) bad(`Picked ${parts.daysAgo === 1 ? 'the day' : `${parts.daysAgo} days`} before`, parts.rotation);
-  } else if (parts.daysAgo === 0) bad('Already wearing it today', parts.rotation);
-  else if (parts.daysAgo === 1) bad('Worn yesterday', parts.rotation);
-  else if (parts.daysAgo === 2) bad('Worn 2 days ago', parts.rotation);
+    if (d === 0) bad('Already picked for that day', parts.rotation, true);
+    else if (d > 0) bad(`Picked ${d === 1 ? 'the day' : `${d} days`} before`, parts.rotation, true);
+  } else if (d === 0) bad('Already wearing it today', parts.rotation, true);
+  else if (d === 1) bad('Worn yesterday', parts.rotation, true);
+  else if (d > 1) bad(`Worn ${d} days ago`, parts.rotation, true);
 
-  return out.sort((a, b) => b.strength - a.strength);
+  return out.sort((a, b) => b.specific - a.specific || b.strength - a.strength);
 }
 
 /**

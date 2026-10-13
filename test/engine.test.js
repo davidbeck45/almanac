@@ -148,7 +148,7 @@ test('office wants a quiet bottle and a night out a loud one', () => {
   const reasons = (occasion, f) => rank([...rest, f], mildFallNight, 'night', { occasion: occasionById(occasion) })
     .find(r => r.fragrance === f).reasons.map(r => r.text);
   assert.ok(reasons('office', quiet).includes('Stays close to the skin'));
-  assert.ok(reasons('office', loud).includes('Projects a lot for office'));
+  assert.ok(reasons('office', loud).includes('Projects a lot for the office'));
   assert.ok(reasons('nightout', loud).includes('Projects across a room'));
   // Without Parfumo ratings a bottle sits in the middle.
   const unrated = { ...base, id: 'unrated', parfumo: undefined };
