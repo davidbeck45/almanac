@@ -126,19 +126,25 @@ const ORIGINAL_PRIOR_VOTES = 120;
 const steadied = new WeakMap();
 
 export function steadyShares(frag) {
-  if (!frag.seasonVotes || !frag.timeVotes) return frag;
+  if (!frag.seasonVotes && !frag.timeVotes) return frag;
   if (steadied.has(frag)) return steadied.get(frag);
   const orig = frag.original;
   const ko = orig ? ORIGINAL_PRIOR_VOTES : 0;
   const est = predictedShares(frag.accords, frag.like);
   const k = frag.like ? PRIOR_VOTES.withLike : PRIOR_VOTES.accords;
-  const n = SEASONS.reduce((sum, s) => sum + frag.seasonVotes[s], 0);
-  const season = Object.fromEntries(SEASONS.map(s => [s,
-    (n * frag.season[s] + k.season * est.season[s] + ko * (orig?.season[s] ?? 0)) / (n + k.season + ko)]));
-  const tn = frag.timeVotes.day + frag.timeVotes.night;
-  const night = (tn * frag.dayNight.night + k.night * est.night + ko * (orig?.dayNight.night ?? 0))
-    / (tn + k.night + ko);
-  const shares = { season, dayNight: { day: 1 - night, night } };
+  // Season and day/night votes steady separately; a split nobody voted on is an estimate already.
+  let season = frag.season, dayNight = frag.dayNight;
+  if (frag.seasonVotes) {
+    const n = SEASONS.reduce((sum, s) => sum + frag.seasonVotes[s], 0);
+    season = Object.fromEntries(SEASONS.map(s => [s,
+      (n * frag.season[s] + k.season * est.season[s] + ko * (orig?.season[s] ?? 0)) / (n + k.season + ko)]));
+  }
+  if (frag.timeVotes) {
+    const tn = frag.timeVotes.day + frag.timeVotes.night;
+    const night = (tn * frag.dayNight.night + k.night * est.night + ko * (orig?.dayNight.night ?? 0)) / (tn + k.night + ko);
+    dayNight = { day: 1 - night, night };
+  }
+  const shares = { season, dayNight };
   steadied.set(frag, shares);
   return shares;
 }

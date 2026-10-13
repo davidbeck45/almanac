@@ -41,16 +41,16 @@ export function fromFragrantica(id, row) {
     accords,
     notes,
   };
-  // Bottles nobody has voted on yet carry the estimate, like hand-entered ones.
+  // Bottles nobody has voted on yet carry the estimate, like hand-entered ones
+  // (worked out only then: most rows have votes).
   const [winter, spring, summer, fall, day, night] = row.v ?? [0, 0, 0, 0, 0, 0];
   const seasonVotes = { winter, spring, summer, fall }, n = winter + spring + summer + fall;
-  const est = predictedShares(accords, like);
-  if (n) {
-    record.seasonVotes = seasonVotes;
-    record.timeVotes = { day, night };
-  }
-  record.season = n ? Object.fromEntries(SEASONS.map(s => [s, round3(seasonVotes[s] / n)])) : est.season;
-  const nightShare = day + night ? night / (day + night) : est.night;
+  let est = null;
+  const estimate = () => (est ??= predictedShares(accords, like));
+  if (n) record.seasonVotes = seasonVotes;
+  if (day + night) record.timeVotes = { day, night };
+  record.season = n ? Object.fromEntries(SEASONS.map(s => [s, round3(seasonVotes[s] / n)])) : estimate().season;
+  const nightShare = day + night ? night / (day + night) : estimate().night;
   record.dayNight = { day: round3(1 - nightShare), night: round3(nightShare) };
   if (Object.values(weights).some(w => w > 0)) {
     record.noteVotes = Object.fromEntries(Object.entries(weights).filter(([, w]) => w > 0)

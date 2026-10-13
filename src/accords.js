@@ -95,7 +95,13 @@ export function accordColor(name) {
 }
 
 // Strength-weighted heaviness of a fragrance, -1 (fresh) .. +1 (heavy).
+// Remembered per accords object (records never change theirs): weather fit
+// asks for it in every window, so a week plan or a pool scan asks thousands
+// of times.
+const heavinessOf = new WeakMap();
 export function heaviness(accords) {
+  let h = heavinessOf.get(accords);
+  if (h !== undefined) return h;
   let sum = 0, total = 0;
   for (const [name, strength] of Object.entries(accords)) {
     const meta = ACCORDS[name];
@@ -103,5 +109,7 @@ export function heaviness(accords) {
     sum += strength * meta.weight;
     total += strength;
   }
-  return total ? sum / total : 0;
+  h = total ? sum / total : 0;
+  heavinessOf.set(accords, h);
+  return h;
 }

@@ -78,3 +78,17 @@ test('accord profiles are fitted to this version of the dataset', () => {
   const meta = JSON.parse(readFileSync(new URL('meta.json', dir)));
   assert.equal(DATASET_VERSION, meta.version, 'run `node scripts/fit-profiles.mjs --write`');
 });
+
+test('season and day/night votes steady on their own when a row has only one', () => {
+  const row = { s: 'X/Y', n: 'Y', b: 'X', a: { woody: 100, amber: 80 } };
+  const nightOnly = fromFragrantica('1', { ...row, v: [0, 0, 0, 0, 0, 3] });
+  assert.equal(nightOnly.seasonVotes, undefined);
+  assert.deepEqual(nightOnly.timeVotes, { day: 0, night: 3 });
+  assert.equal(nightOnly.dayNight.night, 1, 'the raw split');
+  assert.ok(steadyShares(nightOnly).dayNight.night < 0.85, 'three votes barely count');
+  assert.equal(steadyShares(nightOnly).season, nightOnly.season, 'the season estimate passes through');
+  const seasonOnly = fromFragrantica('2', { ...row, v: [2, 0, 0, 0, 0, 0] });
+  assert.equal(seasonOnly.timeVotes, undefined);
+  assert.ok(steadyShares(seasonOnly).season.winter < 0.9);
+  assert.equal(steadyShares(seasonOnly).dayNight, seasonOnly.dayNight);
+});
