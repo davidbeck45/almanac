@@ -15,11 +15,12 @@ const SEASON_CLIMATE = { winter: [34, 12], spring: [51, 13], summer: [76, 10.5],
 // Spring and fall share a temperature range, so the calendar splits it: up to
 // 0.5 + TRANSITION_SPLIT to fall in mid-October, to spring in mid-April, and
 // evenly at midsummer and midwinter. Toward winter temperatures the split
-// fades to even, from the full split at TRANSITION_COLD[1] to none at [0]:
-// spring votes go to florals and greens, and a cold April night calls for
-// them no more than a cold October one.
+// fades to even, from the full split at TRANSITION_COLD[1] (just above
+// fall's mean) to none at [0] (just above winter's): spring votes go to
+// florals and greens, and a cold April night calls for them no more than a
+// cold October one.
 const TRANSITION_SPLIT = 0.35;
-const TRANSITION_COLD = [40, 65];
+const TRANSITION_COLD = [38, 58];
 const FALL_PEAK_DAY = 288; // Oct 15
 // Midwinter and midsummer days still lean a little toward their calendar
 // season, by up to CALENDAR_BOOST in mid-January and mid-July, easing off
