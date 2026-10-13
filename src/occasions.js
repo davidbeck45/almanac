@@ -137,3 +137,8 @@ export const OCCASIONS = [
 ];
 
 export const occasionById = id => OCCASIONS.find(o => o.id === id);
+
+// The raw occasion fit (occasionRaw in src/engine.js) that reads as 0 and as 1:
+// its 2nd and 98th percentile over the dataset's 8,000 bottles with 500+
+// rating votes. Fitted by `node scripts/fit-occasions.mjs --write`.
+export const OCCASION_SCALE = { casual: [-0.026, 0.249], office: [-0.368, 0.533], date: [-0.236, 0.471], nightout: [-0.281, 0.552], formal: [-0.292, 0.401], outdoors: [-0.427, 0.423], cozy: [-0.189, 0.417] };

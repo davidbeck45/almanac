@@ -4,6 +4,7 @@ import { ACCORDS, heaviness } from './accords.js';
 import { isWet } from './wmo.js';
 import { predictedShares } from './custom.js';
 import { PRIOR_VOTES } from './profiles.js';
+import { OCCASION_SCALE } from './occasions.js';
 
 export const SEASONS = ['winter', 'spring', 'summer', 'fall'];
 
@@ -19,8 +20,9 @@ const FALL_PEAK_DAY = 288; // Oct 15
 // A winter or summer day still leans a little toward its calendar season.
 const CALENDAR_BOOST = 1.35;
 
-const DAILY_WEIGHTS = { season: 0.5, time: 0.25, weather: 0.2, quality: 0.05 };
-const OCCASION_WEIGHTS = { occasion: 0.4, season: 0.3, time: 0.1, weather: 0.15, quality: 0.05 };
+// How much each part counts toward a score (scoreOf).
+export const DAILY_WEIGHTS = Object.freeze({ season: 0.5, time: 0.25, weather: 0.2, quality: 0.05 });
+export const OCCASION_WEIGHTS = Object.freeze({ occasion: 0.4, season: 0.3, time: 0.1, weather: 0.15, quality: 0.05 });
 
 // Rank cutoffs: first 3 are S, next 5 A, next 6 B, rest C.
 const TIER_SIZES = [['S', 3], ['A', 5], ['B', 6]];
@@ -295,6 +297,29 @@ export function occasionRaw(frag, occasion) {
   return (total ? sum / total : 0) + perf.longevity + perf.sillage + votedOccasionFit(frag, occasion);
 }
 
+// The occasion fit as a part, 0..1, on one scale for every collection: 0 at
+// the dataset's 2nd percentile for that occasion, 1 at its 98th
+// (OCCASION_SCALE, scripts/fit-occasions.mjs). Stretching each list's own
+// min..max instead made any wardrobe's best bottle a perfect fit, blew up
+// small and one-note lists, and let a narrow spread drown out the weather.
+const FALLBACK_SCALE = [-0.3, 0.5];
+export function occasionPart(raw, occasion) {
+  const [lo, hi] = OCCASION_SCALE[occasion.id] ?? FALLBACK_SCALE;
+  return clamp((raw - lo) / (hi - lo), 0, 1);
+}
+
+/**
+ * A bottle's score from its parts (rank's `parts`): the weighted fits, less
+ * the rotation penalty. Shared with anything that scores bottles the way
+ * rank() does (the gap finder), so the two can't drift apart.
+ */
+export function scoreOf(parts, occasion = null) {
+  const W = occasion ? OCCASION_WEIGHTS : DAILY_WEIGHTS;
+  let score = W.season * parts.season + W.time * parts.time + W.weather * parts.weather + W.quality * parts.quality;
+  if (occasion) score += W.occasion * parts.occasion;
+  return score - (parts.rotation ?? 0);
+}
+
 export function daysBetween(fromISO, toISO) {
   return Math.round((Date.parse(toISO) - Date.parse(fromISO)) / 86_400_000);
 }
@@ -417,26 +442,19 @@ export function rank(fragrances, conditions, slot, opts = {}) {
   const { occasion = null, history = [], todayISO = new Date().toISOString().slice(0, 10) } = opts;
   const weights = targetSeasonWeights(conditions.feelsF, conditions.date, conditions.lat);
 
-  const raws = occasion ? fragrances.map(f => occasionRaw(f, occasion)) : [];
-  const lo = Math.min(...raws), hi = Math.max(...raws);
-
-  const scored = fragrances.map((frag, i) => {
+  const scored = fragrances.map(frag => {
     const { penalty, daysAgo, planned } = rotationPenalty(frag.id, history, todayISO, slot);
     const parts = {
       season: seasonFit(frag, weights),
       time: timeFit(frag, slot),
       weather: weatherFit(frag, conditions),
       quality: quality(frag),
-      occasion: occasion ? (hi > lo ? (raws[i] - lo) / (hi - lo) : 0.5) : null,
+      occasion: occasion ? occasionPart(occasionRaw(frag, occasion), occasion) : null,
       rotation: penalty,
       daysAgo,
       planned,
     };
-    const W = occasion ? OCCASION_WEIGHTS : DAILY_WEIGHTS;
-    let score = W.season * parts.season + W.time * parts.time + W.weather * parts.weather + W.quality * parts.quality;
-    if (occasion) score += W.occasion * parts.occasion;
-    score -= penalty;
-    return { fragrance: frag, score, parts };
+    return { fragrance: frag, score: scoreOf(parts, occasion), parts };
   });
 
   scored.sort((a, b) => b.score - a.score);

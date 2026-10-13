@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit } from '../src/engine.js';
+import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { heaviness } from '../src/accords.js';
 import { summarize, week } from '../src/weather.js';
@@ -167,6 +167,30 @@ test('Parfumo occasion votes nudge a bottle toward what voters wear it for', () 
   assert.equal(votedOccasionFit(clubbing, occasionById('cozy')), 0, 'no Parfumo category for staying in');
   const [entry] = rank([clubbing], { feelsF: 60, humidity: 50, category: 'clear', date: new Date('2026-10-11T20:00:00'), lat: 40 }, 'night', { occasion: night });
   assert.ok(entry.reasons.some(r => r.text === 'Parfumo voters wear it for nights out'), entry.reasons.map(r => r.text).join(' | '));
+});
+
+test('the occasion fit reads on one scale, whatever the collection', () => {
+  const office = occasionById('office');
+  const part = (list, name) => rank(list, mildFallNight, 'day', { occasion: office }).find(r => r.fragrance.name === name).parts.occasion;
+  const pair = fragrances.filter(f => ['Détour Noir', 'Supremacy Collector\'s Edition Pour Homme'].includes(f.name));
+  // Two bottles used to read as 0 and 1, and one alone as 0.5.
+  assert.equal(part(pair, 'Détour Noir'), part(fragrances, 'Détour Noir'));
+  assert.ok(part(pair, 'Détour Noir') > 0 && part(pair, 'Détour Noir') < 1);
+  assert.equal(part([pair[0]], pair[0].name), part(fragrances, pair[0].name));
+  // Outdoors on a cold day is still about the weather: no summer citrus on top.
+  const cold = { ...coldNight, feelsF: 30, dewF: 18 };
+  const outdoors = rank(fragrances, cold, 'day', { occasion: occasionById('outdoors') });
+  assert.ok(!['Essence de Blanc', 'Shiyaaka Sky', 'Jake'].includes(outdoors[0].fragrance.name), outdoors[0].fragrance.name);
+});
+
+test('scoreOf is the score rank() orders by', () => {
+  for (const occasion of [null, occasionById('date')]) {
+    for (const r of rank(fragrances, mildFallNight, 'night', { occasion, history: [{ id: fragrances[0].id, date: '2026-09-27', slot: 'night' }], todayISO: '2026-09-28' })) {
+      assert.equal(scoreOf(r.parts, occasion), r.score);
+    }
+  }
+  const date = occasionById('date');
+  assert.equal(occasionPart(occasionRaw(fragrances[0], date), date), rank([fragrances[0]], mildFallNight, 'night', { occasion: date })[0].parts.occasion);
 });
 
 test('formal favors iris and powder', () => {

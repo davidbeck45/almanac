@@ -10,7 +10,6 @@
 // bottle landed. Wears of bottles outside the demo are skipped.
 // Weather data by Open-Meteo.com (CC BY 4.0).
 import { readFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { rank } from '../src/engine.js';
 import { windowOn } from '../src/weather.js';
@@ -139,4 +138,4 @@ async function main() {
   console.log(`worn bottle's average rank ${s.meanRank} (random would be ${s.randomMeanRank}); the top pick ${s.topPickPct}% of the time, S tier ${s.tierSPct}%, S or A ${s.tierSorAPct}%`);
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) await main();
+if (import.meta.main) await main();
