@@ -1,0 +1,170 @@
+/* Design tokens: type, spacing, radii, elevation, motion and color roles.
+   styles.css builds every component from these; a theme overrides the color
+   roles only. Overlays and lines are the text color at an alpha
+   (color-mix with transparent), so they follow the theme. */
+
+/* Self-hosted variable fonts (fonts/, SIL OFL), latin subset from Google
+   Fonts' CSS API: Fraunces opsz 9–144 and wght 400–700, roman and italic;
+   Inter opsz 14–32 and wght 400–700. Fraunces' SOFT axis is left out: it
+   doubles the files (120 and 149 KB against 67 and 82). */
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('../fonts/fraunces.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Fraunces';
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('../fonts/fraunces-italic.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('../fonts/inter.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  /* Type: Fraunces for the voice (titles, bottle names, numbers that matter),
+     Inter for everything else. Seven sizes plus the hero temperature; nothing
+     under 12px. */
+  --display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --fs-display: clamp(72px, 18vw, 104px);
+  --fs-title-1: 28px;  --lh-title-1: 32px;  /* bottle sheet title */
+  --fs-title-2: 24px;  --lh-title-2: 28px;  /* pick name, sheet titles, messages */
+  --fs-title-3: 20px;  --lh-title-3: 24px;  /* slot and section heads */
+  --fs-headline: 16px; --lh-headline: 22px; /* inputs (16 keeps iOS from zooming), sheet section heads */
+  --fs-body: 15px;     --lh-body: 22px;     /* copy, buttons, list rows */
+  --fs-footnote: 13px; --lh-footnote: 18px; /* meta, secondary lines */
+  --fs-caption: 12px;  --lh-caption: 16px;  /* the minimum: bottle labels, calendar, chart labels */
+
+  /* Spacing on a 4pt grid (--s-0 is the hairline step between stacked lines). */
+  --s-0: 2px;
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-7: 32px;
+  --s-8: 40px;
+  --s-9: 56px;
+  --s-10: 72px;
+  --hit: 44px; /* smallest tap target */
+
+  /* Radii, concentric: an inner radius is the outer one minus the padding. */
+  --r-pill: 999px;
+  --r-surface: 24px; /* cards, sheets, the hero */
+  --r-inset: 16px;   /* cards inside cards */
+  --r-control: 12px; /* fields, list rows, segmented tracks */
+  --r-thumb: 10px;
+  --r-chip: 6px;     /* tier chips */
+  --r-round: 50%;
+
+  /* Motion. The bottle flight is the one orchestrated moment. */
+  --dur-1: 120ms; /* press */
+  --dur-2: 200ms; /* hover, toggles */
+  --dur-3: 320ms; /* view swap, tab pill */
+  --dur-4: 480ms; /* sheet, bottle flight */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Color roles, default theme. */
+  --surface-0: #0a0b10; /* page */
+  --surface-1: color-mix(in srgb, var(--tint-mid) 5%, #12141b); /* cards, sheets: a breath of the sky */
+  --surface-2: #191c25; /* cards inside cards */
+  --surface-3: #20242f; /* hover, selected */
+  --text-primary: #eef0f5;
+  --text-secondary: #9aa1b1;
+  --text-tertiary: #838a9a; /* still 4.5:1 on --surface-3 */
+  --accent: #f2c35b;        /* today, selection, focus */
+  --on-accent: #0a0b10;
+  --positive: #86d9a8;
+  --negative: #f19a84;
+  --info: #7fb8f0;          /* rain */
+  --moon: #aab8e8;
+  /* Tiers as star magnitude: one moonlight hue, brightest first. */
+  --mag-1: #f4f1e6;
+  --mag-2: #c9cfe0;
+  --mag-3: #8f98b3;
+  --mag-4: #6b7389;
+  --on-mag: #0a0b10;
+  --paper: #ffffff;         /* the brightest neutral: knobs, hover on primary, chip text */
+  --on-scene: #ffffff;      /* text and glass over the weather scene */
+  --chip-ink: 50%;          /* how much of an accord's color its chip text keeps (4.5:1 for every accord) */
+  --wx: #c9d1de;            /* weather glyphs */
+  --wx-bright: #e8f0fb;
+  /* Dark tints as RGB channels, for glass, shades and veils at any alpha. */
+  --ink: 14 18 34;
+  --ink-deep: 4 6 14;
+  --ink-veil: 2 3 8;
+  --ink-panel: 18 20 28;
+  --shade: 0 0 0;           /* shadows */
+  /* The page tint behind the hero; main.js sets both from the sky. */
+  --tint-top: #101838;
+  --tint-mid: #1f2c57;
+
+  /* Lines and fills: the text color at an alpha. */
+  --border-subtle: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  --border-strong: color-mix(in srgb, var(--text-primary) 14%, transparent);
+  --fill-faint: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  --fill: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  --fill-strong: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --toast-bg: color-mix(in srgb, var(--surface-3) 92%, transparent);
+
+  /* Elevation. e1 cards, e2 cards inside cards, e3 sheets; glass only over
+     the scene and on the sticky tab bar. */
+  --e1: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 4%, transparent), 0 18px 40px -24px rgb(var(--shade) / 0.8);
+  --e2: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 5%, transparent);
+  --e3: 0 40px 80px -30px rgb(var(--shade) / 0.85);
+  --e-float: 0 16px 40px rgb(var(--shade) / 0.5);
+  --drop-bottle: drop-shadow(0 14px 16px rgb(var(--shade) / 0.55));
+  --drop-small: drop-shadow(0 4px 6px rgb(var(--shade) / 0.4));
+  --glow-text: 0 2px 30px rgb(var(--shade) / 0.3);
+
+  color-scheme: dark;
+}
+
+/* gruvbox dark (morhetz/gruvbox), switched on by src/theme.js. Secondary text
+   is fg3 and tertiary fg4, which both clear 4.5:1 on bg1; red is too dark on
+   the panels, so warnings are bright orange. */
+:root[data-theme='gruvbox'] {
+  --surface-0: #1d2021;
+  --surface-1: #282828;
+  --surface-2: #32302f;
+  --surface-3: #3c3836;
+  --text-primary: #ebdbb2;
+  --text-secondary: #bdae93;
+  --text-tertiary: #a89984;
+  --accent: #fabd2f;
+  --on-accent: #1d2021;
+  --positive: #b8bb26;
+  --negative: #fe8019;
+  --info: #83a598;
+  --moon: #83a598;
+  --mag-1: #fbf1c7;
+  --mag-2: #d5c4a1;
+  --mag-3: #a89984;
+  --mag-4: #928374;
+  --on-mag: #1d2021;
+  --paper: #fbf1c7;
+  --on-scene: #fbf1c7;
+  --chip-ink: 40%;
+  --wx: #bdae93;
+  --wx-bright: #ebdbb2;
+  --ink: 29 32 33;
+  --ink-deep: 20 21 22;
+  --ink-veil: 14 14 14;
+  --ink-panel: 40 40 40;
+  --border-subtle: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --border-strong: color-mix(in srgb, var(--text-primary) 16%, transparent);
+}

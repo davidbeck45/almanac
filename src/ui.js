@@ -48,6 +48,14 @@ export const icon = {
   calendar: stroke('M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7ZM4 10h16M8 3v4M16 3v4'),
   sparkle: svg('<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" fill="currentColor"/>'),
   cloud: stroke('M7 18h10a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.2 9.1 4.5 4.5 0 0 0 7 18Z'),
+  // Occasions (OCCASIONS[].icon names these).
+  cup: stroke('M5 10h11v4a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5v-4ZM16 11h1.5a2.5 2.5 0 0 1 0 5H16M8.5 3.5c-.8 1 .8 2 0 3M12 3.5c-.8 1 .8 2 0 3'),
+  briefcase: stroke('M4.5 8h15A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5v-8A1.5 1.5 0 0 1 4.5 8ZM9 8V6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 13h18M11 13v2h2v-2'),
+  candle: stroke('M12 3c1.6 1.7 2.2 2.9 2.2 4a2.2 2.2 0 0 1-4.4 0c0-1.1.6-2.3 2.2-4ZM12 11v1M9 12h6v9H9zM6 21h12'),
+  cocktail: stroke('M4.5 4h15L12 12.5 4.5 4ZM12 12.5V20M8 20h8M7.5 7.5h9M15 3l2.5-1.5'),
+  bowtie: stroke('M10 10.5 4 7.5a1 1 0 0 0-1.5.9v7.2a1 1 0 0 0 1.5.9l6-3M14 10.5l6-3a1 1 0 0 1 1.5.9v7.2a1 1 0 0 1-1.5.9l-6-3M10 10h4v4h-4z'),
+  leaf: stroke('M5 19c0-8.5 5.5-14 15-15-.5 9.5-6 15-15 15ZM5 19l7.5-7.5'),
+  sofa: stroke('M5 11V8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3M3 13a2 2 0 0 1 4 0v2h10v-2a2 2 0 0 1 4 0v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-4ZM6 18v2M18 18v2'),
 };
 
 // ---------- Weather glyphs ----------
@@ -147,13 +155,21 @@ export function heroPicksHTML(picks) {
     </button>`).join('')}</div>`;
 }
 
-export function heroHTML({ loc, wx, loading, error }, aspect, picks, collectionLabel) {
+// The sky before the forecast arrives (or when it can't): the phase from the
+// device clock, so a loading screen at night isn't a sunny day.
+export function sceneNow(wx, { error = false, date = new Date() } = {}) {
   const now = wx?.now;
-  const phase = now?.phase ?? 'day';
+  if (now) return { phase: now.phase, category: now.category, sunProgress: now.sunProgress };
+  const h = date.getHours() + date.getMinutes() / 60;
+  const phase = h < 5.5 || h >= 20.5 ? 'night' : h < 7.5 ? 'dawn' : h < 18.5 ? 'day' : 'dusk';
+  return { phase, category: error ? 'cloudy' : 'partly', sunProgress: Math.min(1, Math.max(0, (h - 6.5) / 13)) };
+}
+
+export function heroHTML({ loc, wx, loading, error, updating }, aspect, picks, collectionLabel) {
+  const now = wx?.now;
+  const sky = sceneNow(wx, { error: Boolean(error) });
   const scene = renderScene({
-    phase,
-    category: now?.category ?? 'partly',
-    sunProgress: now?.sunProgress ?? 0.45,
+    ...sky,
     season: calendarSeason(new Date(), loc?.lat ?? 1),
     cold: now ? now.feelsF < 50 : false,
     aspect,
@@ -163,15 +179,17 @@ export function heroHTML({ loc, wx, loading, error }, aspect, picks, collectionL
   const locBtn = `<button class="loc-btn" data-action="location" aria-label="Change location: ${esc(loc?.name ?? 'not set')}">${icon.pin}<span>${esc(loc?.name ?? 'Set location')}</span></button>`;
   let body;
   if (now) {
+    const status = updating ? '<div class="hero-sub updating">Updating…</div>'
+      : `<div class="hero-sub">${Math.round(now.humidity)}% humidity${wx.stale ? ' · offline' : ''}</div>`;
     body = `
       <div class="hero-temp">${temp(now.tempF)}<span class="deg">°</span></div>
       <div class="hero-meta">
         <div class="hero-cond">${esc(now.label)}</div>
         <div class="hero-sub">Feels ${deg(now.feelsF)} · H ${deg(now.hiF)} L ${deg(now.loF)}</div>
-        <div class="hero-sub">${Math.round(now.humidity)}% humidity${wx.stale ? ' · offline' : ''}</div>
+        ${status}
       </div>`;
   } else if (error) {
-    body = `<div class="hero-meta"><div class="hero-cond">Weather unavailable</div><div class="hero-sub">${esc(error)}</div></div>`;
+    body = `<div class="hero-meta"><div class="hero-cond">Weather unavailable</div><div class="hero-sub">${esc(loc?.name ?? '')}</div></div>`;
   } else {
     body = `<div class="hero-meta"><div class="hero-cond">${loading ? 'Checking the sky…' : 'Where are you?'}</div><div class="hero-sub">${loading ? '&nbsp;' : 'Set a location to get picks.'}</div></div>`;
   }
@@ -211,7 +229,7 @@ function reasonsList(reasons, cls = '') {
 
 function wearButton(entry, ctx, wornId) {
   const on = wornId === entry.fragrance.id;
-  return `<button class="wear-btn${on ? ' on' : ''}" data-wear data-ctx="${esc(ctx)}" data-id="${esc(entry.fragrance.id)}" aria-pressed="${on}">
+  return `<button class="btn primary wear-btn${on ? ' on' : ''}" data-wear data-ctx="${esc(ctx)}" data-id="${esc(entry.fragrance.id)}" aria-pressed="${on}">
     ${on ? icon.check : icon.spray}<span>${on ? 'Wearing' : 'Wear this'}</span></button>`;
 }
 
@@ -242,7 +260,7 @@ export function pickHTML(entry, ctx, wornId, kicker, { canWear = true } = {}) {
   const top = Object.keys(f.accords)[0];
   const worn = wornId === f.id;
   return `
-    <article class="pick" style="--accent:${accordColor(top)}">
+    <article class="pick" style="--accord:${accordColor(top)}">
       <button class="pick-bottle" data-open data-ctx="${esc(ctx)}" data-id="${esc(f.id)}" aria-label="Details for ${esc(f.name)}">
         ${img(f, { lazy: false })}
       </button>
@@ -302,7 +320,7 @@ export function weekHTML(days) {
       <h2 id="week-title">${icon.calendar}The week ahead</h2>
       <p>Planned against the forecast so nothing repeats back to back. Tap a bottle to see why.</p>
     </header>
-    <ol class="wk-list">${rows}</ol>
+    <ol class="wk-list" style="--days:${days.length}">${rows}</ol>
   </section>`;
 }
 
@@ -316,10 +334,10 @@ export function journalTeaserHTML({ strip, stats }, resolve) {
       <span class="jt-bottles">${worn.length ? worn.map(f => img(f)).join('') : '<i></i>'}</span>
     </span>`;
   }).join('');
-  return `<section class="journal-teaser">
+  return `<section class="journal-teaser" aria-label="Wear journal">
     <header>
-      <div><h3>${icon.journal}Wear journal</h3><p>${plural(stats.wears, 'wear')} · ${plural(stats.bottles, 'bottle')} in 30 days</p></div>
-      <button class="ghost-btn" data-action="journal">Open ${icon.chevron}</button>
+      <div><h2>${icon.journal}Wear journal</h2><p>${plural(stats.wears, 'wear')} · ${plural(stats.bottles, 'bottle')} in 30 days</p></div>
+      <button class="btn secondary compact" data-action="journal">Open ${icon.chevron}</button>
     </header>
     <div class="jt-strip">${cells}</div>
   </section>`;
@@ -353,26 +371,24 @@ export function journalSheetHTML({ stats, calendar, dusty, confirmClear, todayIS
     : '<p class="muted small">Every bottle in rotation got worn this month. Nice.</p>';
   return sheetFrame('journal-title', `
     <h2 id="journal-title" class="sheet-title">Wear journal</h2>
-    <p class="muted lede">What you logged with “Wear this”, on this device. The last 30 days.</p>
+    <p class="muted lede">What you logged with “Wear this” in the last 30 days. History stays on this device.</p>
     ${tiles}
-    <section><h4>Calendar</h4><div class="calendar">${weekdays}${cells}</div></section>
-    <section><h4>Most worn</h4>${mostList}</section>
-    <section><h4>Gathering dust</h4>${dustList}</section>
-    <div class="sheet-footer spread">
-      <span class="muted small">History stays on this device.</span>
-      <span class="footer-actions">
-        <button class="ghost-btn quiet" data-action="journal-export">${icon.share}Export</button>
-        <button class="ghost-btn quiet${confirmClear ? ' danger' : ''}" data-action="journal-clear">${icon.remove}${confirmClear ? 'Tap again to clear' : 'Clear history'}</button>
-      </span>
+    <section><h3>Calendar</h3><div class="calendar">${weekdays}${cells}</div></section>
+    <section><h3>Most worn</h3>${mostList}</section>
+    <section><h3>Gathering dust</h3>${dustList}</section>
+    <div class="sheet-bar">
+      <button class="btn tertiary" data-action="journal-export">${icon.share}Export</button>
+      <button class="btn ${confirmClear ? 'secondary danger' : 'tertiary'}" data-action="journal-clear">${icon.remove}${confirmClear ? 'Tap again to clear' : 'Clear history'}</button>
     </div>`);
 }
 
 // ---------- Occasion controls ----------
 
+// A radio group: one tab stop, arrow keys move the choice (src/main.js).
 export function occasionPickerHTML(activeId) {
-  return `<div class="occasions" role="radiogroup" aria-label="Occasion">
-    ${OCCASIONS.map(o => `<button class="occ${o.id === activeId ? ' on' : ''}" role="radio" aria-checked="${o.id === activeId}" data-occasion="${o.id}">
-      <span class="occ-icon" aria-hidden="true">${o.icon}</span>
+  return `<div class="occasions" role="radiogroup" aria-label="Occasion" style="--n:${OCCASIONS.length}">
+    ${OCCASIONS.map(o => `<button class="occ${o.id === activeId ? ' on' : ''}" role="radio" aria-checked="${o.id === activeId}" tabindex="${o.id === activeId ? 0 : -1}" data-occasion="${o.id}">
+      <span class="occ-icon">${icon[o.icon] ?? icon.sparkle}</span>
       <span class="occ-label">${esc(o.label)}</span>
       <span class="occ-blurb">${esc(o.blurb)}</span>
     </button>`).join('')}
@@ -388,14 +404,18 @@ export function slotToggleHTML(slot, wx) {
 
 // ---------- Detail sheet ----------
 
-function bar(label, pct, color, value) {
+// `value` shows at the end of the bar; `spoken` only to screen readers.
+function bar(label, pct, color, value, spoken = '') {
   return `<div class="bar"><span class="bar-label">${esc(label)}</span>
-    <span class="bar-track"><span class="bar-fill" style="width:${Math.max(0, Math.min(100, pct)).toFixed(1)}%;--c:${paint(color)}"></span></span>
-    <span class="bar-value">${esc(value)}</span></div>`;
+    <span class="bar-track" aria-hidden="true"><span class="bar-fill" style="width:${Math.max(0, Math.min(100, pct)).toFixed(1)}%;--c:${paint(color)}"></span></span>
+    ${spoken ? `<span class="visually-hidden">${esc(spoken)}</span>` : `<span class="bar-value">${esc(value)}</span>`}</div>`;
 }
 
+// Accord bars are Fragrantica's widths (30–100), read out as words.
+const strength = width => (width >= 85 ? 'dominant' : width >= 65 ? 'strong' : width >= 45 ? 'moderate' : 'light');
+
 const SEASON_COLORS = { winter: '#8fc7f0', spring: '#9be39a', summer: '#f6a08f', fall: '#f2b264', day: '#f5c451', night: '#8ea3d9' };
-const GENDER = { men: 'for men', women: 'for women', 'women and men': 'unisex' };
+const GENDER = { men: 'for\u00a0men', women: 'for\u00a0women', 'women and men': 'unisex' };
 const FACTORS = [
   ['occasion', 'Occasion', '#e7b6ff'],
   ['season', 'Season', '#9be39a'],
@@ -411,7 +431,7 @@ function whyHTML(entry) {
   const rotation = p.rotation > 0
     ? `<p class="why-note">−${Math.round(p.rotation * 100)} for rotation: ${esc(p.planned ? 'already in the plan nearby' : 'worn recently')}.</p>`
     : '';
-  return `<section><h4>Why it ranks here <span class="h4-aside">${matchPct(entry)}% match</span></h4><div class="bars why">${bars}</div>${rotation}</section>`;
+  return `<section><h3>Why it ranks here <span class="h3-aside">${matchPct(entry)}% match</span></h3><div class="bars why">${bars}</div>${rotation}</section>`;
 }
 
 function wearsHTML(wears, todayISO) {
@@ -446,7 +466,7 @@ function layersHTML(f, layers, ctx) {
         <p class="pairing-order">${icon.spray}${esc(order)}</p>
       </li>`;
   }).join('');
-  return `<section><h4>Layer it with</h4>${rows
+  return `<section><h3>Layer it with</h3>${rows
     ? `<ul class="pairings">${rows}</ul>`
     : '<p class="muted small">Nothing else in this collection layers well with it.</p>'}</section>`;
 }
@@ -457,7 +477,7 @@ export function sheetHTML(entry, ctxLabel, ctx, wornId, { canWear = true, wears 
   const seasonBars = SEASONS.map(s => bar(s, (f.season[s] / peak) * 100, SEASON_COLORS[s], `${Math.round(f.season[s] * 100)}%`)).join('');
   const dnPeak = Math.max(f.dayNight.day, f.dayNight.night);
   const dnBars = ['day', 'night'].map(s => bar(s, (f.dayNight[s] / dnPeak) * 100, SEASON_COLORS[s], `${Math.round(f.dayNight[s] * 100)}%`)).join('');
-  const accordBars = Object.entries(f.accords).map(([a, v]) => bar(a, v, accordColor(a), '')).join('');
+  const accordBars = Object.entries(f.accords).map(([a, v]) => bar(a, v, accordColor(a), '', `, ${strength(v)}`)).join('');
   const layers = [['top', 'Top'], ['mid', 'Heart'], ['base', 'Base'], ['all', 'Notes']]
     .filter(([k]) => f.notes[k]?.length)
     .map(([k, label]) => `<div class="layer"><span class="layer-label">${label}</span><div class="notes">${f.notes[k].map(n => `<span class="note-chip">${esc(n)}</span>`).join('')}</div></div>`)
@@ -479,13 +499,13 @@ export function sheetHTML(entry, ctxLabel, ctx, wornId, { canWear = true, wears 
   const o = f.original;
   const inspired = o ? `<div class="inspired">Inspired by ${o.url ? `<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.name)}</a>` : esc(o.name)} · ${esc(o.brand)}</div>` : '';
   const altRow = alts.length
-    ? `<section><h4>Also good for ${esc(ctxLabel.toLowerCase())}</h4><div class="alts">${alts.map(a => `
+    ? `<section><h3>Also good for ${esc(ctxLabel.toLowerCase())}</h3><div class="alts">${alts.map(a => `
         <button class="alt" data-open data-ctx="${esc(ctx)}" data-id="${esc(a.fragrance.id)}">
           ${img(a.fragrance)}<span><b>${esc(a.fragrance.name)}</b><small><span class="tier-chip mini" data-tier="${a.tier}">${a.tier}</span>${matchPct(a)}%</small></span>
         </button>`).join('')}</div></section>`
     : '';
   return sheetFrame('sheet-title', `
-      <div class="sheet-head" style="--accent:${accordColor(Object.keys(f.accords)[0])}">
+      <div class="sheet-head" style="--accord:${accordColor(Object.keys(f.accords)[0])}">
         <div class="sheet-bottle">${img(f, { lazy: false })}</div>
         <div>
           <div class="kicker"><span class="tier-chip" data-tier="${entry.tier}">${entry.tier}</span>${esc(ctxLabel)}</div>
@@ -501,18 +521,18 @@ export function sheetHTML(entry, ctxLabel, ctx, wornId, { canWear = true, wears 
       ${wearsHTML(wears, todayISO)}
       <div class="sheet-actions">
         ${canWear ? wearButton(entry, ctx, wornId) : ''}
-        ${f.url ? `<a class="ghost-btn" href="${esc(f.url)}" target="_blank" rel="noopener">Fragrantica ${icon.external}</a>` : ''}
-        <button class="ghost-btn quiet" data-toggle-hidden="${esc(f.id)}">${icon.hide}Hide from picks</button>
+        ${f.url ? `<a class="btn secondary" href="${esc(f.url)}" target="_blank" rel="noopener">Fragrantica ${icon.external}</a>` : ''}
+        <button class="btn tertiary" data-toggle-hidden="${esc(f.id)}">${icon.hide}Hide from picks</button>
       </div>
       ${whyHTML(entry)}
       ${altRow}
       ${layersHTML(f, partners, ctx)}
-      <section><h4>Main accords</h4><div class="bars accords">${accordBars}</div></section>
+      <section><h3>Main accords</h3><div class="bars accords">${accordBars}</div></section>
       <section class="two-col">
-        <div><h4>${estimated ? 'Season fit' : 'Seasons voted'}</h4><div class="bars">${seasonBars}</div></div>
-        <div><h4>${estimated ? 'Time of day (est.)' : 'Time of day'}</h4><div class="bars">${dnBars}</div></div>
+        <div><h3>${estimated ? 'Season fit' : 'Seasons voted'}</h3><div class="bars">${seasonBars}</div></div>
+        <div><h3>${estimated ? 'Time of day (est.)' : 'Time of day'}</h3><div class="bars">${dnBars}</div></div>
       </section>
-      ${layers ? `<section><h4>Notes</h4><div class="pyramid">${layers}</div></section>` : ''}`);
+      ${layers ? `<section><h3>Notes</h3><div class="pyramid">${layers}</div></section>` : ''}`);
 }
 
 // ---------- Collection sheets ----------
@@ -533,14 +553,14 @@ export function collectionSheetHTML({ tab, demo, mine, hidden, shared, filter = 
   const tabBtn = (id, label) => `<button data-collection-tab="${id}" aria-pressed="${tab === id}">${esc(label)}</button>`;
   const actions = tab === 'mine'
     ? `<div class="sheet-actions">
-        <button class="wear-btn" data-action="add">${icon.plus}<span>Add bottles</span></button>
-        <button class="ghost-btn" data-action="import">${icon.paste}Paste a list</button>
-        ${mine.records.length ? `<button class="ghost-btn" data-action="share">${icon.share}Share</button>` : ''}
+        <button class="btn primary" data-action="add">${icon.plus}<span>Add bottles</span></button>
+        <button class="btn secondary" data-action="import">${icon.paste}Paste a list</button>
+        ${mine.records.length ? `<button class="btn tertiary" data-action="share">${icon.share}Share</button>` : ''}
       </div>
       <label class="name-field">Name on share links
         <input type="text" data-field="mine-name" value="${esc(mine.name)}" placeholder="e.g. Alex" maxlength="40" autocomplete="off">
       </label>`
-    : `<div class="sheet-actions"><button class="ghost-btn" data-action="share">${icon.share}Share this collection</button></div>`;
+    : `<div class="sheet-actions"><button class="btn secondary" data-action="share">${icon.share}Share this wardrobe</button></div>`;
   const search = list.length > 8
     ? `<label class="filter">${icon.search}<input type="search" data-field="collection-filter" placeholder="Filter ${list.length} bottles" value="${esc(filter)}" autocomplete="off" aria-label="Filter bottles"></label>`
     : '';
@@ -552,7 +572,7 @@ export function collectionSheetHTML({ tab, demo, mine, hidden, shared, filter = 
   return sheetFrame('coll-title', `
       <h2 id="coll-title" class="sheet-title">Collections</h2>
       ${shared ? `<p class="notice">Picking a collection below closes the shared one you’re viewing.</p>` : ''}
-      <div class="seg wide">${tabBtn('demo', 'Demo (David’s)')}${tabBtn('mine', `Mine · ${mine.records.length}`)}</div>
+      <div class="seg wide" role="group" aria-label="Collection">${tabBtn('demo', 'David’s wardrobe')}${tabBtn('mine', `Mine · ${mine.records.length}`)}</div>
       ${actions}
       ${body}`, { narrow: true });
 }
@@ -562,7 +582,7 @@ function resultRow(r, i, added) {
   return `<li>
     ${img(r)}
     <span class="manage-name"><b>${esc(r.name)}</b><small>${meta}</small></span>
-    <button class="add-btn${added ? ' on' : ''}" data-add="${i}" ${added ? 'disabled' : ''}>${added ? `${icon.check}Added` : `${icon.plus}Add`}</button>
+    <button class="btn secondary compact${added ? ' on' : ''}" data-add="${i}" ${added ? 'disabled' : ''} aria-label="${added ? 'Added' : 'Add'} ${esc(r.name)}">${added ? `${icon.check}Added` : `${icon.plus}Add`}</button>
   </li>`;
 }
 
@@ -577,12 +597,14 @@ export function addSheetHTML({ query = '', results = null, busy = false, error =
       <p class="muted lede">Search every fragrance on Fragrantica. Brand plus name works best.</p>
       <form class="search-form" data-form="search">
         <label class="filter big">${icon.search}<input type="search" name="q" placeholder="e.g. Dior Sauvage" autocomplete="off" value="${esc(query)}" aria-label="Fragrance" enterkeyhint="search"></label>
-        <button type="submit" class="solid-btn" ${busy ? 'disabled' : ''}>${busy ? '<span class="spinner small" aria-hidden="true"></span>Searching' : 'Search'}</button>
+        <button type="submit" class="btn primary" ${busy ? 'disabled' : ''}>${busy ? '<span class="spinner small" aria-hidden="true"></span>Searching' : 'Search'}</button>
       </form>
       ${error ? `<p class="error">${esc(error)}</p>` : ''}
       ${list}
-      ${results?.length && !busy ? `<p class="muted small hand-add">Not listed? ${handAdd('Add it yourself')}</p>` : ''}
-      <div class="sheet-footer"><button class="ghost-btn" data-action="collection">Done</button></div>`, { narrow: true });
+      <div class="sheet-bar${results?.length ? ' spread' : ''}">
+        ${results?.length && !busy ? `<span class="muted">Not listed? ${handAdd('Add it yourself')}</span>` : ''}
+        <button class="btn secondary" data-action="collection">Done</button>
+      </div>`, { narrow: true });
 }
 
 export function importSheetHTML({ text = '', rows = null, busy = false, error = '' }, maxLines) {
@@ -590,14 +612,14 @@ export function importSheetHTML({ text = '', rows = null, busy = false, error = 
   if (!rows) {
     body = `<form class="import-form" data-form="import">
         <textarea name="text" rows="8" placeholder="Dior Sauvage&#10;Liquid Brun&#10;Khadlaj Cream Velvet" aria-label="Fragrance list">${esc(text)}</textarea>
-        <button class="primary-btn" type="submit">Find matches</button>
+        <button class="btn primary block" type="submit">Find matches</button>
       </form>`;
   } else {
     const picked = rows.filter(r => r.match && r.checked).length;
     body = `<ul class="manage-list import-rows">${rows.map((r, i) => {
       if (r.status === 'pending') return `<li class="pending"><span class="spinner" aria-hidden="true"></span><span class="manage-name"><b>${esc(r.line)}</b><small>Looking…</small></span></li>`;
       if (!r.match) return `<li><span class="miss">?</span><span class="manage-name"><b>${esc(r.line)}</b><small>${esc(r.note || 'Not found')}</small></span>
-        <button class="add-btn" data-custom-row="${i}">${icon.plus}Add it yourself</button></li>`;
+        <button class="btn secondary compact" data-custom-row="${i}">${icon.plus}Add it yourself</button></li>`;
       const meta = r.weak
         ? `Closest match for “${esc(r.line)}”. Not it? <button class="link-btn" data-custom-row="${i}">Add it yourself</button>`
         : [r.match.brand, `for “${r.line}”`].filter(Boolean).map(esc).join(' · ');
@@ -607,9 +629,9 @@ export function importSheetHTML({ text = '', rows = null, busy = false, error = 
         <button class="check${r.checked ? ' on' : ''}" role="checkbox" aria-checked="${r.checked}" data-import-toggle="${i}" aria-label="Add ${esc(r.match.name)}">${icon.check}</button>
       </li>`;
     }).join('')}</ul>
-    <div class="sheet-actions">
-      <button class="wear-btn" data-action="import-confirm" ${busy || !picked ? 'disabled' : ''}>${icon.plus}<span>Add ${plural(picked, 'bottle')}</span></button>
-      <button class="ghost-btn" data-action="import" ${busy ? 'disabled' : ''}>Start over</button>
+    <div class="sheet-bar">
+      <button class="btn tertiary" data-action="import" ${busy ? 'disabled' : ''}>Start over</button>
+      <button class="btn primary" data-action="import-confirm" ${busy || !picked ? 'disabled' : ''}>${icon.plus}<span>Add ${plural(picked, 'bottle')}</span></button>
     </div>`;
   }
   return sheetFrame('import-title', `
@@ -651,9 +673,9 @@ export function customSheetHTML({ name = '', brand = '', accords = [], seasons =
           </div>
         </fieldset>
         ${error ? `<p class="error" role="alert">${esc(error)}</p>` : ''}
-        <div class="sheet-actions">
-          <button class="wear-btn" type="submit">${icon.plus}<span>${back?.kind === 'import' ? 'Use for this line' : 'Add to my collection'}</span></button>
-          ${back ? '<button class="ghost-btn" type="button" data-action="custom-back">Back</button>' : ''}
+        <div class="sheet-bar">
+          ${back ? '<button class="btn secondary" type="button" data-action="custom-back">Back</button>' : ''}
+          <button class="btn primary" type="submit">${icon.plus}<span>${back?.kind === 'import' ? 'Use for this line' : 'Add to my collection'}</span></button>
         </div>
       </form>`, { narrow: true });
 }
@@ -665,7 +687,7 @@ export function sharedBannerHTML(shared, mineCount) {
   return `<div class="banner" role="status">
     <span class="banner-icon">${icon.share}</span>
     <span><b>${who} collection</b><small>${status}</small></span>
-    <button class="wear-btn" data-action="shared-save" ${shared.loading || !shared.records.length ? 'disabled' : ''}>${save}</button>
+    <button class="btn primary compact" data-action="shared-save" ${shared.loading || !shared.records.length ? 'disabled' : ''}>${save}</button>
     <button class="icon-btn small" data-action="shared-close" aria-label="Close shared collection">${icon.close}</button>
   </div>`;
 }
@@ -676,7 +698,7 @@ export function cityResultsHTML({ results = null, query = '', busy = false }, re
   if (busy && !results) return '<p class="muted small searching"><span class="spinner small" aria-hidden="true"></span>Searching…</p>';
   if (results === null) {
     if (!recent.length) return '';
-    return `<h4 class="list-title">Recent</h4><ul class="city-results">${recent.map((r, i) => `<li><button data-recent="${i}">${icon.clock}<strong>${esc(r.name)}</strong><span>${esc(r.region ?? '')}</span></button></li>`).join('')}</ul>`;
+    return `<h3 class="list-title">Recent</h3><ul class="city-results">${recent.map((r, i) => `<li><button data-recent="${i}">${icon.clock}<strong>${esc(r.name)}</strong><span>${esc(r.region ?? '')}</span></button></li>`).join('')}</ul>`;
   }
   if (!results.length) return `<p class="muted small">No places match “${esc(query)}”. Try a bigger nearby city.</p>`;
   return `<ul class="city-results">${results.map((r, i) => `<li><button data-city="${i}">${icon.pin}<strong>${esc(r.name)}</strong><span>${esc(r.region)}</span></button></li>`).join('')}</ul>`;
@@ -687,7 +709,7 @@ export function locationSheetHTML(s = {}, recent = []) {
   return sheetFrame('loc-title', `
       <h2 id="loc-title" class="sheet-title">Where are you?</h2>
       <p class="muted lede">Used only to fetch your local forecast from Open-Meteo.</p>
-      <button class="primary-btn" data-action="geo" ${locating ? 'disabled' : ''}>${locating ? '<span class="spinner small" aria-hidden="true"></span>' : icon.pin}<span>${locating ? 'Locating…' : 'Use my location'}</span></button>
+      <button class="btn primary block" data-action="geo" ${locating ? 'disabled' : ''}>${locating ? '<span class="spinner small" aria-hidden="true"></span>' : icon.pin}<span>${locating ? 'Locating…' : 'Use my location'}</span></button>
       <div class="or"><span>or</span></div>
       <form class="search-form" data-form="city">
         <label class="filter big">${icon.search}<input type="search" name="q" data-field="city" placeholder="Search a city" autocomplete="off" value="${esc(query)}" aria-label="City" enterkeyhint="search"></label>
@@ -704,8 +726,8 @@ export function footerHTML({ on, total, sources, updated, stale, units: u, hasHi
   return `
     <div class="foot-row">
       <span>${on} of ${total} bottles in rotation</span>
-      <button class="link-btn" data-action="collection">Manage</button>
-      ${hasHistory ? '<button class="link-btn" data-action="journal">Journal</button>' : ''}
+      <button class="btn tertiary" data-action="collection">Manage</button>
+      ${hasHistory ? '<button class="btn tertiary" data-action="journal">Journal</button>' : ''}
     </div>
     <div class="foot-row">
       <div class="seg tiny" role="group" aria-label="Temperature units">${unitBtn('F')}${unitBtn('C')}</div>

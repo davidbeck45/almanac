@@ -2,13 +2,14 @@
 // (-1 wrong for it .. +1 made for it). `performance`, where the occasion cares,
 // says how loud and lasting it wants a bottle (sillage, longevity: -1 quiet or
 // fleeting .. +1 loud or lasting; Parfumo ratings, see src/engine.js).
-// `slot` is the default time of day, and `phrase` names the occasion in reason
-// text ("Woods & aromatics suit everyday wear").
+// `slot` is the default time of day, `phrase` names the occasion in reason
+// text ("Woods & aromatics suit everyday wear"), and `icon` names a stroke
+// icon in src/ui.js.
 export const OCCASIONS = [
   {
     id: 'casual',
     label: 'Everyday',
-    icon: '☕',
+    icon: 'cup',
     blurb: 'Errands, weekends, hanging out',
     slot: 'day',
     phrase: 'everyday wear',
@@ -26,7 +27,7 @@ export const OCCASIONS = [
   {
     id: 'office',
     label: 'Office',
-    icon: '💼',
+    icon: 'briefcase',
     blurb: 'Close quarters, nothing loud',
     slot: 'day',
     phrase: 'the office',
@@ -45,7 +46,7 @@ export const OCCASIONS = [
   {
     id: 'date',
     label: 'Date Night',
-    icon: '🕯️',
+    icon: 'candle',
     blurb: 'Warm, close, a little sweet',
     slot: 'night',
     phrase: 'a date',
@@ -64,7 +65,7 @@ export const OCCASIONS = [
   {
     id: 'nightout',
     label: 'Night Out',
-    icon: '🍸',
+    icon: 'cocktail',
     blurb: 'Bars, parties, crowds, projection',
     slot: 'night',
     phrase: 'a night out',
@@ -83,7 +84,7 @@ export const OCCASIONS = [
   {
     id: 'formal',
     label: 'Formal',
-    icon: '🎩',
+    icon: 'bowtie',
     blurb: 'Weddings, suits, fancy dinners',
     slot: 'night',
     phrase: 'formal wear',
@@ -102,7 +103,7 @@ export const OCCASIONS = [
   {
     id: 'outdoors',
     label: 'Outdoors',
-    icon: '🌿',
+    icon: 'leaf',
     blurb: 'Sun, beach, sports, gym',
     slot: 'day',
     phrase: 'the outdoors',
@@ -120,7 +121,7 @@ export const OCCASIONS = [
   {
     id: 'cozy',
     label: 'Cozy',
-    icon: '🛋️',
+    icon: 'sofa',
     blurb: 'Home, movie night, sweater weather',
     slot: 'night',
     phrase: 'a night in',

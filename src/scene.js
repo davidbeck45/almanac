@@ -187,6 +187,9 @@ function cabin(x, phase, weatherDark, cold, shade, glowId, P) {
   </g>`;
 }
 
+// Labels can carry place names; keep them inside the attribute.
+const attr = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
 /**
  * phase: 'dawn' | 'day' | 'dusk' | 'night'
  * category: wmo category ('clear', 'partly', 'cloudy', 'fog', 'drizzle', 'rain', 'snow', 'storm')
@@ -294,7 +297,7 @@ export function renderScene({ phase = 'day', category = 'clear', sunProgress = 0
     parts.push(`<rect class="flash" width="${W}" height="${H}" fill="${P.flash}"/>`);
   }
 
-  return `<svg class="scene" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMax slice" role="img" aria-label="${label}">
+  return `<svg class="scene" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMax slice" role="img" aria-label="${attr(label)}">
     <defs>
       <linearGradient id="${id}-sky" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="${sky[0]}"/><stop offset="0.55" stop-color="${sky[1]}"/><stop offset="1" stop-color="${sky[2]}"/>

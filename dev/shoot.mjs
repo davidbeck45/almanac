@@ -25,6 +25,7 @@
 //   --full-page          make every shot a whole-document one
 //   --dark | --light     emulate prefers-color-scheme
 //   --reduced-motion     emulate prefers-reduced-motion: reduce
+//   --forced-colors      emulate forced-colors: active (Windows high contrast)
 //   --scale <n>          device scale factor (default 2)
 //   --init "<js>"        run before the page's own scripts on every load,
 //                        e.g. to seed localStorage; repeatable
@@ -42,7 +43,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-const USAGE = 'usage: node dev/shoot.mjs --url <url> [--size WxH]... [--full-page] [--dark|--light] [--reduced-motion] [--scale n] [--init js]... '
+const USAGE = 'usage: node dev/shoot.mjs --url <url> [--size WxH]... [--full-page] [--dark|--light] [--reduced-motion] [--forced-colors] [--scale n] [--init js]... '
   + '[--wait ms|selector | --click selector | --key name | --type text | --eval js | --shot file.png | --full-shot file.png]... [--out file.png]';
 const WAIT_CAP = 15_000;
 const KEYS = { Tab: 9, Enter: 13, Escape: 27, Space: 32, ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40 };
@@ -57,7 +58,7 @@ function fail(message) {
 }
 
 function parseArgs(argv) {
-  const o = { sizes: [], steps: [], init: [], scale: 2, scheme: null, fullPage: false, reducedMotion: false,
+  const o = { sizes: [], steps: [], init: [], scale: 2, scheme: null, fullPage: false, reducedMotion: false, forcedColors: false,
     chromium: process.env.CHROMIUM || '/usr/bin/chromium' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -69,6 +70,7 @@ function parseArgs(argv) {
     } else if (a === '--full-page') o.fullPage = true;
     else if (a === '--dark' || a === '--light') o.scheme = a.slice(2);
     else if (a === '--reduced-motion') o.reducedMotion = true;
+    else if (a === '--forced-colors') o.forcedColors = true;
     else if (a === '--scale') o.scale = +val() || fail('--scale wants a number');
     else if (a === '--init') o.init.push(val());
     else if (a === '--chromium') o.chromium = val();
@@ -189,6 +191,7 @@ async function runSize(cdp, o, size) {
   const features = [
     o.scheme && { name: 'prefers-color-scheme', value: o.scheme },
     o.reducedMotion && { name: 'prefers-reduced-motion', value: 'reduce' },
+    o.forcedColors && { name: 'forced-colors', value: 'active' },
   ].filter(Boolean);
   if (features.length) await s('Emulation.setEmulatedMedia', { features });
   for (const source of o.init) await s('Page.addScriptToEvaluateOnNewDocument', { source });

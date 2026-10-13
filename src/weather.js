@@ -11,6 +11,9 @@ export const WINDOWS = { day: [10, 17], night: [19, 23] };
 const CACHE_KEY = 'scentcast.weather';
 const CACHE_VERSION = 3; // bump when the request shape changes
 const CACHE_MAX_AGE = 20 * 60 * 1000;
+// An older forecast still opens the app (under "Updating…" while a fresh one
+// loads) up to this age: it still covers today and tomorrow.
+const SHOW_STALE_FOR = 12 * 60 * 60 * 1000;
 
 const wallMs = iso => Date.parse(`${iso}Z`);
 const avg = xs => xs.reduce((a, b) => a + b, 0) / xs.length;
@@ -70,16 +73,33 @@ export async function fetchForecast({ lat, lon }) {
     models: [DEFAULT_MODEL, ...BLEND_MODELS].join(','),
   });
   const res = await fetch(`${FORECAST_URL}?${params}`);
-  if (!res.ok) throw new Error(`Weather request failed (${res.status})`);
+  if (!res.ok) throw Object.assign(new Error(`Weather request failed (${res.status})`), { status: res.status });
   return { ...blendModels(await res.json()), fetchedAt: Date.now() };
 }
 
-// Cached fetch: fresh cache wins, network next, stale cache if offline.
-export async function getForecast(loc) {
-  const key = `${CACHE_VERSION}:${loc.lat},${loc.lon}`;
-  let cached = null;
-  try { cached = JSON.parse(localStorage.getItem(CACHE_KEY)); } catch {}
-  if (cached?.key === key && Date.now() - cached.forecast.fetchedAt < CACHE_MAX_AGE) return cached.forecast;
+const cacheKey = loc => `${CACHE_VERSION}:${loc.lat},${loc.lon}`;
+function readCache() {
+  try { return JSON.parse(localStorage.getItem(CACHE_KEY)); } catch { return null; }
+}
+
+/**
+ * The saved forecast for this place: `fresh` (under 20 minutes old, no need
+ * to fetch) or old enough to refresh but fine to show meanwhile. Null when
+ * there is none, it's for another place, or it's too old to show.
+ */
+export function cachedForecast(loc, nowMs = Date.now()) {
+  const cached = readCache();
+  if (cached?.key !== cacheKey(loc)) return null;
+  const age = nowMs - cached.forecast.fetchedAt;
+  if (!(age < SHOW_STALE_FOR)) return null;
+  return { forecast: cached.forecast, fresh: age < CACHE_MAX_AGE };
+}
+
+// Cached fetch: fresh cache wins (unless forced), network next, stale cache if offline.
+export async function getForecast(loc, { force = false } = {}) {
+  const key = cacheKey(loc);
+  const cached = readCache();
+  if (!force && cached?.key === key && Date.now() - cached.forecast.fetchedAt < CACHE_MAX_AGE) return cached.forecast;
   try {
     const forecast = await fetchForecast(loc);
     try { localStorage.setItem(CACHE_KEY, JSON.stringify({ key, forecast })); } catch {}
@@ -88,6 +108,15 @@ export async function getForecast(loc) {
     if (cached?.key === key) return { ...cached.forecast, stale: true };
     throw err;
   }
+}
+
+/** What went wrong fetching the forecast, as a sentence for the page. */
+export function forecastError(err) {
+  const status = err?.status;
+  if (status === 429) return 'The forecast service is busy. Try again in a minute.';
+  if (status >= 500) return 'The forecast service is down for the moment. Try again soon.';
+  if (status) return `The forecast service turned the request down (error ${status}). Try again later.`;
+  return 'Can’t reach the forecast. Check your connection and try again.';
 }
 
 function headline(hours) {
@@ -183,6 +212,19 @@ function clock(forecast, nowMs) {
   };
 }
 
+// `current` is the reading at fetch time. A saved forecast an hour or more
+// old reads "now" from its row for this hour instead, so a 2 pm forecast
+// opened at 1 am doesn't show the afternoon under a night sky.
+const CURRENT_FOR = 60 * 60 * 1000;
+
+function nowReading(forecast, hours, ctx, nowMs) {
+  const c = forecast.current;
+  const row = nowMs - forecast.fetchedAt >= CURRENT_FOR && hours.find(x => x.date === ctx.todayISO && x.hour === ctx.hour);
+  return row
+    ? { tempF: row.temp, feelsF: row.feels, humidity: row.humidity, cloudCover: null, code: row.code }
+    : { tempF: c.temperature_2m, feelsF: c.apparent_temperature, humidity: c.relative_humidity_2m, cloudCover: c.cloud_cover, code: c.weather_code };
+}
+
 export function summarize(forecast, nowMs = Date.now()) {
   const ctx = clock(forecast, nowMs);
   const { wallNow, todayISO, tomorrowISO, hour } = ctx;
@@ -197,22 +239,19 @@ export function summarize(forecast, nowMs = Date.now()) {
   const di = Math.max(0, d.time.indexOf(todayISO));
   const sunrise = wallMs(d.sunrise[di]);
   const sunset = wallMs(d.sunset[di]);
-  const c = forecast.current;
+  const { code, ...reading } = nowReading(forecast, hours, ctx, nowMs);
 
   return {
     todayISO,
     stale: !!forecast.stale,
     fetchedAt: forecast.fetchedAt,
     now: {
-      tempF: c.temperature_2m,
-      feelsF: c.apparent_temperature,
-      humidity: c.relative_humidity_2m,
-      cloudCover: c.cloud_cover,
+      ...reading,
       hiF: d.temperature_2m_max[di],
       loF: d.temperature_2m_min[di],
       phase: phaseAt(wallNow, sunrise, sunset),
       sunProgress: clamp((wallNow - sunrise) / (sunset - sunrise), 0, 1),
-      ...describe(c.weather_code),
+      ...describe(code),
     },
     day: next('day'),
     night: next('night'),

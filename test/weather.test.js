@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { blendModels, week, windowOn } from '../src/weather.js';
+import { blendModels, week, windowOn, summarize, cachedForecast, forecastError } from '../src/weather.js';
 import { syntheticForecast } from './fixtures.js';
 
 // Two days of a multi-model response, variables suffixed by model as Open-Meteo returns them.
@@ -50,4 +50,51 @@ test('an hour a model left empty doesn\'t read as 0°F', () => {
   const win = windowOn(forecast, '2026-09-29', 'day');
   assert.equal(win.feelsF, 72);
   assert.equal(win.loF, 72);
+});
+
+test('the saved forecast opens the app: fresh as is, older dimmed while it refreshes, too old not at all', () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  try {
+    const loc = { lat: 40.71, lon: -74.01 };
+    const save = (fetchedAt, at = loc) => store.set('scentcast.weather', JSON.stringify({ key: `3:${at.lat},${at.lon}`, forecast: { fetchedAt } }));
+    const now = Date.parse('2026-10-12T12:00:00Z');
+    save(now - 5 * 60e3);
+    assert.equal(cachedForecast(loc, now).fresh, true);
+    save(now - 3 * 3600e3);
+    assert.equal(cachedForecast(loc, now).fresh, false);
+    save(now - 30 * 3600e3);
+    assert.equal(cachedForecast(loc, now), null);
+    save(now, { lat: 1, lon: 2 });
+    assert.equal(cachedForecast(loc, now), null, 'another place');
+  } finally {
+    delete globalThis.localStorage;
+  }
+});
+
+test('forecast failures read as sentences, never "Failed to fetch"', () => {
+  assert.equal(forecastError(new TypeError('Failed to fetch')), 'Can’t reach the forecast. Check your connection and try again.');
+  assert.match(forecastError({ status: 429 }), /busy/);
+  assert.match(forecastError({ status: 503 }), /down/);
+  for (const err of [new TypeError('Failed to fetch'), { status: 400 }, { status: 502 }]) assert.match(forecastError(err), /^[A-Z].*\.$/);
+});
+
+test('a saved forecast hours old reads now from its hourly row, not the reading at fetch time', () => {
+  const f = blendModels(multiModel());
+  // Fetched at 14:00 local on the 8th, when it was 75° and clear.
+  const fetchedAt = Date.parse('2026-10-08T19:00:00Z');
+  f.current = { temperature_2m: 75, apparent_temperature: 76, relative_humidity_2m: 40, weather_code: 0, cloud_cover: 0 };
+  f.fetchedAt = fetchedAt;
+
+  const soon = summarize(f, fetchedAt + 10 * 60e3);
+  assert.equal(soon.now.tempF, 75);
+  assert.equal(soon.now.label, 'Clear');
+
+  // Opened at 01:00 local on the 9th: the 01:00 row (70°, mostly clear by the default model).
+  const late = summarize(f, Date.parse('2026-10-09T06:00:00Z'));
+  assert.equal(late.now.phase, 'night');
+  assert.equal(late.now.tempF, 70);
+  assert.equal(late.now.feelsF, 72);
+  assert.equal(late.now.humidity, 50);
+  assert.equal(late.now.label, 'Mostly clear');
 });
