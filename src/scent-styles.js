@@ -21,14 +21,14 @@
 import { barStrength } from './accords.js';
 import { performanceRating } from './engine.js';
 
-// Show a style from STYLE_MIN (Skin scent's false positives sit at 0.50-0.51),
-// call it strong from STYLE_STRONG. Wears close from WEARS_CLOSE: the quietest
-// 15% of bottles with 300+ voters.
+// Show a style from STYLE_MIN (Skin scent's false positives across the
+// dataset sit at 0.50-0.51), call it strong from STYLE_STRONG. A collection's
+// mix counts what each bottle leans toward, its top 2 from STYLE_LEAN. Wears
+// close from WEARS_CLOSE: the quietest 15% of bottles with 300+ voters.
 export const STYLE_MIN = 0.55;
 export const STYLE_STRONG = 0.75;
+export const STYLE_LEAN = 0.4;
 export const WEARS_CLOSE = 0.6;
-// The wardrobe's mix counts a bottle's top 2 styles from this score.
-const MIX_MIN = 0.4;
 
 const clamp = (x, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, x));
 
@@ -500,8 +500,8 @@ export function wearsClose(frag) {
 }
 
 /**
- * A collection's style mix: how many bottles have each scent style in their
- * top 2 (from MIX_MIN), and how many wear close.
+ * A collection's style mix: how many bottles lean toward each scent style
+ * (their top 2 from STYLE_LEAN), and how many wear close.
  * -> { total, counts: { styleId: n }, ids: { styleId: [record ids] }, intimate, intimateIds }
  */
 export function styleMix(records) {
@@ -511,7 +511,7 @@ export function styleMix(records) {
   for (const r of records) {
     const scores = styleScores(r);
     for (const s of ranked(scores).slice(0, 2)) {
-      if (s.score < MIX_MIN) continue;
+      if (s.score < STYLE_LEAN) continue;
       counts[s.id]++;
       ids[s.id].push(r.id);
     }

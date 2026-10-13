@@ -6,14 +6,18 @@
 //   node scripts/recommend.mjs --layer "Liquid Brun"       (what layers with it; --layer all for the best pairs)
 //   node scripts/recommend.mjs --layer "Liquid Brun" --city "New York" [--slot night]   (for that weather)
 //   node scripts/recommend.mjs --ideal "Amber Empire"     (the temperatures it wears best in)
+//   node scripts/recommend.mjs --mix                       (the collection's scent styles, bottle by bottle)
+//   node scripts/recommend.mjs --styles "Prada L'Homme"   (one bottle's style scores; any Fragrantica bottle)
 // Bottles hidden in the app live in the phone's storage; pass them via --exclude.
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { rank, planWindows, comfortRange } from '../src/engine.js';
 import { layerPicks } from '../src/layering.js';
 import { OCCASIONS, occasionById } from '../src/occasions.js';
 import { fetchForecast, summarize, week } from '../src/weather.js';
 import { searchCities } from '../src/location.js';
+import { STYLES, STYLE_STRONG, STYLE_LEAN, WEARS_CLOSE, styleById, styleScores, topStyles, wearsClose, styleMix } from '../src/scent-styles.js';
+import { fragranticaLibrary } from '../src/fragrantica.js';
 
 const { values: args } = parseArgs({
   options: {
@@ -26,6 +30,8 @@ const { values: args } = parseArgs({
     week: { type: 'boolean', default: false },
     layer: { type: 'string' },
     ideal: { type: 'string' },
+    mix: { type: 'boolean', default: false },
+    styles: { type: 'string' },
   },
 });
 
@@ -133,10 +139,79 @@ if (args.ideal) {
   process.exit(0);
 }
 
+// The collection's style mix: how many bottles lean each way (each bottle's
+// top two styles from STYLE_LEAN, listed per bottle), and which wear close.
+if (args.mix) {
+  const mix = styleMix(fragrances);
+  const nameOf = new Map(fragrances.map(f => [f.id, f.name]));
+  const rows = STYLES.filter(s => s.kind === 'scent')
+    .map(s => ({ id: s.id, label: s.label, count: mix.counts[s.id], bottles: mix.ids[s.id].map(id => nameOf.get(id)) }))
+    .sort((a, b) => b.count - a.count);
+  const bottles = fragrances.map(f => ({
+    name: f.name,
+    brand: f.brand,
+    styles: topStyles(f, 2, STYLE_LEAN),
+    wearsClose: wearsClose(f),
+  }));
+  if (args.json) {
+    console.log(JSON.stringify({ total: mix.total, mix: rows, wearsClose: mix.intimateIds.map(id => nameOf.get(id)), bottles }, null, 2));
+  } else {
+    const width = Math.max(...rows.map(r => r.label.length));
+    console.log(`Style mix of ${mix.total} bottles (each bottle's top two styles):`);
+    for (const r of rows.filter(r => r.count)) console.log(`  ${r.label.padEnd(width)}  ${String(r.count).padStart(2)}  ${r.bottles.join(', ')}`);
+    console.log(`  None: ${rows.filter(r => !r.count).map(r => r.label).join(', ') || '-'}`);
+    console.log(`Wears close: ${mix.intimate ? mix.intimateIds.map(id => nameOf.get(id)).join(', ') : 'none'}\n`);
+    for (const b of bottles) {
+      const styles = b.styles.length ? b.styles.map(s => `${s.label} ${s.score.toFixed(2)}`).join(', ') : 'no clear style';
+      console.log(`${b.name} (${b.brand}): ${styles}${b.wearsClose ? ' · wears close' : ''}`);
+    }
+  }
+  process.exit(0);
+}
+
+// One bottle's style scores: the collection first, then the Fragrantica dataset.
+if (args.styles) {
+  const q = args.styles.toLowerCase();
+  let f = fragrances.find(x => x.name.toLowerCase() === q) ?? fragrances.find(x => x.name.toLowerCase().includes(q));
+  if (!f) {
+    const dir = new URL('../data/fragrantica/', import.meta.url);
+    const library = fragranticaLibrary(async path => {
+      const file = new URL(path, dir);
+      return existsSync(file) ? readFileSync(file, 'utf8') : null;
+    });
+    const [hit] = await library.search(args.styles, 1);
+    if (hit) f = (await library.records([hit.id])).get(hit.id);
+  }
+  if (!f) { console.error(`No bottle matches "${args.styles}"`); process.exit(1); }
+  const scores = styleScores(f);
+  const ranked = STYLES.filter(s => s.kind === 'scent').map(s => ({ id: s.id, label: s.label, score: scores[s.id] }))
+    .sort((a, b) => b.score - a.score);
+  if (args.json) {
+    console.log(JSON.stringify({
+      name: f.name,
+      brand: f.brand,
+      source: f.source === 'fragrantica' ? 'dataset' : 'collection',
+      styles: topStyles(f),
+      wearsClose: wearsClose(f),
+      scores,
+    }, null, 2));
+  } else {
+    console.log(`${f.name} (${f.brand})${f.source === 'fragrantica' ? ', from the Fragrantica dataset' : ''}`);
+    const width = Math.max(...ranked.map(r => r.label.length));
+    for (const r of ranked.filter(r => r.score >= 0.15)) {
+      console.log(`  ${r.label.padEnd(width)}  ${r.score.toFixed(2)}${r.score >= STYLE_STRONG ? '  strong' : ''}`);
+    }
+    console.log(`  ${styleById('intimate').label.padEnd(width)}  ${scores.intimate.toFixed(2)}  ${wearsClose(f) ? 'wears close' : `wears close from ${WEARS_CLOSE.toFixed(2)}`}`);
+  }
+  process.exit(0);
+}
+
 if (!args.city && !args.loc) {
   console.error(`usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON) [--occasion ${OCCASIONS.map(o => o.id).join('|')}] [--slot day|night] [--week] [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --layer NAME|all [--city NAME | --loc LAT,LON] [--slot day|night] [--exclude NAME,NAME] [--json]
-       node scripts/recommend.mjs --ideal NAME [--city NAME | --loc LAT,LON] [--exclude NAME,NAME] [--json]`);
+       node scripts/recommend.mjs --ideal NAME [--city NAME | --loc LAT,LON] [--exclude NAME,NAME] [--json]
+       node scripts/recommend.mjs --mix [--exclude NAME,NAME] [--json]
+       node scripts/recommend.mjs --styles NAME [--json]`);
   process.exit(1);
 }
 

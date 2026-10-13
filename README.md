@@ -21,6 +21,7 @@ MOCK=1 node worker/dev.mjs   # the old Fragella API on :8787, from saved respons
 node scripts/recommend.mjs --city "New York" --occasion date
 node scripts/recommend.mjs --city "New York" --week
 node scripts/recommend.mjs --layer "Liquid Brun"   # or --layer all
+node scripts/recommend.mjs --mix                   # the collection's scent styles
 ```
 
 Live at **https://davidbeck45.github.io/scentcast/** (GitHub Pages from `main`; every push redeploys). Add it to your phone's home screen to use it like an app.

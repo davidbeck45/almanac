@@ -12,6 +12,8 @@ For "what temperature suits X": `node scripts/recommend.mjs --ideal "<name>" [--
 
 For layering ("what goes with X", "cool layers"): `node scripts/recommend.mjs --layer "<name>" [--json]`, or `--layer all` for the best pairs in the wardrobe. No city needed; add `--city "<city>" [--slot day|night]` to score the pairs for that window's weather.
 
+For styles ("what kind of scents do I own", "is X a skin scent"): `node scripts/recommend.mjs --mix [--json]` gives the wardrobe's style mix (how many bottles lean each way, which wear close) and each bottle's top two styles; `--styles "<name>" [--json]` gives one bottle's scores, from the wardrobe or, failing that, the Fragrantica dataset (see Scent styles).
+
 ## Collection data
 
 `data/collection.jsonl` is the raw scrape, one line per bottle. `data/collection.json` is generated from it by `npm run build:data`, so edit the jsonl.
@@ -92,6 +94,16 @@ Layering (`src/layering.js`, the "Layer it with" section of a bottle's detail sh
 Parfumo's layering votes feed the same ranking. The build turns each `layer` list into `layeredWith` on wardrobe and catalog bottles (`[{id, consensus, via}]`, partners within those two files, the same both ways), with a dupe standing in for its original on either side: Layton + Althaïr votes pair Détour Noir with Liquid Brun, and `via` names the two bottles voted on. A voted pair gains `COMMUNITY_WEIGHT` × consensus, scaled by its blend fit up to `BLEND_OK` given a weather window, and leads its reasons ("Parfumo voters layer Layton with Althaïr"). The boost sits on top of the model: `rank` orders picks and can pass 1 to break ties among pairs the model already rates perfect, `score` stays capped at 1, and partner averages leave the boost out. The hand-set rules don't predict the votes (on the wardrobe's 21 voted pairs in October 2026 the model alone ranked them at chance, AUC 0.47), so treat the votes as the better evidence when tuning `PAIRS`.
 
 `planWindows` plans several windows in time order (Today's day + night, the Week tab, `--week`): each pick counts as a `planned` wear for later windows, and a bottle not yet in the plan takes the slot when it scores within `PLAN_MARGIN` of the top. A wear already logged for a window stays its pick.
+
+## Scent styles
+
+`src/scent-styles.js` scores any engine record (wardrobe, catalog, `fromFragrantica`, hand-entered) 0..1 on the words people shop by: 22 scent styles (`kind: 'scent'`: Skin scent, Clean, Fresh citrus, Aquatic, Green, Barbershop, Gourmand, Vanilla, Amber, Oud, Leather, Tobacco, Incense & smoke, White floral, Rose, Floral, Powdery & iris, Woody, Spicy, Fruity, Chypre & mossy, Boozy) plus Intimate (`kind: 'wear'`), read from voters' sillage and ranked apart, so a quiet bottle still shows its character. `STYLES` carries each one's label, tooltip `blurb` and scoring tables.
+
+A style's score is a noisy-OR of its accords' strengths (`acc`; strength^1.3, so an accord has to lead to count fully) plus a noisy-OR of its notes' salience (`notes`: votes over the bottle's most-voted note, the pyramid tier when it has none; a third item is a floor for a defining molecule like Calone), damped by exp(-penalty) for accords that pull away from it (`against`: vanilla isn't Fresh citrus), then eased toward 1 above 0.8. A few styles add structure: fougère (lavender with coumarin or moss), chypre (citrus over moss and patchouli, and a dry bergamot-patchouli "modern chypre" without moss), laundry (fresh air over musk) and soapy iris (iris with neroli) for Clean, and Amber only as warm as its resins (ambroxan's "amber" in Sauvage isn't). Skin scent and Clean lean on sillage a little. Hand-entered bottles score on accords alone and never wear close.
+
+`topStyles(record)` gives the scent styles worth showing (from `STYLE_MIN` 0.55, strong from 0.75, 3 at most), `wearsClose` the Intimate flag (from 0.6: the quietest 15% of well-voted bottles) and `styleMix(records)` a collection's mix (each bottle's top 2 from 0.4, plus who wears close). Accords decide where they disagree with reputation: Daisy is a white floral, Clean Warm Cotton aquatic-citrus. Boozy and Incense lean on notes, so a bottle without a liquor or incense note misses (Khamrah). A record scores in about 10 µs (tables compile to slots, note names' matches are cached): 10,000 dataset bottles take 100–160 ms in Node or desktop Chrome, about 4 times that on a phone.
+
+After changing weights: `npm test` (`test/scent-styles.test.js` wants at least 90% of the canonical bottles in `test/style-exemplars.js` and 80% of the held-out ones to show their style in their top 2, pins the wardrobe, and fails when an accord in `src/accords.js` sits in no style's `acc` or `against`), and `node scripts/check-styles.mjs` for the misses. Run `--save /tmp/before.json` before the change and `--against /tmp/before.json` after to list the well-voted bottles whose top 2 moved, and eyeball them with `--sample 50` or `--style <id>`. Tune on the exemplars only; the held-out set stays out of tuning.
 
 ## Checking picks against real wears
 
