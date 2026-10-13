@@ -1,7 +1,8 @@
-// Open-Meteo-shaped forecast from 2026-09-28, local time UTC-4: 72°F by day,
-// 55°F from 19:00, and 90°F on days where `hot` is true.
-export function syntheticForecast(days, { hot = () => false } = {}) {
-  const dates = Array.from({ length: days }, (_, i) => new Date(Date.UTC(2026, 8, 28 + i)).toISOString().slice(0, 10));
+// Open-Meteo-shaped forecast from 2026-09-28 (or `start`), local time UTC-4:
+// 72°F by day, 55°F from 19:00, and 90°F on days where `hot` is true.
+export function syntheticForecast(days, { hot = () => false, start = '2026-09-28' } = {}) {
+  const from = Date.parse(`${start}T00:00:00Z`);
+  const dates = Array.from({ length: days }, (_, i) => new Date(from + i * 86_400_000).toISOString().slice(0, 10));
   const hours = dates.flatMap(day => Array.from({ length: 24 }, (_, h) => `${day}T${String(h).padStart(2, '0')}:00`));
   const temp = t => (hot(t.slice(0, 10)) ? 90 : +t.slice(11, 13) >= 19 ? 55 : 72);
   return {

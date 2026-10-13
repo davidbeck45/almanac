@@ -3,7 +3,7 @@ import { occasionById } from './occasions.js';
 import { getForecast, summarize, week } from './weather.js';
 import { loadLocation, saveLocation, loadRecent, deviceLocation, searchCities } from './location.js';
 import { loadHistory, toggleWear, wornIn, clearHistory, journalStats, journalCalendar, journalExport, shiftISO } from './history.js';
-import { loadHidden, saveHidden } from './hidden.js';
+import { loadHidden, setHidden, hiddenFor } from './hidden.js';
 import { loadMine, saveMine, loadActive, saveActive, shareURL, parseShare, localMatches, nameMatches, importLines, MAX_IMPORT_LINES } from './collections.js';
 import { apiReady, fetchFragrances } from './api.js';
 import { isFragellaId } from './fragella.js';
@@ -55,7 +55,7 @@ const state = {
   occasion: prefs.occasion ?? 'casual',
   occasionSlot: null,
   history: loadHistory(),
-  hidden: loadHidden(), // ids left out of rankings on this device
+  hiding: loadHidden(), // { hidden, shown }: this device's hides and the defaults it switched on (src/hidden.js)
   contexts: {}, // ctx key -> { win, occasion, ranked, entries: Map(id -> ranked entry) }
   today: null, // { day: plan, night: plan } where plan = { win, ranked, pick }
   expanded: new Set(), // ctx keys showing B and C tiers
@@ -73,8 +73,16 @@ function sourceRecords() {
   return state.demo?.fragrances ?? [];
 }
 
+// The hidden set as it applies to the demo, or to someone's own or shared
+// list, where DEFAULT_HIDDEN doesn't reach (src/hidden.js).
+const hiddenIn = isDemo => hiddenFor(state.hiding, isDemo);
+const viewingDemo = () => !state.shared && state.active === 'demo';
+// Manage lists the demo unless "Mine" is open.
+const manageShowsDemo = () => Boolean(state.shared) || state.active !== 'mine';
+
 function activeFragrances() {
-  return sourceRecords().filter(f => !state.hidden.has(f.id));
+  const hidden = hiddenIn(viewingDemo());
+  return sourceRecords().filter(f => !hidden.has(f.id));
 }
 
 function collectionLabel() {
@@ -102,7 +110,7 @@ function addToMine(record) {
     state.mine.records = [...state.mine.records, record];
     saveMine(state.mine);
   }
-  if (state.hidden.delete(record.id)) saveHidden(state.hidden);
+  if (state.hiding.hidden.has(record.id)) setHidden(state.hiding, record.id, false, false);
   if (state.active !== 'mine' || state.shared) setActive('mine');
 }
 
@@ -387,14 +395,14 @@ function renderSheet({ keepScroll = false } = {}) {
       todayISO: state.wx?.todayISO,
       alts: ctx.ranked.filter(r => r.fragrance.id !== s.id).slice(0, 4),
       partners: activeFragrances().length > 1 ? layerPicks(entry.fragrance, activeFragrances(), 3, ctx.win) : null,
-      comfort: comfortRange(entry.fragrance, { date: ctx.win.date, lat: ctx.win.lat }),
+      comfort: comfortRange(entry.fragrance),
     });
   } else if (s.kind === 'collection') {
     el.innerHTML = ui.collectionSheetHTML({
       tab: state.shared ? null : state.active,
       demo: state.demo?.fragrances ?? [],
       mine: state.mine,
-      hidden: state.hidden,
+      hidden: hiddenIn(manageShowsDemo()),
       shared: state.shared,
       filter: s.filter,
     });
@@ -596,6 +604,7 @@ function saveCustom(name, brand) {
   if (!name) return updateSheet({ name, brand, error: 'Give it a name.' });
   if (!s.accords.length) return updateSheet({ name, brand, error: 'Pick at least one accord.' });
   const record = customRecord({ name, brand, accords: s.accords, seasons: s.seasons, time: s.time });
+  if (!record) return updateSheet({ name, brand, error: 'Pick at least one accord.' });
   if (s.back?.kind === 'import') {
     // Fills that row of the pasted list, ticked; the list's Add button saves it.
     const rows = s.back.rows.map((r, i) => (i === s.row ? { ...r, match: record, checked: true, weak: false, note: '' } : r));
@@ -681,10 +690,9 @@ document.addEventListener('click', async e => {
 
   if (d.toggleHidden) {
     const id = d.toggleHidden;
-    const hide = !state.hidden.has(id);
-    if (hide) state.hidden.add(id);
-    else state.hidden.delete(id);
-    saveHidden(state.hidden);
+    const isDemo = state.sheet?.kind === 'collection' ? manageShowsDemo() : viewingDemo();
+    const hide = !hiddenIn(isDemo).has(id);
+    setHidden(state.hiding, id, hide, isDemo);
     renderPicks();
     if (state.sheet?.kind === 'collection') {
       renderSheet({ keepScroll: true });
@@ -694,8 +702,7 @@ document.addEventListener('click', async e => {
       showToast(`<span>${ui.esc(findRecord(id)?.name ?? 'Bottle')} hidden from picks</span><button data-action="unhide" data-id="${ui.esc(id)}">Undo</button>`);
     }
   } else if (d.action === 'unhide') {
-    state.hidden.delete(d.id);
-    saveHidden(state.hidden);
+    setHidden(state.hiding, d.id, false, viewingDemo());
     renderPicks();
     hideToast();
   } else if (d.remove) {
@@ -819,7 +826,7 @@ document.addEventListener('click', async e => {
   } else if (d.action === 'journal') {
     openSheet({ kind: 'journal' });
   } else if (d.action === 'journal-export') {
-    const data = journalExport(state.history, state.loc, state.hidden);
+    const data = journalExport(state.history, state.loc, hiddenIn(true));
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
     a.download = `scentcast-journal-${data.exported.slice(0, 10)}.json`;

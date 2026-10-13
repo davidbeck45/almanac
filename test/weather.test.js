@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { blendModels, week } from '../src/weather.js';
+import { blendModels, week, windowOn } from '../src/weather.js';
+import { syntheticForecast } from './fixtures.js';
 
 // Two days of a multi-model response, variables suffixed by model as Open-Meteo returns them.
 function multiModel() {
@@ -40,4 +41,13 @@ test('the forecast averages four models, keeping the default for codes and rain'
   assert.equal(f.daily.sunrise[0], '2026-10-08T07:24');
   const [today] = week(f, Date.parse('2026-10-08T14:00:00Z'));
   assert.equal(today.hiF, 80);
+});
+
+test('an hour a model left empty doesn\'t read as 0°F', () => {
+  const forecast = syntheticForecast(2);
+  const i = forecast.hourly.time.indexOf('2026-09-29T12:00');
+  for (const key of ['temperature_2m', 'apparent_temperature', 'relative_humidity_2m']) forecast.hourly[key][i] = null;
+  const win = windowOn(forecast, '2026-09-29', 'day');
+  assert.equal(win.feelsF, 72);
+  assert.equal(win.loF, 72);
 });

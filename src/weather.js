@@ -142,7 +142,9 @@ function slotLabel(slot, dateISO, todayISO, tomorrowISO) {
 function slotWindow(hours, slot, dateISO, fromHour, ctx) {
   const [start, end] = WINDOWS[slot];
   const from = Math.max(start, fromHour);
-  const span = hours.filter(x => x.date === dateISO && x.hour >= from && x.hour <= end);
+  // An hour a model hasn't filled in would read as 0°F.
+  const span = hours.filter(x => x.date === dateISO && x.hour >= from && x.hour <= end
+    && [x.temp, x.feels, x.humidity].every(Number.isFinite));
   if (!span.length) return null;
   const cond = headline(span);
   return {

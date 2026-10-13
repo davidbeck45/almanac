@@ -39,6 +39,8 @@ test('unknown accords are dropped and the list is capped', () => {
   const r = customRecord({ name: 'X', accords: ['smoke machine', 'woody', 'rose', 'musky', 'amber', 'iris', 'leather', 'oud'] });
   assert.equal(Object.keys(r.accords).length, MAX_CUSTOM_ACCORDS);
   assert.equal(Object.keys(r.accords)[0], 'woody');
+  assert.equal(customRecord({ name: 'Mystery', accords: ['smoke machine'] }), null, 'nothing to go on');
+  assert.equal(customRecord({ name: 'Mystery', accords: [] }), null);
 });
 
 test('share tokens carry the bottle whole, accents included', () => {

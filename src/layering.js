@@ -11,15 +11,18 @@
 // Reasons name the actual notes behind the best complement and bridge.
 // Pairs Parfumo voters layer (`layeredWith`, from data/parfumo.jsonl, a dupe
 // standing in for its original) score higher by the voters' consensus, less
-// so when the pair doesn't suit the weather. That boost sits on top of the
-// model, so it can break ties among pairs the model already rates perfect, and
-// it doesn't count toward a partner's average.
+// so the less the pair suits the weather (voters vouch for the pair, not for
+// wearing it in a heat wave). That boost sits on top of the model, so it can
+// break ties among pairs the model already rates perfect, and it doesn't
+// count toward a partner's average.
 // A partner that pairs with everything (a light citrus-woody) would top every
 // list, so picks are scored against each partner's average pairing, like the
 // engine's season "specialty".
 // Given the weather, a blend that doesn't suit it is marked down: both
 // bottles' season votes, and their average heaviness against what the weather
-// calls for, so one heavy and one light bottle meet in the middle.
+// calls for, so one heavy and one light bottle meet in the middle. A pair off
+// for the weather lists after every pair that isn't.
+// A note most of the collection shares (bergamot) doesn't count as a tie.
 import { heaviness } from './accords.js';
 import { targetSeasonWeights, seasonFit, targetHeaviness, isSticky } from './engine.js';
 
@@ -268,10 +271,20 @@ const GENERIC_NOTE = /notes?$|accord$|^(citruses|white flowers|flowers|spices|wo
 const BLEND_SEASON = 0.5;
 const BLEND_WEATHER = 0.2;
 const BLEND_OK = 0.7;
-const BLEND_DAMPING = 0.5;
-// A pair with full Parfumo consensus gains this much, scaled by its blend fit
-// up to BLEND_OK when there's weather.
+const BLEND_DAMPING = 1;
+// Below this fit a pair is off for the weather: it says so ("Too rich for
+// this heat") and sorts after every pair that isn't.
+const BLEND_OFF = 0.58;
+// A pair with full Parfumo consensus gains this much when it suits the
+// weather (a fit of BLEND_OK or more), nothing at BLEND_FLOOR or below:
+// voters vouch for the pair, not for wearing it in any weather.
 const COMMUNITY_WEIGHT = 0.4;
+const BLEND_FLOOR = 0.5;
+// A note listed in more than this share of a collection's bottles (and in at
+// least COMMON_NOTE_MIN of them) ties everything together, so it doesn't
+// count as a bridge: bergamot is in 14 of the demo's 25.
+const COMMON_NOTE_SHARE = 1 / 3;
+const COMMON_NOTE_MIN = 4;
 
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 const family = name => FAMILY_ALIAS[name] ?? name;
@@ -381,11 +394,12 @@ function communityPair(frag, other) {
 
 /**
  * How well `other` layers with `frag`, for the weather when `conditions` are given.
+ * `common`: notes too common in the collection to tie two bottles together.
  * -> { score 0..1, model: the score before Parfumo's votes,
- *      community: { consensus, via, boost } or null,
- *      reasons: [{ text, tone }], first: the one to spray first }
+ *      community: { consensus, via, boost } or null, offWeather: true when the
+ *      pair doesn't suit the weather, reasons: [{ text, tone }], first: the one to spray first }
  */
-export function layerPair(frag, other, conditions = null) {
+export function layerPair(frag, other, conditions = null, { common = null } = {}) {
   const a = profileOf(frag), b = profileOf(other);
 
   // Complement: every family pair across the two, weighted by both shares.
@@ -407,7 +421,7 @@ export function layerPair(frag, other, conditions = null) {
   // voters barely smell in either one doesn't tie them together.
   const shared = n => Math.min(a.noteWeight[n], b.noteWeight[n]);
   const sharedNotes = Object.keys(a.noteWeight)
-    .filter(n => b.noteWeight[n] && !GENERIC_NOTE.test(n) && !a.faint.has(n) && !b.faint.has(n))
+    .filter(n => b.noteWeight[n] && !GENERIC_NOTE.test(n) && !a.faint.has(n) && !b.faint.has(n) && !common?.has(n))
     .sort((x, y) => shared(y) - shared(x));
 
   const similarity = cosine(a.profile, b.profile);
@@ -428,8 +442,10 @@ export function layerPair(frag, other, conditions = null) {
   const bothHeavy = !conditions && ha > 0.55 && hb > 0.55;
   const fit = conditions ? blendFit(frag, other, conditions) : null;
   const offWeather = conditions ? BLEND_DAMPING * Math.max(0, BLEND_OK - fit) : 0;
+  const isOff = conditions !== null && fit < BLEND_OFF;
   const voted = communityPair(frag, other);
-  const community = voted && { ...voted, boost: COMMUNITY_WEIGHT * voted.consensus / 100 * (conditions ? Math.min(1, fit / BLEND_OK) : 1) };
+  const weatherShare = conditions ? clamp((fit - BLEND_FLOOR) / (BLEND_OK - BLEND_FLOOR), 0, 1) : 1;
+  const community = voted && { ...voted, boost: COMMUNITY_WEIGHT * voted.consensus / 100 * weatherShare };
   const model = clamp(
     0.5 * complementScore + 0.25 * bridgeScore + 0.25 * contrastScore
       - Math.min(0.3, clash * 4) - (tooAlike ? 0.25 : 0) - (bothSweet ? 0.12 : 0) - (bothMarine ? 0.12 : 0)
@@ -458,7 +474,7 @@ export function layerPair(frag, other, conditions = null) {
     const hot = conditions.feelsF >= 78, cold = conditions.feelsF <= 52;
     if (fit >= 0.85 && hot) reasons.push({ text: 'Light enough for the heat', tone: 'good' });
     if (fit >= 0.85 && cold) reasons.push({ text: 'Rich enough for the cold', tone: 'good' });
-    if (offWeather >= 0.06) {
+    if (isOff) {
       const sticky = isSticky(conditions);
       const text = (ha + hb) / 2 > targetHeaviness(conditions)
         ? (hot ? `Too rich for ${sticky ? 'sticky' : 'this'} heat` : 'Too rich for this weather')
@@ -475,12 +491,22 @@ export function layerPair(frag, other, conditions = null) {
   // Heavier and longer-lasting goes on first; the lighter one sits on top.
   const first = ha >= hb ? frag : other;
   const score = Math.min(1, model + (community?.boost ?? 0));
-  return { fragrance: other, score, model, community, reasons, first };
+  return { fragrance: other, score, model, community, offWeather: isOff, reasons, first };
+}
+
+// Notes listed in so many of the collection's bottles that sharing one says
+// little (COMMON_NOTE_SHARE).
+export function commonNotes(collection) {
+  const counts = new Map();
+  for (const f of collection) {
+    for (const n of new Set(Object.values(f.notes ?? {}).flat().map(cleanNote))) counts.set(n, (counts.get(n) ?? 0) + 1);
+  }
+  return new Set([...counts].filter(([, c]) => c >= COMMON_NOTE_MIN && c > COMMON_NOTE_SHARE * collection.length).map(([n]) => n));
 }
 
 // Each bottle's average pairing score across the collection, before Parfumo's
-// votes (scores are symmetric).
-let meansFor = { key: '', means: new Map(), overall: 0 };
+// votes (scores are symmetric), and the collection's common notes.
+let meansFor = { key: '', means: new Map(), overall: 0, common: new Set() };
 function pairingMeans(collection) {
   const key = collection.map(f => f.id).join(',');
   if (meansFor.key === key) return meansFor;
@@ -495,26 +521,30 @@ function pairingMeans(collection) {
   const n = Math.max(1, collection.length - 1);
   const means = new Map([...sums].map(([id, sum]) => [id, sum / n]));
   const overall = [...means.values()].reduce((a, b) => a + b, 0) / Math.max(1, means.size);
-  meansFor = { key, means, overall };
+  meansFor = { key, means, overall, common: commonNotes(collection) };
   return meansFor;
 }
+
+// Best first: pairs that suit the weather before any that don't, then by rank.
+export const byPick = (x, y) => x.offWeather - y.offWeather || y.rank - x.rank;
 
 /**
  * The best partners for `frag` among `collection`, best first, for the weather
  * when `conditions` are given. Each pick's `rank` orders them and can pass 1
- * where Parfumo's votes lift a pair the model already rates perfect.
+ * where Parfumo's votes lift a pair the model already rates perfect; a pair
+ * off for the weather comes after every pair that isn't.
  */
 export function layerPicks(frag, collection, limit = 3, conditions = null) {
-  const { means, overall } = pairingMeans(collection);
+  const { means, overall, common } = pairingMeans(collection);
   return collection
     .filter(f => f.id !== frag.id)
     .map(f => {
-      const pair = layerPair(frag, f, conditions);
+      const pair = layerPair(frag, f, conditions, { common });
       const generalist = (means.get(f.id) ?? overall) - overall;
       const rank = clamp(pair.model - GENERALIST_DAMPING * generalist, 0, 1) + (pair.community?.boost ?? 0);
       return { ...pair, rank, score: Math.min(1, rank) };
     })
     .filter(p => p.rank >= MIN_SCORE)
-    .sort((x, y) => y.rank - x.rank)
+    .sort(byPick)
     .slice(0, limit);
 }

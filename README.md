@@ -6,7 +6,7 @@ A quick look at what to wear from my own collection, based on today's weather, t
 - **Week** — a day and night pick for each of the next 7 days, planned against the forecast so nothing repeats back to back.
 - **Occasion** — Everyday, Office, Date Night, Night Out, Formal, Outdoors, Cozy, for daytime or tonight.
 - **Layering** — each bottle's detail sheet suggests which of your other bottles to layer it with, names the notes that complement each other, and says which to spray first.
-- **Wear this** — logs what you wore so picks rotate over the next couple of days. The wear journal shows a calendar, your most-worn bottles and the ones gathering dust.
+- **Wear this** — logs what you wore so picks rotate, fading over the next ten days. The wear journal shows a calendar, your most-worn bottles and the ones gathering dust.
 - °F or °C (defaults from your locale), recent locations, and home-screen shortcuts for Today, Week and Occasion.
 - **Your own collection** — search every fragrance on Fragrantica (from [Le Decanteur's dataset](https://www.kaggle.com/datasets/ledecanteur/fragrantica-perfumes), CC BY-NC-SA 4.0), paste a list, or add a bottle no database has by picking its accords. Share it as a link. The demo shows my wardrobe.
 
@@ -21,6 +21,7 @@ MOCK=1 node worker/dev.mjs   # the old Fragella API on :8787, from saved respons
 node scripts/recommend.mjs --city "New York" --occasion date
 node scripts/recommend.mjs --city "New York" --week
 node scripts/recommend.mjs --layer "Liquid Brun"   # or --layer all
+node scripts/recommend.mjs --city "New York" --journal scentcast-journal.json   # rotate out recent wears
 ```
 
 Live at **https://davidbeck45.github.io/scentcast/** (GitHub Pages from `main`; every push redeploys). Add it to your phone's home screen to use it like an app.

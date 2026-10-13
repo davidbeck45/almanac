@@ -77,10 +77,13 @@ const randomId = () => Math.random().toString(36).slice(2, 10);
 
 /**
  * { name, brand?, accords: [accord names, strongest first], seasons?: [...], time?: 'day'|'night'|'both' }
- * -> engine record (same shape as data/collection.json entries).
+ * -> engine record (same shape as data/collection.json entries), or null
+ * when none of the accords is one the engine knows: with nothing to read,
+ * every fit would be a guess.
  */
 export function customRecord({ id = null, name, brand = '', accords, seasons = [], time = null }) {
   const strengths = accordStrengths(accords);
+  if (!Object.keys(strengths).length) return null;
   const night = estimateNight(strengths, time);
   return fromParts({
     id: id ?? CUSTOM_PREFIX + randomId(),
