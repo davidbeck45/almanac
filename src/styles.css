@@ -378,10 +378,24 @@ input, textarea { font: inherit; }
 
 #view.enter { animation: view-in var(--dur-3) var(--ease-out); }
 @keyframes view-in { from { opacity: 0; transform: translateY(6px); } }
-/* A cached forecast on screen while a fresh one loads. */
-#view { transition: opacity var(--dur-3); }
+#view { position: relative; }
 #view:focus { outline: none; }
-#view.updating { opacity: 0.62; }
+/* A cached forecast on screen while a fresh one loads. Text keeps its
+   contrast: photos and scenes fade, and a line sweeps above the view. */
+#view img, #view .slot-thumb { transition: opacity var(--dur-3); }
+#view.updating img, #view.updating .slot-thumb { opacity: 0.45; }
+#view.updating::before {
+  content: '';
+  position: absolute;
+  top: calc(-1 * var(--s-3));
+  left: 15%;
+  right: 15%;
+  height: 2px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, transparent, var(--accent), transparent) 0 0 / 50% 100% no-repeat;
+  animation: sweep 1.4s ease-in-out infinite;
+}
+@keyframes sweep { from { background-position: -100% 0; } to { background-position: 200% 0; } }
 
 /* ---------- Surfaces ---------- */
 
@@ -547,7 +561,9 @@ input, textarea { font: inherit; }
 @media (max-width: 559px) {
   .tier-items { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity; }
   .tier-items::-webkit-scrollbar { display: none; }
-  .bottle { scroll-snap-align: start; }
+  /* Three and a half bottles to a row at any phone width, so the edge cuts
+     through a bottle and the row reads as one that scrolls. */
+  .tier-items > .bottle { width: calc((100% - 3 * var(--s-0)) / 3.5); scroll-snap-align: start; }
 }
 .bottle {
   display: flex;
@@ -1248,10 +1264,11 @@ input, textarea { font: inherit; }
 @keyframes bolt { 0%, 91%, 95.5%, 100% { opacity: 0; } 92%, 95% { opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .scene *, .sk, .bar-fill, .wear-btn.on svg, #view.enter, .hero-sub.updating::before { animation: none !important; }
+  .scene *, .sk, .bar-fill, .wear-btn.on svg, #view.enter, .hero-sub.updating::before, #view.updating::before { animation: none !important; }
   .scene .flash, .scene .bolt { opacity: 0; }
   .scene .smoke circle { opacity: 0.35; }
-  .sheet-panel, .sheet-backdrop, .tabs::before, .toast, #view { transition: none; }
+  #view.updating::before { background-position: 50% 0; }
+  .sheet-panel, .sheet-backdrop, .tabs::before, .toast, #view img, #view .slot-thumb { transition: none; }
 }
 
 /* Windows high contrast and other forced palettes: keep states that were

@@ -323,12 +323,17 @@ function renderView() {
   }
 }
 
-// Views re-render whole, which replaces the control that asked for it; put
-// focus on its successor so keyboard and screen reader users keep their place.
-function renderViewKeepingFocus(trigger) {
+// Views, the footer and sheets re-render whole, which replaces the control
+// that asked for it; put focus on its successor in `scope` so keyboard and
+// screen reader users keep their place.
+function keepingFocus(trigger, scope, rerender) {
   const focused = trigger && document.activeElement === trigger;
-  renderView();
-  if (focused) refocus(trigger);
+  rerender();
+  if (focused) refocus(trigger, scope);
+}
+
+function renderViewKeepingFocus(trigger) {
+  keepingFocus(trigger, '#app', renderView);
 }
 
 function renderFooter() {
@@ -455,7 +460,7 @@ function refocus(el, scope = '#app') {
   if (!el || el === document.body) return false;
   const attrs = Object.entries(el.dataset ?? {})
     .map(([k, v]) => `[data-${k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)}="${CSS.escape(v)}"]`).join('');
-  const target = el.isConnected ? el : attrs && document.querySelector(`${scope} ${el.tagName.toLowerCase()}${attrs}`);
+  const target = el.isConnected ? el : attrs ? document.querySelector(`${scope} ${el.tagName.toLowerCase()}${attrs}`) : null;
   target?.focus({ preventScroll: true });
   return Boolean(target);
 }
@@ -765,8 +770,8 @@ async function openSharedLink(link) {
 // ---------- Weather ----------
 
 // Opens on the saved forecast when there is one: fresh, it's all we need;
-// older, it shows dimmed under "Updating…" until the new one arrives, so the
-// morning check doesn't wait on the network.
+// older, it shows under "Updating…", photos faded, until the new one arrives,
+// so the morning check doesn't wait on the network.
 async function refreshWeather({ force = false } = {}) {
   if (!state.loc) return;
   state.error = null;
@@ -847,7 +852,7 @@ document.addEventListener('click', async e => {
   } else if (d.collectionTab) {
     setActive(d.collectionTab);
     renderPicks();
-    if (state.sheet?.kind === 'collection') renderSheet();
+    if (state.sheet?.kind === 'collection') keepingFocus(t, '#sheet', () => renderSheet());
   } else if (d.action === 'collection') {
     openSheet({ kind: 'collection' });
   } else if (d.action === 'add') {
@@ -936,20 +941,16 @@ document.addEventListener('click', async e => {
     if (picks) picks.outerHTML = ui.heroPicksHTML(heroPicks());
     renderViewKeepingFocus(t);
     renderFooter();
-    if (state.sheet) {
-      const focused = document.activeElement === t;
-      renderSheet({ keepScroll: true });
-      if (focused) refocus(t, '#sheet');
-    }
+    if (state.sheet) keepingFocus(t, '#sheet', () => renderSheet({ keepScroll: true }));
   } else if (d.themeChoice) {
     setTheme(d.themeChoice);
     savePrefs();
-    render();
+    keepingFocus(t, '#foot', render);
   } else if (d.units) {
     state.units = d.units;
     ui.setUnits(state.units);
     savePrefs();
-    render();
+    keepingFocus(t, '#foot', render);
   } else if (d.action === 'journal') {
     openSheet({ kind: 'journal' });
   } else if (d.action === 'journal-export') {

@@ -11,8 +11,8 @@ export const WINDOWS = { day: [10, 17], night: [19, 23] };
 const CACHE_KEY = 'scentcast.weather';
 const CACHE_VERSION = 3; // bump when the request shape changes
 const CACHE_MAX_AGE = 20 * 60 * 1000;
-// An older forecast still opens the app (dimmed, while a fresh one loads) up
-// to this age: it still covers today and tomorrow.
+// An older forecast still opens the app (under "Updating…" while a fresh one
+// loads) up to this age: it still covers today and tomorrow.
 const SHOW_STALE_FOR = 12 * 60 * 60 * 1000;
 
 const wallMs = iso => Date.parse(`${iso}Z`);
@@ -210,6 +210,19 @@ function clock(forecast, nowMs) {
   };
 }
 
+// `current` is the reading at fetch time. A saved forecast an hour or more
+// old reads "now" from its row for this hour instead, so a 2 pm forecast
+// opened at 1 am doesn't show the afternoon under a night sky.
+const CURRENT_FOR = 60 * 60 * 1000;
+
+function nowReading(forecast, hours, ctx, nowMs) {
+  const c = forecast.current;
+  const row = nowMs - forecast.fetchedAt >= CURRENT_FOR && hours.find(x => x.date === ctx.todayISO && x.hour === ctx.hour);
+  return row
+    ? { tempF: row.temp, feelsF: row.feels, humidity: row.humidity, cloudCover: null, code: row.code }
+    : { tempF: c.temperature_2m, feelsF: c.apparent_temperature, humidity: c.relative_humidity_2m, cloudCover: c.cloud_cover, code: c.weather_code };
+}
+
 export function summarize(forecast, nowMs = Date.now()) {
   const ctx = clock(forecast, nowMs);
   const { wallNow, todayISO, tomorrowISO, hour } = ctx;
@@ -224,22 +237,19 @@ export function summarize(forecast, nowMs = Date.now()) {
   const di = Math.max(0, d.time.indexOf(todayISO));
   const sunrise = wallMs(d.sunrise[di]);
   const sunset = wallMs(d.sunset[di]);
-  const c = forecast.current;
+  const { code, ...reading } = nowReading(forecast, hours, ctx, nowMs);
 
   return {
     todayISO,
     stale: !!forecast.stale,
     fetchedAt: forecast.fetchedAt,
     now: {
-      tempF: c.temperature_2m,
-      feelsF: c.apparent_temperature,
-      humidity: c.relative_humidity_2m,
-      cloudCover: c.cloud_cover,
+      ...reading,
       hiF: d.temperature_2m_max[di],
       loF: d.temperature_2m_min[di],
       phase: phaseAt(wallNow, sunrise, sunset),
       sunProgress: clamp((wallNow - sunrise) / (sunset - sunrise), 0, 1),
-      ...describe(c.weather_code),
+      ...describe(code),
     },
     day: next('day'),
     night: next('night'),

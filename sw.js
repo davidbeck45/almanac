@@ -4,7 +4,7 @@
 // App files always revalidate with the server: GitHub Pages lets browsers
 // keep files for 10 minutes, and a fresh main.js importing a stale module
 // fails to load at all.
-const CACHE = 'scentcast-v10';
+const CACHE = 'scentcast-v11';
 // Dataset files (data/fragrantica/) load a shard at a time as people search
 // and add bottles; they keep their own small cache instead of the shell's.
 const DATA_CACHE = 'scentcast-data';
@@ -74,18 +74,27 @@ async function put(name, key, res, max) {
   if (max) await trim(cache, max);
 }
 
+// The app's page, at the scope's root or as index.html.
+function isAppPage(url) {
+  const root = new URL(self.registration.scope).pathname;
+  return url.pathname === root || url.pathname === `${root}index.html`;
+}
+
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
   if (url.origin === self.location.origin) {
-    // Every navigation (?loc=, ?c=, ?view=…) is the same page: one cache entry.
-    const navigate = req.mode === 'navigate';
-    const key = navigate ? './' : req;
+    // Every visit to the app (?loc=, ?c=, ?view=…) is the same page: one
+    // cache entry. Other files opened in a tab (data/collection.json, say)
+    // go straight to the network, so they can't stand in for the app offline.
+    const appPage = req.mode === 'navigate' && isAppPage(url);
+    if (req.mode === 'navigate' && !appPage) return;
+    const key = appPage ? './' : req;
     const data = url.pathname.includes('/data/fragrantica/');
     e.respondWith(
-      fetch(navigate ? req.url : req, { cache: 'no-cache' })
+      fetch(appPage ? req.url : req, { cache: 'no-cache' })
         .then(res => {
           if (res.ok) e.waitUntil(put(data ? DATA_CACHE : CACHE, key, res.clone(), data ? DATA_MAX : 0));
           return res;
