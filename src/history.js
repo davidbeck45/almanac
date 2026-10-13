@@ -46,6 +46,17 @@ export function journalExport(history, loc, hidden, nowISO = new Date().toISOStr
   };
 }
 
+// A journal file read back (scripts/journal-check.mjs, recommend.mjs --journal),
+// ids as strings like the app keeps them. Null when it isn't one.
+export function parseJournal(data) {
+  if (data?.app !== 'scentcast-journal' || !Array.isArray(data.history)) return null;
+  return {
+    location: data.location ?? null,
+    hidden: (data.hidden ?? []).map(String),
+    history: data.history.filter(h => h?.date && h.slot).map(h => ({ ...h, id: String(h.id) })),
+  };
+}
+
 export function clearHistory() {
   save([]);
   return [];

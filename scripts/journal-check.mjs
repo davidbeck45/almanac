@@ -10,18 +10,11 @@
 // bottle landed. Wears of bottles outside the demo are skipped.
 // Weather data by Open-Meteo.com (CC BY 4.0).
 import { readFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { rank } from '../src/engine.js';
 import { windowOn } from '../src/weather.js';
-
-const { values: args, positionals: [file] } = parseArgs({ allowPositionals: true, options: { json: { type: 'boolean', default: false } } });
-if (!file) { console.error('usage: node scripts/journal-check.mjs JOURNAL.json [--json]'); process.exit(1); }
-
-const journal = JSON.parse(readFileSync(file, 'utf8'));
-if (journal.app !== 'scentcast-journal') { console.error(`${file} is not a Scentcast journal export`); process.exit(1); }
-const demo = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url))).fragrances;
-const byId = new Map(demo.map(f => [String(f.id), f]));
-const hidden = new Set(journal.hidden ?? []);
+import { parseJournal } from '../src/history.js';
 
 const HOURLY = 'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code';
 const DAY_MS = 86_400_000;
@@ -59,51 +52,85 @@ async function hourlyAt(lat, lon, from, to) {
   };
 }
 
-const wears = [...journal.history].filter(h => !h.planned).sort((a, b) => (a.date + a.slot).localeCompare(b.date + b.slot));
-const placeOf = h => (h.lat !== undefined ? { lat: h.lat, lon: h.lon } : journal.location);
+// Logged wears in time order, plans left out.
+export const journalWears = journal => [...journal.history].filter(h => !h.planned)
+  .sort((a, b) => (a.date + a.slot).localeCompare(b.date + b.slot));
 
-// One weather fetch per place, covering its wears.
-const places = new Map();
-for (const h of wears) {
-  const at = placeOf(h);
-  if (!at) continue;
-  const key = `${at.lat},${at.lon}`;
-  const p = places.get(key) ?? { ...at, from: h.date, to: h.date };
-  if (h.date < p.from) p.from = h.date;
-  if (h.date > p.to) p.to = h.date;
-  places.set(key, p);
+const placeOf = (journal, h) => (h.lat !== undefined ? { lat: h.lat, lon: h.lon } : journal.location);
+
+/**
+ * Where each wear's bottle landed, ranked as the app would have: the demo
+ * minus the device's hidden bottles, the earlier wears as rotation.
+ * journal: parseJournal's shape. windowFor(wear, place) -> weather window or null.
+ * -> { rows, skipped }
+ */
+export function rankWears(journal, demo, windowFor) {
+  // The app keeps ids as strings (main.js, history.js); data/collection.json has numbers.
+  const bottles = demo.map(f => (typeof f.id === 'string' ? f : { ...f, id: String(f.id) }));
+  const byId = new Map(bottles.map(f => [f.id, f]));
+  const hidden = new Set(journal.hidden);
+  const wears = journalWears(journal);
+  const rows = [], skipped = { notInDemo: 0, noPlace: 0, noWeather: 0 };
+  for (const [i, h] of wears.entries()) {
+    const worn = byId.get(h.id);
+    if (!worn) { skipped.notInDemo++; continue; }
+    const at = placeOf(journal, h);
+    if (!at) { skipped.noPlace++; continue; }
+    const win = windowFor(h, at);
+    if (!win) { skipped.noWeather++; continue; }
+    const pool = bottles.filter(f => !hidden.has(f.id) || f === worn);
+    const ranked = rank(pool, win, h.slot, { history: wears.slice(0, i), todayISO: h.date });
+    const at1 = ranked.findIndex(r => r.fragrance === worn) + 1;
+    const entry = ranked[at1 - 1];
+    rows.push({
+      date: h.date, slot: h.slot, feelsF: Math.round(win.feelsF), dewF: Math.round(win.dewF), condition: win.condition,
+      worn: worn.name, rank: at1, of: ranked.length, tier: entry.tier, top: ranked[0].fragrance.name,
+      reasons: entry.reasons.map(r => `${r.tone === 'good' ? '+' : '-'} ${r.text}`),
+    });
+  }
+  return { rows, skipped };
 }
-for (const p of places.values()) p.weather = await hourlyAt(p.lat, p.lon, p.from, p.to);
 
-const rows = [], skipped = { notInDemo: 0, noPlace: 0, noWeather: 0 };
-for (const [i, h] of wears.entries()) {
-  const worn = byId.get(String(h.id));
-  if (!worn) { skipped.notInDemo++; continue; }
-  const at = placeOf(h);
-  if (!at) { skipped.noPlace++; continue; }
-  const win = windowOn(places.get(`${at.lat},${at.lon}`).weather, h.date, h.slot);
-  if (!win) { skipped.noWeather++; continue; }
-  const pool = demo.filter(f => !hidden.has(String(f.id)) || f === worn);
-  const ranked = rank(pool, win, h.slot, { history: wears.slice(0, i), todayISO: h.date });
-  const at1 = ranked.findIndex(r => r.fragrance === worn) + 1;
-  rows.push({ date: h.date, slot: h.slot, feelsF: Math.round(win.feelsF), dewF: Math.round(win.dewF), condition: win.condition, worn: worn.name, rank: at1, of: ranked.length, tier: ranked[at1 - 1].tier, top: ranked[0].fragrance.name });
+export function summarizeRows(rows, skipped) {
+  const mean = xs => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
+  const share = pred => rows.length ? Math.round((100 * rows.filter(pred).length) / rows.length) : 0;
+  return {
+    wears: rows.length,
+    skipped,
+    meanRank: +mean(rows.map(r => r.rank)).toFixed(1),
+    randomMeanRank: +mean(rows.map(r => (r.of + 1) / 2)).toFixed(1),
+    topPickPct: share(r => r.rank === 1),
+    tierSPct: share(r => r.tier === 'S'),
+    tierSorAPct: share(r => r.tier === 'S' || r.tier === 'A'),
+  };
 }
 
-const mean = xs => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
-const share = pred => rows.length ? Math.round((100 * rows.filter(pred).length) / rows.length) : 0;
-const summary = {
-  wears: rows.length,
-  skipped,
-  meanRank: +mean(rows.map(r => r.rank)).toFixed(1),
-  randomMeanRank: +mean(rows.map(r => (r.of + 1) / 2)).toFixed(1),
-  topPickPct: share(r => r.rank === 1),
-  tierSPct: share(r => r.tier === 'S'),
-  tierSorAPct: share(r => r.tier === 'S' || r.tier === 'A'),
-};
+async function main() {
+  const { values: args, positionals: [file] } = parseArgs({ allowPositionals: true, options: { json: { type: 'boolean', default: false } } });
+  if (!file) { console.error('usage: node scripts/journal-check.mjs JOURNAL.json [--json]'); process.exit(1); }
+  const journal = parseJournal(JSON.parse(readFileSync(file, 'utf8')));
+  if (!journal) { console.error(`${file} is not a Scentcast journal export`); process.exit(1); }
+  const demo = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url))).fragrances;
 
-if (args.json) {
-  console.log(JSON.stringify({ summary, wears: rows }, null, 2));
-} else {
+  // One weather fetch per place, covering its wears.
+  const places = new Map();
+  for (const h of journalWears(journal)) {
+    const at = placeOf(journal, h);
+    if (!at) continue;
+    const key = `${at.lat},${at.lon}`;
+    const p = places.get(key) ?? { ...at, from: h.date, to: h.date };
+    if (h.date < p.from) p.from = h.date;
+    if (h.date > p.to) p.to = h.date;
+    places.set(key, p);
+  }
+  for (const p of places.values()) p.weather = await hourlyAt(p.lat, p.lon, p.from, p.to);
+
+  const { rows, skipped } = rankWears(journal, demo, (h, at) => windowOn(places.get(`${at.lat},${at.lon}`).weather, h.date, h.slot));
+  const summary = summarizeRows(rows, skipped);
+  if (args.json) {
+    console.log(JSON.stringify({ summary, wears: rows }, null, 2));
+    return;
+  }
   for (const r of rows) {
     console.log(`${r.date} ${r.slot.padEnd(5)} ${String(r.feelsF).padStart(3)}°F dew ${String(r.dewF).padStart(2)}  ${r.worn.padEnd(24)} #${r.rank}/${r.of} ${r.tier}${r.rank > 1 ? `   (top: ${r.top})` : ''}`);
   }
@@ -111,3 +138,5 @@ if (args.json) {
   console.log(`\n${s.wears} wears checked (skipped: ${s.skipped.notInDemo} outside the demo, ${s.skipped.noPlace} without a place, ${s.skipped.noWeather} without weather)`);
   console.log(`worn bottle's average rank ${s.meanRank} (random would be ${s.randomMeanRank}); the top pick ${s.topPickPct}% of the time, S tier ${s.tierSPct}%, S or A ${s.tierSorAPct}%`);
 }
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) await main();
