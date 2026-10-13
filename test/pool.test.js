@@ -66,8 +66,9 @@ test('every id the pool names is in r/', () => {
 });
 
 test('the pool stays small and carries its license', () => {
+  // 719 KB in October 2026, over the ~600 aimed for: see CLAUDE.md for what trims it.
   const pool = gzKB('pool.json'), notes = gzKB('pool-notes.json');
-  assert.ok(pool + notes < 750, `pool ${pool.toFixed(0)} KB + notes ${notes.toFixed(0)} KB gzipped`);
+  assert.ok(pool + notes < 730, `pool ${pool.toFixed(0)} KB + notes ${notes.toFixed(0)} KB gzipped`);
   for (const file of ['pool.json', 'pool-notes.json']) {
     const { license } = JSON.parse(readFileSync(new URL(file, dir)));
     assert.match(license, /CC BY-NC-SA 4\.0/);
@@ -78,13 +79,35 @@ test('the pool stays small and carries its license', () => {
 test('pool signals: brigaded pages, cheaper alternatives, value', () => {
   assert.deepEqual(pool.flags, FLAGS);
   const at = id => fromPool(pool, pool.index.get(id)).extras;
-  assert.ok(at('28286').flags.includes('brigaded'), 'SpongeBob: far more ratings than owners');
+  assert.ok(at('28286').flags.includes('brigaded'), 'SpongeBob: far more ratings than owners, nearly all love');
+  assert.ok(at('81774').flags.includes('brigaded'), 'Le Male Pride 2023: review-bombed');
+  assert.ok(!at('85363').flags.includes('brigaded'), 'Myriad: rated from testers, an ordinary spread');
   assert.ok(!at('9828').flags.includes('brigaded'));
   assert.equal(at('9828').alt[0], 34696, 'Aventus -> Club de Nuit Intense Man');
   assert.ok(at('9828').value < 2 && at('34696').value > 4);
   const values = pool.cols.val.filter(Boolean).sort((a, b) => a - b);
   const median = values[values.length >> 1] / 100;
   assert.ok(median > 2.8 && median < 3.3, `median value ${median}`);
+});
+
+test('discontinued only when a con says so of the bottle itself', () => {
+  const at = id => fromPool(pool, pool.index.get(id)).extras.flags;
+  for (const id of ['81508', '102208', '65051']) {
+    // Acqua di Giò Parfum ("an alternative to the discontinued Profumo"), Y Le Parfum 2025, Gentleman EDT Intense
+    assert.ok(!at(id).includes('discontinued'), id);
+  }
+  assert.ok(!at('109989').includes('discontinued') && at('109989').includes('hardToFind'), 'Cedar Chic: hard to find in stock');
+  assert.ok(at('29727').includes('discontinued'), 'Acqua di Giò Profumo');
+});
+
+test('family links: the smells-like votes strong enough to call two bottles one scent', () => {
+  const aventus = fromPool(pool, pool.index.get('9828')).extras;
+  assert.equal(aventus.like.length, 3);
+  assert.ok(aventus.family.includes(34696) && aventus.family.length > 3, 'Club de Nuit Intense Man and more clones');
+  for (let i = 0; i < pool.count; i++) {
+    const { like, family } = fromPool(pool, i).extras;
+    assert.ok(like.length <= 3 && family.every(id => pool.cols.like[i].includes(id)));
+  }
 });
 
 test('wardrobe, catalog and originals carry the about data and signals', async () => {

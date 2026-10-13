@@ -49,11 +49,18 @@ only what it needs:
   keeper rate (have / (have + had)) over what pages that old keep, per mille;
   lean crowd gender x 100 (-100 feminine .. 100 masculine); now the pool
   percentile of recent popularity; like up to 3 bottles voters say it smells
-  like; alt up to 3 cheaper alternatives (smells like it, valued 1+ higher);
-  f flag bits, as `flags` names them: discontinued, reformulated and
-  notBlindBuy from AI summary items more voters agree with than not; brigaded
-  (more than 1.5 ratings per owner); polarizing (hate share in the pool's top
-  tenth). `slugs` lists the page slugs slug_of() can't derive; `license`.
+  like (5+ net votes, 2:1), then any family ones further down its top 6, and
+  fam a bit per like id that's family (30+ agreeing votes, 2.5 x the
+  disagreeing: one scent, for telling a dupe from a new direction); fromPool
+  splits them into extras.like and extras.family. alt up to 3 cheaper
+  alternatives (smells like it, valued 1+ higher); f flag bits, as `flags`
+  names them: discontinued, reformulated, notBlindBuy and hardToFind from AI
+  summary cons more voters agree with than not (discontinued only when said
+  of the bottle itself: not "weaker than the discontinued EDT", nor a guess
+  like "may be discontinued"); brigaded (more than 1.5 ratings per owner with
+  30%+ of them hate or 85%+ love, or more than 5 whatever the spread);
+  polarizing (hate share in the pool's top tenth). `slugs` lists the page
+  slugs slug_of() can't derive; `license`.
 - pool-notes.json: `no`, row for row with the pool: each bottle's 8 strongest
   notes as [index into `notes` x 4 + tier (0 top, 1 heart, 2 base, 3 flat),
   votes in tenths of the top note's], in r/'s order.
@@ -71,8 +78,8 @@ data/extras.jsonl has one line per bottle in data/collection, catalog and
 originals: the about data with readable keys (sentiment, value, owners,
 crowdGender, popularity, perfumers, line, pros, cons, smellsLike, alsoLiked,
 flags) and `extras`, the pool's signals (value, safe, keep, lean, now, like,
-alt, flags) plus `clones`, up to 6 well-priced bottles from other brands that
-voters say smell like it (an original's are its dupe's siblings).
+family, alt, flags) plus `clones`, up to 6 well-priced bottles from other
+brands that voters say smell like it (an original's are its dupe's siblings).
 scripts/build_collection.py joins it.
 """
 import bisect
@@ -136,15 +143,47 @@ CROWD_PRIOR_VOTES = 10
 PRICEY, CHEAPER_BY, ALT_MIN_NET, ALT_MIN_VOTES = 2.6, 1.0, 10, 100
 # Clones: smells-like bottles from other brands voted 20+ net and 2:1, valued 3.8+.
 CLONE_MIN_NET, CLONE_MIN_VALUE = 20, 3.8
-FLAGS = ("discontinued", "reformulated", "notBlindBuy", "brigaded", "polarizing")  # bit i is 1 << i
-# Flags read from AI summary items more voters agree with than not.
+# Family: smells-like links strong enough to call two bottles one scent (30+
+# agreeing votes, 2.5 x the disagreeing), among a bottle's 6 most agreed.
+FAMILY_MIN_UP, FAMILY_RATIO, FAMILY_TOP = 30, 2.5, 6
+FLAGS = ("discontinued", "reformulated", "notBlindBuy", "brigaded", "polarizing", "hardToFind")  # bit i is 1 << i
+# Discontinued, said of the bottle itself in a con. Pros don't count: they
+# praise "an alternative to the discontinued X". Nor do cons with a word before
+# it that makes it another bottle ("weaker than the discontinued EDT", "the
+# original version is discontinued") or a guess ("may be discontinued",
+# "frequently discontinued", "hard to find or discontinued"), or that make it
+# partly so ("in some regions", "discontinuation rumors").
+DISCONTINUED = re.compile(r"discontinu", re.I)
+NOT_ITSELF = re.compile(r"\b(?:alternative|replacement|successor|similar|reminiscent|clone|dupe|substitute|identical|revival|"
+                        r"upgrade|downgrade|refinement|compared|than|unlike|as \w+ as|repackaged|flankers?|original|version|"
+                        r"formula|formulation|packaging)\b", re.I)
+HEDGED = re.compile(r"\b(?:may|might|could|possibl[ey]|probably|potentially|likely(?: to)?|often|frequent(?:ly)?|or|"
+                    r"(?:risk|potential) (?:of|for)(?: \w+){0,2})(?: currently| now)?(?: be| become| being)?\s*$", re.I)
+PARTLY = re.compile(r"discontinu\w*\W+(?:\w+\W+){0,2}?(?:scents|fragrances|favou?rites|classics|rumou?rs|concerns)\b"
+                    r"|\bin (?:some|many|certain|several) (?:regions|markets|countries|areas)\b", re.I)
+# Hard to find: a con about getting the bottle (not samples of it, or a dupe).
+HARD_TO_FIND = re.compile(r"\b(?:hard(?:er)?|difficult|tough|tricky)[\s-]+to[\s-]+(?:find|source|locate|obtain|come by|get hold of)\b"
+                          r"|\b(?:limited|scarce) availability\b", re.I)
+NOT_THE_BOTTLE = re.compile(r"\b(?:samples?|testers?|decants?|dupes?|clones?|alternatives?)\b", re.I)
+
+
+def says_discontinued(text: str) -> bool:
+    m = DISCONTINUED.search(text)
+    return bool(m) and not NOT_ITSELF.search(text[:m.start()]) and not HEDGED.search(text[:m.start()]) and not PARTLY.search(text)
+
+
+# Flags read from AI summary cons more voters agree with than not.
 FLAG_TEXT = {
-    "discontinued": (("pros", "cons"), re.compile(r"discontinued|hard to find|difficult to find", re.I)),
-    "reformulated": (("cons",), re.compile(r"reformulat", re.I)),
-    "notBlindBuy": (("cons",), re.compile(r"blind.?buy", re.I)),
+    "discontinued": says_discontinued,
+    "reformulated": re.compile(r"reformulat", re.I).search,
+    "notBlindBuy": re.compile(r"blind.?buy", re.I).search,
+    "hardToFind": lambda text: bool(HARD_TO_FIND.search(text)) and not NOT_THE_BOTTLE.search(text),
 }
-# Brigaded: far more ratings than owners (review-bombed or meme pages).
-BRIGADE_RATIO = 1.5
+# Brigaded: far more ratings than owners with a lopsided spread (review-bombed
+# or meme pages: SpongeBob, Bolsonaro, the Pride editions), or many times more
+# whatever the spread (a brand's rating drive). Louis Vuitton bottles people
+# rate from a tester run 1.5 to 2 ratings per owner with an ordinary spread.
+BRIGADE_RATIO, BRIGADE_HATE, BRIGADE_LOVE, BRIGADE_ANY = 1.5, 0.3, 0.85, 5
 
 
 def kaggle(path: str):
@@ -399,9 +438,18 @@ class Signals:
         e = self.kept.get(r["id"] // KEEP_BUCKET, self.kept_overall)
         return (rel["have"] + KEEP_PRIOR_VOTES * e) / (owners + KEEP_PRIOR_VOTES) - e
 
+    def agreed_like(self, r: dict) -> list[dict]:
+        """Its smells-like votes voters agree with (5+ net, 2:1), most agreed first."""
+        return [s for s in by_net(r["similar"]["reminds_me_of"]) if agreed(s, 5) and s["id"] in self.by_id]
+
     def like(self, r: dict, n: int = 3) -> list[int]:
         """The bottles voters most agree it smells like."""
-        return [s["id"] for s in by_net(r["similar"]["reminds_me_of"]) if agreed(s, 5) and s["id"] in self.by_id][:n]
+        return [s["id"] for s in self.agreed_like(r)[:n]]
+
+    def family(self, r: dict) -> list[int]:
+        """The bottles voters say smell like it so strongly they're one scent (dupes, clones, twins)."""
+        return [s["id"] for s in self.agreed_like(r)[:FAMILY_TOP]
+                if s["up_votes"] >= FAMILY_MIN_UP and s["up_votes"] >= FAMILY_RATIO * s["down_votes"]]
 
     def alternatives(self, r: dict, n: int = 3) -> list[int]:
         """Cheaper bottles that smell like it: far better value, agreed either way round."""
@@ -428,13 +476,13 @@ class Signals:
         return [s["id"] for s in by_net(list(near.values()))][:n]
 
     def flags(self, r: dict) -> int:
-        ai = r.get("ai_summary") or {}
-        on = {name for name, (keys, pattern) in FLAG_TEXT.items()
-              if any(pattern.search(x["text"]) and x["up_votes"] > x["down_votes"] for k in keys for x in ai.get(k, []))}
-        rel = r.get("relation") or {}
-        if votes(r) > BRIGADE_RATIO * (rel.get("have", 0) + rel.get("had", 0)):
+        cons = [x["text"] for x in (r.get("ai_summary") or {}).get("cons", []) if x["up_votes"] > x["down_votes"]]
+        on = {name for name, says in FLAG_TEXT.items() if any(says(text) for text in cons)}
+        rel, h = r.get("relation") or {}, histogram(r["rating"], 5)
+        n, owners = sum(h), rel.get("have", 0) + rel.get("had", 0)
+        if n > BRIGADE_RATIO * owners and (n > BRIGADE_ANY * owners or h[0] >= BRIGADE_HATE * n or h[4] >= BRIGADE_LOVE * n):
             on.add("brigaded")
-        if votes(r) and hate_share(histogram(r["rating"], 5)) >= self.polarizing:
+        if n and hate_share(h) >= self.polarizing:
             on.add("polarizing")
         return sum(1 << i for i, name in enumerate(FLAGS) if name in on)
 
@@ -448,6 +496,7 @@ class Signals:
             "lean": round(lean[0], 2) if lean else None,
             "now": self.percentile(self.recents, math.log1p(popularity(r)[1])),
             "like": self.like(r),
+            "family": self.family(r),
             "alt": self.alternatives(r),
             "flags": [name for i, name in enumerate(FLAGS) if flags & (1 << i)],
         }
@@ -528,6 +577,8 @@ def pool(signals: Signals) -> None:
         x = signals.extras(r)
         lon, sil = total(r.get("longevity")), total(r.get("sillage"))
         like = like_shares(r, by_id)
+        # Its smells-like bottles, then any family ones past the top 3; a bit per id marks family.
+        near = x["like"] + [i for i in x["family"] if i not in x["like"]]
         for key, val in (
             ("id", r["id"]), ("n", r["name"]), ("b", brand_ix[r["brand"]]), ("y", r["year"] or 0),
             ("g", GENDER.get(r["gender"], "")), ("r", round(r["rating"]["average"] * 100)), ("rv", votes(r)),
@@ -544,7 +595,8 @@ def pool(signals: Signals) -> None:
             ("keep", round(x["keep"] * 1000) if x["keep"] is not None else None),
             ("lean", round(x["lean"] * 100) if x["lean"] is not None else None),
             ("now", x["now"]),
-            ("like", x["like"]),
+            ("like", near),
+            ("fam", sum(1 << j for j, i in enumerate(near) if i in x["family"])),
             ("alt", x["alt"]),
             ("f", signals.flags(r)),
         ):

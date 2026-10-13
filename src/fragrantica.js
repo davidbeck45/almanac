@@ -67,7 +67,7 @@ export function fromFragrantica(id, row) {
 }
 
 // As scripts/decant.py FLAGS: bit i of a pool or about row's flags.
-export const FLAGS = ['discontinued', 'reformulated', 'notBlindBuy', 'brigaded', 'polarizing'];
+export const FLAGS = ['discontinued', 'reformulated', 'notBlindBuy', 'brigaded', 'polarizing', 'hardToFind'];
 const flagNames = bits => FLAGS.filter((_, i) => bits & (1 << i));
 // Fragrantica's usual page slug, as scripts/decant.py slug_of; the pool lists the rest.
 const slugPart = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -114,7 +114,9 @@ export function fromPool(pool, i) {
     keep: c.keep[i] == null ? null : c.keep[i] / 1000,
     lean: c.lean[i] == null ? null : c.lean[i] / 100,
     now: c.now[i],
-    like: c.like[i],
+    // The pool lists family links past the top 3 after them; a bit marks each family one.
+    like: c.like[i].slice(0, 3),
+    family: c.like[i].filter((_, j) => c.fam[i] & (1 << j)),
     alt: c.alt[i],
     flags: flagNames(c.f[i]),
   };
