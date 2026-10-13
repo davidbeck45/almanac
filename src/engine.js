@@ -25,7 +25,10 @@ const OCCASION_WEIGHTS = { occasion: 0.4, season: 0.3, time: 0.1, weather: 0.15,
 // Rank cutoffs: first 3 are S, next 5 A, next 6 B, rest C.
 const TIER_SIZES = [['S', 3], ['A', 5], ['B', 6]];
 
-const ROTATION_PENALTY = [0.2, 0.12, 0.05]; // worn today, yesterday, 2 days ago
+// Worn today, yesterday, 2 days ago … 9 days ago. Top scores sit within a few
+// hundredths of each other, so a 3-day memory cycled the same 3 bottles
+// through a month of steady weather; a 10-day tail rotates 9–17.
+const ROTATION_PENALTY = [0.2, 0.12, 0.08, 0.06, 0.045, 0.035, 0.025, 0.02, 0.015, 0.01];
 
 const RAIN_ACCORDS = ['green', 'earthy', 'woody', 'aromatic', 'mossy', 'aquatic'];
 

@@ -184,6 +184,35 @@ test('wearing something yesterday pushes it down today', () => {
   assert.ok(moved.reasons.some(r => r.text === 'Worn yesterday'));
 });
 
+test('a month of steady weather rotates through the wardrobe', () => {
+  // Wear every Today pick for 28 days at 62°F by day and 54°F at night.
+  let history = [];
+  const worn = new Map();
+  for (let i = 0; i < 28; i++) {
+    const dateISO = new Date(Date.UTC(2026, 9, 1 + i)).toISOString().slice(0, 10);
+    const date = new Date(`${dateISO}T12:00:00`);
+    const windows = [
+      { ...mildFallNight, feelsF: 62, dewF: 50, date, dateISO, slot: 'day' },
+      { ...mildFallNight, feelsF: 54, dewF: 46, date, dateISO, slot: 'night' },
+    ];
+    for (const { win, pick } of planWindows(fragrances, windows, { history })) {
+      history = [{ id: pick.fragrance.id, date: dateISO, slot: win.slot }, ...history];
+      worn.set(pick.fragrance.name, (worn.get(pick.fragrance.name) ?? 0) + 1);
+    }
+  }
+  assert.ok(worn.size >= 12, `only ${worn.size} bottles in 56 wears: ${[...worn].join(', ')}`);
+  assert.ok(Math.max(...worn.values()) <= 10, 'no bottle takes over');
+});
+
+test('a wear lingers in the ranking for ten days, fading', () => {
+  const top = rank(fragrances, mildFallNight, 'night')[0].fragrance;
+  const after = days => rank(fragrances, mildFallNight, 'night', { history: [{ id: top.id, date: '2026-09-28', slot: 'night' }], todayISO: new Date(Date.UTC(2026, 8, 28 + days)).toISOString().slice(0, 10) })
+    .find(r => r.fragrance === top);
+  assert.ok(after(5).reasons.some(r => r.text === 'Worn 5 days ago'));
+  assert.ok(after(1).parts.rotation > after(5).parts.rotation && after(5).parts.rotation > after(9).parts.rotation);
+  assert.equal(after(10).parts.rotation, 0);
+});
+
 test('the pick you log for a slot is not penalized in that slot', () => {
   const history = [{ id: 1, date: '2026-09-28', slot: 'day' }];
   assert.equal(rotationPenalty(1, history, '2026-09-28', 'day').penalty, 0);
