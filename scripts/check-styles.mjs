@@ -2,14 +2,14 @@
 // What test/scent-styles.test.js only passes or fails, spelled out, for tuning
 // src/scent-styles.js against the Fragrantica dataset:
 //   node scripts/check-styles.mjs                        exemplar and held-out hit rates, with every miss
-//   node scripts/check-styles.mjs --save /tmp/before.json   the top 2 styles of the 12,000 most-voted bottles
-//   node scripts/check-styles.mjs --against /tmp/before.json   bottles whose top 2 changed since --save
+//   node scripts/check-styles.mjs --save /tmp/before.json   the 12,000 most-voted bottles' scores, lean and shown styles
+//   node scripts/check-styles.mjs --against /tmp/before.json   bottles whose lean (what a mix counts) or shown styles changed since --save
 //   node scripts/check-styles.mjs --sample 50 [--seed 7]    random bottles with 1,000+ votes to eyeball
 //   node scripts/check-styles.mjs --style skin [--n 30]     the best-scoring bottles with 1,000+ votes for one style
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { fromFragrantica } from '../src/fragrantica.js';
-import { STYLES, styleScores, wearsClose } from '../src/scent-styles.js';
+import { STYLES, STYLE_LEAN, styleById, styleScores, topOf, leanOf, closeOf } from '../src/scent-styles.js';
 import { EXEMPLARS, HOLDOUT } from '../test/style-exemplars.js';
 
 const { values: args } = parseArgs({
@@ -38,7 +38,7 @@ const wellVoted = byVotes.filter(id => (rows.get(id).r?.[1] ?? 0) >= WELL_VOTED)
 const ranked = scores => SCENT.toSorted((a, b) => scores[b] - scores[a]);
 const top = (scores, n) => ranked(scores).slice(0, n).map(s => `${s} ${scores[s].toFixed(2)}`).join(', ');
 const accordText = f => Object.entries(f.accords).map(([a, w]) => `${a} ${Math.round((w - 30) / 0.7)}`).join(', ');
-const describe = (f, scores) => `${f.name} (${f.brand}): ${top(scores, 3)}${wearsClose(f) ? ', wears close' : ''}\n    ${accordText(f)}\n    ${Object.values(f.notes).flat().slice(0, 10).join(', ')}`;
+const describe = (f, scores) => `${f.name} (${f.brand}): ${top(scores, 3)}${closeOf(scores) ? ', wears close' : ''}\n    ${accordText(f)}\n    ${Object.values(f.notes).flat().slice(0, 10).join(', ')}`;
 
 // A seeded shuffle, so a sample can be drawn again.
 function sample(ids, n, seed) {
@@ -53,18 +53,49 @@ function sample(ids, n, seed) {
 }
 
 if (args.save || args.against) {
-  const now = Object.fromEntries(byVotes.slice(0, MOST_VOTED).map(id => [id, ranked(styleScores(record(id))).slice(0, 2)]));
+  // Per bottle: its scores, its lean (styleMix counts it) and its shown styles
+  // (topOf, the chips), each saved as ids so a later threshold change shows.
+  const now = Object.fromEntries(byVotes.slice(0, MOST_VOTED).map(id => {
+    const scores = styleScores(record(id));
+    return [id, { scores, lean: leanOf(scores).map(s => s.id), shown: topOf(scores).map(s => s.id), close: closeOf(scores) }];
+  }));
   if (args.save) {
     writeFileSync(args.save, JSON.stringify(now));
-    console.log(`Saved the top 2 styles of ${Object.keys(now).length} bottles to ${args.save}`);
+    console.log(`Saved the styles of ${Object.keys(now).length} bottles to ${args.save}`);
   } else {
     const before = JSON.parse(readFileSync(args.against, 'utf8'));
-    const moved = Object.keys(now).filter(id => before[id] && before[id].join() !== now[id].join());
-    console.log(`${moved.length} of ${Object.keys(now).length} bottles changed their top 2 styles:`);
-    for (const id of moved) {
+    const ids = Object.keys(now).filter(id => before[id]);
+    const gained = {}, lost = {};
+    const tally = (counts, list) => list.forEach(s => (counts[s] = (counts[s] ?? 0) + 1));
+    const lines = [];
+    let leanMoved = 0, shownMoved = 0, bare = 0, bareBefore = 0;
+    for (const id of ids) {
+      const b = before[id], n = now[id];
+      const plus = n.shown.filter(s => !b.shown.includes(s)), minus = b.shown.filter(s => !n.shown.includes(s));
+      const leanChanged = b.lean.join() !== n.lean.join();
+      if (!n.shown.length) bare++;
+      if (!b.shown.length) bareBefore++;
+      if (!leanChanged && !plus.length && !minus.length && b.close === n.close) continue;
+      if (leanChanged) leanMoved++;
+      if (plus.length || minus.length) shownMoved++;
+      tally(gained, plus);
+      tally(lost, minus);
+      const was = s => `${s} ${n.scores[s].toFixed(2)} (was ${b.scores[s].toFixed(2)})`;
       const f = record(id);
-      console.log(`  ${f.name} (${f.brand}) ${f.ratingVotes} votes: ${before[id].join(', ')} -> ${top(styleScores(f), 2)}`);
+      const parts = [
+        leanChanged && `lean ${b.lean.join(', ') || '-'} -> ${n.lean.join(', ') || '-'}`,
+        plus.length && `shown +${plus.map(was).join(', +')}`,
+        minus.length && `shown -${minus.map(was).join(', -')}${n.shown.length ? '' : ', none left'}`,
+        b.close !== n.close && (n.close ? 'now wears close' : 'no longer wears close'),
+      ].filter(Boolean);
+      lines.push(`  ${f.name} (${f.brand}) ${f.ratingVotes} votes: ${parts.join('; ')}`);
     }
+    const counts = c => Object.entries(c).sort((a, b) => b[1] - a[1]).map(([s, k]) => `${styleById(s).label} ${k}`).join(', ') || 'none';
+    console.log(`Of ${ids.length} bottles, ${leanMoved} changed their lean (top 2 from ${STYLE_LEAN}, what a mix counts) and ${shownMoved} their shown styles (topOf).`);
+    console.log(`Shown styles gained: ${counts(gained)}`);
+    console.log(`Shown styles lost: ${counts(lost)}`);
+    console.log(`Bottles showing no style: ${bare} (was ${bareBefore})`);
+    if (lines.length) console.log(lines.join('\n'));
   }
 } else if (args.sample) {
   sample(wellVoted, Number(args.sample), Number(args.seed)).forEach((id, i) => {
@@ -89,7 +120,7 @@ if (args.save || args.against) {
         const f = record(id);
         const scores = styleScores(f);
         const rank = ranked(scores).indexOf(style);
-        const hit = style === 'intimate' ? wearsClose(f) : rank < 2;
+        const hit = style === 'intimate' ? closeOf(scores) : rank < 2;
         total++;
         if (hit) hits++;
         else misses.push(`  ${style}: ${f.name} (${f.brand}) has ${style} ${scores[style].toFixed(2)}${rank >= 0 ? ` at #${rank + 1}` : ''}; top ${top(scores, 3)}`);

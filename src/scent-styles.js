@@ -123,14 +123,16 @@ export const STYLES = [
       sweet: 0.35, vanilla: 0.4, caramel: 0.7, chocolate: 0.7, cacao: 0.7, coffee: 0.7, honey: 0.4, almond: 0.4, nutty: 0.5,
       oud: 0.6, leather: 0.5, tobacco: 0.6, smoky: 0.5, animalic: 0.4, 'warm spicy': 0.35, cinnamon: 0.5, balsamic: 0.35,
       patchouli: 0.35, earthy: 0.25, fruity: 0.25, tropical: 0.4, cherry: 0.5, amber: 0.2, whiskey: 0.6, rum: 0.6, mossy: 0.15,
-      woody: 0.1, coconut: 0.2, beeswax: 0.4, savory: 0.4, camphor: 0.2,
+      woody: 0.1, coconut: 0.2, savory: 0.4, camphor: 0.2,
     },
     // Fresh + musk reads as laundry: fresh, ozonic or aldehydic air over a musk.
-    // Iris with neroli reads as fine soap, where iris alone is just powdery.
+    // Iris with neroli reads as fine soap (iris alone is just powdery) unless
+    // amber, vanilla or resins warm it (After Midnight, L'Heure Bleue).
     extra: f => 0.35 * noisyOr([0.8 * f.acc('fresh'), 0.7 * f.acc('ozonic'), 0.45 * f.acc('aquatic'), 0.45 * f.acc('marine'),
       0.3 * f.acc('citrus'), 0.8 * f.acc('aldehydic'), f.acc('soapy'), 0.3 * f.acc('lavender'), 0.25 * f.acc('green')])
       * Math.max(f.acc('musky'), f.note(N.musk))
       + SOAPY_IRIS * f.acc('iris') * noisyOr([f.note(N.neroli), 0.3 * f.note(N.musk)])
+        * (1 - Math.max(f.acc('amber'), f.acc('vanilla'), f.acc('sweet'), f.acc('balsamic')))
       + 0.06 * (f.quiet ?? 0) - 0.1 * f.loud,
   },
   {
@@ -150,7 +152,7 @@ export const STYLES = [
       cacao: 0.6, coffee: 0.6, honey: 0.35, 'warm spicy': 0.3, cinnamon: 0.45, smoky: 0.45, animalic: 0.45, patchouli: 0.35,
       powdery: 0.25, coconut: 0.35, tropical: 0.2, whiskey: 0.5, rum: 0.5, 'white floral': 0.2, tuberose: 0.4, rose: 0.25,
       musky: 0.1, mossy: 0.2, earthy: 0.2, aquatic: 0.25, marine: 0.25, fruity: 0.15, iris: 0.25, almond: 0.4, nutty: 0.4,
-      beeswax: 0.35, savory: 0.2,
+      savory: 0.2,
     },
   },
   {
@@ -200,7 +202,7 @@ export const STYLES = [
     ACC: 0.7, NOTE: 0.35,
     acc: { caramel: 1, chocolate: 1, cacao: 1, coffee: 1, gourmand: 1, 'coca-cola': 0.8, sweet: 0.6, honey: 0.7, almond: 0.7, nutty: 0.75, cherry: 0.4, lactonic: 0.35, coconut: 0.35, vanilla: 0.4, beeswax: 0.4 },
     notes: [[N.gourmand, 0.75], [N.vanilla, 0.3], [/tonka/, 0.25]],
-    against: { aquatic: 0.4, marine: 0.4, ozonic: 0.3, green: 0.3, herbal: 0.3, citrus: 0.15, aromatic: 0.15, 'fresh spicy': 0.1, mossy: 0.3, earthy: 0.2, metallic: 0.3, camphor: 0.3 },
+    against: { aquatic: 0.4, marine: 0.4, ozonic: 0.3, green: 0.3, herbal: 0.3, citrus: 0.15, aromatic: 0.15, 'fresh spicy': 0.1, mossy: 0.3, earthy: 0.2, camphor: 0.3 },
   },
   {
     id: 'vanilla', label: 'Vanilla', kind: 'scent',
@@ -487,35 +489,44 @@ export function styleScores(frag) {
   return out;
 }
 
-const ranked = scores => SCENT.map(s => ({ id: s.id, label: s.label, score: scores[s.id] })).sort((a, b) => b.score - a.score);
+// The rules below read a scores object, so scores computed elsewhere (ahead
+// of time for a pool of bottles) show and count exactly like live ones.
 
-/** The record's scent styles from `min`, best first: [{ id, label, score }]. Intimate is apart (wearsClose). */
-export function topStyles(frag, n = 3, min = STYLE_MIN) {
-  return ranked(styleScores(frag)).filter(s => s.score >= min).slice(0, n);
+/** The scent styles worth showing from `min`, best first: [{ id, label, score }]. Intimate is apart (closeOf). */
+export function topOf(scores, n = 3, min = STYLE_MIN) {
+  const out = [];
+  for (const s of SCENT) if (scores[s.id] >= min) out.push({ id: s.id, label: s.label, score: scores[s.id] });
+  return out.sort((a, b) => b.score - a.score).slice(0, n);
 }
 
-/** Whether voters find it sits close to the skin (the Intimate style). */
-export function wearsClose(frag) {
-  return styleScores(frag).intimate >= WEARS_CLOSE;
-}
+/** The scent styles a bottle leans toward, which a style mix counts: its top 2 from STYLE_LEAN. */
+export const leanOf = scores => topOf(scores, 2, STYLE_LEAN);
+
+/** Whether the scores say it sits close to the skin (the Intimate style). */
+export const closeOf = scores => scores.intimate >= WEARS_CLOSE;
+
+/** topOf for one record. */
+export const topStyles = (frag, n = 3, min = STYLE_MIN) => topOf(styleScores(frag), n, min);
+
+/** closeOf for one record. */
+export const wearsClose = frag => closeOf(styleScores(frag));
 
 /**
  * A collection's style mix: how many bottles lean toward each scent style
- * (their top 2 from STYLE_LEAN), and how many wear close.
+ * (leanOf), and how many wear close. `scoresOf` can hand back stored scores.
  * -> { total, counts: { styleId: n }, ids: { styleId: [record ids] }, intimate, intimateIds }
  */
-export function styleMix(records) {
+export function styleMix(records, scoresOf = styleScores) {
   const counts = Object.fromEntries(SCENT.map(s => [s.id, 0]));
   const ids = Object.fromEntries(SCENT.map(s => [s.id, []]));
   const intimateIds = [];
   for (const r of records) {
-    const scores = styleScores(r);
-    for (const s of ranked(scores).slice(0, 2)) {
-      if (s.score < STYLE_LEAN) continue;
+    const scores = scoresOf(r);
+    for (const s of leanOf(scores)) {
       counts[s.id]++;
       ids[s.id].push(r.id);
     }
-    if (scores.intimate >= WEARS_CLOSE) intimateIds.push(r.id);
+    if (closeOf(scores)) intimateIds.push(r.id);
   }
   return { total: records.length, counts, ids, intimate: intimateIds.length, intimateIds };
 }

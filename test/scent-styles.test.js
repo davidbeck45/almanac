@@ -4,7 +4,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { ACCORDS } from '../src/accords.js';
 import { customRecord } from '../src/custom.js';
 import { fragranticaLibrary } from '../src/fragrantica.js';
-import { STYLES, STYLE_MIN, WEARS_CLOSE, styleScores, topStyles, wearsClose, styleMix } from '../src/scent-styles.js';
+import { STYLES, STYLE_MIN, WEARS_CLOSE, styleScores, topOf, leanOf, closeOf, topStyles, wearsClose, styleMix } from '../src/scent-styles.js';
 import { EXEMPLARS, HOLDOUT } from './style-exemplars.js';
 
 const dir = new URL('../data/fragrantica/', import.meta.url);
@@ -25,8 +25,7 @@ function hitRate(set, records) {
       const record = records.get(String(id));
       assert.ok(record, `id ${id} is in the dataset`);
       const scores = styleScores(record);
-      const hit = style === 'intimate' ? wearsClose(record)
-        : SCENT.toSorted((a, b) => scores[b] - scores[a]).indexOf(style) < 2;
+      const hit = style === 'intimate' ? closeOf(scores) : topOf(scores, 2, 0).some(s => s.id === style);
       total++;
       if (hit) hits++; else misses.push(`${record.name} (${style} ${scores[style]})`);
     }
@@ -35,6 +34,7 @@ function hitRate(set, records) {
 }
 
 const loadAll = async set => library.records([...new Set(Object.values(set).flat().map(String))]);
+const shown = scores => topOf(scores).map(s => s.id);
 
 test('canonical bottles show their style', async () => {
   const { rate, misses } = hitRate(EXEMPLARS, await loadAll(EXEMPLARS));
@@ -44,6 +44,17 @@ test('canonical bottles show their style', async () => {
 test('held-out bottles show their style', async () => {
   const { rate, misses } = hitRate(HOLDOUT, await loadAll(HOLDOUT));
   assert.ok(rate >= 0.8, `top-2 rate ${rate.toFixed(3)}; misses: ${misses.join(', ')}`);
+});
+
+test('soapy iris is Clean only when nothing warms it', async () => {
+  const records = await library.records(['39029', '14840', '49696', '140083', '45668']);
+  const scores = id => styleScores(records.get(id));
+  assert.ok(topOf(scores('39029'), 2, 0).some(s => s.id === 'clean'), 'Prada L\'Homme');
+  for (const id of ['14840', '49696', '140083']) {
+    assert.ok(!shown(scores(id)).includes('clean'), `${records.get(id).name}: ${shown(scores(id)).join(', ')}`);
+  }
+  // A metallic milk is still a gourmand (Dent de Lait).
+  assert.ok(shown(scores('45668')).includes('gourmand'), shown(scores('45668')).join(', '));
 });
 
 test('the wardrobe reads as David knows it', () => {
@@ -84,10 +95,20 @@ test('a hand-entered bottle gets styles from its accords alone and never wears c
   assert.deepEqual(topStyles({ name: 'Empty', accords: {}, notes: {} }), []);
 });
 
-test('the style mix counts each bottle\'s top two and the close wearers', () => {
+test('the rules read stored scores like live ones', () => {
+  for (const f of wardrobe) {
+    const scores = JSON.parse(JSON.stringify(styleScores(f)));
+    assert.deepEqual(topOf(scores), topStyles(f));
+    assert.equal(closeOf(scores), wearsClose(f));
+  }
+  const stored = new Map(wardrobe.map(f => [f.id, styleScores(f)]));
+  assert.deepEqual(styleMix(wardrobe, f => stored.get(f.id)), styleMix(wardrobe));
+});
+
+test('the style mix counts each bottle\'s lean and the close wearers', () => {
   const mix = styleMix(wardrobe);
   assert.equal(mix.total, wardrobe.length);
-  assert.ok(Object.values(mix.counts).reduce((a, b) => a + b, 0) <= 2 * wardrobe.length);
+  assert.equal(Object.values(mix.counts).reduce((a, b) => a + b, 0), wardrobe.reduce((n, f) => n + leanOf(styleScores(f)).length, 0));
   assert.ok(mix.counts.vanilla >= mix.counts.skin, 'the wardrobe leans warm and sweet');
   assert.ok(mix.ids.clean.includes(wardrobe.find(f => f.name === 'Cedrus Blanc').id));
   assert.equal(mix.intimate, mix.intimateIds.length);

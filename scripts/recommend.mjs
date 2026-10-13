@@ -16,7 +16,7 @@ import { layerPicks } from '../src/layering.js';
 import { OCCASIONS, occasionById } from '../src/occasions.js';
 import { fetchForecast, summarize, week } from '../src/weather.js';
 import { searchCities } from '../src/location.js';
-import { STYLES, STYLE_STRONG, STYLE_LEAN, WEARS_CLOSE, styleById, styleScores, topStyles, wearsClose, styleMix } from '../src/scent-styles.js';
+import { STYLES, STYLE_STRONG, WEARS_CLOSE, styleById, styleScores, topOf, leanOf, closeOf, styleMix } from '../src/scent-styles.js';
 import { fragranticaLibrary } from '../src/fragrantica.js';
 
 const { values: args } = parseArgs({
@@ -140,9 +140,10 @@ if (args.ideal) {
 }
 
 // The collection's style mix: how many bottles lean each way (each bottle's
-// top two styles from STYLE_LEAN, listed per bottle), and which wear close.
+// leanOf, listed per bottle), and which wear close.
 if (args.mix) {
-  const mix = styleMix(fragrances);
+  const scores = new Map(fragrances.map(f => [f.id, styleScores(f)]));
+  const mix = styleMix(fragrances, f => scores.get(f.id));
   const nameOf = new Map(fragrances.map(f => [f.id, f.name]));
   const rows = STYLES.filter(s => s.kind === 'scent')
     .map(s => ({ id: s.id, label: s.label, count: mix.counts[s.id], bottles: mix.ids[s.id].map(id => nameOf.get(id)) }))
@@ -150,8 +151,8 @@ if (args.mix) {
   const bottles = fragrances.map(f => ({
     name: f.name,
     brand: f.brand,
-    styles: topStyles(f, 2, STYLE_LEAN),
-    wearsClose: wearsClose(f),
+    styles: leanOf(scores.get(f.id)),
+    wearsClose: closeOf(scores.get(f.id)),
   }));
   if (args.json) {
     console.log(JSON.stringify({ total: mix.total, mix: rows, wearsClose: mix.intimateIds.map(id => nameOf.get(id)), bottles }, null, 2));
@@ -184,24 +185,24 @@ if (args.styles) {
   }
   if (!f) { console.error(`No bottle matches "${args.styles}"`); process.exit(1); }
   const scores = styleScores(f);
-  const ranked = STYLES.filter(s => s.kind === 'scent').map(s => ({ id: s.id, label: s.label, score: scores[s.id] }))
-    .sort((a, b) => b.score - a.score);
   if (args.json) {
     console.log(JSON.stringify({
       name: f.name,
       brand: f.brand,
       source: f.source === 'fragrantica' ? 'dataset' : 'collection',
-      styles: topStyles(f),
-      wearsClose: wearsClose(f),
+      styles: topOf(scores),
+      wearsClose: closeOf(scores),
       scores,
     }, null, 2));
   } else {
     console.log(`${f.name} (${f.brand})${f.source === 'fragrantica' ? ', from the Fragrantica dataset' : ''}`);
-    const width = Math.max(...ranked.map(r => r.label.length));
-    for (const r of ranked.filter(r => r.score >= 0.15)) {
-      console.log(`  ${r.label.padEnd(width)}  ${r.score.toFixed(2)}${r.score >= STYLE_STRONG ? '  strong' : ''}`);
+    const width = Math.max(...STYLES.map(s => s.label.length));
+    const shown = new Set(topOf(scores).map(s => s.id));
+    for (const r of topOf(scores, Infinity, 0.15)) {
+      const tags = [shown.has(r.id) && 'shown', r.score >= STYLE_STRONG && 'strong'].filter(Boolean).join(', ');
+      console.log(`  ${r.label.padEnd(width)}  ${r.score.toFixed(2)}${tags ? `  ${tags}` : ''}`);
     }
-    console.log(`  ${styleById('intimate').label.padEnd(width)}  ${scores.intimate.toFixed(2)}  ${wearsClose(f) ? 'wears close' : `wears close from ${WEARS_CLOSE.toFixed(2)}`}`);
+    console.log(`  ${styleById('intimate').label.padEnd(width)}  ${scores.intimate.toFixed(2)}  ${closeOf(scores) ? 'wears close' : `wears close from ${WEARS_CLOSE.toFixed(2)}`}`);
   }
   process.exit(0);
 }

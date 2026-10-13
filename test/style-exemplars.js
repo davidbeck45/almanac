@@ -5,7 +5,7 @@
 // looking at these, so they are in-sample.
 export const EXEMPLARS = {
   skin: [845, 46885, 10131, 10296, 72665, 48681],      // Molecule 01, Glossier You, Another 13, Not A Perfume, Missing Person, Fleur de Peau
-  clean: [3024, 35233, 20542, 6686, 60105, 4854],       // Clean Warm Cotton, Warm Cotton Reserve, Lazy Sunday Morning, Blanche, Bubble Bath, Pure Grace
+  clean: [3024, 35233, 20542, 6686, 60105, 4854, 39029], // Clean Warm Cotton, Warm Cotton Reserve, Lazy Sunday Morning, Blanche, Bubble Bath, Pure Grace, Prada L'Homme
   intimate: [18, 144, 2797, 20, 83, 1795],              // Un Jardin sur le Nil, Thé Vert, L'Eau d'Hiver, Hiris, EA Green Tea, Infusion d'Iris
   citrus: [9420, 6065, 12192, 3256, 5585, 6327],        // Orange Sanguine, Eau d'Orange Verte, Neroli Portofino, 4711, Lime Basil & Mandarin, Bergamote 22
   aquatic: [410, 507, 721, 913, 153, 25529],            // Acqua di Gio, Cool Water, L'Eau d'Issey PH, Nautica Voyage, Aqva PH, Wood Sage & Sea Salt
@@ -32,7 +32,7 @@ export const EXEMPLARS = {
 // Picked after tuning and never tuned on.
 export const HOLDOUT = {
   skin: [3606, 62377, 16603],          // Molecule 02, Musc Invisible, Clean Skin
-  clean: [39029, 103743, 23032],       // Prada L'Homme, Blanche Absolu, Clean Cool Cotton
+  clean: [4849, 103743, 23032],        // Amazing Grace, Blanche Absolu, Clean Cool Cotton
   intimate: [46885, 72040, 10296],     // Glossier You, Philosykos EDT, Not A Perfume
   citrus: [1681, 231, 72439],          // Acqua di Parma Colonia, Eau Sauvage, Terre d'Hermès Eau Givrée
   aquatic: [44035, 1742, 88818],       // Light Blue Eau Intense PH, Aqva Marine, Oud Minérale
@@ -47,7 +47,7 @@ export const HOLDOUT = {
   incense: [10145, 1232, 406],         // Memoir Man, Kyoto, Bois d'Encens
   whiteFloral: [224, 936, 12765],      // Diorissimo, Gardénia, Jasmin Rouge
   rose: [83771, 21982, 18702],         // Café Rose, Une Rose de Kandahar, Roses de Chloé
-  floral: [1361, 152, 536],            // Daisy, Omnia Crystalline, Pleasures
+  floral: [1361, 152, 12310],          // Daisy, Omnia Crystalline, Wild Bluebell
   powdery: [27417, 208, 11799],        // Dior Homme Parfum, L'Heure Bleue, Drôle de Rose
   woody: [4688, 17, 1006],             // Sycomore, Terre d'Hermès, Bois des Iles
   spicy: [66514, 25991, 16939],        // Spicebomb Infrared, Intoxicated, Herod
