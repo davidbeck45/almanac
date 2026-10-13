@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares } from '../src/engine.js';
+import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { heaviness } from '../src/accords.js';
 import { summarize, week } from '../src/weather.js';
@@ -72,12 +72,21 @@ test('a split from a few votes leans toward what the accords predict', () => {
   assert.equal(steadyShares(estimated).season, amber.season, 'unvoted records pass through');
 });
 
+test('a split from a few votes leans toward what voters say it smells like', () => {
+  const amber = fragrances.find(f => f.name === 'Amber Empire');
+  const few = { ...amber, seasonVotes: { winter: 3, spring: 2, summer: 2, fall: 3 }, timeVotes: { day: 5, night: 5 }, original: undefined };
+  const beachy = { season: { winter: 0.05, spring: 0.25, summer: 0.6, fall: 0.1 }, night: 0.1 };
+  const plain = steadyShares({ ...few, like: undefined }), liked = steadyShares({ ...few, like: beachy });
+  assert.ok(liked.season.summer > plain.season.summer + 0.1, `${liked.season.summer} vs ${plain.season.summer}`);
+  assert.ok(liked.dayNight.night < plain.dayNight.night - 0.1);
+});
+
 test("a dupe with few votes leans toward its original's", () => {
   const atlantis = fragrances.find(f => f.name === 'Atlantis Extrait');
   assert.equal(atlantis.original.name, 'Wavechild');
   const fallish = { winter: 0.2, spring: 0.2, summer: 0.2, fall: 0.4 };
   const few = { ...atlantis, season: fallish, seasonVotes: { winter: 4, spring: 4, summer: 4, fall: 8 }, dayNight: { day: 0.3, night: 0.7 }, timeVotes: { day: 3, night: 7 } };
-  const alone = { ...few, original: undefined };
+  const alone = { ...few, original: undefined, like: undefined };
   assert.ok(steadyShares(few).season.summer > steadyShares(alone).season.summer + 0.1, 'Wavechild is a summer scent');
   assert.ok(steadyShares(few).dayNight.day > 0.7, 'and a day one');
   // Well-voted dupes keep their own split.
@@ -144,6 +153,20 @@ test('office wants a quiet bottle and a night out a loud one', () => {
   // Without Parfumo ratings a bottle sits in the middle.
   const unrated = { ...base, id: 'unrated', parfumo: undefined };
   assert.ok(!reasons('office', unrated).some(t => /skin|Projects/.test(t)));
+});
+
+test('Parfumo occasion votes nudge a bottle toward what voters wear it for', () => {
+  const base = fragrances.find(f => f.name === 'Liquid Brun');
+  const night = occasionById('nightout'), office = occasionById('office');
+  const vote = (occasion, n) => ({ ...base, parfumo: { ...base.parfumo, occasion, occasionVotes: n } });
+  const clubbing = vote({ 'Night Out': 0.45, Evening: 0.3, Leisure: 0.15, Daily: 0.1 }, 1000);
+  const deskbound = vote({ Business: 0.35, Daily: 0.35, Leisure: 0.2, 'Night Out': 0.1 }, 1000);
+  assert.ok(votedOccasionFit(clubbing, night) > 0.1 && votedOccasionFit(deskbound, night) < -0.05);
+  assert.ok(votedOccasionFit(deskbound, office) > 0.1);
+  assert.ok(Math.abs(votedOccasionFit(vote(clubbing.parfumo.occasion, 3), night)) < 0.03, 'three votes barely count');
+  assert.equal(votedOccasionFit(clubbing, occasionById('cozy')), 0, 'no Parfumo category for staying in');
+  const [entry] = rank([clubbing], { feelsF: 60, humidity: 50, category: 'clear', date: new Date('2026-10-11T20:00:00'), lat: 40 }, 'night', { occasion: night });
+  assert.ok(entry.reasons.some(r => r.text === 'Parfumo voters wear it for nights out'), entry.reasons.map(r => r.text).join(' | '));
 });
 
 test('formal favors iris and powder', () => {

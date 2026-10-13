@@ -463,14 +463,18 @@ export function sheetHTML(entry, ctxLabel, ctx, wornId, { canWear = true, wears 
     .map(([k, label]) => `<div class="layer"><span class="layer-label">${label}</span><div class="notes">${f.notes[k].map(n => `<span class="note-chip">${esc(n)}</span>`).join('')}</div></div>`)
     .join('');
   const meta = [f.brand, f.year, GENDER[f.gender]].filter(Boolean).map(esc).join(' · ');
-  const estimated = f.source === 'fragella' || f.source === 'custom';
+  // Fragella, hand-entered and never-voted bottles show what their accords predict.
+  const estimated = !f.seasonVotes;
   const ratingLine = f.source === 'custom'
     ? '<span>Entered by hand</span>'
-    : `${f.rating ? `★ ${f.rating.toFixed(2)}` : 'Unrated'} <span>${esc(f.source === 'fragella' ? 'Fragella rating' : `${f.ratingVotes.toLocaleString()} votes`)}</span>`;
-  // Parfumo's 0–10 ratings when we have them, else Fragella's words.
-  const pf = f.parfumo;
+    : !f.rating ? 'Unrated'
+    : `★ ${f.rating.toFixed(2)} <span>${esc(f.source === 'fragella' ? 'Fragella rating' : `${f.ratingVotes.toLocaleString()} votes`)}</span>`;
+  // Parfumo's 0–10 ratings when we have them, else Fragrantica's votes, else Fragella's words.
+  const pf = f.parfumo, fv = f.performance;
   const performance = pf
     ? `Longevity ${pf.longevity.toFixed(1)} · Sillage ${pf.sillage.toFixed(1)} <span>of 10 on <a href="${esc(pf.url)}" target="_blank" rel="noopener">Parfumo</a></span>`
+    : fv
+    ? `Longevity ${fv.longevity.toFixed(1)} of 5 · Sillage ${fv.sillage.toFixed(1)} of 4 <span>on Fragrantica</span>`
     : [f.longevity, f.sillage && `${f.sillage} sillage`].filter(Boolean).map(esc).join(' · ');
   const o = f.original;
   const inspired = o ? `<div class="inspired">Inspired by ${o.url ? `<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.name)}</a>` : esc(o.name)} · ${esc(o.brand)}</div>` : '';
@@ -564,22 +568,20 @@ function resultRow(r, i, added) {
 
 const handAdd = label => `<button class="link-btn" data-action="custom">${label}</button>`;
 
-export function addSheetHTML({ query = '', results = null, more = false, busy = false, error = '', notice = '' }, ownedIds) {
+export function addSheetHTML({ query = '', results = null, busy = false, error = '' }, ownedIds) {
   const list = results === null ? ''
     : results.length === 0 ? `<p class="muted small">No matches for “${esc(query)}”. Check the spelling, or ${handAdd('add it yourself')}.</p>`
     : `<ul class="manage-list results">${results.map((r, i) => resultRow(r, i, ownedIds.has(r.id))).join('')}</ul>`;
   return sheetFrame('add-title', `
       <h2 id="add-title" class="sheet-title">Add bottles</h2>
-      <p class="muted lede">Search 80,000+ fragrances. Brand plus name works best.</p>
+      <p class="muted lede">Search every fragrance on Fragrantica. Brand plus name works best.</p>
       <form class="search-form" data-form="search">
         <label class="filter big">${icon.search}<input type="search" name="q" placeholder="e.g. Dior Sauvage" autocomplete="off" value="${esc(query)}" aria-label="Fragrance" enterkeyhint="search"></label>
         <button type="submit" class="solid-btn" ${busy ? 'disabled' : ''}>${busy ? '<span class="spinner small" aria-hidden="true"></span>Searching' : 'Search'}</button>
       </form>
       ${error ? `<p class="error">${esc(error)}</p>` : ''}
-      ${notice ? `<p class="muted small">${esc(notice)}</p>` : ''}
       ${list}
-      ${more && !busy ? '<button class="link-btn more-search" data-action="search-more">Not it? Search all fragrances</button>' : ''}
-      ${results?.length && !more && !busy ? `<p class="muted small hand-add">Not listed? ${handAdd('Add it yourself')}</p>` : ''}
+      ${results?.length && !busy ? `<p class="muted small hand-add">Not listed? ${handAdd('Add it yourself')}</p>` : ''}
       <div class="sheet-footer"><button class="ghost-btn" data-action="collection">Done</button></div>`, { narrow: true });
 }
 

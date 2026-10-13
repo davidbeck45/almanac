@@ -70,10 +70,10 @@ if (args.layer) {
     for (const f of fragrances) {
       for (const p of layerPicks(f, fragrances, Infinity, win)) {
         const key = [f.id, p.fragrance.id].sort().join('+');
-        if (!pairs.has(key) || pairs.get(key).pair.score > p.score) pairs.set(key, { base: f, pair: p });
+        if (!pairs.has(key) || pairs.get(key).pair.rank > p.rank) pairs.set(key, { base: f, pair: p });
       }
     }
-    rows = [...pairs.values()].sort((x, y) => y.pair.score - x.pair.score).slice(0, 10);
+    rows = [...pairs.values()].sort((x, y) => y.pair.rank - x.pair.rank).slice(0, 10);
   } else {
     const base = findBottle(args.layer);
     rows = layerPicks(base, fragrances, 5, win).map(pair => ({ base, pair }));
@@ -85,6 +85,7 @@ if (args.layer) {
       brand: pair.fragrance.brand,
       inspiredBy: inspiredBy(pair.fragrance),
       score: +pair.score.toFixed(3),
+      ...(pair.community && { parfumo: { consensus: pair.community.consensus, ...(pair.community.via && { votedOn: pair.community.via }) } }),
       sprayFirst: pair.first.name,
       reasons: pair.reasons.map(x => `${x.tone === 'good' ? '+' : '-'} ${x.text}`),
       ...(win && { window: { label: win.label, feelsF: Math.round(win.feelsF), humidity: Math.round(win.humidity), condition: win.condition } }),

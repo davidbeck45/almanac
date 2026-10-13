@@ -1,6 +1,6 @@
 {
   "source": "fragrantica.com, well-voted bottles for fitting the engine",
-  "fetched": "2026-10-03",
+  "fetched": "2026-10-11",
   "fragrances": [
     {
       "id": 62615,
@@ -64,6 +64,20 @@
           "Sandalwood",
           "Candied Almond"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.426,
+          "spring": 0.12,
+          "summer": 0.051,
+          "fall": 0.403
+        },
+        "night": 0.648
+      },
+      "performance": {
+        "longevity": 3.7817,
+        "sillage": 2.5599,
+        "votes": 12506
       }
     },
     {
@@ -143,6 +157,20 @@
           "Oakmoss",
           "Amber"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.062,
+          "spring": 0.357,
+          "summer": 0.455,
+          "fall": 0.126
+        },
+        "night": 0.173
+      },
+      "performance": {
+        "longevity": 2.5928,
+        "sillage": 1.7509,
+        "votes": 11383
       }
     },
     {
@@ -221,6 +249,20 @@
           "Cinnamon",
           "Cedar"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.318,
+          "spring": 0.23,
+          "summer": 0.121,
+          "fall": 0.331
+        },
+        "night": 0.561
+      },
+      "performance": {
+        "longevity": 3.4866,
+        "sillage": 2.4316,
+        "votes": 12579
       }
     },
     {
@@ -297,6 +339,20 @@
           "Patchouli",
           "Labdanum"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.177,
+          "spring": 0.293,
+          "summer": 0.277,
+          "fall": 0.254
+        },
+        "night": 0.456
+      },
+      "performance": {
+        "longevity": 3.3844,
+        "sillage": 2.1655,
+        "votes": 14608
       }
     },
     {
@@ -322,24 +378,24 @@
         "iris": 59
       },
       "seasonVotes": {
-        "winter": 1300,
-        "spring": 7600,
+        "winter": 1323,
+        "spring": 7551,
         "summer": 6200,
-        "fall": 1900
+        "fall": 1938
       },
       "timeVotes": {
-        "day": 7800,
-        "night": 1400
+        "day": 7815,
+        "night": 1423
       },
       "season": {
-        "winter": 0.076,
-        "spring": 0.447,
-        "summer": 0.365,
-        "fall": 0.112
+        "winter": 0.078,
+        "spring": 0.444,
+        "summer": 0.364,
+        "fall": 0.114
       },
       "dayNight": {
-        "day": 0.848,
-        "night": 0.152
+        "day": 0.846,
+        "night": 0.154
       },
       "sentiment": {
         "love": 8400,
@@ -363,6 +419,20 @@
           "Virginia Cedar",
           "Amber"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.066,
+          "spring": 0.442,
+          "summer": 0.379,
+          "fall": 0.113
+        },
+        "night": 0.141
+      },
+      "performance": {
+        "longevity": 3.0516,
+        "sillage": 2.1661,
+        "votes": 7640
       }
     },
     {
@@ -435,6 +505,20 @@
           "Patchouli",
           "Vetiver"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.279,
+          "spring": 0.264,
+          "summer": 0.168,
+          "fall": 0.29
+        },
+        "night": 0.433
+      },
+      "performance": {
+        "longevity": 3.6234,
+        "sillage": 2.5191,
+        "votes": 4860
       }
     },
     {
@@ -507,6 +591,20 @@
           "Tonka Bean",
           "Opoponax"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.213,
+          "spring": 0.306,
+          "summer": 0.205,
+          "fall": 0.277
+        },
+        "night": 0.378
+      },
+      "performance": {
+        "longevity": 3.8507,
+        "sillage": 2.7094,
+        "votes": 13044
       }
     },
     {
@@ -586,6 +684,20 @@
           "Sandalwood",
           "Musk"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.231,
+          "spring": 0.269,
+          "summer": 0.168,
+          "fall": 0.332
+        },
+        "night": 0.406
+      },
+      "performance": {
+        "longevity": 4.2368,
+        "sillage": 3.0989,
+        "votes": 2424
       }
     },
     {
@@ -657,6 +769,20 @@
           "Cedarwood",
           "Ambroxan"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.148,
+          "spring": 0.306,
+          "summer": 0.298,
+          "fall": 0.249
+        },
+        "night": 0.407
+      },
+      "performance": {
+        "longevity": 3.3696,
+        "sillage": 2.3108,
+        "votes": 17004
       }
     },
     {
@@ -723,6 +849,20 @@
           "Sandalwood",
           "Galbanum"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.068,
+          "spring": 0.367,
+          "summer": 0.394,
+          "fall": 0.17
+        },
+        "night": 0.242
+      },
+      "performance": {
+        "longevity": 3.0016,
+        "sillage": 2.0614,
+        "votes": 5651
       }
     },
     {
@@ -794,6 +934,20 @@
           "Tobacco",
           "Ambergris"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.082,
+          "spring": 0.365,
+          "summer": 0.347,
+          "fall": 0.206
+        },
+        "night": 0.266
+      },
+      "performance": {
+        "longevity": 2.8607,
+        "sillage": 1.944,
+        "votes": 12091
       }
     },
     {
@@ -819,24 +973,24 @@
         "leather": 64
       },
       "seasonVotes": {
-        "winter": 1100,
-        "spring": 745,
+        "winter": 1104,
+        "spring": 744,
         "summer": 316,
-        "fall": 1100
+        "fall": 1114
       },
       "timeVotes": {
-        "day": 931,
-        "night": 1200
+        "day": 930,
+        "night": 1162
       },
       "season": {
         "winter": 0.337,
-        "spring": 0.228,
-        "summer": 0.097,
-        "fall": 0.337
+        "spring": 0.227,
+        "summer": 0.096,
+        "fall": 0.34
       },
       "dayNight": {
-        "day": 0.437,
-        "night": 0.563
+        "day": 0.445,
+        "night": 0.555
       },
       "sentiment": {
         "love": 2300,
@@ -862,6 +1016,20 @@
           "Tahitian Vetiver",
           "Patchouli"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.358,
+          "spring": 0.204,
+          "summer": 0.081,
+          "fall": 0.357
+        },
+        "night": 0.601
+      },
+      "performance": {
+        "longevity": 3.5139,
+        "sillage": 2.3947,
+        "votes": 1148
       }
     },
     {
@@ -942,6 +1110,20 @@
           "Patchouli",
           "Tonka Bean"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.206,
+          "spring": 0.29,
+          "summer": 0.218,
+          "fall": 0.286
+        },
+        "night": 0.434
+      },
+      "performance": {
+        "longevity": 3.6631,
+        "sillage": 2.6489,
+        "votes": 9827
       }
     },
     {
@@ -1013,6 +1195,20 @@
           "Sandalwood",
           "Musk"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.391,
+          "spring": 0.162,
+          "summer": 0.099,
+          "fall": 0.348
+        },
+        "night": 0.572
+      },
+      "performance": {
+        "longevity": 3.7324,
+        "sillage": 2.6136,
+        "votes": 11900
       }
     },
     {
@@ -1089,6 +1285,20 @@
           "Cedar",
           "Blackberry"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.143,
+          "spring": 0.379,
+          "summer": 0.25,
+          "fall": 0.229
+        },
+        "night": 0.299
+      },
+      "performance": {
+        "longevity": 3.4094,
+        "sillage": 2.3742,
+        "votes": 9545
       }
     },
     {
@@ -1151,6 +1361,20 @@
           "Woody Notes",
           "Cedar"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.057,
+          "spring": 0.374,
+          "summer": 0.426,
+          "fall": 0.143
+        },
+        "night": 0.157
+      },
+      "performance": {
+        "longevity": 2.6951,
+        "sillage": 1.8497,
+        "votes": 4434
       }
     },
     {
@@ -1217,6 +1441,20 @@
           "Musk",
           "Amber"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.051,
+          "spring": 0.326,
+          "summer": 0.546,
+          "fall": 0.076
+        },
+        "night": 0.102
+      },
+      "performance": {
+        "longevity": 2.8139,
+        "sillage": 1.9637,
+        "votes": 13035
       }
     },
     {
@@ -1297,6 +1535,20 @@
           "Patchouli",
           "Amber"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.064,
+          "spring": 0.359,
+          "summer": 0.431,
+          "fall": 0.146
+        },
+        "night": 0.268
+      },
+      "performance": {
+        "longevity": 2.8951,
+        "sillage": 1.9828,
+        "votes": 12824
       }
     },
     {
@@ -1368,6 +1620,20 @@
           "Leather",
           "Sandalwood"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.364,
+          "spring": 0.207,
+          "summer": 0.068,
+          "fall": 0.361
+        },
+        "night": 0.603
+      },
+      "performance": {
+        "longevity": 3.5221,
+        "sillage": 2.2114,
+        "votes": 6258
       }
     },
     {
@@ -1440,6 +1706,20 @@
           "Cinnamon",
           "Amber"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.272,
+          "spring": 0.216,
+          "summer": 0.126,
+          "fall": 0.385
+        },
+        "night": 0.498
+      },
+      "performance": {
+        "longevity": 3.4876,
+        "sillage": 2.4191,
+        "votes": 1208
       }
     },
     {
@@ -1516,6 +1796,20 @@
           "Tonka Bean",
           "Musk"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.337,
+          "spring": 0.185,
+          "summer": 0.123,
+          "fall": 0.355
+        },
+        "night": 0.52
+      },
+      "performance": {
+        "longevity": 3.8094,
+        "sillage": 2.6516,
+        "votes": 5493
       }
     },
     {
@@ -1579,6 +1873,20 @@
           "Patchouli",
           "Benzoin"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.148,
+          "spring": 0.309,
+          "summer": 0.27,
+          "fall": 0.273
+        },
+        "night": 0.338
+      },
+      "performance": {
+        "longevity": 3.4489,
+        "sillage": 2.277,
+        "votes": 15051
       }
     },
     {
@@ -1651,6 +1959,20 @@
           "Labdanum",
           "Cinnamon"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.056,
+          "spring": 0.418,
+          "summer": 0.397,
+          "fall": 0.128
+        },
+        "night": 0.161
+      },
+      "performance": {
+        "longevity": 2.8602,
+        "sillage": 1.9631,
+        "votes": 5366
       }
     },
     {
@@ -1722,6 +2044,20 @@
           "Sandalwood",
           "Cedar"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.278,
+          "spring": 0.251,
+          "summer": 0.152,
+          "fall": 0.319
+        },
+        "night": 0.494
+      },
+      "performance": {
+        "longevity": 3.5538,
+        "sillage": 2.3891,
+        "votes": 13660
       }
     },
     {
@@ -1780,6 +2116,20 @@
           "Ambrette (Musk Mallow)",
           "Seaweed"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.067,
+          "spring": 0.343,
+          "summer": 0.463,
+          "fall": 0.127
+        },
+        "night": 0.165
+      },
+      "performance": {
+        "longevity": 2.2698,
+        "sillage": 1.535,
+        "votes": 7886
       }
     },
     {
@@ -1837,6 +2187,20 @@
           "Cashmere Wood",
           "Musk"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.213,
+          "spring": 0.269,
+          "summer": 0.181,
+          "fall": 0.337
+        },
+        "night": 0.409
+      },
+      "performance": {
+        "longevity": 3.414,
+        "sillage": 2.1933,
+        "votes": 14636
       }
     },
     {
@@ -1904,6 +2268,20 @@
           "Patchouli",
           "Tonka Bean"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.352,
+          "spring": 0.201,
+          "summer": 0.101,
+          "fall": 0.346
+        },
+        "night": 0.518
+      },
+      "performance": {
+        "longevity": 3.9215,
+        "sillage": 2.8515,
+        "votes": 16146
       }
     },
     {
@@ -1924,24 +2302,24 @@
         "violet": 48
       },
       "seasonVotes": {
-        "winter": 3500,
-        "spring": 3700,
-        "summer": 2400,
-        "fall": 4700
+        "winter": 3735,
+        "spring": 3927,
+        "summer": 2640,
+        "fall": 4819
       },
       "timeVotes": {
-        "day": 4300,
-        "night": 3100
+        "day": 4555,
+        "night": 3350
       },
       "season": {
-        "winter": 0.245,
-        "spring": 0.259,
-        "summer": 0.168,
-        "fall": 0.329
+        "winter": 0.247,
+        "spring": 0.26,
+        "summer": 0.175,
+        "fall": 0.319
       },
       "dayNight": {
-        "day": 0.581,
-        "night": 0.419
+        "day": 0.576,
+        "night": 0.424
       },
       "sentiment": {
         "love": 5300,
@@ -1961,6 +2339,20 @@
           "Iris",
           "Amber"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.27,
+          "spring": 0.23,
+          "summer": 0.136,
+          "fall": 0.364
+        },
+        "night": 0.406
+      },
+      "performance": {
+        "longevity": 3.7245,
+        "sillage": 2.5593,
+        "votes": 6807
       }
     },
     {
@@ -2028,6 +2420,20 @@
           "Ambroxan",
           "Oakmoss"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.297,
+          "spring": 0.241,
+          "summer": 0.163,
+          "fall": 0.299
+        },
+        "night": 0.493
+      },
+      "performance": {
+        "longevity": 3.9547,
+        "sillage": 2.785,
+        "votes": 15638
       }
     },
     {
@@ -2095,6 +2501,20 @@
           "Benzoin",
           "Cedar"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.062,
+          "spring": 0.262,
+          "summer": 0.559,
+          "fall": 0.117
+        },
+        "night": 0.204
+      },
+      "performance": {
+        "longevity": 2.8526,
+        "sillage": 1.8865,
+        "votes": 3705
       }
     },
     {
@@ -2162,6 +2582,20 @@
           "Peru Balsam",
           "Cashmeran"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.437,
+          "spring": 0.109,
+          "summer": 0.047,
+          "fall": 0.408
+        },
+        "night": 0.655
+      },
+      "performance": {
+        "longevity": 3.3977,
+        "sillage": 2.208,
+        "votes": 13999
       }
     },
     {
@@ -2229,6 +2663,20 @@
           "Vanilla Bean",
           "Styrax"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.378,
+          "spring": 0.179,
+          "summer": 0.051,
+          "fall": 0.392
+        },
+        "night": 0.642
+      },
+      "performance": {
+        "longevity": 3.2402,
+        "sillage": 2.1177,
+        "votes": 11362
       }
     },
     {
@@ -2296,6 +2744,20 @@
           "Ambrette (Musk Mallow)",
           "Indonesian Patchouli Leaf"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.247,
+          "spring": 0.302,
+          "summer": 0.162,
+          "fall": 0.289
+        },
+        "night": 0.415
+      },
+      "performance": {
+        "longevity": 2.788,
+        "sillage": 1.7017,
+        "votes": 4146
       }
     },
     {
@@ -2375,6 +2837,20 @@
           "Sandalwood",
           "Musk"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.428,
+          "spring": 0.141,
+          "summer": 0.058,
+          "fall": 0.374
+        },
+        "night": 0.623
+      },
+      "performance": {
+        "longevity": 4.2383,
+        "sillage": 3.1189,
+        "votes": 5329
       }
     },
     {
@@ -2395,20 +2871,20 @@
         "powdery": 39
       },
       "seasonVotes": {
-        "winter": 12100,
-        "spring": 5200,
-        "summer": 3000,
-        "fall": 10000
+        "winter": 12090,
+        "spring": 5222,
+        "summer": 3027,
+        "fall": 9962
       },
       "timeVotes": {
-        "day": 6200,
-        "night": 12900
+        "day": 6218,
+        "night": 12905
       },
       "season": {
         "winter": 0.399,
         "spring": 0.172,
-        "summer": 0.099,
-        "fall": 0.33
+        "summer": 0.1,
+        "fall": 0.329
       },
       "dayNight": {
         "day": 0.325,
@@ -2431,6 +2907,20 @@
         "base": [
           "Amber"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.253,
+          "spring": 0.271,
+          "summer": 0.171,
+          "fall": 0.305
+        },
+        "night": 0.463
+      },
+      "performance": {
+        "longevity": 4.0051,
+        "sillage": 2.9473,
+        "votes": 15330
       }
     },
     {
@@ -2517,6 +3007,20 @@
           "Musk",
           "Sandalwood"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.401,
+          "spring": 0.155,
+          "summer": 0.094,
+          "fall": 0.35
+        },
+        "night": 0.553
+      },
+      "performance": {
+        "longevity": 4.2348,
+        "sillage": 3.1697,
+        "votes": 12561
       }
     },
     {
@@ -2586,6 +3090,20 @@
           "Benzoin",
           "Vetiver"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.141,
+          "spring": 0.362,
+          "summer": 0.263,
+          "fall": 0.234
+        },
+        "night": 0.229
+      },
+      "performance": {
+        "longevity": 3.0268,
+        "sillage": 2.0236,
+        "votes": 3397
       }
     },
     {
@@ -2650,6 +3168,20 @@
           "Oakmoss",
           "Amber"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.105,
+          "spring": 0.337,
+          "summer": 0.313,
+          "fall": 0.245
+        },
+        "night": 0.294
+      },
+      "performance": {
+        "longevity": 3.4026,
+        "sillage": 2.1866,
+        "votes": 3932
       }
     },
     {
@@ -2725,6 +3257,20 @@
           "Patchouli",
           "Vetiver"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.329,
+          "spring": 0.201,
+          "summer": 0.119,
+          "fall": 0.35
+        },
+        "night": 0.539
+      },
+      "performance": {
+        "longevity": 3.1345,
+        "sillage": 2.2423,
+        "votes": 8986
       }
     },
     {
@@ -2792,6 +3338,20 @@
           "Ambrette (Musk Mallow)",
           "Angelica"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.049,
+          "spring": 0.367,
+          "summer": 0.484,
+          "fall": 0.099
+        },
+        "night": 0.149
+      },
+      "performance": {
+        "longevity": 2.7852,
+        "sillage": 1.9767,
+        "votes": 4180
       }
     },
     {
@@ -2856,6 +3416,20 @@
           "Moss",
           "Patchouli"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.378,
+          "spring": 0.187,
+          "summer": 0.064,
+          "fall": 0.371
+        },
+        "night": 0.622
+      },
+      "performance": {
+        "longevity": 3.8607,
+        "sillage": 2.5647,
+        "votes": 11293
       }
     },
     {
@@ -2919,6 +3493,20 @@
           "Tonka Bean",
           "Amber"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.346,
+          "spring": 0.227,
+          "summer": 0.082,
+          "fall": 0.344
+        },
+        "night": 0.579
+      },
+      "performance": {
+        "longevity": 3.2134,
+        "sillage": 2.1141,
+        "votes": 9544
       }
     },
     {
@@ -2988,6 +3576,20 @@
           "Tonka Bean",
           "Benzoin"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.044,
+          "spring": 0.275,
+          "summer": 0.591,
+          "fall": 0.09
+        },
+        "night": 0.172
+      },
+      "performance": {
+        "longevity": 3.0311,
+        "sillage": 2.1028,
+        "votes": 3863
       }
     },
     {
@@ -3052,6 +3654,20 @@
           "Dried Fruits",
           "Woody Notes"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.437,
+          "spring": 0.108,
+          "summer": 0.047,
+          "fall": 0.408
+        },
+        "night": 0.615
+      },
+      "performance": {
+        "longevity": 4.0385,
+        "sillage": 2.814,
+        "votes": 15737
       }
     },
     {
@@ -3117,6 +3733,20 @@
           "Woody Notes",
           "Amber"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.38,
+          "spring": 0.18,
+          "summer": 0.064,
+          "fall": 0.377
+        },
+        "night": 0.603
+      },
+      "performance": {
+        "longevity": 3.965,
+        "sillage": 2.7134,
+        "votes": 4691
       }
     },
     {
@@ -3186,6 +3816,20 @@
           "Vetiver",
           "Oakmoss"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.249,
+          "spring": 0.274,
+          "summer": 0.198,
+          "fall": 0.279
+        },
+        "night": 0.524
+      },
+      "performance": {
+        "longevity": 3.481,
+        "sillage": 2.4527,
+        "votes": 19590
       }
     },
     {
@@ -3255,6 +3899,20 @@
           "Musk",
           "Vanilla"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.284,
+          "spring": 0.24,
+          "summer": 0.154,
+          "fall": 0.321
+        },
+        "night": 0.486
+      },
+      "performance": {
+        "longevity": 3.4043,
+        "sillage": 2.4199,
+        "votes": 7259
       }
     },
     {
@@ -3312,6 +3970,20 @@
           "Bourbon Whiskey",
           "Saffron"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.403,
+          "spring": 0.153,
+          "summer": 0.066,
+          "fall": 0.378
+        },
+        "night": 0.602
+      },
+      "performance": {
+        "longevity": 3.8123,
+        "sillage": 2.702,
+        "votes": 12180
       }
     },
     {
@@ -3381,6 +4053,20 @@
           "Cashmere Wood",
           "Cedar"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.376,
+          "spring": 0.164,
+          "summer": 0.09,
+          "fall": 0.371
+        },
+        "night": 0.572
+      },
+      "performance": {
+        "longevity": 3.3231,
+        "sillage": 2.3279,
+        "votes": 15914
       }
     },
     {
@@ -3460,6 +4146,20 @@
           "Tonka Bean",
           "Vanilla"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.206,
+          "spring": 0.296,
+          "summer": 0.243,
+          "fall": 0.255
+        },
+        "night": 0.47
+      },
+      "performance": {
+        "longevity": 4.2429,
+        "sillage": 3.1492,
+        "votes": 4380
       }
     },
     {
@@ -3520,6 +4220,20 @@
           "Vetiver",
           "Caraway"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.247,
+          "spring": 0.287,
+          "summer": 0.167,
+          "fall": 0.299
+        },
+        "night": 0.534
+      },
+      "performance": {
+        "longevity": 2.9969,
+        "sillage": 1.979,
+        "votes": 13599
       }
     },
     {
@@ -3589,6 +4303,20 @@
           "Cedar",
           "Ambergris"
         ]
+      },
+      "like": {
+        "season": {
+          "winter": 0.277,
+          "spring": 0.237,
+          "summer": 0.163,
+          "fall": 0.323
+        },
+        "night": 0.499
+      },
+      "performance": {
+        "longevity": 3.5158,
+        "sillage": 2.4533,
+        "votes": 11590
       }
     }
   ]

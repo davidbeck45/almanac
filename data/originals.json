@@ -1,6 +1,6 @@
 {
   "source": "fragrantica.com, the originals that dupes in data/ are inspired by",
-  "fetched": "2026-10-09",
+  "fetched": "2026-10-11",
   "fragrances": [
     {
       "id": 97924,
@@ -111,6 +111,34 @@
         "Musk": 72,
         "Geranium": 66,
         "Rose": 58
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Amouage/outlands",
+        "longevity": 9,
+        "sillage": 8.6,
+        "votes": 1256,
+        "occasion": {
+          "Evening": 0.317,
+          "Night Out": 0.307,
+          "Leisure": 0.188,
+          "Daily": 0.109,
+          "Business": 0.079
+        },
+        "occasionVotes": 818
+      },
+      "like": {
+        "season": {
+          "winter": 0.409,
+          "spring": 0.179,
+          "summer": 0.044,
+          "fall": 0.368
+        },
+        "night": 0.657
+      },
+      "performance": {
+        "longevity": 4.356,
+        "sillage": 3.012,
+        "votes": 1665
       }
     },
     {
@@ -185,6 +213,34 @@
         "Iris": 1052,
         "Tonka Bean": 901,
         "Bourbon Vetiver": 651
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/bdk_Parfums/gris-charnel-eau-de-parfum",
+        "longevity": 7.8,
+        "sillage": 7.4,
+        "votes": 3223,
+        "occasion": {
+          "Evening": 0.22,
+          "Daily": 0.21,
+          "Leisure": 0.21,
+          "Night Out": 0.19,
+          "Business": 0.17
+        },
+        "occasionVotes": 3682
+      },
+      "like": {
+        "season": {
+          "winter": 0.311,
+          "spring": 0.243,
+          "summer": 0.113,
+          "fall": 0.333
+        },
+        "night": 0.532
+      },
+      "performance": {
+        "longevity": 3.3664,
+        "sillage": 2.1198,
+        "votes": 4421
       }
     },
     {
@@ -248,6 +304,35 @@
           "White Musk",
           "Cedarwood"
         ]
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Carolina_Herrera/cedar-chic",
+        "longevity": 7.7,
+        "sillage": 7.2,
+        "votes": 82,
+        "occasion": {
+          "Daily": 0.248,
+          "Leisure": 0.248,
+          "Business": 0.198,
+          "Evening": 0.129,
+          "Night Out": 0.109,
+          "Sport": 0.069
+        },
+        "occasionVotes": 117
+      },
+      "like": {
+        "season": {
+          "winter": 0.154,
+          "spring": 0.298,
+          "summer": 0.275,
+          "fall": 0.273
+        },
+        "night": 0.334
+      },
+      "performance": {
+        "longevity": 3.4959,
+        "sillage": 2.1667,
+        "votes": 242
       }
     },
     {
@@ -356,6 +441,34 @@
         "Ginger": 52,
         "Bergamot": 44,
         "Grapefruit": 30
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Clive_Christian/xxi-art-deco-blonde-amber",
+        "longevity": 8.4,
+        "sillage": 8.2,
+        "votes": 2597,
+        "occasion": {
+          "Night Out": 0.384,
+          "Evening": 0.364,
+          "Leisure": 0.131,
+          "Daily": 0.061,
+          "Business": 0.061
+        },
+        "occasionVotes": 1364
+      },
+      "like": {
+        "season": {
+          "winter": 0.433,
+          "spring": 0.134,
+          "summer": 0.041,
+          "fall": 0.392
+        },
+        "night": 0.732
+      },
+      "performance": {
+        "longevity": 3.9352,
+        "sillage": 2.759,
+        "votes": 1415
       }
     },
     {
@@ -456,6 +569,35 @@
         "Cloves": 59,
         "Evernyl": 46,
         "Rose": 41
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Creed/absolu-aventus",
+        "longevity": 7.7,
+        "sillage": 7.4,
+        "votes": 1263,
+        "occasion": {
+          "Leisure": 0.192,
+          "Daily": 0.192,
+          "Evening": 0.192,
+          "Night Out": 0.182,
+          "Business": 0.182,
+          "Sport": 0.061
+        },
+        "occasionVotes": 1082
+      },
+      "like": {
+        "season": {
+          "winter": 0.221,
+          "spring": 0.274,
+          "summer": 0.247,
+          "fall": 0.258
+        },
+        "night": 0.483
+      },
+      "performance": {
+        "longevity": 3.5511,
+        "sillage": 2.2914,
+        "votes": 1949
       }
     },
     {
@@ -536,6 +678,35 @@
         "Ginger": 349,
         "Georgywood": 232,
         "Cedar": 192
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Ex_Nihilo/blue-talisman-eau-de-parfum",
+        "longevity": 7.7,
+        "sillage": 7.5,
+        "votes": 1613,
+        "occasion": {
+          "Leisure": 0.24,
+          "Daily": 0.23,
+          "Business": 0.19,
+          "Night Out": 0.12,
+          "Sport": 0.11,
+          "Evening": 0.11
+        },
+        "occasionVotes": 1397
+      },
+      "like": {
+        "season": {
+          "winter": 0.093,
+          "spring": 0.344,
+          "summer": 0.364,
+          "fall": 0.198
+        },
+        "night": 0.331
+      },
+      "performance": {
+        "longevity": 3.5306,
+        "sillage": 2.332,
+        "votes": 2967
       }
     },
     {
@@ -608,6 +779,34 @@
         "Cedar": 285,
         "White Musk": 282,
         "Cyclamen": 179
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Floraiku/One_Umbrella_for_Two",
+        "longevity": 7.4,
+        "sillage": 6.9,
+        "votes": 336,
+        "occasion": {
+          "Leisure": 0.3,
+          "Evening": 0.21,
+          "Night Out": 0.2,
+          "Daily": 0.17,
+          "Business": 0.12
+        },
+        "occasionVotes": 408
+      },
+      "like": {
+        "season": {
+          "winter": 0.212,
+          "spring": 0.291,
+          "summer": 0.224,
+          "fall": 0.273
+        },
+        "night": 0.364
+      },
+      "performance": {
+        "longevity": 3.3456,
+        "sillage": 2.2196,
+        "votes": 1302
       }
     },
     {
@@ -677,6 +876,34 @@
         "Coumarin": 1249,
         "Honey": 1213,
         "White Musk": 854
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Giardini_di_Toscana/Bianco_Latte",
+        "longevity": 8.6,
+        "sillage": 8.3,
+        "votes": 1657,
+        "occasion": {
+          "Evening": 0.253,
+          "Leisure": 0.242,
+          "Night Out": 0.232,
+          "Daily": 0.192,
+          "Business": 0.081
+        },
+        "occasionVotes": 1216
+      },
+      "like": {
+        "season": {
+          "winter": 0.379,
+          "spring": 0.167,
+          "summer": 0.101,
+          "fall": 0.353
+        },
+        "night": 0.471
+      },
+      "performance": {
+        "longevity": 3.8839,
+        "sillage": 2.7008,
+        "votes": 6102
       }
     },
     {
@@ -761,6 +988,35 @@
         "Patchouli": 139,
         "Jasmine": 133,
         "Rose": 67
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Goldfield__Banks/ingenious-ginger",
+        "longevity": 7.2,
+        "sillage": 7.1,
+        "votes": 1335,
+        "occasion": {
+          "Daily": 0.25,
+          "Leisure": 0.25,
+          "Business": 0.17,
+          "Sport": 0.11,
+          "Evening": 0.11,
+          "Night Out": 0.11
+        },
+        "occasionVotes": 1408
+      },
+      "like": {
+        "season": {
+          "winter": 0.074,
+          "spring": 0.352,
+          "summer": 0.38,
+          "fall": 0.194
+        },
+        "night": 0.331
+      },
+      "performance": {
+        "longevity": 3.1918,
+        "sillage": 2.0819,
+        "votes": 2295
       }
     },
     {
@@ -823,6 +1079,35 @@
         "White Musk": 168,
         "Orange Blossom": 165,
         "Bergamot": 159
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Guerlain/herbes-troublantes",
+        "longevity": 6.3,
+        "sillage": 6.1,
+        "votes": 564,
+        "occasion": {
+          "Daily": 0.257,
+          "Leisure": 0.248,
+          "Business": 0.218,
+          "Sport": 0.139,
+          "Night Out": 0.069,
+          "Evening": 0.069
+        },
+        "occasionVotes": 763
+      },
+      "like": {
+        "season": {
+          "winter": 0.056,
+          "spring": 0.387,
+          "summer": 0.421,
+          "fall": 0.136
+        },
+        "night": 0.224
+      },
+      "performance": {
+        "longevity": 2.7143,
+        "sillage": 1.7748,
+        "votes": 555
       }
     },
     {
@@ -893,6 +1178,34 @@
         "Amber": 397,
         "Bergamot": 376,
         "Egyptian Jasmine": 221
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Initio/atomic-rose-eau-de-parfum",
+        "longevity": 8.6,
+        "sillage": 8.2,
+        "votes": 874,
+        "occasion": {
+          "Night Out": 0.28,
+          "Evening": 0.28,
+          "Leisure": 0.2,
+          "Daily": 0.14,
+          "Business": 0.1
+        },
+        "occasionVotes": 934
+      },
+      "like": {
+        "season": {
+          "winter": 0.218,
+          "spring": 0.325,
+          "summer": 0.216,
+          "fall": 0.24
+        },
+        "night": 0.431
+      },
+      "performance": {
+        "longevity": 4.1302,
+        "sillage": 3.0125,
+        "votes": 2265
       }
     },
     {
@@ -964,6 +1277,35 @@
         "Magnolia": 664,
         "White Sandalwood": 617,
         "Hedione": 547
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Initio/musk-therapy-extrait-de-parfum",
+        "longevity": 7.8,
+        "sillage": 7.3,
+        "votes": 2651,
+        "occasion": {
+          "Daily": 0.248,
+          "Leisure": 0.248,
+          "Business": 0.198,
+          "Night Out": 0.119,
+          "Evening": 0.119,
+          "Sport": 0.069
+        },
+        "occasionVotes": 2851
+      },
+      "like": {
+        "season": {
+          "winter": 0.142,
+          "spring": 0.317,
+          "summer": 0.306,
+          "fall": 0.235
+        },
+        "night": 0.344
+      },
+      "performance": {
+        "longevity": 3.4645,
+        "sillage": 2.0946,
+        "votes": 3476
       }
     },
     {
@@ -989,24 +1331,24 @@
         "powdery": 48
       },
       "seasonVotes": {
-        "winter": 1600,
-        "spring": 1600,
-        "summer": 940,
-        "fall": 1800
+        "winter": 1591,
+        "spring": 1625,
+        "summer": 931,
+        "fall": 1821
       },
       "timeVotes": {
-        "day": 1600,
-        "night": 1500
+        "day": 1586,
+        "night": 1473
       },
       "season": {
-        "winter": 0.269,
-        "spring": 0.269,
-        "summer": 0.158,
-        "fall": 0.303
+        "winter": 0.267,
+        "spring": 0.272,
+        "summer": 0.156,
+        "fall": 0.305
       },
       "dayNight": {
-        "day": 0.516,
-        "night": 0.484
+        "day": 0.518,
+        "night": 0.482
       },
       "sentiment": {
         "love": 2300,
@@ -1040,6 +1382,34 @@
         "Black Pepper": 313,
         "Bergamot": 265,
         "Agarwood (Oud)": 254
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Initio/paragon",
+        "longevity": 8.1,
+        "sillage": 7.7,
+        "votes": 1376,
+        "occasion": {
+          "Leisure": 0.23,
+          "Daily": 0.21,
+          "Evening": 0.21,
+          "Night Out": 0.2,
+          "Business": 0.15
+        },
+        "occasionVotes": 1447
+      },
+      "like": {
+        "season": {
+          "winter": 0.284,
+          "spring": 0.277,
+          "summer": 0.127,
+          "fall": 0.312
+        },
+        "night": 0.497
+      },
+      "performance": {
+        "longevity": 3.7333,
+        "sillage": 2.3422,
+        "votes": 1923
       }
     },
     {
@@ -1114,6 +1484,34 @@
         "Tobacco": 2874,
         "Mint": 2592,
         "Benzoin": 2289
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Jean_Paul_Gaultier/le-male-elixir",
+        "longevity": 8.6,
+        "sillage": 8.3,
+        "votes": 3552,
+        "occasion": {
+          "Night Out": 0.343,
+          "Evening": 0.333,
+          "Leisure": 0.182,
+          "Daily": 0.091,
+          "Business": 0.051
+        },
+        "occasionVotes": 2088
+      },
+      "like": {
+        "season": {
+          "winter": 0.413,
+          "spring": 0.178,
+          "summer": 0.057,
+          "fall": 0.352
+        },
+        "night": 0.684
+      },
+      "performance": {
+        "longevity": 4.0246,
+        "sillage": 2.8256,
+        "votes": 19363
       }
     },
     {
@@ -1124,8 +1522,8 @@
       "gender": "men",
       "url": "https://www.fragrantica.com/perfume/Louis-Vuitton/Imagination-67370.html",
       "thumb": "https://fimgs.net/mdimg/perfume-thumbs/dark-m.67370.2x.webp",
-      "rating": 4.52,
-      "ratingVotes": 14043,
+      "rating": 4.5332,
+      "ratingVotes": 14061,
       "accords": {
         "citrus": 100,
         "fresh spicy": 61,
@@ -1134,24 +1532,24 @@
         "amber": 46
       },
       "seasonVotes": {
-        "winter": 1800,
-        "spring": 7700,
-        "summer": 9600,
-        "fall": 3500
+        "winter": 2064,
+        "spring": 7851,
+        "summer": 9508,
+        "fall": 3775
       },
       "timeVotes": {
-        "day": 8000,
-        "night": 3100
+        "day": 8158,
+        "night": 3337
       },
       "season": {
-        "winter": 0.08,
-        "spring": 0.341,
-        "summer": 0.425,
-        "fall": 0.155
+        "winter": 0.089,
+        "spring": 0.338,
+        "summer": 0.41,
+        "fall": 0.163
       },
       "dayNight": {
-        "day": 0.721,
-        "night": 0.279
+        "day": 0.71,
+        "night": 0.29
       },
       "sentiment": {
         "love": 9900,
@@ -1189,6 +1587,35 @@
         "Ceylon Cinnamon": 332,
         "Guaiac Wood": 306,
         "Olibanum": 251
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Louis_Vuitton/imagination",
+        "longevity": 7.7,
+        "sillage": 7.6,
+        "votes": 9434,
+        "occasion": {
+          "Daily": 0.24,
+          "Leisure": 0.22,
+          "Business": 0.18,
+          "Sport": 0.14,
+          "Night Out": 0.12,
+          "Evening": 0.1
+        },
+        "occasionVotes": 8009
+      },
+      "like": {
+        "season": {
+          "winter": 0.13,
+          "spring": 0.324,
+          "summer": 0.355,
+          "fall": 0.192
+        },
+        "night": 0.343
+      },
+      "performance": {
+        "longevity": 3.6635,
+        "sillage": 2.3512,
+        "votes": 8331
       }
     },
     {
@@ -1273,6 +1700,34 @@
         "Guaiac Wood": 514,
         "Bergamot": 505,
         "Candied Almond": 409
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Parfums_de_Marly/althair",
+        "longevity": 8.3,
+        "sillage": 8.1,
+        "votes": 5005,
+        "occasion": {
+          "Evening": 0.32,
+          "Night Out": 0.3,
+          "Leisure": 0.18,
+          "Daily": 0.12,
+          "Business": 0.08
+        },
+        "occasionVotes": 3446
+      },
+      "like": {
+        "season": {
+          "winter": 0.447,
+          "spring": 0.127,
+          "summer": 0.047,
+          "fall": 0.379
+        },
+        "night": 0.649
+      },
+      "performance": {
+        "longevity": 3.8069,
+        "sillage": 2.4785,
+        "votes": 6339
       }
     },
     {
@@ -1363,6 +1818,34 @@
         "Jasmine": 519,
         "Ambermax™": 91,
         "Coumarin": 88
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Parfums_de_Marly/Layton",
+        "longevity": 8.2,
+        "sillage": 8,
+        "votes": 8761,
+        "occasion": {
+          "Night Out": 0.26,
+          "Evening": 0.26,
+          "Leisure": 0.19,
+          "Daily": 0.17,
+          "Business": 0.12
+        },
+        "occasionVotes": 6525
+      },
+      "like": {
+        "season": {
+          "winter": 0.325,
+          "spring": 0.255,
+          "summer": 0.096,
+          "fall": 0.325
+        },
+        "night": 0.561
+      },
+      "performance": {
+        "longevity": 3.7707,
+        "sillage": 2.5942,
+        "votes": 12107
       }
     },
     {
@@ -1437,6 +1920,35 @@
         "Amberwood": 128,
         "Lemon": 116,
         "Cacao": 108
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Room_1015/wavechild",
+        "longevity": 7.2,
+        "sillage": 7,
+        "votes": 346,
+        "occasion": {
+          "Leisure": 0.347,
+          "Daily": 0.267,
+          "Sport": 0.129,
+          "Night Out": 0.089,
+          "Evening": 0.089,
+          "Business": 0.079
+        },
+        "occasionVotes": 355
+      },
+      "like": {
+        "season": {
+          "winter": 0.042,
+          "spring": 0.373,
+          "summer": 0.481,
+          "fall": 0.104
+        },
+        "night": 0.233
+      },
+      "performance": {
+        "longevity": 3.2117,
+        "sillage": 2.089,
+        "votes": 865
       }
     },
     {
@@ -1514,6 +2026,34 @@
         "Pink Pepper": 446,
         "Saffron": 437,
         "Cedar": 309
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Yves_Saint_Laurent/babycat",
+        "longevity": 8.5,
+        "sillage": 8.1,
+        "votes": 1845,
+        "occasion": {
+          "Evening": 0.356,
+          "Night Out": 0.337,
+          "Leisure": 0.168,
+          "Daily": 0.069,
+          "Business": 0.069
+        },
+        "occasionVotes": 1458
+      },
+      "like": {
+        "season": {
+          "winter": 0.419,
+          "spring": 0.142,
+          "summer": 0.051,
+          "fall": 0.387
+        },
+        "night": 0.636
+      },
+      "performance": {
+        "longevity": 3.8179,
+        "sillage": 2.556,
+        "votes": 2403
       }
     }
   ]

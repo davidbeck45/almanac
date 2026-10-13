@@ -4,9 +4,10 @@ import { getForecast, summarize, week } from './weather.js';
 import { loadLocation, saveLocation, loadRecent, deviceLocation, searchCities } from './location.js';
 import { loadHistory, toggleWear, wornIn, clearHistory, journalStats, journalCalendar, journalExport, shiftISO } from './history.js';
 import { loadHidden, saveHidden } from './hidden.js';
-import { loadMine, saveMine, loadActive, saveActive, shareURL, parseShare, localMatches, nameMatches, sameBottle, importLines, MAX_IMPORT_LINES } from './collections.js';
-import { apiReady, searchFragrances, fetchFragrances } from './api.js';
+import { loadMine, saveMine, loadActive, saveActive, shareURL, parseShare, localMatches, nameMatches, importLines, MAX_IMPORT_LINES } from './collections.js';
+import { apiReady, fetchFragrances } from './api.js';
 import { isFragellaId } from './fragella.js';
+import { fragranticaLibrary } from './fragrantica.js';
 import { customRecord, isCustomId, fromShareToken, MAX_CUSTOM_ACCORDS } from './custom.js';
 import { layerPicks } from './layering.js';
 import { sceneTint } from './scene.js';
@@ -39,7 +40,7 @@ function defaultUnits() {
 const prefs = loadPrefs();
 const state = {
   demo: null, // { fetched, fragrances } from data/collection.json
-  catalog: [], // data/catalog.json: other people's bottles that Fragella lacks
+  catalog: [], // data/catalog.json: other people's bottles, scraped with Parfumo's ratings
   mine: loadMine(), // { name, records }
   active: loadActive(), // 'demo' | 'mine'
   shared: null, // { name, ids, records, missing, loading, confirmReplace } from a ?c= link
@@ -81,7 +82,7 @@ function collectionLabel() {
   return state.active === 'mine' ? 'My collection' : 'Demo collection';
 }
 
-// Bottles with Fragrantica data, searched before Fragella: free, with real votes.
+// Bottles we scraped ourselves, searched before the rest of Fragrantica.
 function knownBottles() {
   return [...(state.demo?.fragrances ?? []), ...state.catalog];
 }
@@ -308,9 +309,11 @@ function renderFooter() {
   if (!state.demo) return;
   const all = sourceRecords();
   const usesFragella = all.some(f => isFragellaId(f.id));
-  const usesFragrantica = all.some(f => !isFragellaId(f.id) && !isCustomId(f.id));
+  const usesScraped = all.some(f => !f.source);
+  const usesDataset = all.some(f => f.source === 'fragrantica');
   const sources = [
-    usesFragrantica && `Fragrantica (synced ${ui.esc(state.demo.fetched)})`,
+    usesScraped && `Fragrantica (synced ${ui.esc(state.demo.fetched)})`,
+    usesDataset && `Fragrantica via <a href="https://www.kaggle.com/datasets/ledecanteur/fragrantica-perfumes" target="_blank" rel="noopener">Le Decanteur’s dataset</a> (<a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noopener">CC BY-NC-SA</a>)`,
     usesFragella && '<a href="https://api.fragella.com" target="_blank" rel="noopener">Fragella</a>',
   ].filter(Boolean).join(' · ');
   $('#foot').innerHTML = ui.footerHTML({
@@ -524,24 +527,30 @@ function hideToast() {
 
 // ---------- Finding bottles ----------
 
-// Matches from the demo and the catalog come first: they're free and carry real
-// vote data. Fragella (which spends a lookup unless cached) runs only when
-// those have no match or the user asks for more.
-async function findBottles(query, { everywhere = false } = {}) {
+// Every Fragrantica perfume (data/fragrantica/), loaded a file at a time.
+const library = fragranticaLibrary();
+const MAX_RESULTS = 10;
+
+// Matches from the demo and the catalog come first (scraped with Parfumo's
+// ratings), then the rest of Fragrantica as light records ({ stub: true });
+// `fullRecords` loads the ones that get added.
+async function findBottles(query) {
   const local = localMatches(query, knownBottles());
-  if (!apiReady()) return { results: local, more: false, notice: local.length ? '' : 'Online search isn’t set up yet, so only the demo collection was searched.' };
-  if (local.length && !everywhere) return { results: local, more: true, notice: '' };
-  // Fragella sometimes lists one bottle twice; keep the first of each name + brand.
-  const results = [...local];
-  for (const r of await searchFragrances(query)) if (!results.some(x => sameBottle(x, r))) results.push(r);
-  return { results, more: false, notice: '' };
+  const ids = new Set(local.map(r => r.id));
+  const rest = (await library.search(query, MAX_RESULTS)).filter(r => !ids.has(r.id));
+  return [...local, ...rest].slice(0, MAX_RESULTS);
 }
 
-async function runSearch(query, opts) {
-  updateSheet({ query, busy: true, error: '', notice: '' });
+async function fullRecords(list) {
+  const stubs = list.filter(r => r.stub).map(r => r.id);
+  const loaded = stubs.length ? await library.records(stubs) : new Map();
+  return list.map(r => (r.stub ? loaded.get(r.id) : r)).filter(Boolean);
+}
+
+async function runSearch(query) {
+  updateSheet({ query, busy: true, error: '' });
   try {
-    const { results, more, notice } = await findBottles(query, opts);
-    updateSheet({ results, more, notice, busy: false });
+    updateSheet({ results: await findBottles(query), busy: false });
   } catch (err) {
     const local = localMatches(query, knownBottles());
     updateSheet({ results: local.length ? local : null, busy: false, error: err.message });
@@ -557,12 +566,12 @@ async function runImport(text) {
   for (const row of rows) {
     const local = localMatches(row.line, knownBottles(), 1)[0];
     if (local) Object.assign(row, { match: local, checked: true, status: 'done' });
-    else if (stopped || !apiReady()) Object.assign(row, { status: 'done', note: stopped || 'Online search isn’t set up yet.' });
+    else if (stopped) Object.assign(row, { status: 'done', note: stopped });
     else {
       try {
-        // Fragella answers with its nearest guess even when it lacks the bottle,
+        // Search answers with near misses too ("Caramello" for "Caramellino"),
         // so a hit whose name wasn't typed is offered unticked.
-        const hits = await searchFragrances(row.line);
+        const hits = await library.search(row.line);
         const hit = hits.find(r => nameMatches(row.line, r));
         Object.assign(row, { match: hit ?? hits[0] ?? null, checked: Boolean(hit), weak: !hit && hits.length > 0, status: 'done' });
       } catch (err) {
@@ -620,13 +629,16 @@ async function openSharedLink(link) {
   // Bottles entered by hand travel whole inside the link.
   const known = new Map(knownBottles().map(f => [f.id, f]));
   const local = link.ids.map(id => known.get(id) ?? (isCustomId(id) ? fromShareToken(id) : null));
-  const remoteIds = link.ids.filter(isFragellaId);
-  let fetched = { records: [], missing: remoteIds };
-  if (remoteIds.length && apiReady()) {
-    try { fetched = await fetchFragrances(remoteIds); } catch {}
-  }
+  const remote = new Map();
+  const unknown = link.ids.filter((id, i) => !local[i]);
+  const legacy = unknown.filter(isFragellaId); // Fragella bottles from older links, via the Worker
+  await Promise.all([
+    library.records(unknown).then(found => found.forEach((r, id) => remote.set(id, r))).catch(() => {}),
+    legacy.length && apiReady()
+      ? fetchFragrances(legacy).then(({ records }) => records.forEach(r => remote.set(r.id, r))).catch(() => {})
+      : null,
+  ]);
   if (!state.shared) return;
-  const remote = new Map(fetched.records.map(r => [r.id, r]));
   state.shared.records = link.ids.map((id, i) => local[i] ?? remote.get(id)).filter(Boolean);
   state.shared.missing = link.ids.filter((id, i) => !local[i] && !remote.has(id));
   state.shared.loading = false;
@@ -711,16 +723,21 @@ document.addEventListener('click', async e => {
   } else if (d.action === 'add') {
     openSheet({ kind: 'add' });
   } else if (d.add !== undefined) {
-    const record = state.sheet?.results?.[+d.add];
-    if (!record) return;
+    const hit = state.sheet?.results?.[+d.add];
+    if (!hit) return;
+    let record;
+    try {
+      [record] = await fullRecords([hit]);
+    } catch (err) {
+      return updateSheet({ error: err.message });
+    }
+    if (!record) return updateSheet({ error: `Couldn’t load ${hit.name}. Try again.` });
     addToMine(record);
     renderPicks();
     renderSheet({ keepScroll: true });
     showToast(`<span>${ui.esc(record.name)} added to your collection</span>`);
   } else if (d.action === 'import') {
     openSheet({ kind: 'import', text: state.sheet?.kind === 'import' ? state.sheet.text : '' });
-  } else if (d.action === 'search-more') {
-    await runSearch(state.sheet.query, { everywhere: true });
   } else if (d.action === 'custom') {
     openSheet(customSheet({ name: state.sheet?.query ?? '' }));
   } else if (d.customRow !== undefined) {
@@ -744,7 +761,12 @@ document.addEventListener('click', async e => {
     const rows = state.sheet.rows.map((r, i) => (i === +d.importToggle ? { ...r, checked: !r.checked } : r));
     updateSheet({ rows });
   } else if (d.action === 'import-confirm') {
-    const picked = state.sheet.rows.filter(r => r.match && r.checked).map(r => r.match);
+    let picked;
+    try {
+      picked = await fullRecords(state.sheet.rows.filter(r => r.match && r.checked).map(r => r.match));
+    } catch (err) {
+      return updateSheet({ error: err.message });
+    }
     picked.forEach(addToMine);
     renderPicks();
     openSheet({ kind: 'collection' });

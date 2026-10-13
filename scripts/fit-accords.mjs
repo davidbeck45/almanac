@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // Refit accord heaviness from the Fragrantica votes in data/.
 //   node scripts/fit-accords.mjs           (report what would change)
-//   node scripts/fit-accords.mjs --write   (update src/accords.js and src/custom.js)
+//   node scripts/fit-accords.mjs --write   (update src/accords.js)
 //
 // Each voted bottle says how cold-weather it wears: winter + fall votes minus
 // spring + summer. Accord weights start from their hand-set priors and move
 // toward what explains those votes (ridge regression, so an accord seen on one
-// or two bottles barely moves). Then the season and night estimates for
-// hand-entered bottles (src/custom.js) are refit on the new heaviness.
-// Rerun after adding bottles to data/, then `npm test`.
+// or two bottles barely moves). Rerun after adding bottles to data/, then
+// `npm test`. (Season and night estimates come from src/profiles.js, fitted on
+// the whole Fragrantica dataset by scripts/fit-profiles.mjs.)
 import { readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { ACCORDS } from '../src/accords.js';
@@ -16,7 +16,6 @@ import { ACCORDS } from '../src/accords.js';
 // How hard weights are pulled back to their priors. Leave-one-out error is
 // lowest around 0.1–0.3 on 85 bottles; the higher end trusts the votes less.
 const LAMBDA = 0.3;
-const SEASONS = ['winter', 'spring', 'summer', 'fall'];
 
 const load = stem => JSON.parse(readFileSync(new URL(`../data/${stem}.json`, import.meta.url))).fragrances;
 /** Every bottle in data/ with Fragrantica season votes, calibration set and dupes' originals included. */
@@ -32,13 +31,12 @@ const shares = f => {
   return row.map(v => v / total);
 };
 
-function linearFit(xs, ys, ws = xs.map(() => 1)) {
+function linearFit(xs, ys, ws) {
   const W = sum(ws), mx = sum(xs.map((x, i) => ws[i] * x)) / W, my = sum(ys.map((y, i) => ws[i] * y)) / W;
   const sxy = sum(xs.map((x, i) => ws[i] * (x - mx) * (ys[i] - my)));
   const sxx = sum(xs.map((x, i) => ws[i] * (x - mx) ** 2));
-  const syy = sum(ys.map((y, i) => ws[i] * (y - my) ** 2));
   const b = sxy / sxx;
-  return { a: my - b * mx, b, r2: (sxy * sxy) / (sxx * syy) };
+  return { a: my - b * mx, b };
 }
 
 function solve(A, b) {
@@ -121,22 +119,6 @@ if (import.meta.main) {
     console.log(`  ${c.n.padEnd(14)} ${c.from.toFixed(2).padStart(5)} -> ${c.to.toFixed(2).padStart(5)}   (${c.prior.toFixed(1)}, ${c.seen})`);
   }
 
-  // Season and night shares for hand-entered bottles: share = a + b * heaviness.
-  const sharesFit = w => {
-    const h = X.map(r => dot(r, w));
-    const season = Object.fromEntries(SEASONS.map(s => [s, linearFit(h, bottles.map(f => f.season[s]))]));
-    const night = linearFit(h, bottles.map(f => f.dayNight.night));
-    return { season, night, r2Season: sum(SEASONS.map(s => season[s].r2)) / SEASONS.length };
-  };
-  const before = sharesFit(prior);
-  const { season: seasonFit, night: nightFit, r2Season } = sharesFit(weights);
-  console.log(`\nheaviness explains (R²) season shares ${before.r2Season.toFixed(2)} -> ${r2Season.toFixed(2)}, night ${before.night.r2.toFixed(2)} -> ${nightFit.r2.toFixed(2)}`);
-  const f3 = x => +x.toFixed(3);
-  const seasonLine = `const SEASON_FIT = { ${SEASONS.map(s => `${s}: [${f3(seasonFit[s].a)}, ${f3(seasonFit[s].b)}]`).join(', ')} };`;
-  const nightLine = `const NIGHT_FIT = [${f3(nightFit.a)}, ${f3(nightFit.b)}];`;
-  const r2Line = `// (R² ≈ ${r2Season.toFixed(1)} for seasons, ${nightFit.r2.toFixed(1)} for night).`;
-  console.log(`\nsrc/custom.js:\n  ${seasonLine}\n  ${nightLine}\n  ${r2Line}`);
-
   if (args.write) {
     const accordsPath = new URL('../src/accords.js', import.meta.url);
     let src = readFileSync(accordsPath, 'utf8');
@@ -146,12 +128,6 @@ if (import.meta.main) {
       src = src.replace(re, `$1 ${weights[i].toFixed(2).padStart(5)},`);
     });
     writeFileSync(accordsPath, src);
-
-    const customPath = new URL('../src/custom.js', import.meta.url);
-    writeFileSync(customPath, readFileSync(customPath, 'utf8')
-      .replace(/^const SEASON_FIT = .*$/m, seasonLine)
-      .replace(/^const NIGHT_FIT = .*$/m, nightLine)
-      .replace(/^\/\/ \(R² ≈ .*$/m, r2Line));
-    console.log('\nwrote src/accords.js and src/custom.js');
+    console.log('\nwrote src/accords.js');
   }
 }

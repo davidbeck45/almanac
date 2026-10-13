@@ -1,17 +1,17 @@
 // Bottles no database has, entered by their owner: the main accords (strongest
 // first) and, optionally, the seasons and time of day they wear it. Season and
-// day/night shares blend those picks with an estimate from how heavy the
-// accords are, fitted on the votes of the bottles in data/.
-import { ACCORDS, heaviness } from './accords.js';
+// day/night shares blend those picks with what the accords predict.
+//
+// The prediction (also the prior the engine leans a few votes toward) reads
+// each accord's profile in src/profiles.js: the season and night shares it
+// pulls a bottle toward, fitted on 12,000 well-voted Fragrantica bottles.
+import { ACCORDS, barStrength } from './accords.js';
+import { ACCORD_PROFILES, PROFILE_MEAN } from './profiles.js';
 
 export const CUSTOM_PREFIX = 'my:';
 export const MAX_CUSTOM_ACCORDS = 6;
 
 const SEASONS = ['winter', 'spring', 'summer', 'fall'];
-// share = a + b * heaviness, least squares over the voted bottles in data/ (`npm run fit`)
-// (R² ≈ 0.7 for seasons, 0.7 for night).
-const SEASON_FIT = { winter: [0.204, 0.393], spring: [0.283, -0.263], summer: [0.27, -0.411], fall: [0.243, 0.281] };
-const NIGHT_FIT = [0.386, 0.475];
 const SEASON_FLOOR = 0.03;
 // How much the owner's own season and time picks count against the estimate.
 const PICK_WEIGHT = 0.5;
@@ -28,19 +28,49 @@ const accordStrengths = names => Object.fromEntries(
   names.filter(a => ACCORDS[a]).slice(0, MAX_CUSTOM_ACCORDS).map((a, i) => [a, 100 - STRENGTH_STEP * i]),
 );
 
+// [winter, spring, summer, fall, night]: each accord's profile, weighted by
+// its strength (profiles are fitted on strengths, records keep bar widths).
+function accordShares(accords) {
+  const out = [0, 0, 0, 0, 0];
+  let total = 0;
+  for (const [name, width] of Object.entries(accords)) {
+    const s = barStrength(width);
+    const p = ACCORD_PROFILES[name] ?? PROFILE_MEAN;
+    for (let k = 0; k < 5; k++) out[k] += s * p[k];
+    total += s;
+  }
+  return total ? out.map(x => x / total) : PROFILE_MEAN;
+}
+
+const seasonShares = raw => {
+  const floored = raw.map(x => Math.max(SEASON_FLOOR, x));
+  const t = floored.reduce((a, b) => a + b, 0);
+  return Object.fromEntries(SEASONS.map((s, i) => [s, floored[i] / t]));
+};
+
 export function estimateSeason(accords, picked = []) {
-  const h = heaviness(accords);
-  const est = SEASONS.map(s => Math.max(SEASON_FLOOR, SEASON_FIT[s][0] + SEASON_FIT[s][1] * h));
-  const estTotal = est.reduce((a, b) => a + b, 0);
+  const est = seasonShares(accordShares(accords).slice(0, 4));
   const chosen = SEASONS.filter(s => picked.includes(s));
   const w = chosen.length ? PICK_WEIGHT : 0;
-  return Object.fromEntries(SEASONS.map((s, i) =>
-    [s, round3((1 - w) * (est[i] / estTotal) + (chosen.includes(s) ? w / chosen.length : 0))]));
+  return Object.fromEntries(SEASONS.map(s =>
+    [s, round3((1 - w) * est[s] + (chosen.includes(s) ? w / chosen.length : 0))]));
 }
 
 export function estimateNight(accords, time = null) {
-  const est = clamp(NIGHT_FIT[0] + NIGHT_FIT[1] * heaviness(accords), 0.15, 0.85);
+  const est = clamp(accordShares(accords)[4], 0.15, 0.85);
   return round3(time in TIME_TARGET ? (1 - PICK_WEIGHT) * est + PICK_WEIGHT * TIME_TARGET[time] : est);
+}
+
+// What a bottle's votes lean toward when they're few: its accords' estimate,
+// averaged with the votes of the bottles voters say it smells like (`like`,
+// from data/fragrantica/) when it has them.
+export function predictedShares(accords, like = null) {
+  const season = estimateSeason(accords), night = estimateNight(accords);
+  if (!like) return { season, night };
+  return {
+    season: Object.fromEntries(SEASONS.map(s => [s, (season[s] + like.season[s]) / 2])),
+    night: (night + like.night) / 2,
+  };
 }
 
 const randomId = () => Math.random().toString(36).slice(2, 10);

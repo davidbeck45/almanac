@@ -9,6 +9,11 @@
 // - bridge: some overlap ties them together, but near-duplicates add little;
 // - contrast: one heavier bottle to anchor, one lighter to lift.
 // Reasons name the actual notes behind the best complement and bridge.
+// Pairs Parfumo voters layer (`layeredWith`, from data/parfumo.jsonl, a dupe
+// standing in for its original) score higher by the voters' consensus, less
+// so when the pair doesn't suit the weather. That boost sits on top of the
+// model, so it can break ties among pairs the model already rates perfect, and
+// it doesn't count toward a partner's average.
 // A partner that pairs with everything (a light citrus-woody) would top every
 // list, so picks are scored against each partner's average pairing, like the
 // engine's season "specialty".
@@ -101,6 +106,10 @@ const FAMILY_ALIAS = {
   chocolate: 'cacao', coffee: 'cacao', cinnamon: 'warm spicy', patchouli: 'earthy', smoky: 'balsamic', rum: 'whiskey',
   cherry: 'fruity', tuberose: 'white floral', 'yellow floral': 'white floral', marine: 'aquatic', salty: 'aquatic',
   metallic: 'ozonic', aldehydic: 'powdery', soapy: 'musky',
+  // Accords only bottles outside data/ carry (searched from the Fragrantica dataset).
+  alcohol: 'whiskey', wine: 'whiskey', vodka: 'whiskey', Champagne: 'whiskey', beeswax: 'honey', gourmand: 'sweet',
+  'coca-cola': 'sweet', conifer: 'woody', mineral: 'ozonic', sand: 'aquatic', anis: 'herbal', cannabis: 'green',
+  bitter: 'green', camphor: 'herbal', sour: 'citrus',
 };
 
 // Families that work together (+) or fight (−), symmetric.
@@ -260,6 +269,9 @@ const BLEND_SEASON = 0.5;
 const BLEND_WEATHER = 0.2;
 const BLEND_OK = 0.7;
 const BLEND_DAMPING = 0.5;
+// A pair with full Parfumo consensus gains this much, scaled by its blend fit
+// up to BLEND_OK when there's weather.
+const COMMUNITY_WEIGHT = 0.4;
 
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 const family = name => FAMILY_ALIAS[name] ?? name;
@@ -356,8 +368,22 @@ export function blendFit(frag, other, conditions) {
 }
 
 /**
+ * Parfumo voters' backing for the pair, from either bottle's record, or null.
+ * -> { consensus 0..100, via: [frag's side, other's side] when an original stood in }
+ */
+function communityPair(frag, other) {
+  const find = (a, b) => a.layeredWith?.find(e => String(e.id) === String(b.id));
+  const mine = find(frag, other);
+  if (mine) return { consensus: mine.consensus, via: mine.via ?? null };
+  const theirs = find(other, frag);
+  return theirs ? { consensus: theirs.consensus, via: theirs.via ? [...theirs.via].reverse() : null } : null;
+}
+
+/**
  * How well `other` layers with `frag`, for the weather when `conditions` are given.
- * -> { score 0..1, reasons: [{ text, tone }], first: the one to spray first }
+ * -> { score 0..1, model: the score before Parfumo's votes,
+ *      community: { consensus, via, boost } or null,
+ *      reasons: [{ text, tone }], first: the one to spray first }
  */
 export function layerPair(frag, other, conditions = null) {
   const a = profileOf(frag), b = profileOf(other);
@@ -402,7 +428,9 @@ export function layerPair(frag, other, conditions = null) {
   const bothHeavy = !conditions && ha > 0.55 && hb > 0.55;
   const fit = conditions ? blendFit(frag, other, conditions) : null;
   const offWeather = conditions ? BLEND_DAMPING * Math.max(0, BLEND_OK - fit) : 0;
-  const score = clamp(
+  const voted = communityPair(frag, other);
+  const community = voted && { ...voted, boost: COMMUNITY_WEIGHT * voted.consensus / 100 * (conditions ? Math.min(1, fit / BLEND_OK) : 1) };
+  const model = clamp(
     0.5 * complementScore + 0.25 * bridgeScore + 0.25 * contrastScore
       - Math.min(0.3, clash * 4) - (tooAlike ? 0.25 : 0) - (bothSweet ? 0.12 : 0) - (bothMarine ? 0.12 : 0)
       - (bothHeavy ? 0.12 : 0) - offWeather,
@@ -422,6 +450,10 @@ export function layerPair(frag, other, conditions = null) {
     if (f && !(bothMarine && MARINE.includes(f))) reasons.push({ text: `Both lean ${f}`, tone: 'good' });
   }
   if (!reasons.length && contrastScore > 0.5) reasons.push({ text: 'One richer, one lighter', tone: 'good' });
+  if (community) {
+    const text = community.via ? `Parfumo voters layer ${community.via[0]} with ${community.via[1]}` : 'Parfumo voters layer these two';
+    reasons.unshift({ text, tone: 'good' });
+  }
   if (conditions) {
     const hot = conditions.feelsF >= 78, cold = conditions.feelsF <= 52;
     if (fit >= 0.85 && hot) reasons.push({ text: 'Light enough for the heat', tone: 'good' });
@@ -442,10 +474,12 @@ export function layerPair(frag, other, conditions = null) {
 
   // Heavier and longer-lasting goes on first; the lighter one sits on top.
   const first = ha >= hb ? frag : other;
-  return { fragrance: other, score, reasons, first };
+  const score = Math.min(1, model + (community?.boost ?? 0));
+  return { fragrance: other, score, model, community, reasons, first };
 }
 
-// Each bottle's average pairing score across the collection (scores are symmetric).
+// Each bottle's average pairing score across the collection, before Parfumo's
+// votes (scores are symmetric).
 let meansFor = { key: '', means: new Map(), overall: 0 };
 function pairingMeans(collection) {
   const key = collection.map(f => f.id).join(',');
@@ -453,9 +487,9 @@ function pairingMeans(collection) {
   const sums = new Map(collection.map(f => [f.id, 0]));
   for (let i = 0; i < collection.length; i++) {
     for (let j = i + 1; j < collection.length; j++) {
-      const { score } = layerPair(collection[i], collection[j]);
-      sums.set(collection[i].id, sums.get(collection[i].id) + score);
-      sums.set(collection[j].id, sums.get(collection[j].id) + score);
+      const { model } = layerPair(collection[i], collection[j]);
+      sums.set(collection[i].id, sums.get(collection[i].id) + model);
+      sums.set(collection[j].id, sums.get(collection[j].id) + model);
     }
   }
   const n = Math.max(1, collection.length - 1);
@@ -465,7 +499,11 @@ function pairingMeans(collection) {
   return meansFor;
 }
 
-/** The best partners for `frag` among `collection`, best first, for the weather when `conditions` are given. */
+/**
+ * The best partners for `frag` among `collection`, best first, for the weather
+ * when `conditions` are given. Each pick's `rank` orders them and can pass 1
+ * where Parfumo's votes lift a pair the model already rates perfect.
+ */
 export function layerPicks(frag, collection, limit = 3, conditions = null) {
   const { means, overall } = pairingMeans(collection);
   return collection
@@ -473,9 +511,10 @@ export function layerPicks(frag, collection, limit = 3, conditions = null) {
     .map(f => {
       const pair = layerPair(frag, f, conditions);
       const generalist = (means.get(f.id) ?? overall) - overall;
-      return { ...pair, score: clamp(pair.score - GENERALIST_DAMPING * generalist, 0, 1) };
+      const rank = clamp(pair.model - GENERALIST_DAMPING * generalist, 0, 1) + (pair.community?.boost ?? 0);
+      return { ...pair, rank, score: Math.min(1, rank) };
     })
-    .filter(p => p.score >= MIN_SCORE)
-    .sort((x, y) => y.score - x.score)
+    .filter(p => p.rank >= MIN_SCORE)
+    .sort((x, y) => y.rank - x.rank)
     .slice(0, limit);
 }

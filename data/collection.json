@@ -1,6 +1,6 @@
 {
   "source": "fragrantica.com/@doeszen wardrobe (Have)",
-  "fetched": "2026-10-09",
+  "fetched": "2026-10-11",
   "fragrances": [
     {
       "id": 98689,
@@ -114,7 +114,52 @@
         "url": "https://www.parfumo.com/Perfumes/Afnan_Perfumes/supremacy-collector-s-edition",
         "longevity": 8.4,
         "sillage": 8.2,
-        "votes": 1254
+        "votes": 1262,
+        "occasion": {
+          "Daily": 0.24,
+          "Leisure": 0.2,
+          "Business": 0.18,
+          "Evening": 0.15,
+          "Night Out": 0.14,
+          "Sport": 0.09
+        },
+        "occasionVotes": 1030
+      },
+      "layeredWith": [
+        {
+          "id": 31861,
+          "consensus": 64.6,
+          "via": [
+            "Absolu Aventus 2023",
+            "Sauvage"
+          ]
+        },
+        {
+          "id": 95181,
+          "consensus": 51,
+          "via": [
+            "Absolu Aventus 2023",
+            "Imagination"
+          ]
+        },
+        {
+          "id": 94713,
+          "consensus": 34.2
+        }
+      ],
+      "like": {
+        "season": {
+          "winter": 0.244,
+          "spring": 0.266,
+          "summer": 0.223,
+          "fall": 0.266
+        },
+        "night": 0.51
+      },
+      "performance": {
+        "longevity": 3.9954,
+        "sillage": 2.8457,
+        "votes": 6636
       }
     },
     {
@@ -235,7 +280,55 @@
         "url": "https://www.parfumo.com/Perfumes/Al_Haramain/Detour_Noir",
         "longevity": 7.9,
         "sillage": 7.6,
-        "votes": 2706
+        "votes": 2714,
+        "occasion": {
+          "Evening": 0.24,
+          "Night Out": 0.23,
+          "Leisure": 0.22,
+          "Daily": 0.19,
+          "Business": 0.12
+        },
+        "occasionVotes": 2165
+      },
+      "layeredWith": [
+        {
+          "id": 110808,
+          "consensus": 86.7,
+          "via": [
+            "Layton",
+            "Le Male Elixir"
+          ]
+        },
+        {
+          "id": 94713,
+          "consensus": 84.1,
+          "via": [
+            "Layton",
+            "Althaïr"
+          ]
+        },
+        {
+          "id": 98348,
+          "consensus": 41.7,
+          "via": [
+            "Layton",
+            "Musk Therapy"
+          ]
+        }
+      ],
+      "like": {
+        "season": {
+          "winter": 0.313,
+          "spring": 0.264,
+          "summer": 0.108,
+          "fall": 0.315
+        },
+        "night": 0.54
+      },
+      "performance": {
+        "longevity": 3.6128,
+        "sillage": 2.3927,
+        "votes": 3863
       }
     },
     {
@@ -348,7 +441,48 @@
         "url": "https://www.parfumo.com/Perfumes/arabiyat-prestige/aristo",
         "longevity": 7.3,
         "sillage": 7.1,
-        "votes": 79
+        "votes": 79,
+        "occasion": {
+          "Daily": 0.283,
+          "Leisure": 0.222,
+          "Business": 0.192,
+          "Sport": 0.141,
+          "Night Out": 0.081,
+          "Evening": 0.081
+        },
+        "occasionVotes": 36
+      },
+      "layeredWith": [
+        {
+          "id": 95181,
+          "consensus": 64.6,
+          "via": [
+            "Ingenious Ginger",
+            "Imagination"
+          ]
+        },
+        {
+          "id": 85097,
+          "consensus": 25,
+          "via": [
+            "Ingenious Ginger",
+            "Gris Charnel"
+          ]
+        }
+      ],
+      "like": {
+        "season": {
+          "winter": 0.071,
+          "spring": 0.355,
+          "summer": 0.372,
+          "fall": 0.202
+        },
+        "night": 0.287
+      },
+      "performance": {
+        "longevity": 3.4975,
+        "sillage": 2.2234,
+        "votes": 197
       }
     },
     {
@@ -428,7 +562,26 @@
         "url": "https://www.parfumo.com/Perfumes/Banana_Republic/sandalwood-musk",
         "longevity": 7.2,
         "sillage": 6.7,
-        "votes": 11
+        "votes": 11,
+        "occasion": {
+          "Daily": 0.5,
+          "Leisure": 0.5
+        },
+        "occasionVotes": 2
+      },
+      "like": {
+        "season": {
+          "winter": 0.255,
+          "spring": 0.266,
+          "summer": 0.166,
+          "fall": 0.313
+        },
+        "night": 0.458
+      },
+      "performance": {
+        "longevity": 2.9565,
+        "sillage": 2.04,
+        "votes": 23
       }
     },
     {
@@ -516,7 +669,29 @@
         "url": "https://www.parfumo.com/Perfumes/Carolina_Herrera/CH_Men_Prive",
         "longevity": 6.8,
         "sillage": 6.7,
-        "votes": 960
+        "votes": 960,
+        "occasion": {
+          "Evening": 0.32,
+          "Night Out": 0.31,
+          "Leisure": 0.17,
+          "Daily": 0.1,
+          "Business": 0.1
+        },
+        "occasionVotes": 751
+      },
+      "like": {
+        "season": {
+          "winter": 0.41,
+          "spring": 0.174,
+          "summer": 0.035,
+          "fall": 0.381
+        },
+        "night": 0.749
+      },
+      "performance": {
+        "longevity": 3.2438,
+        "sillage": 2.2029,
+        "votes": 2998
       }
     },
     {
@@ -605,7 +780,40 @@
         "url": "https://www.parfumo.com/Perfumes/Dior/Sauvage_Eau_de_Toilette",
         "longevity": 7.8,
         "sillage": 7.7,
-        "votes": 6277
+        "votes": 6290,
+        "occasion": {
+          "Daily": 0.22,
+          "Leisure": 0.2,
+          "Business": 0.18,
+          "Night Out": 0.15,
+          "Evening": 0.15,
+          "Sport": 0.1
+        },
+        "occasionVotes": 5450
+      },
+      "layeredWith": [
+        {
+          "id": 98689,
+          "consensus": 64.6,
+          "via": [
+            "Sauvage",
+            "Absolu Aventus 2023"
+          ]
+        }
+      ],
+      "like": {
+        "season": {
+          "winter": 0.178,
+          "spring": 0.293,
+          "summer": 0.269,
+          "fall": 0.261
+        },
+        "night": 0.448
+      },
+      "performance": {
+        "longevity": 3.5924,
+        "sillage": 2.5453,
+        "votes": 20382
       }
     },
     {
@@ -689,7 +897,29 @@
         "url": "https://www.parfumo.com/Perfumes/Francesca_Bianchi/sticky-fingers-extrait-de-parfum",
         "longevity": 8.5,
         "sillage": 7.9,
-        "votes": 401
+        "votes": 401,
+        "occasion": {
+          "Evening": 0.33,
+          "Night Out": 0.31,
+          "Leisure": 0.23,
+          "Daily": 0.08,
+          "Business": 0.05
+        },
+        "occasionVotes": 434
+      },
+      "like": {
+        "season": {
+          "winter": 0.366,
+          "spring": 0.159,
+          "summer": 0.112,
+          "fall": 0.363
+        },
+        "night": 0.56
+      },
+      "performance": {
+        "longevity": 3.9057,
+        "sillage": 2.6557,
+        "votes": 732
       }
     },
     {
@@ -803,7 +1033,39 @@
         "url": "https://www.parfumo.com/Perfumes/french-avenue/amber-empire",
         "longevity": 7.9,
         "sillage": 7.7,
-        "votes": 503
+        "votes": 510,
+        "occasion": {
+          "Night Out": 0.323,
+          "Evening": 0.313,
+          "Leisure": 0.182,
+          "Business": 0.111,
+          "Daily": 0.071
+        },
+        "occasionVotes": 327
+      },
+      "layeredWith": [
+        {
+          "id": 118549,
+          "consensus": 56.6,
+          "via": [
+            "Blonde Amber",
+            "Outlands"
+          ]
+        }
+      ],
+      "like": {
+        "season": {
+          "winter": 0.416,
+          "spring": 0.152,
+          "summer": 0.055,
+          "fall": 0.377
+        },
+        "night": 0.725
+      },
+      "performance": {
+        "longevity": 3.5961,
+        "sillage": 2.4168,
+        "votes": 864
       }
     },
     {
@@ -829,24 +1091,24 @@
         "vanilla": 45
       },
       "seasonVotes": {
-        "winter": 141,
-        "spring": 1100,
-        "summer": 1300,
-        "fall": 387
+        "winter": 139,
+        "spring": 1132,
+        "summer": 1305,
+        "fall": 380
       },
       "timeVotes": {
-        "day": 1200,
-        "night": 424
+        "day": 1146,
+        "night": 422
       },
       "season": {
-        "winter": 0.048,
-        "spring": 0.376,
-        "summer": 0.444,
-        "fall": 0.132
+        "winter": 0.047,
+        "spring": 0.383,
+        "summer": 0.441,
+        "fall": 0.129
       },
       "dayNight": {
-        "day": 0.739,
-        "night": 0.261
+        "day": 0.731,
+        "night": 0.269
       },
       "sentiment": {
         "love": 1100,
@@ -914,7 +1176,30 @@
         "url": "https://www.parfumo.com/Perfumes/french-avenue/atlantis",
         "longevity": 8,
         "sillage": 7.8,
-        "votes": 158
+        "votes": 160,
+        "occasion": {
+          "Leisure": 0.28,
+          "Daily": 0.26,
+          "Night Out": 0.15,
+          "Evening": 0.12,
+          "Business": 0.1,
+          "Sport": 0.09
+        },
+        "occasionVotes": 124
+      },
+      "like": {
+        "season": {
+          "winter": 0.033,
+          "spring": 0.34,
+          "summer": 0.561,
+          "fall": 0.066
+        },
+        "night": 0.182
+      },
+      "performance": {
+        "longevity": 3.8414,
+        "sillage": 2.7621,
+        "votes": 1076
       }
     },
     {
@@ -998,34 +1283,99 @@
         "brand": "Louis Vuitton",
         "url": "https://www.fragrantica.com/perfume/Louis-Vuitton/Imagination-67370.html",
         "thumb": "https://fimgs.net/mdimg/perfume-thumbs/dark-m.67370.2x.webp",
-        "rating": 4.52,
-        "ratingVotes": 14043,
+        "rating": 4.5332,
+        "ratingVotes": 14061,
         "seasonVotes": {
-          "winter": 1800,
-          "spring": 7700,
-          "summer": 9600,
-          "fall": 3500
+          "winter": 2064,
+          "spring": 7851,
+          "summer": 9508,
+          "fall": 3775
         },
         "timeVotes": {
-          "day": 8000,
-          "night": 3100
+          "day": 8158,
+          "night": 3337
         },
         "season": {
-          "winter": 0.08,
-          "spring": 0.341,
-          "summer": 0.425,
-          "fall": 0.155
+          "winter": 0.089,
+          "spring": 0.338,
+          "summer": 0.41,
+          "fall": 0.163
         },
         "dayNight": {
-          "day": 0.721,
-          "night": 0.279
+          "day": 0.71,
+          "night": 0.29
         }
       },
       "parfumo": {
         "url": "https://www.parfumo.com/Perfumes/french-avenue/essence-de-blanc",
         "longevity": 7.6,
         "sillage": 7.4,
-        "votes": 246
+        "votes": 246,
+        "occasion": {
+          "Daily": 0.25,
+          "Leisure": 0.25,
+          "Business": 0.18,
+          "Sport": 0.17,
+          "Night Out": 0.08,
+          "Evening": 0.07
+        },
+        "occasionVotes": 197
+      },
+      "layeredWith": [
+        {
+          "id": 64338,
+          "consensus": 68.6,
+          "via": [
+            "Imagination",
+            "Bois Impérial"
+          ]
+        },
+        {
+          "id": 98348,
+          "consensus": 67.6,
+          "via": [
+            "Imagination",
+            "Musk Therapy"
+          ]
+        },
+        {
+          "id": 125391,
+          "consensus": 64.6,
+          "via": [
+            "Imagination",
+            "Ingenious Ginger"
+          ]
+        },
+        {
+          "id": 105076,
+          "consensus": 61,
+          "via": [
+            "Imagination",
+            "Blue Talisman"
+          ]
+        },
+        {
+          "id": 98689,
+          "consensus": 51,
+          "via": [
+            "Imagination",
+            "Absolu Aventus 2023"
+          ]
+        }
+      ],
+      "like": {
+        "season": {
+          "winter": 0.06,
+          "spring": 0.363,
+          "summer": 0.427,
+          "fall": 0.149
+        },
+        "night": 0.236
+      },
+      "performance": {
+        "longevity": 3.3408,
+        "sillage": 2.2606,
+        "votes": 564
       }
     },
     {
@@ -1130,7 +1480,72 @@
         "url": "https://www.parfumo.com/Perfumes/french-avenue/glorious-oud-royal-blanc",
         "longevity": 7.4,
         "sillage": 7,
-        "votes": 41
+        "votes": 41,
+        "occasion": {
+          "Leisure": 0.28,
+          "Daily": 0.24,
+          "Business": 0.2,
+          "Evening": 0.12,
+          "Sport": 0.08,
+          "Night Out": 0.08
+        },
+        "occasionVotes": 25
+      },
+      "layeredWith": [
+        {
+          "id": 89454,
+          "consensus": 83.9,
+          "via": [
+            "Musk Therapy",
+            "Paragon"
+          ]
+        },
+        {
+          "id": 95181,
+          "consensus": 67.6,
+          "via": [
+            "Musk Therapy",
+            "Imagination"
+          ]
+        },
+        {
+          "id": 94713,
+          "consensus": 56.6,
+          "via": [
+            "Musk Therapy",
+            "Althaïr"
+          ]
+        },
+        {
+          "id": 105076,
+          "consensus": 51,
+          "via": [
+            "Musk Therapy",
+            "Blue Talisman"
+          ]
+        },
+        {
+          "id": 70748,
+          "consensus": 41.7,
+          "via": [
+            "Musk Therapy",
+            "Layton"
+          ]
+        }
+      ],
+      "like": {
+        "season": {
+          "winter": 0.131,
+          "spring": 0.333,
+          "summer": 0.316,
+          "fall": 0.22
+        },
+        "night": 0.288
+      },
+      "performance": {
+        "longevity": 3.0909,
+        "sillage": 2.0306,
+        "votes": 229
       }
     },
     {
@@ -1245,7 +1660,71 @@
         "url": "https://www.parfumo.com/Perfumes/french-avenue/liquid-brun",
         "longevity": 8.4,
         "sillage": 8.1,
-        "votes": 2405
+        "votes": 2420,
+        "occasion": {
+          "Evening": 0.317,
+          "Night Out": 0.307,
+          "Leisure": 0.178,
+          "Daily": 0.129,
+          "Business": 0.069
+        },
+        "occasionVotes": 1365
+      },
+      "layeredWith": [
+        {
+          "id": 70748,
+          "consensus": 84.1,
+          "via": [
+            "Althaïr",
+            "Layton"
+          ]
+        },
+        {
+          "id": 102358,
+          "consensus": 74.2,
+          "via": [
+            "Althaïr",
+            "Bianco Latte"
+          ]
+        },
+        {
+          "id": 99060,
+          "consensus": 70.1
+        },
+        {
+          "id": 98348,
+          "consensus": 56.6,
+          "via": [
+            "Althaïr",
+            "Musk Therapy"
+          ]
+        },
+        {
+          "id": 118549,
+          "consensus": 51
+        },
+        {
+          "id": 89454,
+          "consensus": 43.9
+        },
+        {
+          "id": 98689,
+          "consensus": 34.2
+        }
+      ],
+      "like": {
+        "season": {
+          "winter": 0.428,
+          "spring": 0.138,
+          "summer": 0.054,
+          "fall": 0.379
+        },
+        "night": 0.614
+      },
+      "performance": {
+        "longevity": 3.8602,
+        "sillage": 2.6896,
+        "votes": 9509
       }
     },
     {
@@ -1306,7 +1785,30 @@
         "url": "https://www.parfumo.com/Perfumes/Hollister/Jake_Eau_de_Cologne",
         "longevity": 4.8,
         "sillage": 5.1,
-        "votes": 45
+        "votes": 45,
+        "occasion": {
+          "Leisure": 0.307,
+          "Sport": 0.248,
+          "Daily": 0.208,
+          "Business": 0.099,
+          "Night Out": 0.079,
+          "Evening": 0.059
+        },
+        "occasionVotes": 52
+      },
+      "like": {
+        "season": {
+          "winter": 0.087,
+          "spring": 0.326,
+          "summer": 0.352,
+          "fall": 0.234
+        },
+        "night": 0.264
+      },
+      "performance": {
+        "longevity": 2.5567,
+        "sillage": 1.9396,
+        "votes": 182
       }
     },
     {
@@ -1416,7 +1918,55 @@
         "url": "https://www.parfumo.com/Perfumes/Khadlaj/cream-velvet",
         "longevity": 7.7,
         "sillage": 7.2,
-        "votes": 104
+        "votes": 104,
+        "occasion": {
+          "Leisure": 0.238,
+          "Night Out": 0.228,
+          "Evening": 0.228,
+          "Daily": 0.208,
+          "Business": 0.099
+        },
+        "occasionVotes": 62
+      },
+      "layeredWith": [
+        {
+          "id": 94713,
+          "consensus": 74.2,
+          "via": [
+            "Bianco Latte",
+            "Althaïr"
+          ]
+        },
+        {
+          "id": 99060,
+          "consensus": 67.6,
+          "via": [
+            "Bianco Latte",
+            "Babycat"
+          ]
+        },
+        {
+          "id": 85097,
+          "consensus": 62.4,
+          "via": [
+            "Bianco Latte",
+            "Gris Charnel"
+          ]
+        }
+      ],
+      "like": {
+        "season": {
+          "winter": 0.399,
+          "spring": 0.155,
+          "summer": 0.084,
+          "fall": 0.362
+        },
+        "night": 0.489
+      },
+      "performance": {
+        "longevity": 3.2917,
+        "sillage": 2.1955,
+        "votes": 619
       }
     },
     {
@@ -1531,7 +2081,30 @@
         "url": "https://www.parfumo.com/Perfumes/Khadlaj/shiyaaka-sky",
         "longevity": 6.3,
         "sillage": 6.4,
-        "votes": 86
+        "votes": 87,
+        "occasion": {
+          "Daily": 0.25,
+          "Leisure": 0.22,
+          "Business": 0.21,
+          "Sport": 0.2,
+          "Night Out": 0.06,
+          "Evening": 0.06
+        },
+        "occasionVotes": 100
+      },
+      "like": {
+        "season": {
+          "winter": 0.056,
+          "spring": 0.407,
+          "summer": 0.431,
+          "fall": 0.107
+        },
+        "night": 0.196
+      },
+      "performance": {
+        "longevity": 2.8129,
+        "sillage": 2.006,
+        "votes": 167
       }
     },
     {
@@ -1646,7 +2219,55 @@
         "url": "https://www.parfumo.com/Perfumes/Lattafa/liam",
         "longevity": 7.7,
         "sillage": 7.3,
-        "votes": 2366
+        "votes": 2371,
+        "occasion": {
+          "Daily": 0.22,
+          "Leisure": 0.22,
+          "Evening": 0.21,
+          "Night Out": 0.18,
+          "Business": 0.17
+        },
+        "occasionVotes": 2025
+      },
+      "layeredWith": [
+        {
+          "id": 99060,
+          "consensus": 69,
+          "via": [
+            "Gris Charnel",
+            "Babycat"
+          ]
+        },
+        {
+          "id": 102358,
+          "consensus": 62.4,
+          "via": [
+            "Gris Charnel",
+            "Bianco Latte"
+          ]
+        },
+        {
+          "id": 125391,
+          "consensus": 25,
+          "via": [
+            "Gris Charnel",
+            "Ingenious Ginger"
+          ]
+        }
+      ],
+      "like": {
+        "season": {
+          "winter": 0.313,
+          "spring": 0.229,
+          "summer": 0.114,
+          "fall": 0.343
+        },
+        "night": 0.521
+      },
+      "performance": {
+        "longevity": 3.4277,
+        "sillage": 2.1626,
+        "votes": 2939
       }
     },
     {
@@ -1733,31 +2354,67 @@
         "rating": 4.24,
         "ratingVotes": 4251,
         "seasonVotes": {
-          "winter": 1600,
-          "spring": 1600,
-          "summer": 940,
-          "fall": 1800
+          "winter": 1591,
+          "spring": 1625,
+          "summer": 931,
+          "fall": 1821
         },
         "timeVotes": {
-          "day": 1600,
-          "night": 1500
+          "day": 1586,
+          "night": 1473
         },
         "season": {
-          "winter": 0.269,
-          "spring": 0.269,
-          "summer": 0.158,
-          "fall": 0.303
+          "winter": 0.267,
+          "spring": 0.272,
+          "summer": 0.156,
+          "fall": 0.305
         },
         "dayNight": {
-          "day": 0.516,
-          "night": 0.484
+          "day": 0.518,
+          "night": 0.482
         }
       },
       "parfumo": {
         "url": "https://www.parfumo.com/Perfumes/lattafa-pride/vintage-radio",
         "longevity": 7.8,
         "sillage": 7.6,
-        "votes": 1121
+        "votes": 1124,
+        "occasion": {
+          "Evening": 0.228,
+          "Night Out": 0.228,
+          "Leisure": 0.218,
+          "Daily": 0.198,
+          "Business": 0.129
+        },
+        "occasionVotes": 953
+      },
+      "layeredWith": [
+        {
+          "id": 98348,
+          "consensus": 83.9,
+          "via": [
+            "Paragon",
+            "Musk Therapy"
+          ]
+        },
+        {
+          "id": 94713,
+          "consensus": 43.9
+        }
+      ],
+      "like": {
+        "season": {
+          "winter": 0.264,
+          "spring": 0.27,
+          "summer": 0.162,
+          "fall": 0.304
+        },
+        "night": 0.481
+      },
+      "performance": {
+        "longevity": 3.6034,
+        "sillage": 2.3446,
+        "votes": 2815
       }
     },
     {
@@ -1867,7 +2524,29 @@
         "url": "https://www.parfumo.com/Perfumes/maison-alhambra/infini-rose",
         "longevity": 8.1,
         "sillage": 7.5,
-        "votes": 38
+        "votes": 38,
+        "occasion": {
+          "Night Out": 0.29,
+          "Evening": 0.29,
+          "Daily": 0.15,
+          "Business": 0.15,
+          "Leisure": 0.12
+        },
+        "occasionVotes": 34
+      },
+      "like": {
+        "season": {
+          "winter": 0.274,
+          "spring": 0.269,
+          "summer": 0.172,
+          "fall": 0.285
+        },
+        "night": 0.534
+      },
+      "performance": {
+        "longevity": 3.6161,
+        "sillage": 2.5371,
+        "votes": 525
       }
     },
     {
@@ -1980,7 +2659,48 @@
         "url": "https://www.parfumo.com/Perfumes/maison-asrar/legacy",
         "longevity": 7.4,
         "sillage": 7.3,
-        "votes": 424
+        "votes": 428,
+        "occasion": {
+          "Daily": 0.26,
+          "Leisure": 0.23,
+          "Business": 0.18,
+          "Sport": 0.15,
+          "Night Out": 0.09,
+          "Evening": 0.09
+        },
+        "occasionVotes": 292
+      },
+      "layeredWith": [
+        {
+          "id": 95181,
+          "consensus": 61,
+          "via": [
+            "Blue Talisman",
+            "Imagination"
+          ]
+        },
+        {
+          "id": 98348,
+          "consensus": 51,
+          "via": [
+            "Blue Talisman",
+            "Musk Therapy"
+          ]
+        }
+      ],
+      "like": {
+        "season": {
+          "winter": 0.086,
+          "spring": 0.354,
+          "summer": 0.367,
+          "fall": 0.193
+        },
+        "night": 0.309
+      },
+      "performance": {
+        "longevity": 3.4609,
+        "sillage": 2.1757,
+        "votes": 609
       }
     },
     {
@@ -2062,9 +2782,32 @@
       },
       "parfumo": {
         "url": "https://www.parfumo.com/Perfumes/Nishane/meant-to-be-seen-1",
-        "longevity": 7.8,
-        "sillage": 7.3,
-        "votes": 286
+        "longevity": 7.9,
+        "sillage": 7.4,
+        "votes": 289,
+        "occasion": {
+          "Daily": 0.25,
+          "Leisure": 0.23,
+          "Business": 0.2,
+          "Evening": 0.15,
+          "Night Out": 0.13,
+          "Sport": 0.04
+        },
+        "occasionVotes": 362
+      },
+      "like": {
+        "season": {
+          "winter": 0.189,
+          "spring": 0.322,
+          "summer": 0.259,
+          "fall": 0.23
+        },
+        "night": 0.255
+      },
+      "performance": {
+        "longevity": 3.709,
+        "sillage": 2.3763,
+        "votes": 457
       }
     },
     {
@@ -2173,7 +2916,51 @@
         "url": "https://www.parfumo.com/Perfumes/paris-corner/rifaaqat",
         "longevity": 8.2,
         "sillage": 7.9,
-        "votes": 579
+        "votes": 585,
+        "occasion": {
+          "Evening": 0.337,
+          "Night Out": 0.327,
+          "Leisure": 0.168,
+          "Daily": 0.089,
+          "Business": 0.079
+        },
+        "occasionVotes": 469
+      },
+      "layeredWith": [
+        {
+          "id": 94713,
+          "consensus": 70.1
+        },
+        {
+          "id": 85097,
+          "consensus": 69,
+          "via": [
+            "Babycat",
+            "Gris Charnel"
+          ]
+        },
+        {
+          "id": 102358,
+          "consensus": 67.6,
+          "via": [
+            "Babycat",
+            "Bianco Latte"
+          ]
+        }
+      ],
+      "like": {
+        "season": {
+          "winter": 0.429,
+          "spring": 0.126,
+          "summer": 0.05,
+          "fall": 0.394
+        },
+        "night": 0.677
+      },
+      "performance": {
+        "longevity": 3.7625,
+        "sillage": 2.5951,
+        "votes": 2465
       }
     },
     {
@@ -2286,7 +3073,29 @@
         "url": "https://www.parfumo.com/Perfumes/paris-corner/zahri-amara",
         "longevity": 7.4,
         "sillage": 7.2,
-        "votes": 19
+        "votes": 19,
+        "occasion": {
+          "Daily": 0.26,
+          "Leisure": 0.26,
+          "Night Out": 0.21,
+          "Business": 0.16,
+          "Evening": 0.11
+        },
+        "occasionVotes": 19
+      },
+      "like": {
+        "season": {
+          "winter": 0.225,
+          "spring": 0.291,
+          "summer": 0.184,
+          "fall": 0.3
+        },
+        "night": 0.355
+      },
+      "performance": {
+        "longevity": 3.3846,
+        "sillage": 2.1905,
+        "votes": 39
       }
     },
     {
@@ -2399,7 +3208,40 @@
         "url": "https://www.parfumo.com/Perfumes/Rasasi/hawas-elixir",
         "longevity": 8.4,
         "sillage": 8.1,
-        "votes": 156
+        "votes": 157,
+        "occasion": {
+          "Night Out": 0.29,
+          "Evening": 0.28,
+          "Leisure": 0.2,
+          "Daily": 0.1,
+          "Business": 0.09,
+          "Sport": 0.04
+        },
+        "occasionVotes": 90
+      },
+      "layeredWith": [
+        {
+          "id": 70748,
+          "consensus": 86.7,
+          "via": [
+            "Le Male Elixir",
+            "Layton"
+          ]
+        }
+      ],
+      "like": {
+        "season": {
+          "winter": 0.434,
+          "spring": 0.154,
+          "summer": 0.06,
+          "fall": 0.352
+        },
+        "night": 0.686
+      },
+      "performance": {
+        "longevity": 3.9447,
+        "sillage": 2.8253,
+        "votes": 995
       }
     },
     {
@@ -2492,7 +3334,30 @@
         "url": "https://www.parfumo.com/Perfumes/rayhaan/cedrus-blanc",
         "longevity": 7.7,
         "sillage": 7.4,
-        "votes": 69
+        "votes": 72,
+        "occasion": {
+          "Daily": 0.273,
+          "Leisure": 0.242,
+          "Business": 0.222,
+          "Night Out": 0.121,
+          "Evening": 0.101,
+          "Sport": 0.04
+        },
+        "occasionVotes": 67
+      },
+      "like": {
+        "season": {
+          "winter": 0.168,
+          "spring": 0.295,
+          "summer": 0.272,
+          "fall": 0.264
+        },
+        "night": 0.312
+      },
+      "performance": {
+        "longevity": 3.6527,
+        "sillage": 2.2412,
+        "votes": 167
       }
     },
     {
@@ -2636,7 +3501,43 @@
         "url": "https://www.parfumo.com/Perfumes/rayhaan/terra",
         "longevity": 8.6,
         "sillage": 8.4,
-        "votes": 530
+        "votes": 535,
+        "occasion": {
+          "Evening": 0.313,
+          "Night Out": 0.293,
+          "Leisure": 0.192,
+          "Daily": 0.111,
+          "Business": 0.091
+        },
+        "occasionVotes": 307
+      },
+      "layeredWith": [
+        {
+          "id": 116876,
+          "consensus": 56.6,
+          "via": [
+            "Outlands",
+            "Blonde Amber"
+          ]
+        },
+        {
+          "id": 94713,
+          "consensus": 51
+        }
+      ],
+      "like": {
+        "season": {
+          "winter": 0.393,
+          "spring": 0.196,
+          "summer": 0.064,
+          "fall": 0.347
+        },
+        "night": 0.622
+      },
+      "performance": {
+        "longevity": 4.0332,
+        "sillage": 2.9224,
+        "votes": 1172
       }
     }
   ]

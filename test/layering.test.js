@@ -116,6 +116,27 @@ test('picks come from the rest of the collection, capped and above the bar', () 
   assert.ok(picks.every(p => p.reasons.some(r => r.tone === 'good')));
 });
 
+test('pairs Parfumo voters layer rank higher, named by the bottles they voted on', () => {
+  const backed = { ...WOODY, id: 'backed' }, plain = { ...WOODY, id: 'plain' };
+  const base = { ...GOURMAND, layeredWith: [{ id: 'backed', consensus: 80, via: ['Original A', 'Original B'] }] };
+  const [top, next] = layerPicks(base, [base, plain, backed]);
+  assert.equal(top.fragrance, backed);
+  assert.equal(top.reasons[0].text, 'Parfumo voters layer Original A with Original B');
+  assert.ok(top.score > next.score && next.community === null);
+  // Either record carries the pair; from the other side the names swap.
+  assert.deepEqual(layerPair(backed, base).community.via, ['Original B', 'Original A']);
+});
+
+test('Parfumo votes on originals reach their dupes, less so in the wrong weather', () => {
+  // Hawas Elixir and Détour Noir have few votes of their own; Le Mâle Elixir and Layton do.
+  const pick = layerPicks(named('Hawas Elixir'), demo).find(p => p.fragrance === named('Détour Noir'));
+  assert.ok(pick, 'Détour Noir is among Hawas Elixir\'s partners');
+  assert.match(pick.reasons[0].text, /^Parfumo voters layer .+ with Layton$/);
+  // Voters vouch for the pair, not the weather: two fresh bottles gain less on a cold night.
+  const fresh = [named('Essence de Blanc'), named('Aristo')];
+  assert.ok(layerPair(...fresh, coldNight).community.boost < layerPair(...fresh).community.boost);
+});
+
 test('no single partner takes over every list', () => {
   for (const list of [demo, catalog]) {
     const counts = {};

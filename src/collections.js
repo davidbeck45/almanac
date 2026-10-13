@@ -46,7 +46,7 @@ export function parseShare(params) {
   return ids.length ? { ids, name: params.get('n')?.trim().slice(0, 40) || null } : null;
 }
 
-const normalize = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+export const normalize = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 // Offline matches against a list of records, e.g. the demo catalog.
 export function localMatches(query, records, limit = 5) {

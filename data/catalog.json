@@ -1,6 +1,6 @@
 {
   "source": "fragrantica.com, bottles added for other people's collections",
-  "fetched": "2026-10-08",
+  "fetched": "2026-10-11",
   "fragrances": [
     {
       "id": 88207,
@@ -83,7 +83,29 @@
         "url": "https://www.parfumo.com/Perfumes/clue-perfumery/warm-bulb",
         "longevity": 6.8,
         "sillage": 6.1,
-        "votes": 108
+        "votes": 109,
+        "occasion": {
+          "Leisure": 0.354,
+          "Evening": 0.283,
+          "Daily": 0.222,
+          "Night Out": 0.101,
+          "Business": 0.04
+        },
+        "occasionVotes": 89
+      },
+      "like": {
+        "season": {
+          "winter": 0.28,
+          "spring": 0.246,
+          "summer": 0.164,
+          "fall": 0.31
+        },
+        "night": 0.379
+      },
+      "performance": {
+        "longevity": 3.0325,
+        "sillage": 1.805,
+        "votes": 241
       }
     },
     {
@@ -152,7 +174,30 @@
         "url": "https://www.parfumo.com/Perfumes/d-annam/mango-sticky-rice",
         "longevity": 6.3,
         "sillage": 6,
-        "votes": 95
+        "votes": 96,
+        "occasion": {
+          "Leisure": 0.384,
+          "Daily": 0.273,
+          "Business": 0.141,
+          "Evening": 0.081,
+          "Sport": 0.061,
+          "Night Out": 0.061
+        },
+        "occasionVotes": 77
+      },
+      "like": {
+        "season": {
+          "winter": 0.08,
+          "spring": 0.369,
+          "summer": 0.305,
+          "fall": 0.246
+        },
+        "night": 0.204
+      },
+      "performance": {
+        "longevity": 2.7204,
+        "sillage": 1.7959,
+        "votes": 93
       }
     },
     {
@@ -221,7 +266,29 @@
         "url": "https://www.parfumo.com/Perfumes/d-annam/mooncake",
         "longevity": 7.1,
         "sillage": 6.5,
-        "votes": 108
+        "votes": 110,
+        "occasion": {
+          "Leisure": 0.327,
+          "Daily": 0.238,
+          "Evening": 0.228,
+          "Night Out": 0.129,
+          "Business": 0.079
+        },
+        "occasionVotes": 101
+      },
+      "like": {
+        "season": {
+          "winter": 0.322,
+          "spring": 0.224,
+          "summer": 0.102,
+          "fall": 0.352
+        },
+        "night": 0.349
+      },
+      "performance": {
+        "longevity": 3.2114,
+        "sillage": 1.9426,
+        "votes": 122
       }
     },
     {
@@ -295,7 +362,40 @@
         "url": "https://www.parfumo.com/Perfumes/Essential_Parfums/bois-imperial-eau-de-parfum-1",
         "longevity": 8.5,
         "sillage": 8.1,
-        "votes": 4288
+        "votes": 4305,
+        "occasion": {
+          "Daily": 0.248,
+          "Leisure": 0.228,
+          "Business": 0.218,
+          "Evening": 0.109,
+          "Night Out": 0.099,
+          "Sport": 0.099
+        },
+        "occasionVotes": 4013
+      },
+      "layeredWith": [
+        {
+          "id": 95181,
+          "consensus": 68.6,
+          "via": [
+            "Bois Impérial",
+            "Imagination"
+          ]
+        }
+      ],
+      "like": {
+        "season": {
+          "winter": 0.251,
+          "spring": 0.278,
+          "summer": 0.187,
+          "fall": 0.283
+        },
+        "night": 0.499
+      },
+      "performance": {
+        "longevity": 3.962,
+        "sillage": 2.7878,
+        "votes": 10708
       }
     },
     {
@@ -359,7 +459,30 @@
         "url": "https://www.parfumo.com/Perfumes/french-cowboy/pear-pavlova",
         "longevity": 7.9,
         "sillage": 7.4,
-        "votes": 146
+        "votes": 146,
+        "occasion": {
+          "Leisure": 0.287,
+          "Daily": 0.277,
+          "Night Out": 0.149,
+          "Business": 0.129,
+          "Evening": 0.089,
+          "Sport": 0.069
+        },
+        "occasionVotes": 181
+      },
+      "like": {
+        "season": {
+          "winter": 0.105,
+          "spring": 0.35,
+          "summer": 0.367,
+          "fall": 0.178
+        },
+        "night": 0.176
+      },
+      "performance": {
+        "longevity": 3.7398,
+        "sillage": 2.3622,
+        "votes": 123
       }
     },
     {
@@ -426,7 +549,29 @@
         "url": "https://www.parfumo.com/Perfumes/french-cowboy/vanilla-for-breakfast",
         "longevity": 7.3,
         "sillage": 7.2,
-        "votes": 32
+        "votes": 32,
+        "occasion": {
+          "Night Out": 0.287,
+          "Leisure": 0.228,
+          "Evening": 0.228,
+          "Daily": 0.198,
+          "Business": 0.059
+        },
+        "occasionVotes": 35
+      },
+      "like": {
+        "season": {
+          "winter": 0.354,
+          "spring": 0.193,
+          "summer": 0.094,
+          "fall": 0.359
+        },
+        "night": 0.517
+      },
+      "performance": {
+        "longevity": 3.8485,
+        "sillage": 2.5455,
+        "votes": 33
       }
     },
     {
@@ -501,7 +646,29 @@
         "url": "https://www.parfumo.com/Perfumes/liis/bo",
         "longevity": 7.2,
         "sillage": 6.4,
-        "votes": 274
+        "votes": 274,
+        "occasion": {
+          "Leisure": 0.26,
+          "Daily": 0.25,
+          "Business": 0.19,
+          "Evening": 0.18,
+          "Night Out": 0.12
+        },
+        "occasionVotes": 395
+      },
+      "like": {
+        "season": {
+          "winter": 0.352,
+          "spring": 0.161,
+          "summer": 0.066,
+          "fall": 0.421
+        },
+        "night": 0.489
+      },
+      "performance": {
+        "longevity": 3.1802,
+        "sillage": 1.8729,
+        "votes": 405
       }
     },
     {
@@ -574,7 +741,28 @@
         "url": "https://www.parfumo.com/Perfumes/scout-dixon-west/coney-island-baby",
         "longevity": 5.9,
         "sillage": 5.8,
-        "votes": 22
+        "votes": 22,
+        "occasion": {
+          "Night Out": 0.406,
+          "Leisure": 0.238,
+          "Evening": 0.238,
+          "Daily": 0.119
+        },
+        "occasionVotes": 17
+      },
+      "like": {
+        "season": {
+          "winter": 0.382,
+          "spring": 0.163,
+          "summer": 0.077,
+          "fall": 0.378
+        },
+        "night": 0.612
+      },
+      "performance": {
+        "longevity": 3.177,
+        "sillage": 1.9813,
+        "votes": 107
       }
     },
     {
@@ -651,7 +839,30 @@
         "url": "https://www.parfumo.com/Perfumes/universal-flowering/daddy",
         "longevity": 7.2,
         "sillage": 5.8,
-        "votes": 14
+        "votes": 14,
+        "occasion": {
+          "Daily": 0.28,
+          "Evening": 0.24,
+          "Leisure": 0.17,
+          "Night Out": 0.14,
+          "Business": 0.1,
+          "Sport": 0.07
+        },
+        "occasionVotes": 29
+      },
+      "like": {
+        "season": {
+          "winter": 0.373,
+          "spring": 0.165,
+          "summer": 0.079,
+          "fall": 0.383
+        },
+        "night": 0.502
+      },
+      "performance": {
+        "longevity": 3.4559,
+        "sillage": 2.1045,
+        "votes": 67
       }
     }
   ]
