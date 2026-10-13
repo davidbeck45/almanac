@@ -226,6 +226,25 @@ test('the occasion fit reads on one scale, whatever the collection', () => {
   assert.ok(!['Essence de Blanc', 'Shiyaaka Sky', 'Jake'].includes(outdoors[0].fragrance.name), outdoors[0].fragrance.name);
 });
 
+test('bottles past the scale\'s top keep their order instead of tying at a perfect fit', () => {
+  const office = occasionById('office');
+  const xs = Array.from({ length: 81 }, (_, i) => -0.6 + i * 0.025); // raw fits well past both ends
+  const parts = xs.map(x => occasionPart(x, office));
+  for (let i = 1; i < parts.length; i++) assert.ok(parts[i] > parts[i - 1], `rises at ${xs[i]}`);
+  assert.ok(parts[0] > 0 && parts.at(-1) < 1);
+  // Parfumo's occasion votes carry several owned bottles past the dataset's
+  // 98th percentile; at most one per occasion should read as near-perfect.
+  for (const id of ['casual', 'office', 'date', 'nightout', 'formal', 'outdoors', 'cozy']) {
+    const occasion = occasionById(id);
+    const top = fragrances.filter(f => String(f.id) !== '4310' && occasionPart(occasionRaw(f, occasion), occasion) >= 0.99);
+    assert.ok(top.length <= 1, `${id}: ${top.map(f => f.name).join(', ')}`);
+  }
+  // Amber Empire's date fit (accords and votes) beats Terra's; a hard cap tied them.
+  const date = occasionById('date');
+  const part = name => occasionPart(occasionRaw(fragrances.find(f => f.name === name), date), date);
+  assert.ok(part('Amber Empire') > part('Terra'));
+});
+
 test('scoreOf is the score rank() orders by', () => {
   for (const occasion of [null, occasionById('date')]) {
     for (const r of rank(fragrances, mildFallNight, 'night', { occasion, history: [{ id: fragrances[0].id, date: '2026-09-27', slot: 'night' }], todayISO: '2026-09-28' })) {

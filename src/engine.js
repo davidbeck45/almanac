@@ -329,15 +329,24 @@ export function occasionRaw(frag, occasion) {
   return (total ? sum / total : 0) + perf.longevity + perf.sillage + votedOccasionFit(frag, occasion);
 }
 
-// The occasion fit as a part, 0..1, on one scale for every collection: 0 at
-// the dataset's 2nd percentile for that occasion, 1 at its 98th
+// The occasion fit as a part, 0..1, on one scale for every collection: about
+// 0 at the dataset's 2nd percentile for that occasion, about 1 at its 98th
 // (OCCASION_SCALE, scripts/fit-occasions.mjs). Stretching each list's own
 // min..max instead made any wardrobe's best bottle a perfect fit, blew up
 // small and one-note lists, and let a narrow spread drown out the weather.
+// Within OCCASION_KNEE of either end the part bends toward 0 or 1 instead of
+// stopping there, so bottles past the dataset's range keep their order: the
+// Parfumo votes (votedOccasionFit, which the dataset's bottles lack) carry a
+// few owned bottles past its 98th percentile, and a hard cap tied five of
+// them as perfect date-night fits.
 const FALLBACK_SCALE = [-0.3, 0.5];
+const OCCASION_KNEE = 0.1;
 export function occasionPart(raw, occasion) {
   const [lo, hi] = OCCASION_SCALE[occasion.id] ?? FALLBACK_SCALE;
-  return clamp((raw - lo) / (hi - lo), 0, 1);
+  const x = (raw - lo) / (hi - lo), k = OCCASION_KNEE;
+  if (x > 1 - k) return 1 - k * Math.exp((1 - k - x) / k);
+  if (x < k) return k * Math.exp((x - k) / k);
+  return x;
 }
 
 /**
