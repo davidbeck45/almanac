@@ -1,6 +1,6 @@
 {
   "source": "fragrantica.com, the originals that dupes in data/ are inspired by",
-  "fetched": "2026-10-11",
+  "fetched": "2026-10-12",
   "fragrances": [
     {
       "id": 97924,
@@ -139,6 +139,126 @@
         "longevity": 4.356,
         "sillage": 3.012,
         "votes": 1665
+      },
+      "about": {
+        "value": {
+          "avg": 1.95,
+          "votes": 1559
+        },
+        "owners": {
+          "have": 4727,
+          "had": 556,
+          "want": 8705
+        },
+        "crowdGender": {
+          "lean": 0.37,
+          "votes": 1675
+        },
+        "popularity": {
+          "all": 19169,
+          "recent": 17283
+        },
+        "perfumers": [
+          "Cécile Zarokian"
+        ],
+        "line": "The Essences",
+        "pros": [
+          {
+            "text": "Unique, opulent, and otherworldly character",
+            "up": 243,
+            "down": 12
+          },
+          {
+            "text": "Ideal for winter and cold weather",
+            "up": 217,
+            "down": 2
+          },
+          {
+            "text": "Nuclear performance lasting 24+ hours",
+            "up": 200,
+            "down": 19
+          }
+        ],
+        "cons": [
+          {
+            "text": "Prohibitively high retail price",
+            "up": 215,
+            "down": 19
+          },
+          {
+            "text": "Too heavy for summer heat",
+            "up": 166,
+            "down": 37
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 118549,
+            "up": 566,
+            "down": 81
+          },
+          {
+            "id": 115548,
+            "up": 171,
+            "down": 73
+          },
+          {
+            "id": 132925,
+            "up": 36,
+            "down": 16
+          },
+          {
+            "id": 123008,
+            "up": 40,
+            "down": 25
+          },
+          {
+            "id": 135426,
+            "up": 30,
+            "down": 16
+          }
+        ],
+        "alsoLiked": [
+          103892,
+          54785,
+          40816,
+          68415,
+          100897,
+          84109,
+          39314,
+          64338,
+          62615,
+          30529
+        ],
+        "flags": [
+          "notBlindBuy"
+        ]
+      },
+      "extras": {
+        "value": 1.96,
+        "safe": 43,
+        "keep": 0.046,
+        "lean": 0.37,
+        "now": 99,
+        "like": [
+          118549,
+          115548,
+          132925
+        ],
+        "family": [
+          118549
+        ],
+        "alt": [
+          118549,
+          115548
+        ],
+        "flags": [
+          "notBlindBuy"
+        ],
+        "clones": [
+          118549,
+          115548
+        ]
       }
     },
     {
@@ -241,6 +361,114 @@
         "longevity": 3.3664,
         "sillage": 2.1198,
         "votes": 4421
+      },
+      "about": {
+        "value": {
+          "avg": 2.63,
+          "votes": 4068
+        },
+        "owners": {
+          "have": 15550,
+          "had": 2873,
+          "want": 17430
+        },
+        "crowdGender": {
+          "lean": -0.01,
+          "votes": 5106
+        },
+        "popularity": {
+          "all": 56719,
+          "recent": 19380
+        },
+        "perfumers": [
+          "Mathilde Bijaoui"
+        ],
+        "line": "Parisienne",
+        "pros": [
+          {
+            "text": "Smooth and complex scent",
+            "up": 815,
+            "down": 23
+          },
+          {
+            "text": "Versatile and well-composed fragrance",
+            "up": 731,
+            "down": 18
+          },
+          {
+            "text": "Professional and clean vibe",
+            "up": 676,
+            "down": 33
+          }
+        ],
+        "cons": [],
+        "smellsLike": [
+          {
+            "id": 85097,
+            "up": 1049,
+            "down": 123
+          },
+          {
+            "id": 73645,
+            "up": 588,
+            "down": 93
+          },
+          {
+            "id": 93785,
+            "up": 341,
+            "down": 149
+          },
+          {
+            "id": 100143,
+            "up": 114,
+            "down": 23
+          },
+          {
+            "id": 100016,
+            "up": 110,
+            "down": 32
+          }
+        ],
+        "alsoLiked": [
+          73645,
+          39314,
+          62615,
+          31623,
+          54785,
+          6458,
+          64338,
+          33519,
+          1825,
+          42260
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 2.63,
+        "safe": 52,
+        "keep": 0.075,
+        "lean": -0.01,
+        "now": 99,
+        "like": [
+          85097,
+          73645,
+          93785
+        ],
+        "family": [
+          85097,
+          73645,
+          100143,
+          100016,
+          93674
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": [
+          85097,
+          100143,
+          100016,
+          109902
+        ]
       }
     },
     {
@@ -333,6 +561,125 @@
         "longevity": 3.4959,
         "sillage": 2.1667,
         "votes": 242
+      },
+      "about": {
+        "value": {
+          "avg": 2.04,
+          "votes": 245
+        },
+        "owners": {
+          "have": 1456,
+          "had": 142,
+          "want": 3336
+        },
+        "crowdGender": {
+          "lean": -0.38,
+          "votes": 294
+        },
+        "popularity": {
+          "all": 5595,
+          "recent": 5595
+        },
+        "perfumers": [
+          "Antoine Maisondieu"
+        ],
+        "line": "Herrera Confidential",
+        "pros": [
+          {
+            "text": "Versatile for office and daily wear",
+            "up": 57,
+            "down": 1
+          },
+          {
+            "text": "Year-round wearable signature scent",
+            "up": 52,
+            "down": 3
+          },
+          {
+            "text": "Excellent longevity and strong projection",
+            "up": 46,
+            "down": 2
+          }
+        ],
+        "cons": [
+          {
+            "text": "Extremely difficult to find in stock",
+            "up": 82,
+            "down": 6
+          },
+          {
+            "text": "High price point exceeds many budgets",
+            "up": 41,
+            "down": 5
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 138575,
+            "up": 158,
+            "down": 18
+          },
+          {
+            "id": 139285,
+            "up": 79,
+            "down": 10
+          },
+          {
+            "id": 142219,
+            "up": 15,
+            "down": 0
+          },
+          {
+            "id": 140421,
+            "up": 6,
+            "down": 0
+          },
+          {
+            "id": 141201,
+            "up": 5,
+            "down": 1
+          }
+        ],
+        "alsoLiked": [
+          78574,
+          84224,
+          66097,
+          84119,
+          78658,
+          108421,
+          1021,
+          67370,
+          116224,
+          37602
+        ],
+        "flags": [
+          "hardToFind"
+        ]
+      },
+      "extras": {
+        "value": 2.12,
+        "safe": 33,
+        "keep": 0.033,
+        "lean": -0.38,
+        "now": 92,
+        "like": [
+          138575,
+          139285,
+          142219
+        ],
+        "family": [
+          138575,
+          139285
+        ],
+        "alt": [
+          138575
+        ],
+        "flags": [
+          "hardToFind"
+        ],
+        "clones": [
+          138575
+        ]
       }
     },
     {
@@ -469,6 +816,133 @@
         "longevity": 3.9352,
         "sillage": 2.759,
         "votes": 1415
+      },
+      "about": {
+        "value": {
+          "avg": 1.74,
+          "votes": 1533
+        },
+        "owners": {
+          "have": 5427,
+          "had": 714,
+          "want": 11194
+        },
+        "crowdGender": {
+          "lean": 0.28,
+          "votes": 1573
+        },
+        "popularity": {
+          "all": 24723,
+          "recent": 14217
+        },
+        "perfumers": [
+          "Vincent Ricord"
+        ],
+        "line": "Noble XXI Collection",
+        "pros": [
+          {
+            "text": "Masterfully blended complex scent profile",
+            "up": 154,
+            "down": 6
+          },
+          {
+            "text": "Ideal for cold weather and evenings",
+            "up": 141,
+            "down": 5
+          },
+          {
+            "text": "Smooth transitions between scent stages",
+            "up": 119,
+            "down": 5
+          }
+        ],
+        "cons": [
+          {
+            "text": "Extremely high retail price",
+            "up": 196,
+            "down": 4
+          },
+          {
+            "text": "Lacks versatility for summer use",
+            "up": 94,
+            "down": 21
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 116876,
+            "up": 428,
+            "down": 75
+          },
+          {
+            "id": 92425,
+            "up": 273,
+            "down": 116
+          },
+          {
+            "id": 115637,
+            "up": 182,
+            "down": 48
+          },
+          {
+            "id": 120486,
+            "up": 73,
+            "down": 11
+          },
+          {
+            "id": 117832,
+            "up": 62,
+            "down": 17
+          }
+        ],
+        "alsoLiked": [
+          54785,
+          70789,
+          17786,
+          84109,
+          62615,
+          33514,
+          39314,
+          16939,
+          21548,
+          40816
+        ],
+        "flags": [
+          "notBlindBuy"
+        ]
+      },
+      "extras": {
+        "value": 1.75,
+        "safe": 87,
+        "keep": 0.078,
+        "lean": 0.28,
+        "now": 98,
+        "like": [
+          116876,
+          92425,
+          115637
+        ],
+        "family": [
+          116876,
+          115637,
+          120486,
+          117832
+        ],
+        "alt": [
+          116876,
+          92425,
+          115637
+        ],
+        "flags": [
+          "notBlindBuy"
+        ],
+        "clones": [
+          116876,
+          92425,
+          115637,
+          120486,
+          117832
+        ]
       }
     },
     {
@@ -598,6 +1072,129 @@
         "longevity": 3.5511,
         "sillage": 2.2914,
         "votes": 1949
+      },
+      "about": {
+        "value": {
+          "avg": 1.65,
+          "votes": 2002
+        },
+        "owners": {
+          "have": 6230,
+          "had": 925,
+          "want": 6910
+        },
+        "crowdGender": {
+          "lean": 0.79,
+          "votes": 2040
+        },
+        "popularity": {
+          "all": 20881,
+          "recent": 10733
+        },
+        "perfumers": [],
+        "line": "Aventus",
+        "pros": [
+          {
+            "text": "Masculine, sophisticated, and domineering character",
+            "up": 115,
+            "down": 3
+          },
+          {
+            "text": "Intense, juicy pineapple and citrus opening",
+            "up": 100,
+            "down": 5
+          },
+          {
+            "text": "Better performance than current Aventus batches",
+            "up": 83,
+            "down": 2
+          }
+        ],
+        "cons": [
+          {
+            "text": "Extremely high price for the volume",
+            "up": 103,
+            "down": 14
+          },
+          {
+            "text": "Limited edition status drives artificial hype",
+            "up": 62,
+            "down": 9
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 98689,
+            "up": 1082,
+            "down": 261
+          },
+          {
+            "id": 93272,
+            "up": 668,
+            "down": 133
+          },
+          {
+            "id": 9828,
+            "up": 660,
+            "down": 214
+          },
+          {
+            "id": 106403,
+            "up": 372,
+            "down": 120
+          },
+          {
+            "id": 121661,
+            "up": 225,
+            "down": 23
+          }
+        ],
+        "alsoLiked": [
+          17,
+          44174,
+          25967,
+          50757,
+          472,
+          39314,
+          68415,
+          67370,
+          9828,
+          70424
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 1.66,
+        "safe": 51,
+        "keep": 0.044,
+        "lean": 0.79,
+        "now": 97,
+        "like": [
+          98689,
+          93272,
+          9828
+        ],
+        "family": [
+          98689,
+          93272,
+          9828,
+          106403,
+          121661,
+          106624
+        ],
+        "alt": [
+          98689,
+          93272,
+          106403
+        ],
+        "flags": [],
+        "clones": [
+          98689,
+          121661,
+          93955,
+          100239,
+          110343
+        ]
       }
     },
     {
@@ -707,6 +1304,129 @@
         "longevity": 3.5306,
         "sillage": 2.332,
         "votes": 2967
+      },
+      "about": {
+        "value": {
+          "avg": 2.04,
+          "votes": 2936
+        },
+        "owners": {
+          "have": 10898,
+          "had": 2096,
+          "want": 13237
+        },
+        "crowdGender": {
+          "lean": -0.06,
+          "votes": 3518
+        },
+        "popularity": {
+          "all": 37558,
+          "recent": 24204
+        },
+        "perfumers": [
+          "Jordi Fernández"
+        ],
+        "line": null,
+        "pros": [
+          {
+            "text": "Inviting, fresh, and uplifting character",
+            "up": 282,
+            "down": 10
+          },
+          {
+            "text": "Modern, clean, and polished scent profile",
+            "up": 258,
+            "down": 10
+          },
+          {
+            "text": "Highly effective compliment getter",
+            "up": 197,
+            "down": 17
+          }
+        ],
+        "cons": [
+          {
+            "text": "Extremely high price for the profile",
+            "up": 224,
+            "down": 43
+          },
+          {
+            "text": "Driven by excessive social media hype",
+            "up": 111,
+            "down": 107
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 105076,
+            "up": 396,
+            "down": 58
+          },
+          {
+            "id": 108244,
+            "up": 410,
+            "down": 127
+          },
+          {
+            "id": 101314,
+            "up": 456,
+            "down": 242
+          },
+          {
+            "id": 110848,
+            "up": 267,
+            "down": 73
+          },
+          {
+            "id": 136382,
+            "up": 143,
+            "down": 55
+          }
+        ],
+        "alsoLiked": [
+          66097,
+          75930,
+          9828,
+          81423,
+          67370,
+          44174,
+          54785,
+          39314,
+          70424,
+          84109
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 2.05,
+        "safe": 43,
+        "keep": 0.012,
+        "lean": -0.06,
+        "now": 100,
+        "like": [
+          105076,
+          108244,
+          110848
+        ],
+        "family": [
+          105076,
+          108244,
+          110848,
+          136382,
+          122026
+        ],
+        "alt": [
+          105076,
+          108244,
+          136382
+        ],
+        "flags": [],
+        "clones": [
+          105076,
+          108244,
+          115528,
+          111155
+        ]
       }
     },
     {
@@ -807,6 +1527,130 @@
         "longevity": 3.3456,
         "sillage": 2.2196,
         "votes": 1302
+      },
+      "about": {
+        "value": {
+          "avg": 1.97,
+          "votes": 1175
+        },
+        "owners": {
+          "have": 4821,
+          "had": 1233,
+          "want": 6766
+        },
+        "crowdGender": {
+          "lean": -0.53,
+          "votes": 1344
+        },
+        "popularity": {
+          "all": 21405,
+          "recent": 7410
+        },
+        "perfumers": [
+          "Alienor Massenet"
+        ],
+        "line": "Secret Teas and Spices",
+        "pros": [
+          {
+            "text": "Beautiful presentation bottle",
+            "up": 171,
+            "down": 2
+          },
+          {
+            "text": "Realistic blackcurrant and toasted pastry aroma",
+            "up": 147,
+            "down": 18
+          },
+          {
+            "text": "Refillable bottle",
+            "up": 95,
+            "down": 4
+          }
+        ],
+        "cons": [
+          {
+            "text": "Expensive",
+            "up": 176,
+            "down": 10
+          },
+          {
+            "text": "Not blind buy safe",
+            "up": 121,
+            "down": 27
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 75874,
+            "up": 176,
+            "down": 38
+          },
+          {
+            "id": 75078,
+            "up": 116,
+            "down": 33
+          },
+          {
+            "id": 121449,
+            "up": 75,
+            "down": 9
+          },
+          {
+            "id": 87157,
+            "up": 98,
+            "down": 33
+          },
+          {
+            "id": 122851,
+            "up": 49,
+            "down": 10
+          }
+        ],
+        "alsoLiked": [
+          28182,
+          66097,
+          43871,
+          78656,
+          54785,
+          6458,
+          46066,
+          15555,
+          3575,
+          31623
+        ],
+        "flags": [
+          "notBlindBuy"
+        ]
+      },
+      "extras": {
+        "value": 1.99,
+        "safe": 21,
+        "keep": 0.056,
+        "lean": -0.53,
+        "now": 95,
+        "like": [
+          75874,
+          75078,
+          121449
+        ],
+        "family": [
+          75874,
+          75078,
+          121449,
+          87157,
+          122851
+        ],
+        "alt": [
+          121449,
+          87157,
+          17882
+        ],
+        "flags": [
+          "notBlindBuy"
+        ],
+        "clones": [
+          121449
+        ]
       }
     },
     {
@@ -904,6 +1748,127 @@
         "longevity": 3.8839,
         "sillage": 2.7008,
         "votes": 6102
+      },
+      "about": {
+        "value": {
+          "avg": 2.9,
+          "votes": 5810
+        },
+        "owners": {
+          "have": 20307,
+          "had": 3258,
+          "want": 26918
+        },
+        "crowdGender": {
+          "lean": -0.63,
+          "votes": 6447
+        },
+        "popularity": {
+          "all": 76205,
+          "recent": 29043
+        },
+        "perfumers": [
+          "Silvia Martinelli"
+        ],
+        "line": null,
+        "pros": [
+          {
+            "text": "Performance is great",
+            "up": 1093,
+            "down": 55
+          },
+          {
+            "text": "High-quality, rich gourmand",
+            "up": 1064,
+            "down": 97
+          },
+          {
+            "text": "Has a unique condensed milk scent",
+            "up": 908,
+            "down": 101
+          }
+        ],
+        "cons": [
+          {
+            "text": "May be too sweet for some people's liking",
+            "up": 882,
+            "down": 151
+          },
+          {
+            "text": "Best suited for colder seasons",
+            "up": 639,
+            "down": 194
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 93628,
+            "up": 1709,
+            "down": 183
+          },
+          {
+            "id": 88999,
+            "up": 387,
+            "down": 120
+          },
+          {
+            "id": 102358,
+            "up": 304,
+            "down": 43
+          },
+          {
+            "id": 95955,
+            "up": 392,
+            "down": 194
+          },
+          {
+            "id": 98691,
+            "up": 189,
+            "down": 47
+          }
+        ],
+        "alsoLiked": [
+          11801,
+          93628,
+          56062,
+          84951,
+          99254,
+          4322,
+          30529,
+          1825,
+          219,
+          83483
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 2.9,
+        "safe": 17,
+        "keep": 0.084,
+        "lean": -0.63,
+        "now": 100,
+        "like": [
+          93628,
+          88999,
+          102358
+        ],
+        "family": [
+          93628,
+          88999,
+          102358,
+          98691,
+          102822
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": [
+          93628,
+          102358,
+          98691,
+          105184,
+          119815,
+          101215
+        ]
       }
     },
     {
@@ -1017,6 +1982,124 @@
         "longevity": 3.1918,
         "sillage": 2.0819,
         "votes": 2295
+      },
+      "about": {
+        "value": {
+          "avg": 3.03,
+          "votes": 2218
+        },
+        "owners": {
+          "have": 8361,
+          "had": 1382,
+          "want": 10814
+        },
+        "crowdGender": {
+          "lean": 0.08,
+          "votes": 2547
+        },
+        "popularity": {
+          "all": 28614,
+          "recent": 17310
+        },
+        "perfumers": [
+          "Hamid Merati-Kashani"
+        ],
+        "line": null,
+        "pros": [
+          {
+            "text": "Versatile, inoffensive unisex signature",
+            "up": 255,
+            "down": 4
+          },
+          {
+            "text": "Smooth transition from fresh to creamy",
+            "up": 231,
+            "down": 2
+          },
+          {
+            "text": "Uplifting, happy, and playful character",
+            "up": 215,
+            "down": 3
+          }
+        ],
+        "cons": [
+          {
+            "text": "Projection fades to intimate scent bubble",
+            "up": 101,
+            "down": 55
+          },
+          {
+            "text": "Inconsistent longevity across skin types",
+            "up": 70,
+            "down": 34
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 75930,
+            "up": 662,
+            "down": 252
+          },
+          {
+            "id": 41222,
+            "up": 422,
+            "down": 246
+          },
+          {
+            "id": 122274,
+            "up": 186,
+            "down": 21
+          },
+          {
+            "id": 125391,
+            "up": 175,
+            "down": 16
+          },
+          {
+            "id": 70839,
+            "up": 248,
+            "down": 160
+          }
+        ],
+        "alsoLiked": [
+          75930,
+          67370,
+          54785,
+          66097,
+          39314,
+          50757,
+          44174,
+          44120,
+          30529,
+          70424
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 3.03,
+        "safe": 81,
+        "keep": 0.032,
+        "lean": 0.08,
+        "now": 99,
+        "like": [
+          75930,
+          122274,
+          125391
+        ],
+        "family": [
+          75930,
+          122274,
+          125391,
+          125861,
+          96141
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": [
+          122274,
+          125391,
+          125861
+        ]
       }
     },
     {
@@ -1108,6 +2191,123 @@
         "longevity": 2.7143,
         "sillage": 1.7748,
         "votes": 555
+      },
+      "about": {
+        "value": {
+          "avg": 1.62,
+          "votes": 573
+        },
+        "owners": {
+          "have": 1857,
+          "had": 290,
+          "want": 4275
+        },
+        "crowdGender": {
+          "lean": 0.08,
+          "votes": 617
+        },
+        "popularity": {
+          "all": 9119,
+          "recent": 6894
+        },
+        "perfumers": [
+          "Thierry Wasser"
+        ],
+        "line": "L'Art & La Matière",
+        "pros": [
+          {
+            "text": "Vibrant spring and summer staple",
+            "up": 99,
+            "down": 1
+          },
+          {
+            "text": "Smooth, non-synthetic composition",
+            "up": 91,
+            "down": 2
+          },
+          {
+            "text": "Invigorating mint and citrus opening",
+            "up": 87,
+            "down": 1
+          }
+        ],
+        "cons": [
+          {
+            "text": "Extremely high price for simple scent",
+            "up": 94,
+            "down": 17
+          },
+          {
+            "text": "Disappointing longevity for an EDP",
+            "up": 75,
+            "down": 8
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 137096,
+            "up": 154,
+            "down": 25
+          },
+          {
+            "id": 42250,
+            "up": 71,
+            "down": 17
+          },
+          {
+            "id": 139667,
+            "up": 30,
+            "down": 2
+          },
+          {
+            "id": 10244,
+            "up": 77,
+            "down": 71
+          },
+          {
+            "id": 708,
+            "up": 37,
+            "down": 32
+          }
+        ],
+        "alsoLiked": [
+          40345,
+          75930,
+          67370,
+          81423,
+          66097,
+          70424,
+          53947,
+          54785,
+          9828,
+          1021
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 1.67,
+        "safe": 79,
+        "keep": 0.074,
+        "lean": 0.08,
+        "now": 94,
+        "like": [
+          137096,
+          42250,
+          139667
+        ],
+        "family": [
+          137096,
+          42250,
+          139667
+        ],
+        "alt": [
+          137096,
+          42250
+        ],
+        "flags": [],
+        "clones": [
+          137096
+        ]
       }
     },
     {
@@ -1206,6 +2406,118 @@
         "longevity": 4.1302,
         "sillage": 3.0125,
         "votes": 2265
+      },
+      "about": {
+        "value": {
+          "avg": 2.4,
+          "votes": 1889
+        },
+        "owners": {
+          "have": 6806,
+          "had": 1443,
+          "want": 7898
+        },
+        "crowdGender": {
+          "lean": -0.48,
+          "votes": 2216
+        },
+        "popularity": {
+          "all": 25931,
+          "recent": 7846
+        },
+        "perfumers": [],
+        "line": "The Carnal Blends Collection",
+        "pros": [
+          {
+            "text": "Exceptional performance with beast-mode longevity.",
+            "up": 301,
+            "down": 15
+          },
+          {
+            "text": "Deep, seductive rose with impressive projection.",
+            "up": 298,
+            "down": 12
+          },
+          {
+            "text": "Powerful sillage; requires very few sprays.",
+            "up": 257,
+            "down": 34
+          }
+        ],
+        "cons": [
+          {
+            "text": "Dominant rose profile can feel overwhelming.",
+            "up": 180,
+            "down": 48
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 43871,
+            "up": 963,
+            "down": 657
+          },
+          {
+            "id": 83513,
+            "up": 299,
+            "down": 42
+          },
+          {
+            "id": 95613,
+            "up": 46,
+            "down": 10
+          },
+          {
+            "id": 107860,
+            "up": 38,
+            "down": 7
+          },
+          {
+            "id": 96604,
+            "up": 34,
+            "down": 5
+          }
+        ],
+        "alsoLiked": [
+          30352,
+          50370,
+          43871,
+          54785,
+          45977,
+          40816,
+          30529,
+          66097,
+          30989,
+          39314
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 2.41,
+        "safe": 60,
+        "keep": 0.056,
+        "lean": -0.48,
+        "now": 95,
+        "like": [
+          83513,
+          95613,
+          107860
+        ],
+        "family": [
+          83513,
+          95613,
+          107860,
+          96604
+        ],
+        "alt": [
+          83513,
+          95613
+        ],
+        "flags": [],
+        "clones": [
+          83513,
+          95613
+        ]
       }
     },
     {
@@ -1306,6 +2618,111 @@
         "longevity": 3.4645,
         "sillage": 2.0946,
         "votes": 3476
+      },
+      "about": {
+        "value": {
+          "avg": 2.1,
+          "votes": 3417
+        },
+        "owners": {
+          "have": 13432,
+          "had": 2652,
+          "want": 15023
+        },
+        "crowdGender": {
+          "lean": -0.35,
+          "votes": 3978
+        },
+        "popularity": {
+          "all": 46155,
+          "recent": 20600
+        },
+        "perfumers": [],
+        "line": "The Hedonist",
+        "pros": [
+          {
+            "text": "Clean and fresh scent",
+            "up": 751,
+            "down": 16
+          },
+          {
+            "text": "Great for summer",
+            "up": 614,
+            "down": 16
+          },
+          {
+            "text": "Exceptional longevity and consistent sillage",
+            "up": 487,
+            "down": 62
+          }
+        ],
+        "cons": [],
+        "smellsLike": [
+          {
+            "id": 91361,
+            "up": 160,
+            "down": 40
+          },
+          {
+            "id": 98348,
+            "up": 215,
+            "down": 112
+          },
+          {
+            "id": 99849,
+            "up": 142,
+            "down": 68
+          },
+          {
+            "id": 96606,
+            "up": 73,
+            "down": 21
+          },
+          {
+            "id": 98002,
+            "up": 86,
+            "down": 42
+          }
+        ],
+        "alsoLiked": [
+          43871,
+          67370,
+          54785,
+          76580,
+          50351,
+          39314,
+          6458,
+          25529,
+          57038,
+          30529
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 2.1,
+        "safe": 59,
+        "keep": 0.046,
+        "lean": -0.35,
+        "now": 99,
+        "like": [
+          91361,
+          99849,
+          96606
+        ],
+        "family": [
+          91361,
+          96606,
+          121577
+        ],
+        "alt": [
+          91361,
+          99849,
+          98002
+        ],
+        "flags": [],
+        "clones": [
+          99849
+        ]
       }
     },
     {
@@ -1410,6 +2827,119 @@
         "longevity": 3.7333,
         "sillage": 2.3422,
         "votes": 1923
+      },
+      "about": {
+        "value": {
+          "avg": 2.25,
+          "votes": 1876
+        },
+        "owners": {
+          "have": 6422,
+          "had": 1417,
+          "want": 8027
+        },
+        "crowdGender": {
+          "lean": 0.08,
+          "votes": 2324
+        },
+        "popularity": {
+          "all": 25462,
+          "recent": 9814
+        },
+        "perfumers": [],
+        "line": "The Hedonist",
+        "pros": [
+          {
+            "text": "Therapeutic and calming woodiness",
+            "up": 442,
+            "down": 12
+          },
+          {
+            "text": "Perfectly balanced unisex scent profile",
+            "up": 393,
+            "down": 19
+          },
+          {
+            "text": "Excellent longevity and scent trail",
+            "up": 335,
+            "down": 18
+          }
+        ],
+        "cons": [
+          {
+            "text": "Expensive price point",
+            "up": 382,
+            "down": 41
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 89454,
+            "up": 788,
+            "down": 79
+          },
+          {
+            "id": 89762,
+            "up": 185,
+            "down": 60
+          },
+          {
+            "id": 114754,
+            "up": 68,
+            "down": 20
+          },
+          {
+            "id": 28702,
+            "up": 22,
+            "down": 15
+          },
+          {
+            "id": 105611,
+            "up": 7,
+            "down": 5
+          }
+        ],
+        "alsoLiked": [
+          50351,
+          39314,
+          1826,
+          54785,
+          70424,
+          9828,
+          66097,
+          31623,
+          30529,
+          53641
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 2.26,
+        "safe": 57,
+        "keep": 0.005,
+        "lean": 0.08,
+        "now": 96,
+        "like": [
+          89454,
+          89762,
+          114754
+        ],
+        "family": [
+          89454,
+          89762,
+          114754
+        ],
+        "alt": [
+          89454,
+          89762,
+          114754
+        ],
+        "flags": [],
+        "clones": [
+          89454,
+          89762,
+          114754
+        ]
       }
     },
     {
@@ -1512,6 +3042,128 @@
         "longevity": 4.0246,
         "sillage": 2.8256,
         "votes": 19363
+      },
+      "about": {
+        "value": {
+          "avg": 3.06,
+          "votes": 18656
+        },
+        "owners": {
+          "have": 44522,
+          "had": 5238,
+          "want": 27136
+        },
+        "crowdGender": {
+          "lean": 0.67,
+          "votes": 19673
+        },
+        "popularity": {
+          "all": 103754,
+          "recent": 40200
+        },
+        "perfumers": [
+          "Quentin Bisch"
+        ],
+        "line": "Le Male Collection",
+        "pros": [
+          {
+            "text": "Elite performance in cold weather",
+            "up": 569,
+            "down": 8
+          },
+          {
+            "text": "Major compliment-getting masculine scent",
+            "up": 503,
+            "down": 22
+          },
+          {
+            "text": "Striking, collector-quality golden bottle",
+            "up": 477,
+            "down": 13
+          }
+        ],
+        "cons": [
+          {
+            "text": "Too heavy for summer heat",
+            "up": 521,
+            "down": 41
+          },
+          {
+            "text": "Too loud for conservative offices",
+            "up": 403,
+            "down": 95
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 97995,
+            "up": 1175,
+            "down": 91
+          },
+          {
+            "id": 61856,
+            "up": 1960,
+            "down": 1229
+          },
+          {
+            "id": 95265,
+            "up": 641,
+            "down": 93
+          },
+          {
+            "id": 101529,
+            "up": 738,
+            "down": 194
+          },
+          {
+            "id": 110808,
+            "up": 434,
+            "down": 45
+          }
+        ],
+        "alsoLiked": [
+          30529,
+          52802,
+          65414,
+          430,
+          30947,
+          75805,
+          16657,
+          30499,
+          61856,
+          55785
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 3.06,
+        "safe": 80,
+        "keep": 0.069,
+        "lean": 0.67,
+        "now": 100,
+        "like": [
+          97995,
+          95265,
+          101529
+        ],
+        "family": [
+          97995,
+          95265,
+          101529,
+          110808,
+          102026,
+          100252
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": [
+          97995,
+          95265,
+          110808,
+          102026,
+          100252,
+          103482
+        ]
       }
     },
     {
@@ -1616,6 +3268,114 @@
         "longevity": 3.6635,
         "sillage": 2.3512,
         "votes": 8331
+      },
+      "about": {
+        "value": {
+          "avg": 1.85,
+          "votes": 8529
+        },
+        "owners": {
+          "have": 26346,
+          "had": 2826,
+          "want": 31321
+        },
+        "crowdGender": {
+          "lean": 0.4,
+          "votes": 8771
+        },
+        "popularity": {
+          "all": 82523,
+          "recent": 46730
+        },
+        "perfumers": [
+          "Jacques Cavallier Belletrud"
+        ],
+        "line": "Les Parfums Louis Vuitton",
+        "pros": [
+          {
+            "text": "Fresh, inviting citrus and tea scent",
+            "up": 2415,
+            "down": 32
+          },
+          {
+            "text": "Bright, uplifting, and antidepressant quality",
+            "up": 2227,
+            "down": 44
+          },
+          {
+            "text": "Outstanding longevity for a fresh fragrance",
+            "up": 1939,
+            "down": 176
+          }
+        ],
+        "cons": [
+          {
+            "text": "Expensive luxury price point",
+            "up": 2708,
+            "down": 177
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 122037,
+            "up": 686,
+            "down": 24
+          },
+          {
+            "id": 99815,
+            "up": 744,
+            "down": 320
+          },
+          {
+            "id": 79102,
+            "up": 1176,
+            "down": 873
+          },
+          {
+            "id": 107084,
+            "up": 882,
+            "down": 695
+          },
+          {
+            "id": 96482,
+            "up": 1012,
+            "down": 872
+          }
+        ],
+        "alsoLiked": [
+          53947,
+          81423,
+          75930,
+          25967,
+          49751,
+          70424,
+          50757,
+          44174,
+          39314,
+          9828
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 1.86,
+        "safe": 88,
+        "keep": 0.114,
+        "lean": 0.4,
+        "now": 100,
+        "like": [
+          122037,
+          99815
+        ],
+        "family": [
+          122037
+        ],
+        "alt": [
+          99815
+        ],
+        "flags": [],
+        "clones": [
+          99815
+        ]
       }
     },
     {
@@ -1728,6 +3488,128 @@
         "longevity": 3.8069,
         "sillage": 2.4785,
         "votes": 6339
+      },
+      "about": {
+        "value": {
+          "avg": 2.22,
+          "votes": 6435
+        },
+        "owners": {
+          "have": 18116,
+          "had": 2565,
+          "want": 24380
+        },
+        "crowdGender": {
+          "lean": 0.33,
+          "votes": 7234
+        },
+        "popularity": {
+          "all": 64775,
+          "recent": 31518
+        },
+        "perfumers": [
+          "Hamid Merati-Kashani",
+          "Ilias Ermenidis"
+        ],
+        "line": null,
+        "pros": [
+          {
+            "text": "Smooth, high-quality bourbon vanilla profile",
+            "up": 360,
+            "down": 7
+          },
+          {
+            "text": "Perfect for cold weather and winter",
+            "up": 328,
+            "down": 4
+          },
+          {
+            "text": "Mass-pleasing with high compliment potential",
+            "up": 330,
+            "down": 11
+          }
+        ],
+        "cons": [
+          {
+            "text": "Too sweet for hot summer days",
+            "up": 325,
+            "down": 43
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 94713,
+            "up": 2813,
+            "down": 125
+          },
+          {
+            "id": 98242,
+            "up": 317,
+            "down": 65
+          },
+          {
+            "id": 106802,
+            "up": 288,
+            "down": 36
+          },
+          {
+            "id": 123526,
+            "up": 243,
+            "down": 41
+          },
+          {
+            "id": 109081,
+            "up": 190,
+            "down": 23
+          }
+        ],
+        "alsoLiked": [
+          52802,
+          62615,
+          21548,
+          16939,
+          30529,
+          1825,
+          30499,
+          81642,
+          61856,
+          31623
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 2.23,
+        "safe": 54,
+        "keep": 0.05,
+        "lean": 0.33,
+        "now": 100,
+        "like": [
+          94713,
+          98242,
+          106802
+        ],
+        "family": [
+          94713,
+          98242,
+          106802,
+          123526,
+          109081,
+          96320
+        ],
+        "alt": [
+          94713,
+          98242,
+          106802
+        ],
+        "flags": [],
+        "clones": [
+          94713,
+          106802,
+          98242,
+          123526,
+          109081,
+          96320
+        ]
       }
     },
     {
@@ -1846,6 +3728,121 @@
         "longevity": 3.7707,
         "sillage": 2.5942,
         "votes": 12107
+      },
+      "about": {
+        "value": {
+          "avg": 2.35,
+          "votes": 10477
+        },
+        "owners": {
+          "have": 35108,
+          "had": 5875,
+          "want": 32082
+        },
+        "crowdGender": {
+          "lean": 0.6,
+          "votes": 11190
+        },
+        "popularity": {
+          "all": 103203,
+          "recent": 28958
+        },
+        "perfumers": [
+          "Hamid Merati-Kashani"
+        ],
+        "line": null,
+        "pros": [
+          {
+            "text": "Well-crafted fragrance",
+            "up": 2050,
+            "down": 63
+          },
+          {
+            "text": "High mass appeal and compliment factor",
+            "up": 1834,
+            "down": 92
+          },
+          {
+            "text": "Long-lasting scent",
+            "up": 1653,
+            "down": 156
+          }
+        ],
+        "cons": [],
+        "smellsLike": [
+          {
+            "id": 70748,
+            "up": 1658,
+            "down": 178
+          },
+          {
+            "id": 46633,
+            "up": 922,
+            "down": 358
+          },
+          {
+            "id": 66242,
+            "up": 512,
+            "down": 96
+          },
+          {
+            "id": 63711,
+            "up": 411,
+            "down": 66
+          },
+          {
+            "id": 78001,
+            "up": 265,
+            "down": 34
+          }
+        ],
+        "alsoLiked": [
+          68415,
+          50757,
+          5521,
+          61856,
+          1826,
+          17,
+          920,
+          31861,
+          84109,
+          25967
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 2.35,
+        "safe": 85,
+        "keep": 0.14,
+        "lean": 0.6,
+        "now": 100,
+        "like": [
+          70748,
+          46633,
+          66242
+        ],
+        "family": [
+          70748,
+          46633,
+          66242,
+          63711,
+          78001,
+          55525
+        ],
+        "alt": [
+          70748,
+          66242,
+          63711
+        ],
+        "flags": [],
+        "clones": [
+          70748,
+          63711,
+          113924,
+          95630,
+          119178,
+          61291
+        ]
       }
     },
     {
@@ -1949,6 +3946,111 @@
         "longevity": 3.2117,
         "sillage": 2.089,
         "votes": 865
+      },
+      "about": {
+        "value": {
+          "avg": 2.83,
+          "votes": 821
+        },
+        "owners": {
+          "have": 3196,
+          "had": 703,
+          "want": 5009
+        },
+        "crowdGender": {
+          "lean": -0.26,
+          "votes": 1035
+        },
+        "popularity": {
+          "all": 14454,
+          "recent": 8667
+        },
+        "perfumers": [
+          "Jérôme di Marino"
+        ],
+        "line": null,
+        "pros": [
+          {
+            "text": "Fun, juicy watermelon candy opening",
+            "up": 108,
+            "down": 2
+          },
+          {
+            "text": "Unique aquatic-gourmand scent profile",
+            "up": 85,
+            "down": 4
+          },
+          {
+            "text": "Perfect for hot summer days",
+            "up": 84,
+            "down": 5
+          }
+        ],
+        "cons": [],
+        "smellsLike": [
+          {
+            "id": 113595,
+            "up": 327,
+            "down": 26
+          },
+          {
+            "id": 103256,
+            "up": 167,
+            "down": 39
+          },
+          {
+            "id": 135601,
+            "up": 98,
+            "down": 5
+          },
+          {
+            "id": 47255,
+            "up": 58,
+            "down": 32
+          },
+          {
+            "id": 123802,
+            "up": 21,
+            "down": 1
+          }
+        ],
+        "alsoLiked": [
+          84224,
+          67370,
+          81895,
+          30567,
+          40816,
+          81423,
+          54785,
+          84109,
+          75930,
+          66097
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 2.84,
+        "safe": 32,
+        "keep": -0.024,
+        "lean": -0.26,
+        "now": 96,
+        "like": [
+          113595,
+          103256,
+          135601
+        ],
+        "family": [
+          113595,
+          103256,
+          135601
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": [
+          113595,
+          103256,
+          135601
+        ]
       }
     },
     {
@@ -2054,6 +4156,134 @@
         "longevity": 3.8179,
         "sillage": 2.556,
         "votes": 2403
+      },
+      "about": {
+        "value": {
+          "avg": 2.15,
+          "votes": 2398
+        },
+        "owners": {
+          "have": 8305,
+          "had": 1550,
+          "want": 20514
+        },
+        "crowdGender": {
+          "lean": -0.03,
+          "votes": 2842
+        },
+        "popularity": {
+          "all": 48972,
+          "recent": 19071
+        },
+        "perfumers": [
+          "Claire Liégent",
+          "Dominique Ropion"
+        ],
+        "line": "Le Vestiaire des Parfums",
+        "pros": [
+          {
+            "text": "Unisex fragrance",
+            "up": 481,
+            "down": 55
+          },
+          {
+            "text": "Well-balanced sweetness",
+            "up": 453,
+            "down": 41
+          },
+          {
+            "text": "Sophisticated and expensive scent",
+            "up": 370,
+            "down": 30
+          }
+        ],
+        "cons": [
+          {
+            "text": "Expensive price point",
+            "up": 595,
+            "down": 23
+          },
+          {
+            "text": "Extremely difficult to find in many regions",
+            "up": 503,
+            "down": 30
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 99060,
+            "up": 908,
+            "down": 75
+          },
+          {
+            "id": 66238,
+            "up": 605,
+            "down": 105
+          },
+          {
+            "id": 46115,
+            "up": 805,
+            "down": 489
+          },
+          {
+            "id": 84258,
+            "up": 344,
+            "down": 60
+          },
+          {
+            "id": 95389,
+            "up": 501,
+            "down": 255
+          }
+        ],
+        "alsoLiked": [
+          54785,
+          1801,
+          31623,
+          39314,
+          84109,
+          40816,
+          32269,
+          33519,
+          62615,
+          1825
+        ],
+        "flags": [
+          "hardToFind"
+        ]
+      },
+      "extras": {
+        "value": 2.16,
+        "safe": 32,
+        "keep": 0.037,
+        "lean": -0.03,
+        "now": 99,
+        "like": [
+          99060,
+          66238,
+          84258
+        ],
+        "family": [
+          99060,
+          66238,
+          84258,
+          104191,
+          95174,
+          83803
+        ],
+        "alt": [
+          99060,
+          95174,
+          102788
+        ],
+        "flags": [
+          "hardToFind"
+        ],
+        "clones": [
+          99060,
+          102788,
+          103380
+        ]
       }
     }
   ]

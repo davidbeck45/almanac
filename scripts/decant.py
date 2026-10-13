@@ -4,17 +4,21 @@
 The dataset (https://www.kaggle.com/datasets/ledecanteur/fragrantica-perfumes,
 CC BY-NC-SA 4.0) is a scrape of all of Fragrantica, about 140,000 perfumes:
 accords, notes with how strongly voters smell each, season and day/night
-votes, longevity and sillage votes, and "smells like" suggestions with their
-agree/disagree votes. Its season and day/night shares match our own scrapes to
-a fraction of a point.
+votes, longevity and sillage votes, "smells like" suggestions with their
+agree/disagree votes, and what else a page shows: rating, value for money and
+gender votes, owners, popularity, perfumers, the AI summary of its reviews.
+Its season and day/night shares match our own scrapes to a fraction of a point.
 
   python3 scripts/decant.py download          newest version into .cache/decant/v<N>/
-  python3 scripts/decant.py build             data/fragrantica/ from it (the app's search)
+  python3 scripts/decant.py build             data/fragrantica/ from it (search, records, pool, about)
+  python3 scripts/decant.py pool              just pool.json and pool-notes.json
+  python3 scripts/decant.py about             just x/
+  python3 scripts/decant.py extras            data/extras.jsonl for the wardrobe, catalog and originals
   python3 scripts/decant.py similar 31861     what voters say it smells like (a dupe's original)
   python3 scripts/decant.py similar "liquid brun"
   python3 scripts/decant.py dupes             check data/dupes.json, suggest originals for the rest
   python3 scripts/decant.py add originals 9828 ...   lines for data/<stem>.jsonl, no browser
-  python3 scripts/decant.py refresh           newer vote counts into data/*.jsonl
+  python3 scripts/decant.py refresh           newer vote counts into data/*.jsonl, and extras
 
 `download` needs a Kaggle API token in ~/.kaggle/access_token (kaggle.com,
 Settings, API, Create New Token). The raw dump stays in .cache/ (ignored).
@@ -31,12 +35,61 @@ only what it needs:
 - i/<xx>.tsv: the search index, split by the first two letters of each word of
   a bottle's name and brand: id, name, brand, year, season votes; most voted
   first.
+- pool.json: the suggestion pool, bottles with 500+ rating votes plus rising
+  ones (100-499, and 1000+ recent popularity), by brand then name; `cols`
+  holds one array per key, row i of each being bottle i (fromPool in
+  src/fragrantica.js makes engine records of them). Keys: id; n name; b index
+  into `brands`; y year (0 unknown); g gender (f/m/u or ""); r rating x 100;
+  rv rating votes; a indexes into `accords` and w their bar widths (30 + 0.7
+  x strength, whole, as the engine sees them); v as r/'s; l and si longevity
+  and sillage averages x 100 (0 without votes) and lv the fewer of their vote
+  counts; k as r/'s, x 100. Signals: val value for money x 100 (1 overpriced
+  .. 5 great value, few votes leaning to 3.1; 0 unvoted); safe blind-buy
+  safety, the pool percentile of like+love share less 4 x hate share; keep
+  keeper rate (have / (have + had)) over what pages that old keep, per mille;
+  lean crowd gender x 100 (-100 feminine .. 100 masculine); now the pool
+  percentile of recent popularity; like up to 3 bottles voters say it smells
+  like (5+ net votes, 2:1), then any family ones further down its top 6, and
+  fam a bit per like id that's family (30+ agreeing votes, 2.5 x the
+  disagreeing: one scent, for telling a dupe from a new direction); fromPool
+  splits them into extras.like and extras.family. alt up to 3 cheaper
+  alternatives (smells like it, valued 1+ higher); f flag bits, as `flags`
+  names them: discontinued, reformulated, notBlindBuy and hardToFind from AI
+  summary cons more voters agree with than not (discontinued only when said
+  of the bottle itself: not "weaker than the discontinued EDT", nor a guess
+  like "may be discontinued"); brigaded (more than 1.5 ratings per owner with
+  30%+ of them hate or 85%+ love, or more than 5 whatever the spread);
+  polarizing (hate share in the pool's top tenth). `slugs` lists the page
+  slugs slug_of() can't derive; `license`.
+- pool-notes.json: `no`, row for row with the pool: each bottle's 8 strongest
+  notes as [index into `notes` x 4 + tier (0 top, 1 heart, 2 base, 3 flat),
+  votes in tenths of the top note's], in r/'s order.
+- x/<id % 512>.json: {id: about}, for bottles with 30+ rating votes: h rating
+  histogram [hate, dislike, ok, like, love], pv [value average, votes],
+  o [have, had, want], cg [crowd lean, votes], p [all-time, recent
+  popularity], pf perfumers, c line (collection), pr top 3 and co top 2 AI
+  summary pros and cons [text, agree, disagree] (Fragrantica members'
+  summary), sm top 5 smells-like [id, agree, disagree], al top 10 also-liked
+  ids, f flag bits. src/fragrantica.js loadAbout() reads them with the
+  readable keys data/extras.jsonl has.
 - meta.json: dataset version and counts. README.md: source and license.
+
+data/extras.jsonl has one line per bottle in data/collection, catalog and
+originals: the about data with readable keys (sentiment, value, owners,
+crowdGender, popularity, perfumers, line, pros, cons, smellsLike, alsoLiked,
+flags) and `extras`, the pool's signals (value, safe, keep, lean, now, like,
+family, alt, flags) plus `clones`, up to 6 well-priced bottles from other
+brands that voters say smell like it (an original's are its dupe's siblings).
+scripts/build_collection.py joins it.
 """
+import bisect
+import collections
 import gzip
 import json
+import math
 import re
 import shutil
+import statistics
 import sys
 import unicodedata
 import urllib.request
@@ -62,6 +115,75 @@ BAR_FLOOR, BAR_SLOPE = 30, 0.7
 # Note weights are 100 x (votes / the bottle's top note's votes) ^ 1.61 (fitted
 # on 348 notes against our own vote counts); turned back into relative votes.
 NOTE_WEIGHT_POWER = 1.61
+LICENSE = ("CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/): derived from Le Decanteur's "
+           f"Fragrantica dataset (https://www.kaggle.com/datasets/{DATASET}), from Fragrantica members' votes")
+# The suggestion pool: well-voted bottles, plus rising ones (fewer votes, but
+# many people listing them lately: the new releases).
+POOL_MIN_VOTES = 500
+RISING_MIN_VOTES, RISING_MIN_RECENT = 100, 1000
+POOL_NOTES = 8
+# Per-bottle "about" files: bottles with this many rating votes.
+ABOUT_MIN_VOTES = 30
+# Value for money (1 overpriced .. 5 great value) leans toward 3.1 as if 20
+# votes; it matches Fragrantica's AI summaries calling a bottle affordable or
+# overpriced at AUC 0.98.
+VALUE_PRIOR, VALUE_PRIOR_VOTES = 3.1, 20
+# Blind-buy safety: the like + love share minus 4 x the hate share, both
+# leaning toward the pool's medians as if 30 votes. The hate share is the best
+# single predictor of an AI "not a safe blind buy" (AUC 0.73; the rating 0.56).
+APPROVAL_PRIOR, HATE_PRIOR, SHARE_PRIOR_VOTES = 0.72, 0.015, 30
+# Polarizing: a hate share in the pool's top tenth.
+POLARIZING_QUANTILE = 0.9
+# Keeper rate: have / (have + had) over what pages that old keep (newer pages
+# haven't been passed on yet), leaning toward it as if 50 owners.
+KEEP_BUCKET, KEEP_PRIOR_VOTES = 5000, 50
+CROWD_PRIOR_VOTES = 10
+# Cheaper alternatives: for a bottle valued at most 2.6, smells-like bottles
+# (either way round) voted 10+ net and 2:1, with 100+ ratings, valued 1+ higher.
+PRICEY, CHEAPER_BY, ALT_MIN_NET, ALT_MIN_VOTES = 2.6, 1.0, 10, 100
+# Clones: smells-like bottles from other brands voted 20+ net and 2:1, valued 3.8+.
+CLONE_MIN_NET, CLONE_MIN_VALUE = 20, 3.8
+# Family: smells-like links strong enough to call two bottles one scent (30+
+# agreeing votes, 2.5 x the disagreeing), among a bottle's 6 most agreed.
+FAMILY_MIN_UP, FAMILY_RATIO, FAMILY_TOP = 30, 2.5, 6
+FLAGS = ("discontinued", "reformulated", "notBlindBuy", "brigaded", "polarizing", "hardToFind")  # bit i is 1 << i
+# Discontinued, said of the bottle itself in a con. Pros don't count: they
+# praise "an alternative to the discontinued X". Nor do cons with a word before
+# it that makes it another bottle ("weaker than the discontinued EDT", "the
+# original version is discontinued") or a guess ("may be discontinued",
+# "frequently discontinued", "hard to find or discontinued"), or that make it
+# partly so ("in some regions", "discontinuation rumors").
+DISCONTINUED = re.compile(r"discontinu", re.I)
+NOT_ITSELF = re.compile(r"\b(?:alternative|replacement|successor|similar|reminiscent|clone|dupe|substitute|identical|revival|"
+                        r"upgrade|downgrade|refinement|compared|than|unlike|as \w+ as|repackaged|flankers?|original|version|"
+                        r"formula|formulation|packaging)\b", re.I)
+HEDGED = re.compile(r"\b(?:may|might|could|possibl[ey]|probably|potentially|likely(?: to)?|often|frequent(?:ly)?|or|"
+                    r"(?:risk|potential) (?:of|for)(?: \w+){0,2})(?: currently| now)?(?: be| become| being)?\s*$", re.I)
+PARTLY = re.compile(r"discontinu\w*\W+(?:\w+\W+){0,2}?(?:scents|fragrances|favou?rites|classics|rumou?rs|concerns)\b"
+                    r"|\bin (?:some|many|certain|several) (?:regions|markets|countries|areas)\b", re.I)
+# Hard to find: a con about getting the bottle (not samples of it, or a dupe).
+HARD_TO_FIND = re.compile(r"\b(?:hard(?:er)?|difficult|tough|tricky)[\s-]+to[\s-]+(?:find|source|locate|obtain|come by|get hold of)\b"
+                          r"|\b(?:limited|scarce) availability\b", re.I)
+NOT_THE_BOTTLE = re.compile(r"\b(?:samples?|testers?|decants?|dupes?|clones?|alternatives?)\b", re.I)
+
+
+def says_discontinued(text: str) -> bool:
+    m = DISCONTINUED.search(text)
+    return bool(m) and not NOT_ITSELF.search(text[:m.start()]) and not HEDGED.search(text[:m.start()]) and not PARTLY.search(text)
+
+
+# Flags read from AI summary cons more voters agree with than not.
+FLAG_TEXT = {
+    "discontinued": says_discontinued,
+    "reformulated": re.compile(r"reformulat", re.I).search,
+    "notBlindBuy": re.compile(r"blind.?buy", re.I).search,
+    "hardToFind": lambda text: bool(HARD_TO_FIND.search(text)) and not NOT_THE_BOTTLE.search(text),
+}
+# Brigaded: far more ratings than owners with a lopsided spread (review-bombed
+# or meme pages: SpongeBob, Bolsonaro, the Pride editions), or many times more
+# whatever the spread (a brand's rating drive). Louis Vuitton bottles people
+# rate from a tester run 1.5 to 2 ratings per owner with an ordinary spread.
+BRIGADE_RATIO, BRIGADE_HATE, BRIGADE_LOVE, BRIGADE_ANY = 1.5, 0.3, 0.85, 5
 
 
 def kaggle(path: str):
@@ -162,8 +284,13 @@ def write_json(path: Path, body) -> None:
     path.write_text(json.dumps(body, ensure_ascii=False, separators=(",", ":")) + "\n")
 
 
+def dataset() -> dict[int, dict]:
+    """Every bottle with accords (the ones data/fragrantica/r/ has), by id."""
+    return {r["id"]: r for r in records() if r["accords"]}
+
+
 def build() -> None:
-    by_id = {r["id"]: r for r in records() if r["accords"]}
+    by_id = dataset()
     shards, index = {}, {}
     for pid, r in by_id.items():
         shards.setdefault(pid % SHARDS, {})[pid] = row(r, like_shares(r, by_id))
@@ -188,9 +315,334 @@ def build() -> None:
         "bottles": len(by_id),
         "shards": SHARDS,
     })
-    size = sum(len(gzip.compress(p.read_bytes())) for p in OUT.rglob("*.*"))
+    size = sum(len(gzip.compress(p.read_bytes())) for sub in ("r", "i") for p in (OUT / sub).iterdir())
     print(f"{len(by_id)} bottles -> data/fragrantica/ ({len(shards)} record files, {len(index)} index files, {size / 1e6:.1f} MB gzipped)")
-    print("then: node scripts/fit-profiles.mjs --write && npm run build:data && npm test")
+    signals = Signals(by_id)
+    pool(signals)
+    about(signals)
+    print("then: python3 scripts/decant.py extras, node scripts/fit-profiles.mjs --write, npm run build:data, npm test")
+
+
+# ---------- Derived signals: the pool, about files and extras ----------
+
+SENTIMENT = ("hate", "dislike", "ok", "like", "love")
+CROWD = (("female", -1), ("female_leaning", -0.5), ("unisex", 0), ("male_leaning", 0.5), ("male", 1))
+TIERS = ("top", "middle", "base")
+
+
+def histogram(h: dict | None, buckets: int) -> list[int]:
+    counts = [0] * buckets
+    for b in (h or {}).get("histogram", []):
+        counts[b["bucket"] - 1] += b["count"]
+    return counts
+
+
+def votes(r: dict) -> int:
+    """Rating votes, the rating histogram's total."""
+    return total(r["rating"])
+
+
+def popularity(r: dict) -> tuple[int, int]:
+    """Fragrantica's engagement score, all-time and in roughly the last two years."""
+    pop = r.get("popularity") or {}
+    return pop.get("magnitude") or 0, pop.get("recent_magnitude") or 0
+
+
+def in_pool(r: dict) -> bool:
+    n = votes(r)
+    return n >= POOL_MIN_VOTES or (n >= RISING_MIN_VOTES and popularity(r)[1] >= RISING_MIN_RECENT)
+
+
+def value(r: dict) -> float | None:
+    n = total(r.get("price_value"))
+    return (r["price_value"]["average"] * n + VALUE_PRIOR * VALUE_PRIOR_VOTES) / (n + VALUE_PRIOR_VOTES) if n else None
+
+
+def hate_share(h: list[int]) -> float:
+    return (h[0] + SHARE_PRIOR_VOTES * HATE_PRIOR) / (sum(h) + SHARE_PRIOR_VOTES)
+
+
+def safety(h: list[int]) -> float:
+    approval = (h[3] + h[4] + SHARE_PRIOR_VOTES * APPROVAL_PRIOR) / (sum(h) + SHARE_PRIOR_VOTES)
+    return approval - 4 * hate_share(h)
+
+
+def crowd(r: dict) -> tuple[float, int] | None:
+    """The crowd's gender vote, -1 feminine .. +1 masculine (few votes lean to 0), and its count."""
+    cg = r.get("community_gender") or {}
+    n = sum(cg.values())
+    return (sum(cg.get(k, 0) * w for k, w in CROWD) / (n + CROWD_PRIOR_VOTES), n) if n else None
+
+
+def agreed(s: dict, min_net: int) -> bool:
+    """A smells-like vote with min_net more agreeing than not, and twice as many."""
+    return s["up_votes"] - s["down_votes"] >= min_net and s["up_votes"] >= 2 * s["down_votes"]
+
+
+def by_net(items: list[dict]) -> list[dict]:
+    return sorted(items, key=lambda x: -(x["up_votes"] - x["down_votes"]))
+
+
+def slug_of(name: str, brand: str) -> str:
+    """Fragrantica's usual page slug; src/fragrantica.js derives it the same way."""
+    part = lambda s: re.sub(r"[^A-Za-z0-9]+", "-", re.sub(r"[\u0300-\u036f]", "", unicodedata.normalize("NFD", s))).strip("-")
+    return f"{part(brand)}/{part(name)}"
+
+
+def top_notes(r: dict) -> list[tuple[int, str, int]]:
+    """A bottle's strongest notes as (tier, name, weight), in r/'s order; a top
+    note counts 0.7 of its weight in the choice. Tiers 0-2 top, heart, base; 3 flat."""
+    tiered, flat = r["notes"]["tiered"], r["notes"]["flat"]
+    notes = [(t, n["name"], n["weight"]) for t, k in enumerate(TIERS) for n in tiered.get(k, [])]
+    if not notes:
+        notes = [(3, n["name"], n["weight"]) for n in flat]
+    keep = set(sorted(range(len(notes)), key=lambda i: -notes[i][2] * (0.7 if notes[i][0] == 0 else 1))[:POOL_NOTES])
+    return [n for i, n in enumerate(notes) if i in keep]
+
+
+class Signals:
+    """What the pool, about files and extras derive from a bottle's votes,
+    with percentiles measured against the pool."""
+
+    def __init__(self, by_id: dict[int, dict]):
+        self.by_id = by_id
+        kept = {}  # what pages that old keep: the median over bottles with 100+ ratings and 50+ owners
+        for r in by_id.values():
+            rel = r.get("relation") or {}
+            owners = rel.get("have", 0) + rel.get("had", 0)
+            if votes(r) >= 100 and owners >= 50:
+                kept.setdefault(r["id"] // KEEP_BUCKET, []).append(rel["have"] / owners)
+        self.kept = {age: statistics.median(shares) for age, shares in kept.items()}
+        self.kept_overall = statistics.median(self.kept.values())
+        # Bottle id -> the bottles voters say smell like it, the other way round.
+        self.reverse = {}
+        for o in by_id.values():
+            for s in o["similar"]["reminds_me_of"]:
+                if agreed(s, ALT_MIN_NET):
+                    self.reverse.setdefault(s["id"], []).append({**s, "id": o["id"]})
+        self.pool = sorted(filter(in_pool, by_id.values()), key=lambda r: (-popularity(r)[0], r["id"]))
+        self.safeties = sorted(safety(histogram(r["rating"], 5)) for r in self.pool)
+        self.recents = sorted(math.log1p(popularity(r)[1]) for r in self.pool)
+        hates = sorted(hate_share(histogram(r["rating"], 5)) for r in self.pool)
+        self.polarizing = hates[int(POLARIZING_QUANTILE * len(hates))]
+
+    @staticmethod
+    def percentile(ordered: list[float], x: float) -> int:
+        return round(100 * bisect.bisect_left(ordered, x) / len(ordered))
+
+    def keep(self, r: dict) -> float | None:
+        rel = r.get("relation") or {}
+        owners = rel.get("have", 0) + rel.get("had", 0)
+        if not owners:
+            return None
+        e = self.kept.get(r["id"] // KEEP_BUCKET, self.kept_overall)
+        return (rel["have"] + KEEP_PRIOR_VOTES * e) / (owners + KEEP_PRIOR_VOTES) - e
+
+    def agreed_like(self, r: dict) -> list[dict]:
+        """Its smells-like votes voters agree with (5+ net, 2:1), most agreed first."""
+        return [s for s in by_net(r["similar"]["reminds_me_of"]) if agreed(s, 5) and s["id"] in self.by_id]
+
+    def like(self, r: dict, n: int = 3) -> list[int]:
+        """The bottles voters most agree it smells like."""
+        return [s["id"] for s in self.agreed_like(r)[:n]]
+
+    def family(self, r: dict) -> list[int]:
+        """The bottles voters say smell like it so strongly they're one scent (dupes, clones, twins)."""
+        return [s["id"] for s in self.agreed_like(r)[:FAMILY_TOP]
+                if s["up_votes"] >= FAMILY_MIN_UP and s["up_votes"] >= FAMILY_RATIO * s["down_votes"]]
+
+    def alternatives(self, r: dict, n: int = 3) -> list[int]:
+        """Cheaper bottles that smell like it: far better value, agreed either way round."""
+        v = value(r)
+        if v is None or v > PRICEY:
+            return []
+        near = {}
+        for s in [*r["similar"]["reminds_me_of"], *self.reverse.get(r["id"], [])]:
+            o = self.by_id.get(s["id"])
+            if (o and s["id"] not in near and agreed(s, ALT_MIN_NET) and votes(o) >= ALT_MIN_VOTES
+                    and (value(o) or 0) >= v + CHEAPER_BY):
+                near[s["id"]] = s
+        return [s["id"] for s in by_net(list(near.values()))][:n]
+
+    def clones(self, r: dict, n: int = 6) -> list[int]:
+        """Well-priced bottles from other brands, released no earlier, that voters say smell like it."""
+        near = {}
+        for s in [*self.reverse.get(r["id"], []), *r["similar"]["reminds_me_of"]]:
+            o = self.by_id.get(s["id"])
+            if (o and s["id"] not in near and agreed(s, CLONE_MIN_NET) and votes(o) >= ALT_MIN_VOTES
+                    and o["brand"] != r["brand"] and (value(o) or 0) >= CLONE_MIN_VALUE
+                    and (not o["year"] or not r["year"] or o["year"] >= r["year"])):
+                near[s["id"]] = s
+        return [s["id"] for s in by_net(list(near.values()))][:n]
+
+    def flags(self, r: dict) -> int:
+        cons = [x["text"] for x in (r.get("ai_summary") or {}).get("cons", []) if x["up_votes"] > x["down_votes"]]
+        on = {name for name, says in FLAG_TEXT.items() if any(says(text) for text in cons)}
+        rel, h = r.get("relation") or {}, histogram(r["rating"], 5)
+        n, owners = sum(h), rel.get("have", 0) + rel.get("had", 0)
+        if n > BRIGADE_RATIO * owners and (n > BRIGADE_ANY * owners or h[0] >= BRIGADE_HATE * n or h[4] >= BRIGADE_LOVE * n):
+            on.add("brigaded")
+        if n and hate_share(h) >= self.polarizing:
+            on.add("polarizing")
+        return sum(1 << i for i, name in enumerate(FLAGS) if name in on)
+
+    def extras(self, r: dict) -> dict:
+        """A bottle's signals as records carry them (`extras`); the pool packs the same numbers."""
+        v, keep, lean, flags = value(r), self.keep(r), crowd(r), self.flags(r)
+        return {
+            "value": round(v, 2) if v is not None else None,
+            "safe": self.percentile(self.safeties, safety(histogram(r["rating"], 5))),
+            "keep": round(keep, 3) if keep is not None else None,
+            "lean": round(lean[0], 2) if lean else None,
+            "now": self.percentile(self.recents, math.log1p(popularity(r)[1])),
+            "like": self.like(r),
+            "family": self.family(r),
+            "alt": self.alternatives(r),
+            "flags": [name for i, name in enumerate(FLAGS) if flags & (1 << i)],
+        }
+
+    def about(self, r: dict) -> dict:
+        """A bottle's about row (data/fragrantica/x/), short keys."""
+        out = {"h": histogram(r["rating"], 5)}
+        if n := total(r.get("price_value")):
+            out["pv"] = [round(r["price_value"]["average"], 2), n]
+        if rel := r.get("relation"):
+            out["o"] = [rel.get("have", 0), rel.get("had", 0), rel.get("want", 0)]
+        if lean := crowd(r):
+            out["cg"] = [round(lean[0], 2), lean[1]]
+        if any(pop := popularity(r)):
+            out["p"] = list(pop)
+        if r.get("perfumers"):
+            out["pf"] = [p["name"] for p in r["perfumers"]]
+        if r.get("collection"):
+            out["c"] = r["collection"]
+        ai = r.get("ai_summary") or {}
+        for key, short, n in (("pros", "pr", 3), ("cons", "co", 2)):
+            items = [x for x in by_net(ai.get(key, [])) if x["up_votes"] > x["down_votes"]][:n]
+            if items:
+                out[short] = [[x["text"], x["up_votes"], x["down_votes"]] for x in items]
+        sims = [s for s in by_net(r["similar"]["reminds_me_of"]) if s["up_votes"] > s["down_votes"] and s["id"] in self.by_id]
+        if sims:
+            out["sm"] = [[s["id"], s["up_votes"], s["down_votes"]] for s in sims[:5]]
+        if also := [s["id"] for s in r["similar"]["also_liked"] if s["id"] in self.by_id][:10]:
+            out["al"] = also
+        if f := self.flags(r):
+            out["f"] = f
+        return out
+
+
+def readable_about(x: dict) -> dict:
+    """An about row with readable keys, as src/fragrantica.js loadAbout() returns it."""
+    out = {"sentiment": dict(zip(SENTIMENT, x["h"]))}
+    if "pv" in x:
+        out["value"] = {"avg": x["pv"][0], "votes": x["pv"][1]}
+    if "o" in x:
+        out["owners"] = dict(zip(("have", "had", "want"), x["o"]))
+    if "cg" in x:
+        out["crowdGender"] = {"lean": x["cg"][0], "votes": x["cg"][1]}
+    if "p" in x:
+        out["popularity"] = {"all": x["p"][0], "recent": x["p"][1]}
+    out["perfumers"] = x.get("pf", [])
+    out["line"] = x.get("c")
+    for short, key in (("pr", "pros"), ("co", "cons")):
+        out[key] = [{"text": t, "up": up, "down": down} for t, up, down in x.get(short, [])]
+    out["smellsLike"] = [{"id": i, "up": up, "down": down} for i, up, down in x.get("sm", [])]
+    out["alsoLiked"] = x.get("al", [])
+    out["flags"] = [name for i, name in enumerate(FLAGS) if x.get("f", 0) & (1 << i)]
+    return out
+
+
+def bar_width(strength: float) -> int:
+    """As src/accords.js barWidth, which rounds halves up (Python's round() goes to even)."""
+    return math.floor(BAR_FLOOR + BAR_SLOPE * strength + 0.5)
+
+
+def gz_size(path: Path) -> int:
+    return len(gzip.compress(path.read_bytes(), 9))
+
+
+def pool(signals: Signals) -> None:
+    """data/fragrantica/pool.json and pool-notes.json: the suggestion pool, one array per key."""
+    by_id = signals.by_id
+    # By brand, then name: flankers sit together, which compresses best.
+    brands = sorted({r["brand"] for r in signals.pool}, key=str.casefold)
+    bottles = sorted(signals.pool, key=lambda r: (r["brand"].casefold(), r["name"].casefold(), r["id"]))
+    accords = [a for a, _ in collections.Counter(a["name"] for r in bottles for a in r["accords"]).most_common()]
+    notes = [n for n, _ in collections.Counter(n for r in bottles for _, n, _ in top_notes(r)).most_common()]
+    brand_ix, accord_ix, note_ix = ({x: i for i, x in enumerate(xs)} for xs in (brands, accords, notes))
+    cols, slugs = {}, {}
+    for r in bottles:
+        if r["slug"] != slug_of(r["name"], r["brand"]):
+            slugs[r["id"]] = r["slug"]
+        x = signals.extras(r)
+        lon, sil = total(r.get("longevity")), total(r.get("sillage"))
+        like = like_shares(r, by_id)
+        # Its smells-like bottles, then any family ones past the top 3; a bit per id marks family.
+        near = x["like"] + [i for i in x["family"] if i not in x["like"]]
+        for key, val in (
+            ("id", r["id"]), ("n", r["name"]), ("b", brand_ix[r["brand"]]), ("y", r["year"] or 0),
+            ("g", GENDER.get(r["gender"], "")), ("r", round(r["rating"]["average"] * 100)), ("rv", votes(r)),
+            ("a", [accord_ix[a["name"]] for a in r["accords"]]),
+            # The engine sees accords as whole bar widths, 30 + 0.7 x strength, so those are kept exactly.
+            ("w", [bar_width(a["strength"]) for a in r["accords"]]),
+            ("v", [*(r["seasons"][s] for s in SEASONS), r["daypart"]["day"], r["daypart"]["night"]] if season_votes(r) else []),
+            ("l", round(r["longevity"]["average"] * 100) if lon and sil else 0),
+            ("si", round(r["sillage"]["average"] * 100) if lon and sil else 0),
+            ("lv", min(lon, sil)),
+            ("k", [round(s * 100) for s in like] if like else []),
+            ("val", round(x["value"] * 100) if x["value"] is not None else 0),
+            ("safe", x["safe"]),
+            ("keep", round(x["keep"] * 1000) if x["keep"] is not None else None),
+            ("lean", round(x["lean"] * 100) if x["lean"] is not None else None),
+            ("now", x["now"]),
+            ("like", near),
+            ("fam", sum(1 << j for j, i in enumerate(near) if i in x["family"])),
+            ("alt", x["alt"]),
+            ("f", signals.flags(r)),
+        ):
+            cols.setdefault(key, []).append(val)
+    body = {"license": LICENSE, "version": int(latest_dump().parent.name[1:]), "count": len(bottles),
+            "brands": brands, "accords": accords, "flags": FLAGS, "slugs": slugs, "cols": cols}
+    write_json(OUT / "pool.json", body)
+    # Each note as [note index x 4 + tier, votes in tenths of the top note's], in r/'s order.
+    tenths = lambda w: max(round(10 * (w / 100) ** (1 / NOTE_WEIGHT_POWER)), 1) if w else 0
+    write_json(OUT / "pool-notes.json", {"license": LICENSE, "count": len(bottles), "notes": notes,
+                                         "no": [[v for t, n, w in top_notes(r) for v in (note_ix[n] * 4 + t, tenths(w))] for r in bottles]})
+    for name in ("pool.json", "pool-notes.json"):
+        path = OUT / name
+        print(f"data/fragrantica/{name}: {len(bottles)} bottles, {path.stat().st_size / 1024:.0f} KB, {gz_size(path) / 1024:.0f} KB gzip -9")
+
+
+def about(signals: Signals) -> None:
+    """data/fragrantica/x/<id % 512>.json: what a bottle's page shows beyond its record."""
+    shards = {}
+    for pid, r in signals.by_id.items():
+        if votes(r) >= ABOUT_MIN_VOTES:
+            shards.setdefault(pid % SHARDS, {})[pid] = signals.about(r)
+    shutil.rmtree(OUT / "x", ignore_errors=True)
+    (OUT / "x").mkdir(parents=True)
+    for n, rows in shards.items():
+        write_json(OUT / f"x/{n}.json", dict(sorted(rows.items())))
+    paths = list((OUT / "x").iterdir())
+    print(f"data/fragrantica/x/: {sum(map(len, shards.values()))} bottles, {sum(p.stat().st_size for p in paths) / 1e6:.1f} MB, "
+          f"{sum(map(gz_size, paths)) / 1e6:.1f} MB gzip -9")
+
+
+def jsonl_ids(*stems: str) -> list[int]:
+    return [line_id(json.loads(l)) for stem in stems for l in (ROOT / f"data/{stem}.jsonl").read_text().splitlines() if l.strip()]
+
+
+def extras(signals: Signals) -> None:
+    """data/extras.jsonl: the about data and signals of every bottle in the
+    wardrobe, catalog and originals, which scripts/build_collection.py joins."""
+    ids = sorted(set(jsonl_ids("collection", "catalog", "originals")))
+    lines = []
+    for pid in ids:
+        if r := signals.by_id.get(pid):
+            lines.append({"id": pid, **readable_about(signals.about(r)), "extras": {**signals.extras(r), "clones": signals.clones(r)}})
+    (ROOT / "data/extras.jsonl").write_text("".join(json.dumps(l, ensure_ascii=False, separators=(",", ":")) + "\n" for l in lines))
+    missing = len(ids) - len(lines)
+    print(f"data/extras.jsonl: {len(lines)} bottles{f' ({missing} newer than the dataset)' if missing else ''}")
 
 
 def describe(r: dict) -> str:
@@ -314,7 +766,7 @@ def add(stem: str, ids: list[int]) -> None:
             lines.append(line)
         print(f"{'replaced' if pid in index else 'added'} {describe(found[pid])}")
     path.write_text("".join(json.dumps(l, ensure_ascii=False, separators=(",", ":")) + "\n" for l in lines))
-    print(f"then: python3 scripts/parfumo.py --search \"<name brand>\" for each, npm run build:data, npm run fit, npm test")
+    print(f"then: python3 scripts/decant.py extras, python3 scripts/parfumo.py --search \"<name brand>\" for each, npm run build:data, npm run fit, npm test")
 
 
 def refresh() -> None:
@@ -323,11 +775,11 @@ def refresh() -> None:
     Season and day/night votes come from the dataset's page capture, exact where
     our extractor reads Fragrantica's rounded "22.6k". Its ratings can come from
     an older index, so they're taken only when they have more votes too.
+    Then data/extras.jsonl is written afresh.
     """
     stems = ("collection", "catalog", "originals", "calibration")
     files = {stem: [json.loads(l) for l in (ROOT / f"data/{stem}.jsonl").read_text().splitlines() if l.strip()] for stem in stems}
-    wanted = {line_id(l) for lines in files.values() for l in lines}
-    dump = {r["id"]: r for r in records() if r["id"] in wanted}
+    dump = dataset()
     for stem, lines in files.items():
         changed = 0
         for line in lines:
@@ -341,6 +793,7 @@ def refresh() -> None:
             changed += 1
         (ROOT / f"data/{stem}.jsonl").write_text("".join(json.dumps(l, ensure_ascii=False, separators=(",", ":")) + "\n" for l in lines))
         print(f"data/{stem}.jsonl: {changed} of {len(lines)} lines had newer votes")
+    extras(Signals(dump))
     print("then: npm run build:data, npm run fit, npm test")
 
 
@@ -358,6 +811,8 @@ def main(args: list[str]) -> None:
         add(rest[0], [int(x) for x in rest[1:]])
     elif cmd == "refresh":
         refresh()
+    elif cmd in ("pool", "about", "extras"):
+        {"pool": pool, "about": about, "extras": extras}[cmd](Signals(dataset()))
     else:
         raise SystemExit(__doc__)
 

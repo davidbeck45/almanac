@@ -318,10 +318,10 @@ function renderFooter() {
   const all = sourceRecords();
   const usesFragella = all.some(f => isFragellaId(f.id));
   const usesScraped = all.some(f => !f.source);
-  const usesDataset = all.some(f => f.source === 'fragrantica');
+  // Always: even the demo's own records carry values derived from the dataset.
   const sources = [
     usesScraped && `Fragrantica (synced ${ui.esc(state.demo.fetched)})`,
-    usesDataset && `Fragrantica via <a href="https://www.kaggle.com/datasets/ledecanteur/fragrantica-perfumes" target="_blank" rel="noopener">Le Decanteur’s dataset</a> (<a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noopener">CC BY-NC-SA</a>)`,
+    `Fragrantica via <a href="https://www.kaggle.com/datasets/ledecanteur/fragrantica-perfumes" target="_blank" rel="noopener">Le Decanteur’s dataset</a> (<a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noopener">CC BY-NC-SA</a>)`,
     usesFragella && '<a href="https://api.fragella.com" target="_blank" rel="noopener">Fragella</a>',
   ].filter(Boolean).join(' · ');
   $('#foot').innerHTML = ui.footerHTML({

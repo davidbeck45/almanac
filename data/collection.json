@@ -1,6 +1,6 @@
 {
   "source": "fragrantica.com/@doeszen wardrobe (Have)",
-  "fetched": "2026-10-11",
+  "fetched": "2026-10-12",
   "fragrances": [
     {
       "id": 98689,
@@ -108,6 +108,58 @@
         "dayNight": {
           "day": 0.485,
           "night": 0.515
+        },
+        "extras": {
+          "value": 1.66,
+          "safe": 51,
+          "keep": 0.044,
+          "lean": 0.79,
+          "now": 97,
+          "like": [
+            98689,
+            93272,
+            9828
+          ],
+          "family": [
+            98689,
+            93272,
+            9828,
+            106403,
+            121661,
+            106624
+          ],
+          "alt": [
+            98689,
+            93272,
+            106403
+          ],
+          "flags": []
+        },
+        "siblings": [
+          121661,
+          93955,
+          100239,
+          110343
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Creed/absolu-aventus",
+          "longevity": 7.7,
+          "sillage": 7.4,
+          "votes": 1263,
+          "occasion": {
+            "Leisure": 0.192,
+            "Daily": 0.192,
+            "Evening": 0.192,
+            "Night Out": 0.182,
+            "Business": 0.182,
+            "Sport": 0.061
+          },
+          "occasionVotes": 1082
+        },
+        "performance": {
+          "longevity": 3.5511,
+          "sillage": 2.2914,
+          "votes": 1949
         }
       },
       "parfumo": {
@@ -160,6 +212,118 @@
         "longevity": 3.9954,
         "sillage": 2.8457,
         "votes": 6636
+      },
+      "about": {
+        "value": {
+          "avg": 4.3,
+          "votes": 6249
+        },
+        "owners": {
+          "have": 24931,
+          "had": 2054,
+          "want": 18001
+        },
+        "crowdGender": {
+          "lean": 0.83,
+          "votes": 6390
+        },
+        "popularity": {
+          "all": 49263,
+          "recent": 45579
+        },
+        "perfumers": [
+          "Imran Fazlani"
+        ],
+        "line": "Supremacy",
+        "pros": [
+          {
+            "text": "Strong projection and noticeable sillage",
+            "up": 1254,
+            "down": 27
+          },
+          {
+            "text": "High-quality, elegant box presentation",
+            "up": 1161,
+            "down": 23
+          },
+          {
+            "text": "Beast mode longevity exceeding 10 hours",
+            "up": 1018,
+            "down": 60
+          }
+        ],
+        "cons": [
+          {
+            "text": "Too heavy for gym environments",
+            "up": 586,
+            "down": 381
+          },
+          {
+            "text": "Occasional olfactory fatigue or anosmia",
+            "up": 408,
+            "down": 257
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 84112,
+            "up": 1080,
+            "down": 261
+          },
+          {
+            "id": 93272,
+            "up": 498,
+            "down": 190
+          },
+          {
+            "id": 106624,
+            "up": 345,
+            "down": 149
+          },
+          {
+            "id": 106403,
+            "up": 243,
+            "down": 136
+          },
+          {
+            "id": 99238,
+            "up": 300,
+            "down": 214
+          }
+        ],
+        "alsoLiked": [
+          89050,
+          105520,
+          34696,
+          84094,
+          72158,
+          25967,
+          70839,
+          40031,
+          50757,
+          65414
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 4.3,
+        "safe": 81,
+        "keep": 0.075,
+        "lean": 0.83,
+        "now": 100,
+        "like": [
+          84112,
+          93272,
+          106624
+        ],
+        "family": [
+          84112,
+          93272,
+          136770
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": []
       }
     },
     {
@@ -274,6 +438,58 @@
         "dayNight": {
           "day": 0.46,
           "night": 0.54
+        },
+        "extras": {
+          "value": 2.35,
+          "safe": 85,
+          "keep": 0.14,
+          "lean": 0.6,
+          "now": 100,
+          "like": [
+            70748,
+            46633,
+            66242
+          ],
+          "family": [
+            70748,
+            46633,
+            66242,
+            63711,
+            78001,
+            55525
+          ],
+          "alt": [
+            70748,
+            66242,
+            63711
+          ],
+          "flags": []
+        },
+        "siblings": [
+          63711,
+          113924,
+          95630,
+          119178,
+          61291
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Parfums_de_Marly/Layton",
+          "longevity": 8.2,
+          "sillage": 8,
+          "votes": 8761,
+          "occasion": {
+            "Night Out": 0.26,
+            "Evening": 0.26,
+            "Leisure": 0.19,
+            "Daily": 0.17,
+            "Business": 0.12
+          },
+          "occasionVotes": 6525
+        },
+        "performance": {
+          "longevity": 3.7707,
+          "sillage": 2.5942,
+          "votes": 12107
         }
       },
       "parfumo": {
@@ -329,6 +545,123 @@
         "longevity": 3.6128,
         "sillage": 2.3927,
         "votes": 3863
+      },
+      "about": {
+        "value": {
+          "avg": 4.58,
+          "votes": 3945
+        },
+        "owners": {
+          "have": 12728,
+          "had": 2263,
+          "want": 6188
+        },
+        "crowdGender": {
+          "lean": 0.55,
+          "votes": 4022
+        },
+        "popularity": {
+          "all": 28839,
+          "recent": 8978
+        },
+        "perfumers": [],
+        "line": null,
+        "pros": [
+          {
+            "text": "Affordable price",
+            "up": 1083,
+            "down": 10
+          },
+          {
+            "text": "Mass-appealing apple and vanilla scent profile",
+            "up": 860,
+            "down": 59
+          },
+          {
+            "text": "Very close to Layton",
+            "up": 681,
+            "down": 34
+          }
+        ],
+        "cons": [
+          {
+            "text": "Highly unattractive and awkward bottle design",
+            "up": 1340,
+            "down": 104
+          },
+          {
+            "text": "Initial opening can smell slightly synthetic",
+            "up": 73,
+            "down": 60
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 39314,
+            "up": 1658,
+            "down": 178
+          },
+          {
+            "id": 66242,
+            "up": 183,
+            "down": 54
+          },
+          {
+            "id": 63711,
+            "up": 106,
+            "down": 30
+          },
+          {
+            "id": 78001,
+            "up": 89,
+            "down": 18
+          },
+          {
+            "id": 95630,
+            "up": 46,
+            "down": 6
+          }
+        ],
+        "alsoLiked": [
+          39314,
+          65414,
+          61856,
+          68415,
+          50757,
+          72821,
+          5521,
+          17,
+          94713,
+          39029
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 4.57,
+        "safe": 60,
+        "keep": 0.044,
+        "lean": 0.55,
+        "now": 96,
+        "like": [
+          39314,
+          66242,
+          63711
+        ],
+        "family": [
+          39314,
+          66242,
+          63711,
+          78001,
+          95630,
+          78036
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": [
+          95630,
+          113924,
+          119178
+        ]
       }
     },
     {
@@ -435,6 +768,51 @@
         "dayNight": {
           "day": 0.736,
           "night": 0.264
+        },
+        "extras": {
+          "value": 3.03,
+          "safe": 81,
+          "keep": 0.032,
+          "lean": 0.08,
+          "now": 99,
+          "like": [
+            75930,
+            122274,
+            125391
+          ],
+          "family": [
+            75930,
+            122274,
+            125391,
+            125861,
+            96141
+          ],
+          "alt": [],
+          "flags": []
+        },
+        "siblings": [
+          122274,
+          125861
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Goldfield__Banks/ingenious-ginger",
+          "longevity": 7.2,
+          "sillage": 7.1,
+          "votes": 1335,
+          "occasion": {
+            "Daily": 0.25,
+            "Leisure": 0.25,
+            "Business": 0.17,
+            "Sport": 0.11,
+            "Evening": 0.11,
+            "Night Out": 0.11
+          },
+          "occasionVotes": 1408
+        },
+        "performance": {
+          "longevity": 3.1918,
+          "sillage": 2.0819,
+          "votes": 2295
         }
       },
       "parfumo": {
@@ -483,6 +861,92 @@
         "longevity": 3.4975,
         "sillage": 2.2234,
         "votes": 197
+      },
+      "about": {
+        "value": {
+          "avg": 4.54,
+          "votes": 202
+        },
+        "owners": {
+          "have": 924,
+          "had": 80,
+          "want": 1635
+        },
+        "crowdGender": {
+          "lean": 0.26,
+          "votes": 212
+        },
+        "popularity": {
+          "all": 2780,
+          "recent": 2780
+        },
+        "perfumers": [
+          "Elodie Bernard"
+        ],
+        "line": null,
+        "pros": [],
+        "cons": [],
+        "smellsLike": [
+          {
+            "id": 81895,
+            "up": 175,
+            "down": 16
+          },
+          {
+            "id": 122274,
+            "up": 53,
+            "down": 11
+          },
+          {
+            "id": 125861,
+            "up": 22,
+            "down": 3
+          },
+          {
+            "id": 75930,
+            "up": 36,
+            "down": 25
+          },
+          {
+            "id": 132431,
+            "up": 9,
+            "down": 4
+          }
+        ],
+        "alsoLiked": [
+          112706,
+          70839,
+          120605,
+          107083,
+          89050,
+          94702,
+          107084,
+          112859,
+          98689,
+          94713
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 4.41,
+        "safe": 80,
+        "keep": 0.013,
+        "lean": 0.26,
+        "now": 80,
+        "like": [
+          81895,
+          122274,
+          125861
+        ],
+        "family": [
+          81895,
+          122274
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": [
+          122274
+        ]
       }
     },
     {
@@ -582,6 +1046,81 @@
         "longevity": 2.9565,
         "sillage": 2.04,
         "votes": 23
+      },
+      "about": {
+        "value": {
+          "avg": 4.2,
+          "votes": 30
+        },
+        "owners": {
+          "have": 192,
+          "had": 23,
+          "want": 137
+        },
+        "crowdGender": {
+          "lean": -0.18,
+          "votes": 37
+        },
+        "popularity": {
+          "all": 467,
+          "recent": 467
+        },
+        "perfumers": [],
+        "line": "Collezione Riservata",
+        "pros": [],
+        "cons": [],
+        "smellsLike": [
+          {
+            "id": 31625,
+            "up": 2,
+            "down": 0
+          },
+          {
+            "id": 47642,
+            "up": 2,
+            "down": 0
+          },
+          {
+            "id": 7052,
+            "up": 2,
+            "down": 1
+          },
+          {
+            "id": 21984,
+            "up": 2,
+            "down": 1
+          },
+          {
+            "id": 54877,
+            "up": 1,
+            "down": 0
+          }
+        ],
+        "alsoLiked": [
+          70839,
+          64022,
+          55858,
+          113596,
+          45027,
+          89050,
+          59392,
+          72821,
+          70465,
+          16657
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 3.76,
+        "safe": 11,
+        "keep": 0.002,
+        "lean": -0.18,
+        "now": 23,
+        "like": [],
+        "family": [],
+        "alt": [],
+        "flags": [],
+        "clones": []
       }
     },
     {
@@ -692,6 +1231,122 @@
         "longevity": 3.2438,
         "sillage": 2.2029,
         "votes": 2998
+      },
+      "about": {
+        "value": {
+          "avg": 3.01,
+          "votes": 1418
+        },
+        "owners": {
+          "have": 9292,
+          "had": 2880,
+          "want": 5664
+        },
+        "crowdGender": {
+          "lean": 0.84,
+          "votes": 1575
+        },
+        "popularity": {
+          "all": 25643,
+          "recent": 2003
+        },
+        "perfumers": [],
+        "line": "CH",
+        "pros": [
+          {
+            "text": "Classy and elegant",
+            "up": 141,
+            "down": 5
+          },
+          {
+            "text": "Seductive and magnetic masculine character",
+            "up": 125,
+            "down": 10
+          },
+          {
+            "text": "Addictive fragrance",
+            "up": 120,
+            "down": 12
+          }
+        ],
+        "cons": [
+          {
+            "text": "May not perform well in terms of longevity or projection",
+            "up": 83,
+            "down": 20
+          },
+          {
+            "text": "Polarizing boozy and harsh whiskey opening",
+            "up": 51,
+            "down": 39
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 48586,
+            "up": 322,
+            "down": 54
+          },
+          {
+            "id": 51656,
+            "up": 125,
+            "down": 25
+          },
+          {
+            "id": 72694,
+            "up": 97,
+            "down": 35
+          },
+          {
+            "id": 91292,
+            "up": 63,
+            "down": 8
+          },
+          {
+            "id": 49037,
+            "up": 41,
+            "down": 15
+          }
+        ],
+        "alsoLiked": [
+          26358,
+          5521,
+          14669,
+          31909,
+          29727,
+          13857,
+          25967,
+          30947,
+          17,
+          9099
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 3.01,
+        "safe": 95,
+        "keep": 0.06,
+        "lean": 0.84,
+        "now": 71,
+        "like": [
+          48586,
+          51656,
+          72694
+        ],
+        "family": [
+          48586,
+          51656,
+          72694,
+          91292,
+          49037,
+          56843
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": [
+          91292,
+          49037
+        ]
       }
     },
     {
@@ -814,6 +1469,132 @@
         "longevity": 3.5924,
         "sillage": 2.5453,
         "votes": 20382
+      },
+      "about": {
+        "value": {
+          "avg": 2.74,
+          "votes": 15609
+        },
+        "owners": {
+          "have": 55004,
+          "had": 19230,
+          "want": 13209
+        },
+        "crowdGender": {
+          "lean": 0.86,
+          "votes": 16933
+        },
+        "popularity": {
+          "all": 120540,
+          "recent": 29848
+        },
+        "perfumers": [
+          "François Demachy"
+        ],
+        "line": "Sauvage Collection",
+        "pros": [
+          {
+            "text": "Good projection",
+            "up": 1678,
+            "down": 107
+          },
+          {
+            "text": "Pleasant smell",
+            "up": 1525,
+            "down": 320
+          },
+          {
+            "text": "Garners compliments",
+            "up": 1244,
+            "down": 194
+          }
+        ],
+        "cons": [
+          {
+            "text": "In-your-face aroma chemicals",
+            "up": 1199,
+            "down": 501
+          },
+          {
+            "text": "Feels synthetic",
+            "up": 1184,
+            "down": 562
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 48100,
+            "up": 1829,
+            "down": 131
+          },
+          {
+            "id": 43402,
+            "up": 2195,
+            "down": 506
+          },
+          {
+            "id": 77860,
+            "up": 1019,
+            "down": 149
+          },
+          {
+            "id": 43933,
+            "up": 602,
+            "down": 63
+          },
+          {
+            "id": 50265,
+            "up": 488,
+            "down": 101
+          }
+        ],
+        "alsoLiked": [
+          9099,
+          25967,
+          50757,
+          40031,
+          17,
+          14669,
+          2318,
+          31909,
+          68415,
+          29727
+        ],
+        "flags": [
+          "polarizing"
+        ]
+      },
+      "extras": {
+        "value": 2.74,
+        "safe": 9,
+        "keep": 0.038,
+        "lean": 0.86,
+        "now": 100,
+        "like": [
+          48100,
+          43402,
+          77860
+        ],
+        "family": [
+          48100,
+          43402,
+          77860,
+          43933,
+          50265,
+          93538
+        ],
+        "alt": [],
+        "flags": [
+          "polarizing"
+        ],
+        "clones": [
+          77860,
+          50265,
+          93538,
+          69256,
+          50327,
+          53752
+        ]
       }
     },
     {
@@ -920,6 +1701,115 @@
         "longevity": 3.9057,
         "sillage": 2.6557,
         "votes": 732
+      },
+      "about": {
+        "value": {
+          "avg": 2.93,
+          "votes": 630
+        },
+        "owners": {
+          "have": 2339,
+          "had": 507,
+          "want": 2682
+        },
+        "crowdGender": {
+          "lean": 0.11,
+          "votes": 784
+        },
+        "popularity": {
+          "all": 9772,
+          "recent": 2730
+        },
+        "perfumers": [
+          "Francesca Bianchi"
+        ],
+        "line": null,
+        "pros": [
+          {
+            "text": "Addictive aroma",
+            "up": 89,
+            "down": 1
+          },
+          {
+            "text": "Potent performance with a unisex profile",
+            "up": 78,
+            "down": 4
+          },
+          {
+            "text": "Soft suede and resinous patchouli blend",
+            "up": 73,
+            "down": 1
+          }
+        ],
+        "cons": [
+          {
+            "text": "May not suit everyone's taste or occasion",
+            "up": 56,
+            "down": 7
+          },
+          {
+            "text": "Not suitable for patchouli-averse individuals",
+            "up": 47,
+            "down": 18
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 79205,
+            "up": 33,
+            "down": 7
+          },
+          {
+            "id": 76575,
+            "up": 7,
+            "down": 2
+          },
+          {
+            "id": 48557,
+            "up": 6,
+            "down": 2
+          },
+          {
+            "id": 62288,
+            "up": 6,
+            "down": 2
+          },
+          {
+            "id": 42131,
+            "up": 11,
+            "down": 8
+          }
+        ],
+        "alsoLiked": [
+          46650,
+          51499,
+          1018,
+          57019,
+          57018,
+          1801,
+          40884,
+          10464,
+          64029,
+          54785
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 2.93,
+        "safe": 37,
+        "keep": 0.044,
+        "lean": 0.11,
+        "now": 80,
+        "like": [
+          79205,
+          76575
+        ],
+        "family": [
+          79205
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": []
       }
     },
     {
@@ -1027,6 +1917,57 @@
         "dayNight": {
           "day": 0.268,
           "night": 0.732
+        },
+        "extras": {
+          "value": 1.75,
+          "safe": 87,
+          "keep": 0.078,
+          "lean": 0.28,
+          "now": 98,
+          "like": [
+            116876,
+            92425,
+            115637
+          ],
+          "family": [
+            116876,
+            115637,
+            120486,
+            117832
+          ],
+          "alt": [
+            116876,
+            92425,
+            115637
+          ],
+          "flags": [
+            "notBlindBuy"
+          ]
+        },
+        "siblings": [
+          92425,
+          115637,
+          120486,
+          117832
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Clive_Christian/xxi-art-deco-blonde-amber",
+          "longevity": 8.4,
+          "sillage": 8.2,
+          "votes": 2597,
+          "occasion": {
+            "Night Out": 0.384,
+            "Evening": 0.364,
+            "Leisure": 0.131,
+            "Daily": 0.061,
+            "Business": 0.061
+          },
+          "occasionVotes": 1364
+        },
+        "performance": {
+          "longevity": 3.9352,
+          "sillage": 2.759,
+          "votes": 1415
         }
       },
       "parfumo": {
@@ -1066,6 +2007,119 @@
         "longevity": 3.5961,
         "sillage": 2.4168,
         "votes": 864
+      },
+      "about": {
+        "value": {
+          "avg": 4.21,
+          "votes": 867
+        },
+        "owners": {
+          "have": 3953,
+          "had": 380,
+          "want": 4511
+        },
+        "crowdGender": {
+          "lean": 0.52,
+          "votes": 909
+        },
+        "popularity": {
+          "all": 10018,
+          "recent": 10018
+        },
+        "perfumers": [],
+        "line": null,
+        "pros": [
+          {
+            "text": "Rich boozy and honeyed amber notes",
+            "up": 173,
+            "down": 7
+          },
+          {
+            "text": "Expensive-smelling, rich scent profile",
+            "up": 171,
+            "down": 10
+          },
+          {
+            "text": "Perfect for date nights",
+            "up": 160,
+            "down": 10
+          }
+        ],
+        "cons": [
+          {
+            "text": "Requires several weeks of maceration",
+            "up": 105,
+            "down": 33
+          },
+          {
+            "text": "Projection drops sharply after two hours",
+            "up": 77,
+            "down": 46
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 73595,
+            "up": 427,
+            "down": 75
+          },
+          {
+            "id": 115637,
+            "up": 89,
+            "down": 24
+          },
+          {
+            "id": 92425,
+            "up": 87,
+            "down": 37
+          },
+          {
+            "id": 120486,
+            "up": 42,
+            "down": 11
+          },
+          {
+            "id": 117832,
+            "up": 25,
+            "down": 10
+          }
+        ],
+        "alsoLiked": [
+          118549,
+          75805,
+          52802,
+          96246,
+          99586,
+          61856,
+          94713,
+          40031,
+          65414,
+          88175
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 4.18,
+        "safe": 49,
+        "keep": 0.018,
+        "lean": 0.52,
+        "now": 97,
+        "like": [
+          73595,
+          115637,
+          92425
+        ],
+        "family": [
+          73595,
+          115637,
+          120486
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": [
+          115637,
+          120486
+        ]
       }
     },
     {
@@ -1170,6 +2224,49 @@
         "dayNight": {
           "day": 0.843,
           "night": 0.157
+        },
+        "extras": {
+          "value": 2.84,
+          "safe": 32,
+          "keep": -0.024,
+          "lean": -0.26,
+          "now": 96,
+          "like": [
+            113595,
+            103256,
+            135601
+          ],
+          "family": [
+            113595,
+            103256,
+            135601
+          ],
+          "alt": [],
+          "flags": []
+        },
+        "siblings": [
+          103256,
+          135601
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Room_1015/wavechild",
+          "longevity": 7.2,
+          "sillage": 7,
+          "votes": 346,
+          "occasion": {
+            "Leisure": 0.347,
+            "Daily": 0.267,
+            "Sport": 0.129,
+            "Night Out": 0.089,
+            "Evening": 0.089,
+            "Business": 0.079
+          },
+          "occasionVotes": 355
+        },
+        "performance": {
+          "longevity": 3.2117,
+          "sillage": 2.089,
+          "votes": 865
         }
       },
       "parfumo": {
@@ -1200,6 +2297,118 @@
         "longevity": 3.8414,
         "sillage": 2.7621,
         "votes": 1076
+      },
+      "about": {
+        "value": {
+          "avg": 4.1,
+          "votes": 1067
+        },
+        "owners": {
+          "have": 4376,
+          "had": 469,
+          "want": 5006
+        },
+        "crowdGender": {
+          "lean": -0.07,
+          "votes": 1193
+        },
+        "popularity": {
+          "all": 11714,
+          "recent": 11714
+        },
+        "perfumers": [],
+        "line": "The Extraits",
+        "pros": [
+          {
+            "text": "Refreshing summer freshie with depth",
+            "up": 250,
+            "down": 13
+          },
+          {
+            "text": "Exceptional 8-12 hour longevity",
+            "up": 234,
+            "down": 10
+          },
+          {
+            "text": "Versatile for office, gym, and dates",
+            "up": 214,
+            "down": 25
+          }
+        ],
+        "cons": [
+          {
+            "text": "Synthetic candy-like watermelon accord",
+            "up": 178,
+            "down": 99
+          },
+          {
+            "text": "Cloyingly sweet in extreme heat",
+            "up": 135,
+            "down": 77
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 91364,
+            "up": 327,
+            "down": 26
+          },
+          {
+            "id": 135601,
+            "up": 84,
+            "down": 7
+          },
+          {
+            "id": 103256,
+            "up": 89,
+            "down": 39
+          },
+          {
+            "id": 123802,
+            "up": 16,
+            "down": 4
+          },
+          {
+            "id": 93078,
+            "up": 11,
+            "down": 1
+          }
+        ],
+        "alsoLiked": [
+          46890,
+          120605,
+          34696,
+          89050,
+          105520,
+          98689,
+          70839,
+          75805,
+          94713,
+          65414
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 4.08,
+        "safe": 57,
+        "keep": 0.013,
+        "lean": -0.07,
+        "now": 97,
+        "like": [
+          91364,
+          135601,
+          103256
+        ],
+        "family": [
+          91364,
+          135601
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": [
+          135601,
+          103256
+        ]
       }
     },
     {
@@ -1304,6 +2513,47 @@
         "dayNight": {
           "day": 0.71,
           "night": 0.29
+        },
+        "extras": {
+          "value": 1.86,
+          "safe": 88,
+          "keep": 0.114,
+          "lean": 0.4,
+          "now": 100,
+          "like": [
+            122037,
+            99815
+          ],
+          "family": [
+            122037
+          ],
+          "alt": [
+            99815
+          ],
+          "flags": []
+        },
+        "siblings": [
+          99815
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Louis_Vuitton/imagination",
+          "longevity": 7.7,
+          "sillage": 7.6,
+          "votes": 9434,
+          "occasion": {
+            "Daily": 0.24,
+            "Leisure": 0.22,
+            "Business": 0.18,
+            "Sport": 0.14,
+            "Night Out": 0.12,
+            "Evening": 0.1
+          },
+          "occasionVotes": 8009
+        },
+        "performance": {
+          "longevity": 3.6635,
+          "sillage": 2.3512,
+          "votes": 8331
         }
       },
       "parfumo": {
@@ -1376,6 +2626,118 @@
         "longevity": 3.3408,
         "sillage": 2.2606,
         "votes": 564
+      },
+      "about": {
+        "value": {
+          "avg": 4.16,
+          "votes": 570
+        },
+        "owners": {
+          "have": 1677,
+          "had": 323,
+          "want": 1473
+        },
+        "crowdGender": {
+          "lean": 0.27,
+          "votes": 604
+        },
+        "popularity": {
+          "all": 5268,
+          "recent": 3756
+        },
+        "perfumers": [],
+        "line": "Essence",
+        "pros": [
+          {
+            "text": "Clean, refreshing soapy and tea scent",
+            "up": 37,
+            "down": 4
+          },
+          {
+            "text": "Excellent daily driver for hot weather",
+            "up": 32,
+            "down": 2
+          },
+          {
+            "text": "High-quality heavy bottle and premium packaging",
+            "up": 30,
+            "down": 3
+          }
+        ],
+        "cons": [
+          {
+            "text": "Requires weeks of maceration to improve",
+            "up": 27,
+            "down": 7
+          },
+          {
+            "text": "Lacks sparkling citrus of the original",
+            "up": 18,
+            "down": 6
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 107084,
+            "up": 92,
+            "down": 38
+          },
+          {
+            "id": 96482,
+            "up": 74,
+            "down": 36
+          },
+          {
+            "id": 112706,
+            "up": 37,
+            "down": 11
+          },
+          {
+            "id": 79102,
+            "up": 46,
+            "down": 26
+          },
+          {
+            "id": 103351,
+            "up": 30,
+            "down": 11
+          }
+        ],
+        "alsoLiked": [
+          83666,
+          17,
+          34696,
+          40031,
+          70839,
+          46890,
+          94702,
+          94697,
+          89454,
+          68271
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 4.13,
+        "safe": 24,
+        "keep": -0.01,
+        "lean": 0.27,
+        "now": 86,
+        "like": [
+          107084,
+          96482,
+          112706
+        ],
+        "family": [
+          112706,
+          103351
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": [
+          107084,
+          112706
+        ]
       }
     },
     {
@@ -1474,6 +2836,52 @@
         "dayNight": {
           "day": 0.711,
           "night": 0.289
+        },
+        "extras": {
+          "value": 2.1,
+          "safe": 59,
+          "keep": 0.046,
+          "lean": -0.35,
+          "now": 99,
+          "like": [
+            91361,
+            99849,
+            96606
+          ],
+          "family": [
+            91361,
+            96606,
+            121577
+          ],
+          "alt": [
+            91361,
+            99849,
+            98002
+          ],
+          "flags": []
+        },
+        "siblings": [
+          99849
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Initio/musk-therapy-extrait-de-parfum",
+          "longevity": 7.8,
+          "sillage": 7.3,
+          "votes": 2651,
+          "occasion": {
+            "Daily": 0.248,
+            "Leisure": 0.248,
+            "Business": 0.198,
+            "Night Out": 0.119,
+            "Evening": 0.119,
+            "Sport": 0.069
+          },
+          "occasionVotes": 2851
+        },
+        "performance": {
+          "longevity": 3.4645,
+          "sillage": 2.0946,
+          "votes": 3476
         }
       },
       "parfumo": {
@@ -1546,6 +2954,117 @@
         "longevity": 3.0909,
         "sillage": 2.0306,
         "votes": 229
+      },
+      "about": {
+        "value": {
+          "avg": 4.22,
+          "votes": 240
+        },
+        "owners": {
+          "have": 784,
+          "had": 165,
+          "want": 1057
+        },
+        "crowdGender": {
+          "lean": -0.23,
+          "votes": 262
+        },
+        "popularity": {
+          "all": 3061,
+          "recent": 2360
+        },
+        "perfumers": [],
+        "line": "Glorious Collection",
+        "pros": [
+          {
+            "text": "Versatile for office and daily wear",
+            "up": 24,
+            "down": 0
+          },
+          {
+            "text": "Soothing, clean luxury spa aroma",
+            "up": 24,
+            "down": 1
+          },
+          {
+            "text": "Exceptional value compared to niche alternatives",
+            "up": 23,
+            "down": 0
+          }
+        ],
+        "cons": [
+          {
+            "text": "Requires over-spraying for moderate projection",
+            "up": 13,
+            "down": 7
+          },
+          {
+            "text": "Missing the complexity of the original",
+            "up": 9,
+            "down": 4
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 66097,
+            "up": 215,
+            "down": 112
+          },
+          {
+            "id": 98345,
+            "up": 32,
+            "down": 7
+          },
+          {
+            "id": 99849,
+            "up": 32,
+            "down": 11
+          },
+          {
+            "id": 121577,
+            "up": 11,
+            "down": 1
+          },
+          {
+            "id": 91361,
+            "up": 9,
+            "down": 1
+          }
+        ],
+        "alsoLiked": [
+          66097,
+          89454,
+          113593,
+          100386,
+          94697,
+          6458,
+          98689,
+          105520,
+          64338,
+          85097
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 4.13,
+        "safe": 25,
+        "keep": -0.021,
+        "lean": -0.23,
+        "now": 76,
+        "like": [
+          98345,
+          99849,
+          121577
+        ],
+        "family": [
+          98345,
+          99849
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": [
+          99849
+        ]
       }
     },
     {
@@ -1654,6 +3173,58 @@
         "dayNight": {
           "day": 0.379,
           "night": 0.621
+        },
+        "extras": {
+          "value": 2.23,
+          "safe": 54,
+          "keep": 0.05,
+          "lean": 0.33,
+          "now": 100,
+          "like": [
+            94713,
+            98242,
+            106802
+          ],
+          "family": [
+            94713,
+            98242,
+            106802,
+            123526,
+            109081,
+            96320
+          ],
+          "alt": [
+            94713,
+            98242,
+            106802
+          ],
+          "flags": []
+        },
+        "siblings": [
+          106802,
+          98242,
+          123526,
+          109081,
+          96320
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Parfums_de_Marly/althair",
+          "longevity": 8.3,
+          "sillage": 8.1,
+          "votes": 5005,
+          "occasion": {
+            "Evening": 0.32,
+            "Night Out": 0.3,
+            "Leisure": 0.18,
+            "Daily": 0.12,
+            "Business": 0.08
+          },
+          "occasionVotes": 3446
+        },
+        "performance": {
+          "longevity": 3.8069,
+          "sillage": 2.4785,
+          "votes": 6339
         }
       },
       "parfumo": {
@@ -1725,6 +3296,126 @@
         "longevity": 3.8602,
         "sillage": 2.6896,
         "votes": 9509
+      },
+      "about": {
+        "value": {
+          "avg": 4.43,
+          "votes": 9359
+        },
+        "owners": {
+          "have": 36695,
+          "had": 3342,
+          "want": 21646
+        },
+        "crowdGender": {
+          "lean": 0.42,
+          "votes": 9666
+        },
+        "popularity": {
+          "all": 71869,
+          "recent": 58246
+        },
+        "perfumers": [],
+        "line": "Sweet Pleasure Collection",
+        "pros": [
+          {
+            "text": "Perfect for cold weather and dates",
+            "up": 1246,
+            "down": 25
+          },
+          {
+            "text": "Exceptional value for the price",
+            "up": 1213,
+            "down": 31
+          },
+          {
+            "text": "98% accurate PDM Althaïr clone",
+            "up": 931,
+            "down": 49
+          }
+        ],
+        "cons": [
+          {
+            "text": "Too sweet and heavy for summer",
+            "up": 1010,
+            "down": 130
+          },
+          {
+            "text": "Overpowering sweetness if oversprayed",
+            "up": 599,
+            "down": 237
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 84109,
+            "up": 2813,
+            "down": 125
+          },
+          {
+            "id": 123526,
+            "up": 394,
+            "down": 22
+          },
+          {
+            "id": 98242,
+            "up": 382,
+            "down": 45
+          },
+          {
+            "id": 106802,
+            "up": 311,
+            "down": 39
+          },
+          {
+            "id": 109081,
+            "up": 165,
+            "down": 29
+          }
+        ],
+        "alsoLiked": [
+          88175,
+          75805,
+          52802,
+          65414,
+          30499,
+          30529,
+          61856,
+          81642,
+          101124,
+          72821
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 4.43,
+        "safe": 69,
+        "keep": 0.073,
+        "lean": 0.42,
+        "now": 100,
+        "like": [
+          84109,
+          123526,
+          98242
+        ],
+        "family": [
+          84109,
+          123526,
+          98242,
+          106802,
+          109081,
+          98713
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": [
+          98242,
+          106802,
+          109081,
+          98713,
+          96320,
+          98137
+        ]
       }
     },
     {
@@ -1809,6 +3500,83 @@
         "longevity": 2.5567,
         "sillage": 1.9396,
         "votes": 182
+      },
+      "about": {
+        "value": {
+          "avg": 3.69,
+          "votes": 140
+        },
+        "owners": {
+          "have": 492,
+          "had": 394,
+          "want": 134
+        },
+        "crowdGender": {
+          "lean": 0.74,
+          "votes": 153
+        },
+        "popularity": {
+          "all": 1305,
+          "recent": 250
+        },
+        "perfumers": [],
+        "line": null,
+        "pros": [],
+        "cons": [],
+        "smellsLike": [
+          {
+            "id": 86056,
+            "up": 15,
+            "down": 0
+          },
+          {
+            "id": 30963,
+            "up": 5,
+            "down": 1
+          },
+          {
+            "id": 11868,
+            "up": 9,
+            "down": 7
+          },
+          {
+            "id": 40437,
+            "up": 2,
+            "down": 0
+          },
+          {
+            "id": 1782,
+            "up": 5,
+            "down": 4
+          }
+        ],
+        "alsoLiked": [
+          644,
+          17,
+          9099,
+          25967,
+          410,
+          3508,
+          2318,
+          734,
+          607,
+          40031
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 3.62,
+        "safe": 88,
+        "keep": -0.027,
+        "lean": 0.74,
+        "now": 11,
+        "like": [
+          86056
+        ],
+        "family": [],
+        "alt": [],
+        "flags": [],
+        "clones": []
       }
     },
     {
@@ -1912,6 +3680,53 @@
         "dayNight": {
           "day": 0.526,
           "night": 0.474
+        },
+        "extras": {
+          "value": 2.9,
+          "safe": 17,
+          "keep": 0.084,
+          "lean": -0.63,
+          "now": 100,
+          "like": [
+            93628,
+            88999,
+            102358
+          ],
+          "family": [
+            93628,
+            88999,
+            102358,
+            98691,
+            102822
+          ],
+          "alt": [],
+          "flags": []
+        },
+        "siblings": [
+          93628,
+          98691,
+          105184,
+          119815,
+          101215
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Giardini_di_Toscana/Bianco_Latte",
+          "longevity": 8.6,
+          "sillage": 8.3,
+          "votes": 1657,
+          "occasion": {
+            "Evening": 0.253,
+            "Leisure": 0.242,
+            "Night Out": 0.232,
+            "Daily": 0.192,
+            "Business": 0.081
+          },
+          "occasionVotes": 1216
+        },
+        "performance": {
+          "longevity": 3.8839,
+          "sillage": 2.7008,
+          "votes": 6102
         }
       },
       "parfumo": {
@@ -1967,6 +3782,121 @@
         "longevity": 3.2917,
         "sillage": 2.1955,
         "votes": 619
+      },
+      "about": {
+        "value": {
+          "avg": 4.24,
+          "votes": 655
+        },
+        "owners": {
+          "have": 3380,
+          "had": 355,
+          "want": 3513
+        },
+        "crowdGender": {
+          "lean": -0.62,
+          "votes": 710
+        },
+        "popularity": {
+          "all": 9197,
+          "recent": 8403
+        },
+        "perfumers": [],
+        "line": null,
+        "pros": [
+          {
+            "text": "Exceptional value for the price point",
+            "up": 112,
+            "down": 2
+          },
+          {
+            "text": "Photorealistic creamy, buttery caramel profile",
+            "up": 94,
+            "down": 4
+          },
+          {
+            "text": "Excellent for layering with other scents",
+            "up": 88,
+            "down": 2
+          }
+        ],
+        "cons": [
+          {
+            "text": "Opaque bottle hides remaining juice level",
+            "up": 72,
+            "down": 8
+          },
+          {
+            "text": "Leans distinctly feminine for some users",
+            "up": 62,
+            "down": 10
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 64757,
+            "up": 304,
+            "down": 43
+          },
+          {
+            "id": 93628,
+            "up": 253,
+            "down": 58
+          },
+          {
+            "id": 101562,
+            "up": 150,
+            "down": 67
+          },
+          {
+            "id": 98691,
+            "up": 61,
+            "down": 15
+          },
+          {
+            "id": 105184,
+            "up": 38,
+            "down": 5
+          }
+        ],
+        "alsoLiked": [
+          101562,
+          64757,
+          93628,
+          78560,
+          84951,
+          102002,
+          76880,
+          102874,
+          99069,
+          99254
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 4.21,
+        "safe": 74,
+        "keep": 0.036,
+        "lean": -0.62,
+        "now": 95,
+        "like": [
+          64757,
+          93628,
+          101562
+        ],
+        "family": [
+          64757,
+          93628,
+          98691,
+          105184,
+          93680
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": [
+          101562,
+          105184
+        ]
       }
     },
     {
@@ -2075,6 +4005,49 @@
         "dayNight": {
           "day": 0.824,
           "night": 0.176
+        },
+        "extras": {
+          "value": 1.67,
+          "safe": 79,
+          "keep": 0.074,
+          "lean": 0.08,
+          "now": 94,
+          "like": [
+            137096,
+            42250,
+            139667
+          ],
+          "family": [
+            137096,
+            42250,
+            139667
+          ],
+          "alt": [
+            137096,
+            42250
+          ],
+          "flags": []
+        },
+        "siblings": [],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Guerlain/herbes-troublantes",
+          "longevity": 6.3,
+          "sillage": 6.1,
+          "votes": 564,
+          "occasion": {
+            "Daily": 0.257,
+            "Leisure": 0.248,
+            "Business": 0.218,
+            "Sport": 0.139,
+            "Night Out": 0.069,
+            "Evening": 0.069
+          },
+          "occasionVotes": 763
+        },
+        "performance": {
+          "longevity": 2.7143,
+          "sillage": 1.7748,
+          "votes": 555
         }
       },
       "parfumo": {
@@ -2105,6 +4078,86 @@
         "longevity": 2.8129,
         "sillage": 2.006,
         "votes": 167
+      },
+      "about": {
+        "value": {
+          "avg": 4.33,
+          "votes": 156
+        },
+        "owners": {
+          "have": 795,
+          "had": 47,
+          "want": 1502
+        },
+        "crowdGender": {
+          "lean": 0.29,
+          "votes": 171
+        },
+        "popularity": {
+          "all": 875,
+          "recent": 875
+        },
+        "perfumers": [],
+        "line": "Shiyaaka",
+        "pros": [],
+        "cons": [],
+        "smellsLike": [
+          {
+            "id": 69275,
+            "up": 155,
+            "down": 25
+          },
+          {
+            "id": 139667,
+            "up": 21,
+            "down": 4
+          },
+          {
+            "id": 10244,
+            "up": 10,
+            "down": 6
+          },
+          {
+            "id": 50883,
+            "up": 7,
+            "down": 3
+          },
+          {
+            "id": 85095,
+            "up": 2,
+            "down": 0
+          }
+        ],
+        "alsoLiked": [
+          67370,
+          113593,
+          119252,
+          70839,
+          107084,
+          89050,
+          120605,
+          112859,
+          98689,
+          39314
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 4.19,
+        "safe": 55,
+        "keep": 0.009,
+        "lean": 0.29,
+        "now": 38,
+        "like": [
+          69275,
+          139667
+        ],
+        "family": [
+          69275
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": []
       }
     },
     {
@@ -2213,6 +4266,51 @@
         "dayNight": {
           "day": 0.507,
           "night": 0.493
+        },
+        "extras": {
+          "value": 2.63,
+          "safe": 52,
+          "keep": 0.075,
+          "lean": -0.01,
+          "now": 99,
+          "like": [
+            85097,
+            73645,
+            93785
+          ],
+          "family": [
+            85097,
+            73645,
+            100143,
+            100016,
+            93674
+          ],
+          "alt": [],
+          "flags": []
+        },
+        "siblings": [
+          100143,
+          100016,
+          109902
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/bdk_Parfums/gris-charnel-eau-de-parfum",
+          "longevity": 7.8,
+          "sillage": 7.4,
+          "votes": 3223,
+          "occasion": {
+            "Evening": 0.22,
+            "Daily": 0.21,
+            "Leisure": 0.21,
+            "Night Out": 0.19,
+            "Business": 0.17
+          },
+          "occasionVotes": 3682
+        },
+        "performance": {
+          "longevity": 3.3664,
+          "sillage": 2.1198,
+          "votes": 4421
         }
       },
       "parfumo": {
@@ -2268,6 +4366,122 @@
         "longevity": 3.4277,
         "sillage": 2.1626,
         "votes": 2939
+      },
+      "about": {
+        "value": {
+          "avg": 4.55,
+          "votes": 3047
+        },
+        "owners": {
+          "have": 11041,
+          "had": 1696,
+          "want": 7002
+        },
+        "crowdGender": {
+          "lean": 0.19,
+          "votes": 3301
+        },
+        "popularity": {
+          "all": 26068,
+          "recent": 13803
+        },
+        "perfumers": [],
+        "line": null,
+        "pros": [
+          {
+            "text": "Cozy, creamy, and comforting scent",
+            "up": 282,
+            "down": 12
+          },
+          {
+            "text": "Excellent value for price",
+            "up": 270,
+            "down": 9
+          },
+          {
+            "text": "Ideal for cool autumn weather",
+            "up": 225,
+            "down": 7
+          }
+        ],
+        "cons": [
+          {
+            "text": "Requires maceration for best performance",
+            "up": 146,
+            "down": 33
+          },
+          {
+            "text": "Less nuanced and more linear",
+            "up": 72,
+            "down": 38
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 57038,
+            "up": 1049,
+            "down": 123
+          },
+          {
+            "id": 73645,
+            "up": 409,
+            "down": 82
+          },
+          {
+            "id": 93785,
+            "up": 300,
+            "down": 59
+          },
+          {
+            "id": 100143,
+            "up": 123,
+            "down": 25
+          },
+          {
+            "id": 108426,
+            "up": 78,
+            "down": 15
+          }
+        ],
+        "alsoLiked": [
+          61856,
+          72821,
+          84302,
+          99060,
+          64947,
+          65414,
+          94713,
+          75805,
+          88175,
+          89454
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 4.54,
+        "safe": 65,
+        "keep": 0.029,
+        "lean": 0.19,
+        "now": 98,
+        "like": [
+          57038,
+          73645,
+          93785
+        ],
+        "family": [
+          57038,
+          73645,
+          93785,
+          100143,
+          108426,
+          100016
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": [
+          100016,
+          109902
+        ]
       }
     },
     {
@@ -2372,6 +4586,52 @@
         "dayNight": {
           "day": 0.518,
           "night": 0.482
+        },
+        "extras": {
+          "value": 2.26,
+          "safe": 57,
+          "keep": 0.005,
+          "lean": 0.08,
+          "now": 96,
+          "like": [
+            89454,
+            89762,
+            114754
+          ],
+          "family": [
+            89454,
+            89762,
+            114754
+          ],
+          "alt": [
+            89454,
+            89762,
+            114754
+          ],
+          "flags": []
+        },
+        "siblings": [
+          89762,
+          114754
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Initio/paragon",
+          "longevity": 8.1,
+          "sillage": 7.7,
+          "votes": 1376,
+          "occasion": {
+            "Leisure": 0.23,
+            "Daily": 0.21,
+            "Evening": 0.21,
+            "Night Out": 0.2,
+            "Business": 0.15
+          },
+          "occasionVotes": 1447
+        },
+        "performance": {
+          "longevity": 3.7333,
+          "sillage": 2.3422,
+          "votes": 1923
         }
       },
       "parfumo": {
@@ -2415,6 +4675,118 @@
         "longevity": 3.6034,
         "sillage": 2.3446,
         "votes": 2815
+      },
+      "about": {
+        "value": {
+          "avg": 4.35,
+          "votes": 2876
+        },
+        "owners": {
+          "have": 11844,
+          "had": 1443,
+          "want": 7898
+        },
+        "crowdGender": {
+          "lean": 0.16,
+          "votes": 3098
+        },
+        "popularity": {
+          "all": 26985,
+          "recent": 17314
+        },
+        "perfumers": [],
+        "line": "Lattafa Pride",
+        "pros": [
+          {
+            "text": "Unique juicy plum and palo santo",
+            "up": 325,
+            "down": 6
+          },
+          {
+            "text": "Excellent value for the price",
+            "up": 313,
+            "down": 7
+          },
+          {
+            "text": "Long-lasting on skin and clothes",
+            "up": 244,
+            "down": 14
+          }
+        ],
+        "cons": [
+          {
+            "text": "Name and artwork lack coherence",
+            "up": 219,
+            "down": 85
+          },
+          {
+            "text": "Unattractive tacky bottle design",
+            "up": 288,
+            "down": 164
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 76580,
+            "up": 789,
+            "down": 79
+          },
+          {
+            "id": 89762,
+            "up": 236,
+            "down": 38
+          },
+          {
+            "id": 114754,
+            "up": 60,
+            "down": 6
+          },
+          {
+            "id": 105611,
+            "up": 9,
+            "down": 3
+          },
+          {
+            "id": 95814,
+            "up": 8,
+            "down": 3
+          }
+        ],
+        "alsoLiked": [
+          50757,
+          89050,
+          34696,
+          85097,
+          105520,
+          98689,
+          84302,
+          101124,
+          72821,
+          30529
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 4.34,
+        "safe": 66,
+        "keep": 0.054,
+        "lean": 0.16,
+        "now": 99,
+        "like": [
+          76580,
+          89762,
+          114754
+        ],
+        "family": [
+          76580,
+          89762,
+          114754
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": [
+          114754
+        ]
       }
     },
     {
@@ -2518,6 +4890,51 @@
         "dayNight": {
           "day": 0.469,
           "night": 0.531
+        },
+        "extras": {
+          "value": 2.41,
+          "safe": 60,
+          "keep": 0.056,
+          "lean": -0.48,
+          "now": 95,
+          "like": [
+            83513,
+            95613,
+            107860
+          ],
+          "family": [
+            83513,
+            95613,
+            107860,
+            96604
+          ],
+          "alt": [
+            83513,
+            95613
+          ],
+          "flags": []
+        },
+        "siblings": [
+          95613
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Initio/atomic-rose-eau-de-parfum",
+          "longevity": 8.6,
+          "sillage": 8.2,
+          "votes": 874,
+          "occasion": {
+            "Night Out": 0.28,
+            "Evening": 0.28,
+            "Leisure": 0.2,
+            "Daily": 0.14,
+            "Business": 0.1
+          },
+          "occasionVotes": 934
+        },
+        "performance": {
+          "longevity": 4.1302,
+          "sillage": 3.0125,
+          "votes": 2265
         }
       },
       "parfumo": {
@@ -2547,6 +4964,103 @@
         "longevity": 3.6161,
         "sillage": 2.5371,
         "votes": 525
+      },
+      "about": {
+        "value": {
+          "avg": 4.38,
+          "votes": 552
+        },
+        "owners": {
+          "have": 1720,
+          "had": 318,
+          "want": 1294
+        },
+        "crowdGender": {
+          "lean": -0.44,
+          "votes": 584
+        },
+        "popularity": {
+          "all": 5051,
+          "recent": 1586
+        },
+        "perfumers": [],
+        "line": null,
+        "pros": [
+          {
+            "text": "Exceptional value for the price",
+            "up": 34,
+            "down": 1
+          },
+          {
+            "text": "Sophisticated, expensive-smelling profile",
+            "up": 30,
+            "down": 1
+          },
+          {
+            "text": "Realistic, deep, jammy rose scent",
+            "up": 25,
+            "down": 1
+          }
+        ],
+        "cons": [],
+        "smellsLike": [
+          {
+            "id": 57587,
+            "up": 299,
+            "down": 41
+          },
+          {
+            "id": 95613,
+            "up": 18,
+            "down": 5
+          },
+          {
+            "id": 107860,
+            "up": 15,
+            "down": 6
+          },
+          {
+            "id": 103453,
+            "up": 6,
+            "down": 2
+          },
+          {
+            "id": 119254,
+            "up": 3,
+            "down": 0
+          }
+        ],
+        "alsoLiked": [
+          57587,
+          68214,
+          78474,
+          43871,
+          27656,
+          96768,
+          50582,
+          76880,
+          39681,
+          78560
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 4.34,
+        "safe": 60,
+        "keep": 0.017,
+        "lean": -0.44,
+        "now": 63,
+        "like": [
+          57587,
+          95613,
+          107860
+        ],
+        "family": [
+          57587
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": []
       }
     },
     {
@@ -2653,6 +5167,56 @@
         "dayNight": {
           "day": 0.7,
           "night": 0.3
+        },
+        "extras": {
+          "value": 2.05,
+          "safe": 43,
+          "keep": 0.012,
+          "lean": -0.06,
+          "now": 100,
+          "like": [
+            105076,
+            108244,
+            110848
+          ],
+          "family": [
+            105076,
+            108244,
+            110848,
+            136382,
+            122026
+          ],
+          "alt": [
+            105076,
+            108244,
+            136382
+          ],
+          "flags": []
+        },
+        "siblings": [
+          108244,
+          115528,
+          111155
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Ex_Nihilo/blue-talisman-eau-de-parfum",
+          "longevity": 7.7,
+          "sillage": 7.5,
+          "votes": 1613,
+          "occasion": {
+            "Leisure": 0.24,
+            "Daily": 0.23,
+            "Business": 0.19,
+            "Night Out": 0.12,
+            "Sport": 0.11,
+            "Evening": 0.11
+          },
+          "occasionVotes": 1397
+        },
+        "performance": {
+          "longevity": 3.5306,
+          "sillage": 2.332,
+          "votes": 2967
         }
       },
       "parfumo": {
@@ -2701,6 +5265,123 @@
         "longevity": 3.4609,
         "sillage": 2.1757,
         "votes": 609
+      },
+      "about": {
+        "value": {
+          "avg": 4.13,
+          "votes": 583
+        },
+        "owners": {
+          "have": 2701,
+          "had": 331,
+          "want": 3583
+        },
+        "crowdGender": {
+          "lean": 0.13,
+          "votes": 627
+        },
+        "popularity": {
+          "all": 7982,
+          "recent": 7982
+        },
+        "perfumers": [],
+        "line": "Royal Collection",
+        "pros": [
+          {
+            "text": "High-quality, heavy bottle presentation",
+            "up": 141,
+            "down": 4
+          },
+          {
+            "text": "Exceptional value for the price",
+            "up": 130,
+            "down": 4
+          },
+          {
+            "text": "Ideal for spring and summer heat",
+            "up": 119,
+            "down": 2
+          }
+        ],
+        "cons": [
+          {
+            "text": "Inconsistent longevity across different batches",
+            "up": 33,
+            "down": 16
+          },
+          {
+            "text": "Difficult to find in some regions",
+            "up": 32,
+            "down": 16
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 84224,
+            "up": 396,
+            "down": 58
+          },
+          {
+            "id": 101314,
+            "up": 121,
+            "down": 48
+          },
+          {
+            "id": 108244,
+            "up": 94,
+            "down": 22
+          },
+          {
+            "id": 115528,
+            "up": 26,
+            "down": 8
+          },
+          {
+            "id": 111155,
+            "up": 15,
+            "down": 3
+          }
+        ],
+        "alsoLiked": [
+          98689,
+          89050,
+          84094,
+          34696,
+          105520,
+          70839,
+          107084,
+          31909,
+          120605,
+          50757
+        ],
+        "flags": [
+          "hardToFind"
+        ]
+      },
+      "extras": {
+        "value": 4.1,
+        "safe": 82,
+        "keep": 0.013,
+        "lean": 0.13,
+        "now": 95,
+        "like": [
+          84224,
+          101314,
+          108244
+        ],
+        "family": [
+          84224,
+          101314,
+          108244
+        ],
+        "alt": [],
+        "flags": [
+          "hardToFind"
+        ],
+        "clones": [
+          101314,
+          108244
+        ]
       }
     },
     {
@@ -2808,6 +5489,110 @@
         "longevity": 3.709,
         "sillage": 2.3763,
         "votes": 457
+      },
+      "about": {
+        "value": {
+          "avg": 2.2,
+          "votes": 426
+        },
+        "owners": {
+          "have": 1651,
+          "had": 218,
+          "want": 2982
+        },
+        "crowdGender": {
+          "lean": -0.41,
+          "votes": 528
+        },
+        "popularity": {
+          "all": 7033,
+          "recent": 7033
+        },
+        "perfumers": [
+          "Jordi Fernández"
+        ],
+        "line": null,
+        "pros": [
+          {
+            "text": "Clean, comforting, and cocooning skin-like aura",
+            "up": 90,
+            "down": 3
+          },
+          {
+            "text": "Airy, fluffy, non-cloying floral sweetness",
+            "up": 77,
+            "down": 6
+          },
+          {
+            "text": "Addictive, warm, and velvety drydown",
+            "up": 70,
+            "down": 3
+          }
+        ],
+        "cons": [
+          {
+            "text": "High retail price lacks perceived value",
+            "up": 27,
+            "down": 18
+          },
+          {
+            "text": "Leans heavily feminine, not truly unisex",
+            "up": 42,
+            "down": 35
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 46885,
+            "up": 129,
+            "down": 110
+          },
+          {
+            "id": 139003,
+            "up": 4,
+            "down": 1
+          },
+          {
+            "id": 669,
+            "up": 68,
+            "down": 66
+          },
+          {
+            "id": 115080,
+            "up": 2,
+            "down": 0
+          },
+          {
+            "id": 141010,
+            "up": 2,
+            "down": 0
+          }
+        ],
+        "alsoLiked": [
+          84119,
+          57038,
+          6458,
+          78658,
+          66097,
+          78656,
+          64338,
+          94033,
+          54785,
+          78574
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 2.24,
+        "safe": 35,
+        "keep": -0.01,
+        "lean": -0.41,
+        "now": 94,
+        "like": [],
+        "family": [],
+        "alt": [],
+        "flags": [],
+        "clones": []
       }
     },
     {
@@ -2910,6 +5695,57 @@
         "dayNight": {
           "day": 0.303,
           "night": 0.697
+        },
+        "extras": {
+          "value": 2.16,
+          "safe": 32,
+          "keep": 0.037,
+          "lean": -0.03,
+          "now": 99,
+          "like": [
+            99060,
+            66238,
+            84258
+          ],
+          "family": [
+            99060,
+            66238,
+            84258,
+            104191,
+            95174,
+            83803
+          ],
+          "alt": [
+            99060,
+            95174,
+            102788
+          ],
+          "flags": [
+            "hardToFind"
+          ]
+        },
+        "siblings": [
+          102788,
+          103380
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Yves_Saint_Laurent/babycat",
+          "longevity": 8.5,
+          "sillage": 8.1,
+          "votes": 1845,
+          "occasion": {
+            "Evening": 0.356,
+            "Night Out": 0.337,
+            "Leisure": 0.168,
+            "Daily": 0.069,
+            "Business": 0.069
+          },
+          "occasionVotes": 1458
+        },
+        "performance": {
+          "longevity": 3.8179,
+          "sillage": 2.556,
+          "votes": 2403
         }
       },
       "parfumo": {
@@ -2961,6 +5797,121 @@
         "longevity": 3.7625,
         "sillage": 2.5951,
         "votes": 2465
+      },
+      "about": {
+        "value": {
+          "avg": 4.55,
+          "votes": 2559
+        },
+        "owners": {
+          "have": 10328,
+          "had": 1271,
+          "want": 6520
+        },
+        "crowdGender": {
+          "lean": 0.18,
+          "votes": 2685
+        },
+        "popularity": {
+          "all": 21640,
+          "recent": 16029
+        },
+        "perfumers": [],
+        "line": null,
+        "pros": [
+          {
+            "text": "Ideal for winter and fall",
+            "up": 324,
+            "down": 3
+          },
+          {
+            "text": "Exceptional value for price",
+            "up": 309,
+            "down": 8
+          },
+          {
+            "text": "Deep, rich, high-quality vanilla",
+            "up": 307,
+            "down": 13
+          }
+        ],
+        "cons": [
+          {
+            "text": "Not suitable for high heat",
+            "up": 251,
+            "down": 20
+          },
+          {
+            "text": "Requires weeks of maturation",
+            "up": 124,
+            "down": 117
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 73149,
+            "up": 908,
+            "down": 75
+          },
+          {
+            "id": 95174,
+            "up": 149,
+            "down": 32
+          },
+          {
+            "id": 104191,
+            "up": 113,
+            "down": 52
+          },
+          {
+            "id": 102788,
+            "up": 56,
+            "down": 6
+          },
+          {
+            "id": 83803,
+            "up": 66,
+            "down": 21
+          }
+        ],
+        "alsoLiked": [
+          31623,
+          52802,
+          65414,
+          61856,
+          75805,
+          85097,
+          96768,
+          94713,
+          81642,
+          88175
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 4.54,
+        "safe": 36,
+        "keep": 0.041,
+        "lean": 0.18,
+        "now": 99,
+        "like": [
+          73149,
+          95174,
+          104191
+        ],
+        "family": [
+          73149,
+          95174,
+          102788,
+          83803,
+          66238
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": [
+          102788,
+          103380
+        ]
       }
     },
     {
@@ -3067,6 +6018,53 @@
         "dayNight": {
           "day": 0.652,
           "night": 0.348
+        },
+        "extras": {
+          "value": 1.99,
+          "safe": 21,
+          "keep": 0.056,
+          "lean": -0.53,
+          "now": 95,
+          "like": [
+            75874,
+            75078,
+            121449
+          ],
+          "family": [
+            75874,
+            75078,
+            121449,
+            87157,
+            122851
+          ],
+          "alt": [
+            121449,
+            87157,
+            17882
+          ],
+          "flags": [
+            "notBlindBuy"
+          ]
+        },
+        "siblings": [],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Floraiku/One_Umbrella_for_Two",
+          "longevity": 7.4,
+          "sillage": 6.9,
+          "votes": 336,
+          "occasion": {
+            "Leisure": 0.3,
+            "Evening": 0.21,
+            "Night Out": 0.2,
+            "Daily": 0.17,
+            "Business": 0.12
+          },
+          "occasionVotes": 408
+        },
+        "performance": {
+          "longevity": 3.3456,
+          "sillage": 2.2196,
+          "votes": 1302
         }
       },
       "parfumo": {
@@ -3096,6 +6094,90 @@
         "longevity": 3.3846,
         "sillage": 2.1905,
         "votes": 39
+      },
+      "about": {
+        "value": {
+          "avg": 4.13,
+          "votes": 47
+        },
+        "owners": {
+          "have": 259,
+          "had": 38,
+          "want": 419
+        },
+        "crowdGender": {
+          "lean": -0.59,
+          "votes": 52
+        },
+        "popularity": {
+          "all": 954,
+          "recent": 954
+        },
+        "perfumers": [],
+        "line": null,
+        "pros": [],
+        "cons": [],
+        "smellsLike": [
+          {
+            "id": 46165,
+            "up": 75,
+            "down": 9
+          },
+          {
+            "id": 75874,
+            "up": 15,
+            "down": 3
+          },
+          {
+            "id": 136124,
+            "up": 4,
+            "down": 0
+          },
+          {
+            "id": 100963,
+            "up": 2,
+            "down": 0
+          },
+          {
+            "id": 118635,
+            "up": 6,
+            "down": 5
+          }
+        ],
+        "alsoLiked": [
+          102791,
+          102874,
+          92766,
+          98937,
+          85097,
+          113778,
+          78560,
+          96768,
+          75805,
+          101955
+        ],
+        "flags": [
+          "polarizing"
+        ]
+      },
+      "extras": {
+        "value": 3.82,
+        "safe": 6,
+        "keep": -0.024,
+        "lean": -0.59,
+        "now": 40,
+        "like": [
+          46165,
+          75874
+        ],
+        "family": [
+          46165
+        ],
+        "alt": [],
+        "flags": [
+          "polarizing"
+        ],
+        "clones": []
       }
     },
     {
@@ -3202,6 +6284,54 @@
         "dayNight": {
           "day": 0.298,
           "night": 0.702
+        },
+        "extras": {
+          "value": 3.06,
+          "safe": 80,
+          "keep": 0.069,
+          "lean": 0.67,
+          "now": 100,
+          "like": [
+            97995,
+            95265,
+            101529
+          ],
+          "family": [
+            97995,
+            95265,
+            101529,
+            110808,
+            102026,
+            100252
+          ],
+          "alt": [],
+          "flags": []
+        },
+        "siblings": [
+          97995,
+          95265,
+          102026,
+          100252,
+          103482
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Jean_Paul_Gaultier/le-male-elixir",
+          "longevity": 8.6,
+          "sillage": 8.3,
+          "votes": 3552,
+          "occasion": {
+            "Night Out": 0.343,
+            "Evening": 0.333,
+            "Leisure": 0.182,
+            "Daily": 0.091,
+            "Business": 0.051
+          },
+          "occasionVotes": 2088
+        },
+        "performance": {
+          "longevity": 4.0246,
+          "sillage": 2.8256,
+          "votes": 19363
         }
       },
       "parfumo": {
@@ -3242,6 +6372,118 @@
         "longevity": 3.9447,
         "sillage": 2.8253,
         "votes": 995
+      },
+      "about": {
+        "value": {
+          "avg": 4.23,
+          "votes": 940
+        },
+        "owners": {
+          "have": 3772,
+          "had": 391,
+          "want": 2097
+        },
+        "crowdGender": {
+          "lean": 0.61,
+          "votes": 967
+        },
+        "popularity": {
+          "all": 7598,
+          "recent": 7598
+        },
+        "perfumers": [],
+        "line": "Hawas Collection",
+        "pros": [
+          {
+            "text": "Excellent value for the price",
+            "up": 127,
+            "down": 2
+          },
+          {
+            "text": "Perfect for winter and cold nights",
+            "up": 120,
+            "down": 1
+          },
+          {
+            "text": "High-quality bottle and heavy atomizer",
+            "up": 104,
+            "down": 3
+          }
+        ],
+        "cons": [
+          {
+            "text": "Lacks the original's honeyed depth",
+            "up": 65,
+            "down": 13
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 81642,
+            "up": 434,
+            "down": 45
+          },
+          {
+            "id": 97995,
+            "up": 156,
+            "down": 18
+          },
+          {
+            "id": 95265,
+            "up": 104,
+            "down": 16
+          },
+          {
+            "id": 102026,
+            "up": 68,
+            "down": 19
+          },
+          {
+            "id": 100252,
+            "up": 37,
+            "down": 5
+          }
+        ],
+        "alsoLiked": [
+          81642,
+          101124,
+          65414,
+          52802,
+          61856,
+          94713,
+          75805,
+          52180,
+          88175,
+          72821
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 4.21,
+        "safe": 93,
+        "keep": 0.016,
+        "lean": 0.61,
+        "now": 95,
+        "like": [
+          81642,
+          97995,
+          95265
+        ],
+        "family": [
+          81642,
+          97995,
+          95265,
+          102026,
+          100252
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": [
+          97995,
+          95265,
+          102026,
+          100252
+        ]
       }
     },
     {
@@ -3328,6 +6570,49 @@
         "dayNight": {
           "day": 0.669,
           "night": 0.331
+        },
+        "extras": {
+          "value": 2.12,
+          "safe": 33,
+          "keep": 0.033,
+          "lean": -0.38,
+          "now": 92,
+          "like": [
+            138575,
+            139285,
+            142219
+          ],
+          "family": [
+            138575,
+            139285
+          ],
+          "alt": [
+            138575
+          ],
+          "flags": [
+            "hardToFind"
+          ]
+        },
+        "siblings": [],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Carolina_Herrera/cedar-chic",
+          "longevity": 7.7,
+          "sillage": 7.2,
+          "votes": 82,
+          "occasion": {
+            "Daily": 0.248,
+            "Leisure": 0.248,
+            "Business": 0.198,
+            "Evening": 0.129,
+            "Night Out": 0.109,
+            "Sport": 0.069
+          },
+          "occasionVotes": 117
+        },
+        "performance": {
+          "longevity": 3.4959,
+          "sillage": 2.1667,
+          "votes": 242
         }
       },
       "parfumo": {
@@ -3358,6 +6643,83 @@
         "longevity": 3.6527,
         "sillage": 2.2412,
         "votes": 167
+      },
+      "about": {
+        "value": {
+          "avg": 4.22,
+          "votes": 184
+        },
+        "owners": {
+          "have": 959,
+          "had": 65,
+          "want": 1295
+        },
+        "crowdGender": {
+          "lean": -0.13,
+          "votes": 223
+        },
+        "perfumers": [],
+        "line": null,
+        "pros": [],
+        "cons": [],
+        "smellsLike": [
+          {
+            "id": 109989,
+            "up": 160,
+            "down": 18
+          },
+          {
+            "id": 139285,
+            "up": 55,
+            "down": 6
+          },
+          {
+            "id": 6458,
+            "up": 17,
+            "down": 15
+          },
+          {
+            "id": 113920,
+            "up": 1,
+            "down": 0
+          },
+          {
+            "id": 141201,
+            "up": 1,
+            "down": 0
+          }
+        ],
+        "alsoLiked": [
+          107084,
+          123211,
+          89454,
+          89050,
+          85087,
+          120605,
+          121721,
+          105520,
+          121870,
+          98689
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 4.11,
+        "safe": 33,
+        "keep": 0.002,
+        "lean": -0.13,
+        "now": 0,
+        "like": [
+          109989,
+          139285
+        ],
+        "family": [
+          109989,
+          139285
+        ],
+        "alt": [],
+        "flags": [],
+        "clones": []
       }
     },
     {
@@ -3495,6 +6857,50 @@
         "dayNight": {
           "day": 0.377,
           "night": 0.623
+        },
+        "extras": {
+          "value": 1.96,
+          "safe": 43,
+          "keep": 0.046,
+          "lean": 0.37,
+          "now": 99,
+          "like": [
+            118549,
+            115548,
+            132925
+          ],
+          "family": [
+            118549
+          ],
+          "alt": [
+            118549,
+            115548
+          ],
+          "flags": [
+            "notBlindBuy"
+          ]
+        },
+        "siblings": [
+          115548
+        ],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Amouage/outlands",
+          "longevity": 9,
+          "sillage": 8.6,
+          "votes": 1256,
+          "occasion": {
+            "Evening": 0.317,
+            "Night Out": 0.307,
+            "Leisure": 0.188,
+            "Daily": 0.109,
+            "Business": 0.079
+          },
+          "occasionVotes": 818
+        },
+        "performance": {
+          "longevity": 4.356,
+          "sillage": 3.012,
+          "votes": 1665
         }
       },
       "parfumo": {
@@ -3538,6 +6944,121 @@
         "longevity": 4.0332,
         "sillage": 2.9224,
         "votes": 1172
+      },
+      "about": {
+        "value": {
+          "avg": 4.55,
+          "votes": 1131
+        },
+        "owners": {
+          "have": 5086,
+          "had": 431,
+          "want": 4700
+        },
+        "crowdGender": {
+          "lean": 0.75,
+          "votes": 1180
+        },
+        "popularity": {
+          "all": 11507,
+          "recent": 11507
+        },
+        "perfumers": [],
+        "line": null,
+        "pros": [
+          {
+            "text": "Well-blended resins and spices",
+            "up": 299,
+            "down": 12
+          },
+          {
+            "text": "Ideal for cold weather and evenings",
+            "up": 273,
+            "down": 6
+          },
+          {
+            "text": "Smooth, creamy amber-vanilla base",
+            "up": 247,
+            "down": 13
+          }
+        ],
+        "cons": [
+          {
+            "text": "Leans toward a mature audience",
+            "up": 244,
+            "down": 24
+          },
+          {
+            "text": "Definitely not blind buy safe",
+            "up": 257,
+            "down": 51
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 97924,
+            "up": 566,
+            "down": 81
+          },
+          {
+            "id": 115548,
+            "up": 129,
+            "down": 19
+          },
+          {
+            "id": 135426,
+            "up": 24,
+            "down": 4
+          },
+          {
+            "id": 123008,
+            "up": 27,
+            "down": 11
+          },
+          {
+            "id": 132925,
+            "up": 14,
+            "down": 7
+          }
+        ],
+        "alsoLiked": [
+          72821,
+          96246,
+          75805,
+          52802,
+          61856,
+          50757,
+          65414,
+          94697,
+          39314,
+          94713
+        ],
+        "flags": [
+          "notBlindBuy"
+        ]
+      },
+      "extras": {
+        "value": 4.53,
+        "safe": 42,
+        "keep": 0.028,
+        "lean": 0.75,
+        "now": 97,
+        "like": [
+          97924,
+          115548,
+          135426
+        ],
+        "family": [
+          97924,
+          115548
+        ],
+        "alt": [],
+        "flags": [
+          "notBlindBuy"
+        ],
+        "clones": [
+          115548
+        ]
       }
     }
   ]
