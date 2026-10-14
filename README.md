@@ -16,7 +16,7 @@ A quick look at what to wear from my own collection, based on today's weather, t
 - **How much to spray** — a count and where for each pick ("2 sprays · neck, chest" on the Now card, and the spots on a small figure on every bottle page), from how loud and lasting the bottle is, the weather and the occasion. In the terminal too (`--spray`, and on every pick).
 - **Your own ratings** — your stars steer the picks (a bottle you rate 1★ sits out, a 5★ one wins near ties), and so does whether a bottle lasts longer or sits closer on your skin than the crowd says. Set them under "On my skin" on a bottle's page; Now, Week, Occasion, trips and Insights all use them.
 - **Gaps and buy check** in the terminal too: where your wardrobe is thin and what fills it (`--gaps`), and a verdict on any bottle you're eyeing (`--check`).
-- °F or °C (defaults from your locale), two themes, recent locations, links to every view, and home-screen shortcuts for Now, Week and Occasion.
+- °F or °C (defaults from your locale), two themes, a still sky for those who want one, recent locations, links to every view, and home-screen shortcuts for Now, Week and Occasion.
 
 Picks come from Fragrantica community votes (season, day/night, and those of the bottles voters say it smells like), each bottle's main accords, how heavy they wear versus the temperature and humidity, and the occasion's accord profile.
 

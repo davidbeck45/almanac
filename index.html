@@ -34,11 +34,13 @@
   <link rel="stylesheet" href="src/css/wardrobe.css">
   <link rel="stylesheet" href="src/css/discover.css">
   <link rel="stylesheet" href="src/css/bottle.css">
-  <!-- Apply the saved theme before first paint (src/theme.js takes over from there). -->
+  <!-- Apply the saved theme (and a still sky) before first paint (src/theme.js and the shell take over from there). -->
   <script>
     try {
-      const t = new URLSearchParams(location.search).get('theme') ?? JSON.parse(localStorage.getItem('scentcast.prefs'))?.theme;
+      const prefs = JSON.parse(localStorage.getItem('scentcast.prefs'));
+      const t = new URLSearchParams(location.search).get('theme') ?? prefs?.theme;
       if (t) document.documentElement.dataset.theme = t;
+      if (prefs?.stillSky) document.documentElement.classList.add('still-sky');
     } catch {}
   </script>
   <script type="module" src="src/main.js"></script>

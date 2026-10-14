@@ -28,6 +28,7 @@ export function savePrefs() {
   try {
     localStorage.setItem(PREFS_KEY, JSON.stringify({
       occasion: state.occasion, units: state.units, theme: theme(), preferValue: state.preferValue, likedStyles: state.likedStyles,
+      stillSky: state.stillSky || undefined,
     }));
   } catch {}
 }
@@ -76,6 +77,9 @@ export const state = {
   // else's on what most of its bottles lean toward (likedStyles in
   // src/discover.js). setLikedStyles.
   likedStyles: Array.isArray(prefs.likedStyles) ? prefs.likedStyles.filter(s => typeof s === 'string') : null,
+  // Settings › Animate the sky switched off: the weather scene holds still
+  // (the shell sets .still-sky on <html>; base.css).
+  stillSky: prefs.stillSky === true,
   // Discover's search: `draft` is the field as typed, `query` what was last
   // searched; `offline` the library's error when only local matches came back.
   discover: { draft: null, query: '', results: null, busy: false, error: '', offline: '' },
@@ -337,6 +341,13 @@ export function setPreferValue(on) {
   savePrefs();
 }
 
+// Animate the sky (Settings), saved in prefs; the class holds the scene still.
+export function setStillSky(on) {
+  state.stillSky = Boolean(on);
+  globalThis.document?.documentElement.classList.toggle('still-sky', state.stillSky);
+  savePrefs();
+}
+
 // The styles someone likes, saved in prefs: an empty list means none, null
 // goes back to the default (state.likedStyles).
 export function setLikedStyles(ids) {
@@ -346,20 +357,30 @@ export function setLikedStyles(ids) {
 
 // The place's climate summary for the gap finder (src/climate.js keeps it
 // on the device per place), or null for the default climate: with no place
-// set, or while the archive can't be reached (asked again next time).
-let climate = null; // { key, summary: promise }
-export function localClimate() {
+// set, or while the archive can't be reached. A failed ask is remembered for
+// CLIMATE_RETRY_MS (or until the browser comes back online, retryClimate),
+// so every pool question meanwhile doesn't ask a failing service again.
+const CLIMATE_RETRY_MS = 10 * 60 * 1000;
+let climate = null; // { key, summary: promise, failedAt }
+export function localClimate(nowMs = Date.now()) {
   const { lat, lon } = state.loc ?? {};
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return Promise.resolve(null);
   const key = `${lat},${lon}`;
+  if (climate?.key === key && climate.failedAt != null && nowMs - climate.failedAt >= CLIMATE_RETRY_MS) climate = null;
   if (climate?.key !== key) {
     const summary = import('../climate.js')
       .then(({ fetchClimate }) => fetchClimate(lat, lon))
       .then(c => (c.local ? c.summary : null), () => null);
-    climate = { key, summary };
-    summary.then(s => { if (!s && climate?.summary === summary) climate = null; });
+    const asked = { key, summary, failedAt: null };
+    climate = asked;
+    summary.then(s => { if (!s) asked.failedAt = Date.now(); });
   }
   return climate.summary;
+}
+
+/** Forget a failed climate ask (back online), so the next question asks again. */
+export function retryClimate() {
+  if (climate?.failedAt != null) climate = null;
 }
 
 /**

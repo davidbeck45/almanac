@@ -25,6 +25,9 @@ const jsFiles = dir => readdirSync(new URL(`../${dir}/`, import.meta.url), { wit
 test('routes parse into a destination, a pane and an argument', () => {
   assert.deepEqual(parse('#/wear/now'), { dest: 'wear', pane: 'now', arg: null, query: {} });
   assert.deepEqual(parse('#/wear/occasion/office'), { dest: 'wear', pane: 'occasion', arg: 'office', query: {} });
+  assert.deepEqual(parse('#/wear/occasion/bogus'), { dest: 'wear', pane: 'occasion', arg: null, query: {} }, 'an unknown occasion drops out, so the URL is rewritten');
+  assert.equal(routeHash(parse('#/wear/occasion/bogus')), '#/wear/occasion');
+  assert.equal(parse('#/wardrobe/worn/extra').arg, null, 'a pane that takes no argument keeps none');
   assert.deepEqual(parse('#/wardrobe/worn'), { dest: 'wardrobe', pane: 'worn', arg: null, query: {} });
   assert.deepEqual(parse('#/discover?q=iris%20leather'), { dest: 'discover', pane: null, arg: null, query: { q: 'iris leather' } });
   assert.deepEqual(parse('#/bottle/98689?ctx=w:2026-10-14:night'), { dest: 'bottle', pane: null, arg: '98689', query: { ctx: 'w:2026-10-14:night' } });

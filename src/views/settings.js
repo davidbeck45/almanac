@@ -3,17 +3,25 @@
 // from. Also the location sheet. Styles: src/css/shell.css (.set-*).
 import { loadRecent, deviceLocation, searchCities } from '../location.js';
 import { setTheme, theme } from '../theme.js';
-import { esc, plural, setUnits } from '../ui.js';
-import { icon, segHTML, sheetFrame } from '../ui/components.js';
-import { state, savePrefs, activeFragrances, sourceRecords } from '../app/state.js';
+import { esc, plural, setUnits, shortDate } from '../ui.js';
+import { icon, segHTML, sheetFrame, switchHTML } from '../ui/components.js';
+import { state, savePrefs, activeFragrances, sourceRecords, setStillSky } from '../app/state.js';
+
+// "Oct 14" as every date in the app reads, with the year when it isn't this one.
+function syncedOn(fetched, now = new Date()) {
+  const iso = String(fetched ?? '');
+  if (!/^\d{4}-\d{2}-\d{2}/.test(iso) || Number.isNaN(Date.parse(iso.slice(0, 10)))) return esc(iso);
+  const year = iso.slice(0, 4);
+  return `${shortDate(iso.slice(0, 10))}${year === String(now.getFullYear()) ? '' : `, ${year}`}`;
+}
 
 // The credits every page carries in its footer, and Settings in full.
 // `scraped`: the list on screen has bottles synced from Fragrantica itself
 // (on `fetched`), not only from the dataset.
 export function creditsHTML({ fetched = null, scraped = false, fragella = false }) {
-  const dataset = '<a href="https://www.kaggle.com/datasets/ledecanteur/fragrantica-perfumes" target="_blank" rel="noopener">Le Decanteur’s dataset</a> (<a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noopener">CC BY-NC-SA</a>)';
+  const dataset = '<a href="https://www.kaggle.com/datasets/ledecanteur/fragrantica-perfumes" target="_blank" rel="noopener">Le Decanteur’s dataset</a> (<a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noopener">CC BY-NC-SA 4.0</a>)';
   const sources = [
-    scraped ? `Fragrantica, synced ${esc(fetched)}, and ${dataset}` : `Fragrantica via ${dataset}`,
+    scraped ? `Fragrantica, synced ${syncedOn(fetched)}, and ${dataset}` : `Fragrantica via ${dataset}`,
     fragella && '<a href="https://api.fragella.com" target="_blank" rel="noopener">Fragella</a>',
   ].filter(Boolean).join(' · ');
   return `<span>Fragrance data: ${sources}</span><span>Forecast by <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a></span>`;
@@ -27,7 +35,7 @@ const row = (label, control, { glyph = '', note = '' } = {}) => `<div class="set
     <span class="set-label">${glyph}<span class="set-text">${label}${note ? `<small>${note}</small>` : ''}</span></span>${control}
   </div>`;
 
-export function settingsHTML({ loc, units, themeName, active, mineCount, shared, on, total, wears, updated, stale, credits }) {
+export function settingsHTML({ loc, units, themeName, stillSky = false, active, mineCount, shared, on, total, wears, updated, stale, credits }) {
   return `
     ${group('Weather', `
       ${row(loc ? esc(loc.name) : 'Not set', '<button class="btn secondary compact" data-action="location">Change</button>', { glyph: icon.pin, note: loc?.region ? esc(loc.region) : '' })}
@@ -36,6 +44,7 @@ export function settingsHTML({ loc, units, themeName, active, mineCount, shared,
     ${group('Display', `
       ${row('Temperature', segHTML([{ value: 'F', label: '°F', on: units === 'F' }, { value: 'C', label: '°C', on: units === 'C' }], { action: 'units', label: 'Temperature units' }))}
       ${row('Theme', segHTML([{ value: 'default', label: 'Default', on: themeName === 'default' }, { value: 'gruvbox', label: 'Gruvbox', on: themeName === 'gruvbox' }], { action: 'theme', label: 'Theme' }))}
+      ${row('Animate the sky', switchHTML({ on: !stillSky, label: 'Animate the sky', action: 'sky-motion', id: 'sky' }), { note: 'Stars, rain and smoke move' })}
     `)}
     ${group('Collection', `
       ${shared ? `<p class="notice">Viewing ${esc(shared.name ? `${shared.name}’s` : 'a shared')} collection from a link. Picking a list closes it.</p>` : ''}
@@ -54,6 +63,7 @@ function settingsPage() {
     loc: state.loc,
     units: state.units,
     themeName: theme(),
+    stillSky: state.stillSky,
     active: state.active,
     mineCount: state.mine.records.length,
     shared: state.shared,
@@ -92,12 +102,12 @@ export function locationSheetHTML(s = {}, recent = []) {
   return sheetFrame('loc-title', `
       <h2 id="loc-title" class="sheet-title">Where are you?</h2>
       <p class="muted lede">Used only to fetch your local forecast from Open-Meteo.</p>
-      <button class="btn primary block" data-action="geo" ${locating ? 'disabled' : ''}>${locating ? '<span class="spinner small" aria-hidden="true"></span>' : icon.pin}<span>${locating ? 'Locating…' : 'Use my location'}</span></button>
+      <button class="btn primary block" data-action="geo"${locating ? ' aria-disabled="true"' : ''}>${locating ? '<span class="spinner small" aria-hidden="true"></span>' : icon.pin}<span>${locating ? 'Locating…' : 'Use my location'}</span></button>
       <div class="or"><span>or</span></div>
       <form class="search-form" data-form="city">
         <label class="filter big">${icon.search}<input type="search" name="q" data-field="city" placeholder="Search a city" autocomplete="off" value="${esc(query)}" aria-label="City" enterkeyhint="search"></label>
       </form>
-      ${error ? `<p class="error">${esc(error)}</p>` : ''}
+      ${error ? `<p class="error" role="alert">${esc(error)}</p>` : ''}
       <div class="city-slot" aria-live="polite">${cityResultsHTML(s, recent)}</div>`);
 }
 
@@ -131,14 +141,17 @@ async function runCitySearch(query) {
     sheet.busy = false;
   }
   const slot = document.querySelector('#sheet .city-slot');
-  if (slot) slot.innerHTML = sheet.error ? `<p class="error">${esc(sheet.error)}</p>` : cityResultsHTML(sheet, loadRecent());
+  if (slot) slot.innerHTML = sheet.error ? `<p class="error" role="alert">${esc(sheet.error)}</p>` : cityResultsHTML(sheet, loadRecent());
 }
 
 export const actions = {
   location(el, app) {
     app.openSheet({ kind: 'location' });
   },
+  // While it looks, the button stays focusable (aria-disabled, "Locating…"),
+  // so focus doesn't drop out of the sheet; a second press does nothing.
   async geo(el, app) {
+    if (state.sheet?.locating) return;
     app.updateSheet({ locating: true, error: '' });
     try {
       await app.setLocation(await deviceLocation());
@@ -164,6 +177,12 @@ export const actions = {
   theme(el, app) {
     setTheme(el.dataset.value);
     savePrefs();
+    app.keepingFocus(el, '#app', app.render);
+  },
+  // The scene's loops (stars, rain, smoke, lightning) can be held still
+  // (WCAG 2.2.2); reduced motion holds them anyway.
+  'sky-motion'(el, app) {
+    setStillSky(!state.stillSky);
     app.keepingFocus(el, '#app', app.render);
   },
 };

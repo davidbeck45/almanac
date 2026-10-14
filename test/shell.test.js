@@ -207,3 +207,27 @@ test('the suggestion pool’s files stay cached offline, however many dataset sh
   assert.equal(await w.get(`data/fragrantica/x/${max + 19}.json`), `/scentcast/data/fragrantica/x/${max + 19}.json from the network (v1)`);
   assert.equal(await w.get('data/fragrantica/x/0.json'), '', 'the oldest shards make room');
 });
+
+test('a climate archive that fails isn’t asked again by every pool question', async () => {
+  const { state, localClimate, retryClimate } = await import('../src/app/state.js');
+  const realFetch = globalThis.fetch;
+  let asked = 0;
+  globalThis.fetch = async url => {
+    if (String(url).includes('archive')) asked++;
+    return new Response('{}', { status: 503 });
+  };
+  try {
+    state.loc = { name: 'Testville', lat: 12.5, lon: -45.25 };
+    assert.equal(await localClimate(), null, 'the default climate meanwhile');
+    assert.equal(await localClimate(), null);
+    assert.equal(asked, 1, 'once, not once per question');
+    assert.equal(await localClimate(Date.now() + 11 * 60 * 1000), null);
+    assert.equal(asked, 2, 'again after a while');
+    retryClimate();
+    await localClimate();
+    assert.equal(asked, 3, 'and again once back online');
+  } finally {
+    globalThis.fetch = realFetch;
+    state.loc = null;
+  }
+});

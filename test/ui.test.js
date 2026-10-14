@@ -241,3 +241,20 @@ test('accord chips read in sentence case, whatever case the data keeps', () => {
   const { chips } = componentsKit;
   assert.match(chips({ 'warm spicy': 100, Champagne: 80, amber: 60 }), />Warm spicy<.*>Champagne<.*>Amber</s);
 });
+
+test('the credits read a date as every date in the app does, and name the licence’s version', () => {
+  const year = new Date().getFullYear();
+  assert.match(settings.creditsHTML({ fetched: `${year}-10-14`, scraped: true }), /synced Oct 14, and/);
+  assert.match(settings.creditsHTML({ fetched: '2019-03-02', scraped: true }), /synced Mar 2, 2019, and/);
+  assert.match(settings.creditsHTML({}), />CC BY-NC-SA 4\.0</);
+});
+
+test('Settings can hold the sky still, and the location sheet stays in reach while it locates', () => {
+  const base = { loc: { name: 'Here' }, units: 'F', themeName: 'default', active: 'demo', mineCount: 0, shared: null, on: 1, total: 1, wears: 0, updated: '', stale: false, credits: '' };
+  assert.match(settings.settingsHTML(base), /role="switch" aria-checked="true" data-action="sky-motion"/);
+  assert.match(settings.settingsHTML({ ...base, stillSky: true }), /role="switch" aria-checked="false" data-action="sky-motion"/);
+  const locating = settings.locationSheetHTML({ locating: true, error: 'Location permission was denied.' });
+  assert.match(locating, /data-action="geo" aria-disabled="true"/, 'focusable while it looks, so focus stays in the sheet');
+  assert.ok(!/data-action="geo"[^>]*\sdisabled/.test(locating));
+  assert.match(locating, /role="alert">Location permission was denied\./, 'the error is announced');
+});
