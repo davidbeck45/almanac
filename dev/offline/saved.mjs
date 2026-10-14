@@ -32,16 +32,50 @@ function moveDates(value, days) {
 const FORECAST = read('ny-forecast.json');
 const shift = now => Math.round((noon(isoDay(now)) - noon(FORECAST.daily.time[0])) / 864e5);
 
-/** The saved forecast starting today, read at this hour. */
+/**
+ * The saved forecast starting today, read at this hour: `current` is the
+ * hourly row src/weather.js reads as now once a forecast is an hour old (the
+ * hour on the forecast's clock), so a fresh fetch shows the same reading.
+ */
 export function shiftedForecast(now = new Date()) {
   const out = moveDates(FORECAST, shift(now));
-  out.current.time = `${isoDay(now)}T${pad(now.getHours())}:00`;
   delete out.fetchedAt;
+  const time = `${new Date(now.getTime() + out.utc_offset_seconds * 1000).toISOString().slice(0, 13)}:00`;
+  const { hourly: h, daily: d } = out, i = h.time.indexOf(time), day = d.time.indexOf(time.slice(0, 10));
+  if (i < 0 || day < 0) return out;
+  out.current = {
+    ...out.current,
+    time,
+    temperature_2m: h.temperature_2m[i],
+    apparent_temperature: h.apparent_temperature[i],
+    relative_humidity_2m: h.relative_humidity_2m[i],
+    weather_code: h.weather_code[i],
+    cloud_cover: null, // not in the hourly rows; the app reads none from them either
+    is_day: d.sunrise[day] <= time && time < d.sunset[day] ? 1 : 0,
+  };
   return out;
 }
 
 /** The sample wears, moved as far as the forecast. */
 export const shiftedHistory = (now = new Date()) => moveDates(read('history.json'), shift(now));
+
+/** What the CLI calls the place under stub.mjs. */
+export const SAVED_NAME = `${NEW_YORK.name} (saved)`;
+
+/**
+ * CLI arguments with every --loc and --city (no lookup) turned into New York
+ * as SAVED_NAME, so output on the saved weather never names the place asked.
+ */
+export function savedPlaceArgs(args) {
+  const SAVED_PLACE = `${NEW_YORK.lat},${NEW_YORK.lon},${SAVED_NAME}`;
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    if (/^--(city|loc)=/.test(args[i])) out.push(`--loc=${SAVED_PLACE}`);
+    else if ((args[i] === '--city' || args[i] === '--loc') && i + 1 < args.length) out.push('--loc', SAVED_PLACE), i++;
+    else out.push(args[i]);
+  }
+  return out;
+}
 
 /** What offlineFetch answers with. */
 export const offlineData = (now = new Date()) => ({ forecast: shiftedForecast(now), climate: read('ny-climate.json'), windows: WINDOWS, home: NEW_YORK });

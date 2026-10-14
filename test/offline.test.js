@@ -2,7 +2,9 @@
 // app reads a fresh forecast and climate, without reaching the network.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { offlineData, offlineFetch, shiftedForecast, shiftedHistory } from '../dev/offline/saved.mjs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { offlineData, offlineFetch, savedPlaceArgs, shiftedForecast, shiftedHistory } from '../dev/offline/saved.mjs';
 import { fetchForecast, summarize, week } from '../src/weather.js';
 import { fetchClimate } from '../src/climate.js';
 
@@ -13,10 +15,18 @@ test('the saved forecast and wears move to the day asked', () => {
   const f = shiftedForecast(NOW);
   assert.equal(f.daily.time[0], '2027-03-05');
   assert.equal(f.hourly.time[0], '2027-03-05T00:00');
-  assert.equal(f.current.time, '2027-03-05T15:00');
   const wears = shiftedHistory(NOW);
   assert.equal(wears[0].date, '2027-03-02');
   assert.ok(wears.every(w => w.lat === 40.71 && w.lon === -74.01 && /^\d+$/.test(w.id)));
+});
+
+test('its now is the reading for this hour, fresh or an hour old', () => {
+  const f = shiftedForecast(NOW);
+  assert.ok(f.hourly.time.includes(f.current.time));
+  // Fresh, the app reads `current`; an hour old, the hour's row.
+  const read = age => summarize({ ...f, fetchedAt: NOW.getTime() - age }, NOW.getTime()).now;
+  const fresh = read(0), old = read(2 * 3600e3);
+  for (const key of ['tempF', 'feelsF', 'humidity', 'label']) assert.equal(fresh[key], old[key], key);
 });
 
 test('the app reads the offline forecast and climate as fetched ones', async t => {
@@ -39,4 +49,14 @@ test('other places get New York weather, with a warning', async t => {
   await fetchForecast({ lat: 29.76, lon: -95.37 });
   assert.equal(warn.mock.callCount(), 1);
   assert.match(warn.mock.calls[0].arguments[0], /29\.76,-95\.37 with New York's saved weather/);
+});
+
+test('the CLI on the saved weather names the place New York (saved), whatever it was asked', () => {
+  const ny = '40.71,-74.01,New York (saved)';
+  assert.deepEqual(savedPlaceArgs(['--city', 'Houston', '--gaps', '--loc=41.88,-87.63,Chicago', '--json']), ['--loc', ny, '--gaps', `--loc=${ny}`, '--json']);
+  const path = name => fileURLToPath(new URL(name, import.meta.url));
+  const run = spawnSync(process.execPath, ['--import', path('../dev/offline/stub.mjs'), path('../scripts/recommend.mjs'), '--loc', '41.88,-87.63,Chicago'], { encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /^New York \(saved\) · now/);
+  assert.doesNotMatch(run.stdout, /Chicago/);
 });
