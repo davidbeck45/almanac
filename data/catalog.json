@@ -1,6 +1,6 @@
 {
   "source": "fragrantica.com, bottles added for other people's collections",
-  "fetched": "2026-10-12",
+  "fetched": "2026-10-14",
   "fragrances": [
     {
       "id": 88207,
@@ -214,6 +214,8 @@
         ],
         "alt": [],
         "flags": [],
+        "owners": 802,
+        "reach": 0.45,
         "clones": []
       }
     },
@@ -368,6 +370,8 @@
         "family": [],
         "alt": [],
         "flags": [],
+        "owners": 381,
+        "reach": 0.6,
         "clones": []
       }
     },
@@ -547,6 +551,8 @@
         "family": [],
         "alt": [],
         "flags": [],
+        "owners": 406,
+        "reach": 0.5,
         "clones": []
       }
     },
@@ -766,6 +772,8 @@
         ],
         "alt": [],
         "flags": [],
+        "owners": 34178,
+        "reach": 0.88,
         "clones": [
           123710,
           137297
@@ -933,6 +941,8 @@
         "family": [],
         "alt": [],
         "flags": [],
+        "owners": 361,
+        "reach": 0.74,
         "clones": []
       }
     },
@@ -1099,6 +1109,8 @@
         "family": [],
         "alt": [],
         "flags": [],
+        "owners": 96,
+        "reach": 0.5,
         "clones": []
       }
     },
@@ -1298,6 +1310,8 @@
         "family": [],
         "alt": [],
         "flags": [],
+        "owners": 1315,
+        "reach": 0.8,
         "clones": []
       }
     },
@@ -1489,6 +1503,8 @@
         "flags": [
           "polarizing"
         ],
+        "owners": 179,
+        "reach": 0.67,
         "clones": []
       }
     },
@@ -1688,6 +1704,8 @@
         "family": [],
         "alt": [],
         "flags": [],
+        "owners": 242,
+        "reach": 0.31,
         "clones": []
       }
     }

@@ -43,7 +43,12 @@ only what it needs:
   rv rating votes; a indexes into `accords` and w their bar widths (30 + 0.7
   x strength, whole, as the engine sees them); v as r/'s; l and si longevity
   and sillage averages x 100 (0 without votes) and lv the fewer of their vote
-  counts; k as r/'s, x 100. Signals: val value for money x 100 (1 overpriced
+  counts (rounded to 2 significant digits: they only weigh the average
+  against the middle); k as r/'s, x 100. Signals: o owners (Fragrantica's
+  "have") as 4 x log2(1 + owners), whole; rc reach, the share (x 100) of the
+  bottles its fans also like that are among the pool's 5% most owned, at
+  most its brand's median + 0.15 (-1 when none of them is in the pool and
+  its brand has under 5 pool bottles); val value for money x 100 (1 overpriced
   .. 5 great value, few votes leaning to 3.1; 0 unvoted); safe blind-buy
   safety, the pool percentile of like+love share less 4 x hate share; keep
   keeper rate (have / (have + had)) over what pages that old keep, per mille;
@@ -59,7 +64,10 @@ only what it needs:
   of the bottle itself: not "weaker than the discontinued EDT", nor a guess
   like "may be discontinued"); brigaded (more than 1.5 ratings per owner with
   30%+ of them hate or 85%+ love, or more than 5 whatever the spread);
-  polarizing (hate share in the pool's top tenth). `slugs` lists the page
+  polarizing (hate share in the pool's top tenth); mist (a body or hair mist,
+  body spray or splash, by its name, description or the AI summary: "Book
+  Loft Fine Fragrance Mist by", "impressive longevity for a body mist").
+  `slugs` lists the page
   slugs slug_of() can't derive; `license`.
 - pool-notes.json: `no`, row for row with the pool: each bottle's 8 strongest
   notes as [index into `notes` x 4 + tier (0 top, 1 heart, 2 base, 3 flat),
@@ -78,7 +86,7 @@ data/extras.jsonl has one line per bottle in data/collection, catalog and
 originals: the about data with readable keys (sentiment, value, owners,
 crowdGender, popularity, perfumers, line, pros, cons, smellsLike, alsoLiked,
 flags) and `extras`, the pool's signals (value, safe, keep, lean, now, like,
-family, alt, flags) plus `clones`, up to 6 well-priced bottles from other
+family, alt, flags, owners, reach) plus `clones`, up to 6 well-priced bottles from other
 brands that voters say smell like it (an original's are its dupe's siblings).
 scripts/build_collection.py joins it.
 """
@@ -146,7 +154,7 @@ CLONE_MIN_NET, CLONE_MIN_VALUE = 20, 3.8
 # Family: smells-like links strong enough to call two bottles one scent (30+
 # agreeing votes, 2.5 x the disagreeing), among a bottle's 6 most agreed.
 FAMILY_MIN_UP, FAMILY_RATIO, FAMILY_TOP = 30, 2.5, 6
-FLAGS = ("discontinued", "reformulated", "notBlindBuy", "brigaded", "polarizing", "hardToFind")  # bit i is 1 << i
+FLAGS = ("discontinued", "reformulated", "notBlindBuy", "brigaded", "polarizing", "hardToFind", "mist")  # bit i is 1 << i
 # Discontinued, said of the bottle itself in a con. Pros don't count: they
 # praise "an alternative to the discontinued X". Nor do cons with a word before
 # it that makes it another bottle ("weaker than the discontinued EDT", "the
@@ -179,6 +187,44 @@ FLAG_TEXT = {
     "notBlindBuy": re.compile(r"blind.?buy", re.I).search,
     "hardToFind": lambda text: bool(HARD_TO_FIND.search(text)) and not NOT_THE_BOTTLE.search(text),
 }
+# A mist (body or hair mist, body spray or splash), not a perfume: its name says
+# so, or its description ("Fine Fragrance Mist by", "this body mist"), or an AI
+# summary point calls it one ("impressive longevity for a body mist", "high
+# projection for a body splash"; not "performs like a body mist", "high price
+# for body mist performance"). A plain "mist" in a name is a perfume's (Cashmere
+# Mist, Iris Silver Mist), and so is a plain "spray" (Eau de Parfum Spray, On
+# The Go Spray, Bon Parfumeur's 801 sea spray) or "brume" (Guerlain's Brume
+# d'Automne): a name counts when it says what kind ("All-Over Spray", "Very
+# Cool Spray", "Brume Soyeuse pour le Corps", "Brume de Bain"). A plain
+# "spray" in a description is its atomizer.
+MIST_KIND = r"(?:(?:fine )?fragrance|body|hair|body and hair|skin|perfume|perfumed|scented)"
+MIST_NAME = re.compile(rf"\b(?:{MIST_KIND} (?:mist|spray|splash)|hair perfume|(?:all[- ]over|very cool|aroma|body (?:&|and) soul|splash fresh) spray"
+                       rf"|brume (?:\w+ )?(?:corps|cheveux|parfum[ée]e|de bain|soyeuse|d['’]oreiller|fra[iî]ch(?:e|eur)|paillet[ée]e))\b", re.I)
+MIST_DESC = re.compile(rf"\b(?:fine )?fragrance mist by\b|\bbody (?:mist|spray|splash) by\b|\bthis [\w\s'-]{{0,25}}?\b{MIST_KIND} (?:mist|spray|splash)\b"
+                       rf"|\bis an? [\w\s,-]{{0,60}}?\b(?:body|hair|body and hair) (?:mist|spray|splash)\b"
+                       r"|\bavailable (?:only )?as (?:an? )?[\d\s,.]*(?:ml )?(?:perfumed )?(?:body|fragrance) (?:mist|spray)\.?\s*$", re.I)
+MIST_AI = re.compile(r"\b(?:for|from) (?:a|an) (?:\w+ )?(?:(?:body|fragrance|hair|aromatherapy) (?:mist|spray|splash)|mist|splash)\b|\bin mist form\b"
+                     r"|\bthan (?:typical|other|most|basic|usual|regular|standard) (?:\w+ )?(?:body )?mists\b", re.I)
+
+
+def is_mist(r: dict) -> bool:
+    ai = (r.get("ai_summary") or {})
+    points = [x["text"] for x in ai.get("pros", []) + ai.get("cons", []) if x["up_votes"] >= x["down_votes"]]
+    return bool(MIST_NAME.search(r["name"]) or MIST_DESC.search(r.get("description") or "") or any(MIST_AI.search(t) for t in points))
+
+
+# Reach: how much a bottle's fans also like the pool's REACH_TOP most-owned
+# bottles (its also-liked list, Fragrantica's "people who like this also
+# like"). The pool's median is 0.85; Granado, Phebo, Natura and O Boticário's
+# fans like each other's bottles, at 0.20, Louis Vuitton's and some indie
+# houses' sit low too. Owners alone don't show it (Granado's have as many
+# per rating as Lattafa's). A house's best known bottles reach further than
+# the house does (Granado's Bossa 0.40, its median 0.06), so a bottle's reach
+# is at most its brand's median plus BRAND_REACH_SLACK, for a brand with
+# BRAND_REACH_MIN pool bottles or more; niche houses sit at 0.65-0.95.
+REACH_TOP = 0.05
+BRAND_REACH_MIN = 5
+BRAND_REACH_SLACK = 0.15
 # Brigaded: far more ratings than owners with a lopsided spread (review-bombed
 # or meme pages: SpongeBob, Bolsonaro, the Pride editions), or many times more
 # whatever the spread (a brand's rating drive). Louis Vuitton bottles people
@@ -421,6 +467,14 @@ class Signals:
                 if agreed(s, ALT_MIN_NET):
                     self.reverse.setdefault(s["id"], []).append({**s, "id": o["id"]})
         self.pool = sorted(filter(in_pool, by_id.values()), key=lambda r: (-popularity(r)[0], r["id"]))
+        owned = sorted(((r.get("relation") or {}).get("have", 0), r["id"]) for r in self.pool)
+        self.pool_ids = {r["id"] for r in self.pool}
+        self.most_owned = {i for _, i in owned[int((1 - REACH_TOP) * len(owned)):]}
+        brands = {}
+        for r in self.pool:
+            if (own := self.own_reach(r)) is not None:
+                brands.setdefault(r["brand"], []).append(own)
+        self.brand_reach = {b: statistics.median(xs) for b, xs in brands.items() if len(xs) >= BRAND_REACH_MIN}
         self.safeties = sorted(safety(histogram(r["rating"], 5)) for r in self.pool)
         self.recents = sorted(math.log1p(popularity(r)[1]) for r in self.pool)
         hates = sorted(hate_share(histogram(r["rating"], 5)) for r in self.pool)
@@ -475,9 +529,22 @@ class Signals:
                 near[s["id"]] = s
         return [s["id"] for s in by_net(list(near.values()))][:n]
 
+    def own_reach(self, r: dict) -> float | None:
+        """The share of the pool bottles its fans also like that are among the pool's most owned."""
+        also = [s["id"] for s in r["similar"]["also_liked"] if s["id"] in self.pool_ids]
+        return sum(i in self.most_owned for i in also) / len(also) if also else None
+
+    def reach(self, r: dict) -> float | None:
+        """Its own reach, at most its brand's median plus BRAND_REACH_SLACK (its brand's, without its own)."""
+        own, brand = self.own_reach(r), self.brand_reach.get(r["brand"])
+        cap = brand + BRAND_REACH_SLACK if brand is not None else None
+        return own if cap is None else cap if own is None else min(own, cap)
+
     def flags(self, r: dict) -> int:
         cons = [x["text"] for x in (r.get("ai_summary") or {}).get("cons", []) if x["up_votes"] > x["down_votes"]]
         on = {name for name, says in FLAG_TEXT.items() if any(says(text) for text in cons)}
+        if is_mist(r):
+            on.add("mist")
         rel, h = r.get("relation") or {}, histogram(r["rating"], 5)
         n, owners = sum(h), rel.get("have", 0) + rel.get("had", 0)
         if n > BRIGADE_RATIO * owners and (n > BRIGADE_ANY * owners or h[0] >= BRIGADE_HATE * n or h[4] >= BRIGADE_LOVE * n):
@@ -499,6 +566,8 @@ class Signals:
             "family": self.family(r),
             "alt": self.alternatives(r),
             "flags": [name for i, name in enumerate(FLAGS) if flags & (1 << i)],
+            "owners": (r.get("relation") or {}).get("have"),
+            "reach": round(reach, 2) if (reach := self.reach(r)) is not None else None,
         }
 
     def about(self, r: dict) -> dict:
@@ -557,6 +626,14 @@ def bar_width(strength: float) -> int:
     return math.floor(BAR_FLOOR + BAR_SLOPE * strength + 0.5)
 
 
+def two_digits(n: int) -> int:
+    """A count to 2 significant digits (1,234 -> 1,200), which gzips far smaller."""
+    if n < 100:
+        return n
+    step = 10 ** (len(str(n)) - 2)
+    return (n + step // 2) // step * step
+
+
 def gz_size(path: Path) -> int:
     return len(gzip.compress(path.read_bytes(), 9))
 
@@ -588,7 +665,7 @@ def pool(signals: Signals) -> None:
             ("v", [*(r["seasons"][s] for s in SEASONS), r["daypart"]["day"], r["daypart"]["night"]] if season_votes(r) else []),
             ("l", round(r["longevity"]["average"] * 100) if lon and sil else 0),
             ("si", round(r["sillage"]["average"] * 100) if lon and sil else 0),
-            ("lv", min(lon, sil)),
+            ("lv", two_digits(min(lon, sil))),
             ("k", [round(s * 100) for s in like] if like else []),
             ("val", round(x["value"] * 100) if x["value"] is not None else 0),
             ("safe", x["safe"]),
@@ -599,6 +676,8 @@ def pool(signals: Signals) -> None:
             ("fam", sum(1 << j for j, i in enumerate(near) if i in x["family"])),
             ("alt", x["alt"]),
             ("f", signals.flags(r)),
+            ("o", round(4 * math.log2(1 + (x["owners"] or 0)))),
+            ("rc", round(100 * x["reach"]) if x["reach"] is not None else -1),
         ):
             cols.setdefault(key, []).append(val)
     body = {"license": LICENSE, "version": int(latest_dump().parent.name[1:]), "count": len(bottles),

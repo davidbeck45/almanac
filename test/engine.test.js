@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart } from '../src/engine.js';
+import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, seasonFit, SEASONS, votedShares, performanceLevel } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { heaviness } from '../src/accords.js';
+import { predictedShares } from '../src/custom.js';
 import { summarize, week } from '../src/weather.js';
 import { syntheticForecast } from './fixtures.js';
 
@@ -101,6 +102,23 @@ test('a split from a few votes leans toward what the accords predict', () => {
   assert.equal(steadyShares(estimated).season, amber.season, 'unvoted records pass through');
 });
 
+test('flat votes read as none: the prediction decides, and reasons don’t call it voted', () => {
+  // A Louis Vuitton page's pattern: one count on every season and both slots.
+  const amber = fragrances.find(f => f.name === 'Amber Empire');
+  const flat = { ...amber, seasonVotes: { winter: 765, spring: 765, summer: 765, fall: 765 }, timeVotes: { day: 765, night: 765 },
+    season: { winter: 0.25, spring: 0.25, summer: 0.25, fall: 0.25 }, dayNight: { day: 0.5, night: 0.5 }, ratingVotes: 1481, original: undefined };
+  assert.deepEqual(votedShares(flat), { season: false, time: false });
+  const est = predictedShares(flat.accords, flat.like);
+  for (const s of SEASONS) assert.ok(Math.abs(steadyShares(flat).season[s] - est.season[s]) < 1e-9, s);
+  assert.ok(Math.abs(steadyShares(flat).dayNight.night - est.night) < 1e-9);
+  const reasons = rank([flat], coldNight, 'night')[0].reasons.map(r => r.text);
+  assert.ok(reasons.includes('A winter scent') && !reasons.some(t => t.startsWith('Voted') || t === 'Versatile across seasons'), reasons.join(' | '));
+  // Even day and night votes stand while the seasons say something: half the raters ticking both is a bottle worn either way.
+  const even = { ...amber, timeVotes: { day: 2400, night: 2400 }, dayNight: { day: 0.5, night: 0.5 } };
+  assert.deepEqual(votedShares(even), { season: true, time: true });
+  assert.ok(Math.abs(steadyShares(even).dayNight.night - 0.5) < 0.02);
+});
+
 test('a split from a few votes leans toward what voters say it smells like', () => {
   const amber = fragrances.find(f => f.name === 'Amber Empire');
   const few = { ...amber, seasonVotes: { winter: 3, spring: 2, summer: 2, fall: 3 }, timeVotes: { day: 5, night: 5 }, original: undefined };
@@ -121,6 +139,31 @@ test("a dupe with few votes leans toward its original's", () => {
   // Well-voted dupes keep their own split.
   const own = steadyShares(atlantis).season.summer;
   assert.ok(Math.abs(own - atlantis.season.summer) < 0.03, `${own} vs ${atlantis.season.summer}`);
+});
+
+test('seasonFit, written out season by season, scores as the loop it replaced', () => {
+  const loop = (frag, weights) => {
+    const { season } = steadyShares(frag);
+    const peak = Math.max(...SEASONS.map(s => season[s])) || 1;
+    const relative = SEASONS.reduce((sum, s) => sum + weights[s] * (season[s] / peak), 0);
+    const lift = SEASONS.reduce((sum, s) => sum + weights[s] * season[s], 0) / 0.25;
+    return 0.5 * relative + 0.5 * Math.min(1, Math.max(0, lift / 1.6));
+  };
+  const unvoted = fragrances.map(f => ({ ...f, seasonVotes: undefined, timeVotes: undefined }));
+  let worst = 0, checked = 0;
+  for (const month of ['01', '04', '07', '10']) {
+    for (let feelsF = 0; feelsF <= 105; feelsF += 5) {
+      for (const lat of [40, -33, 5]) {
+        const weights = targetSeasonWeights(feelsF, new Date(`2026-${month}-15T12:00:00`), lat);
+        for (const f of [...fragrances, ...unvoted]) {
+          worst = Math.max(worst, Math.abs(seasonFit(f, weights) - loop(f, weights)));
+          checked++;
+        }
+      }
+    }
+  }
+  assert.ok(checked > 10000);
+  assert.ok(worst < 1e-12, `largest difference ${worst}`);
 });
 
 test('hot humid day: fresh scents on top, heavy ones at the bottom', () => {
@@ -198,6 +241,35 @@ test('office wants a quiet bottle and a night out a loud one', () => {
   assert.ok(!reasons('office', unrated).some(t => /skin|Projects/.test(t)));
 });
 
+test('office wants moderate projection that lasts the day, not a whisper that fades', () => {
+  const office = occasionById('office');
+  const base = fragrances.find(f => f.name === 'Cedrus Blanc');
+  // Parfumo's 0–10: 6.2 sillage and 6.6 longevity read -1, 7.04 sillage -0.3, 7.8 longevity the middle.
+  const at = (sillage, longevity) => occasionRaw({ ...base, parfumo: { sillage, longevity, votes: 1000 } }, office);
+  const moderate = at(7.04, 7.8);
+  assert.ok(moderate > at(6.2, 6.6) + 0.1, 'a body mist gone by lunch');
+  assert.ok(moderate > at(8.6, 7.8), 'a loud one');
+  assert.ok(moderate > at(6.2, 7.8) && at(6.2, 7.8) > at(8.6, 7.8), 'quieter than enough earns nothing more, and still beats loud');
+  assert.ok(at(7.04, 8.8) > moderate, 'lasting longer helps');
+  // The reason still says what it does.
+  const reasons = rank([{ ...base, parfumo: { sillage: 6.2, longevity: 6.6, votes: 1000 } }], mildFallNight, 'day', { occasion: office })[0].reasons.map(r => r.text);
+  assert.ok(reasons.includes('Stays close to the skin') && reasons.includes('Fades early'), reasons.join(' | '));
+  // In David's wardrobe, nothing a fifth of a level louder than the middle (Sauvage and up) makes the office's
+  // top 3, day or night, nor Jake, which fades by lunch.
+  const loud = new Set(fragrances.filter(f => performanceLevel(f, 'sillage') >= 0.2).map(f => f.name));
+  assert.ok(loud.has('Sauvage') && loud.size >= 5, [...loud].join(', '));
+  for (const month of ['01', '04', '07', '10']) {
+    for (const feelsF of [25, 45, 65, 85, 95]) {
+      for (const slot of ['day', 'night']) {
+        const dateISO = `2026-${month}-15`;
+        const c = { feelsF, humidity: 60, dewF: Math.min(feelsF - 8, 72), category: 'clear', date: new Date(`${dateISO}T12:00:00`), dateISO, lat: 40 };
+        const top = rank(fragrances, c, slot, { occasion: office }).slice(0, 3).map(r => r.fragrance.name);
+        assert.ok(!top.some(n => loud.has(n) || n === 'Jake'), `${dateISO} ${slot} ${feelsF}: ${top.join(', ')}`);
+      }
+    }
+  }
+});
+
 test('Parfumo occasion votes nudge a bottle toward what voters wear it for', () => {
   const base = fragrances.find(f => f.name === 'Liquid Brun');
   const night = occasionById('nightout'), office = occasionById('office');
@@ -233,11 +305,16 @@ test('bottles past the scale\'s top keep their order instead of tying at a perfe
   for (let i = 1; i < parts.length; i++) assert.ok(parts[i] > parts[i - 1], `rises at ${xs[i]}`);
   assert.ok(parts[0] > 0 && parts.at(-1) < 1);
   // Parfumo's occasion votes carry several owned bottles past the dataset's
-  // 98th percentile; at most one per occasion should read as near-perfect.
+  // 98th percentile; at most one per occasion should read as near-perfect,
+  // and only a few as above 0.9 (Office's wish to last, which few of the
+  // dataset's fresh bottles do, once pressed eight of David's past it).
   for (const id of ['casual', 'office', 'date', 'nightout', 'formal', 'outdoors', 'cozy']) {
     const occasion = occasionById(id);
-    const top = fragrances.filter(f => String(f.id) !== '4310' && occasionPart(occasionRaw(f, occasion), occasion) >= 0.99);
-    assert.ok(top.length <= 1, `${id}: ${top.map(f => f.name).join(', ')}`);
+    const parts = fragrances.filter(f => String(f.id) !== '4310').map(f => occasionPart(occasionRaw(f, occasion), occasion));
+    assert.ok(parts.filter(p => p >= 0.99).length <= 1, `${id}: ${parts.filter(p => p >= 0.99).length} near-perfect`);
+    assert.ok(parts.filter(p => p > 0.9).length <= 6, `${id}: ${parts.filter(p => p > 0.9).length} above 0.9`);
+    const top = parts.filter(p => p > 0.9);
+    assert.equal(new Set(top).size, top.length, `${id}: no ties`);
   }
   // Amber Empire's date fit (accords and votes) beats Terra's; a hard cap tied them.
   const date = occasionById('date');

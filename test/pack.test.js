@@ -70,7 +70,7 @@ function bestSets(windows, k) {
   const day = windows.map(w => daysBetween(windows[0].dateISO, w.dateISO));
   const score = new Map(fragrances.map(f => [f.id, rows.map(r => r.find(x => x.fragrance.id === f.id).score)]));
   const judge = set => {
-    const last = new Map();
+    const last = new Map(), picks = [];
     let reached = 0, total = 0;
     for (let w = 0; w < floor.length; w++) {
       const reach = set.some(f => score.get(f.id)[w] >= floor[w]);
@@ -82,9 +82,12 @@ function bestSets(windows, k) {
         if (v > value) [pick, value] = [f, v];
       }
       last.set(pick, day[w]);
+      picks.push(pick);
       total += value;
     }
-    return { reached, total };
+    const dates = [...new Set(windows.map(w => w.dateISO))];
+    const everyDay = set.filter(f => dates.every(d => windows.some((w, i) => w.dateISO === d && picks[i] === f))).length;
+    return { reached, total, everyDay, most: Math.max(...set.map(f => picks.filter(p => p === f).length)) };
   };
   const out = [];
   const walk = (from, set) => {
@@ -122,6 +125,81 @@ test('extra bottles go where they improve the plan most, not to copies of the fi
       assert.equal(b.wears, out.plan.filter(p => p.pick === b.record).length);
     }
   }
+});
+
+// Cancún, Jan 10–16 2027, and London, Dec 10–19 2026, in typical weather
+// (Open-Meteo's archive, as tripWindows gave them on Oct 14 2026).
+const typical = rows => rows.map(([d, slot, feelsF, humidity, dewF, category, lat]) => win(d, slot, feelsF, dewF, { humidity, category, lat, typical: true }));
+const CANCUN = typical([
+  ['2027-01-10', 'day', 83.5, 69, 68.7, 'cloudy', 21.2], ['2027-01-10', 'night', 79.7, 83, 69.4, 'clear', 21.2],
+  ['2027-01-11', 'day', 84, 69, 68.9, 'cloudy', 21.2], ['2027-01-11', 'night', 79.8, 84, 69.5, 'clear', 21.2],
+  ['2027-01-12', 'day', 84.2, 69, 68.9, 'cloudy', 21.2], ['2027-01-12', 'night', 79.7, 84, 69.3, 'clear', 21.2],
+  ['2027-01-13', 'day', 84.6, 71, 69.2, 'cloudy', 21.2], ['2027-01-13', 'night', 79.8, 86, 69.5, 'clear', 21.2],
+  ['2027-01-14', 'day', 84.6, 72, 69.6, 'drizzle', 21.2], ['2027-01-14', 'night', 79.8, 86, 69.7, 'clear', 21.2],
+  ['2027-01-15', 'day', 84.4, 72, 69.6, 'drizzle', 21.2], ['2027-01-15', 'night', 79.5, 86, 69.6, 'clear', 21.2],
+  ['2027-01-16', 'day', 84.2, 72, 69.2, 'drizzle', 21.2], ['2027-01-16', 'night', 78.7, 86, 68.9, 'cloudy', 21.2],
+]);
+const LONDON = typical([
+  ['2026-12-10', 'day', 42.4, 85, 43.9], ['2026-12-10', 'night', 40.3, 85, 42.2], ['2026-12-11', 'day', 42.3, 84, 43.4],
+  ['2026-12-11', 'night', 40.1, 86, 41.9], ['2026-12-12', 'day', 42.4, 85, 43.5], ['2026-12-12', 'night', 40.2, 86, 41.9],
+  ['2026-12-13', 'day', 42.6, 86, 43.7], ['2026-12-13', 'night', 40.5, 88, 42.2], ['2026-12-14', 'day', 42.6, 87, 43.7],
+  ['2026-12-14', 'night', 40.7, 88, 42.5], ['2026-12-15', 'day', 43.2, 87, 44.5], ['2026-12-15', 'night', 41.8, 88, 43.7],
+  ['2026-12-16', 'day', 42.7, 86, 43.9], ['2026-12-16', 'night', 41.1, 87, 43], ['2026-12-17', 'day', 42.9, 85, 44.1],
+  ['2026-12-17', 'night', 41.8, 87, 43.7], ['2026-12-18', 'day', 43.7, 85, 44.9], ['2026-12-18', 'night', 42.3, 86, 44],
+  ['2026-12-19', 'day', 43.2, 83, 44.2], ['2026-12-19', 'night', 41.6, 84, 43.2],
+].map(r => [...r, 'cloudy', 51.5]));
+const wornEveryDay = out => out.bottles.filter(b => [...new Set(out.plan.map(p => p.window.dateISO))]
+  .every(d => out.plan.some(p => p.window.dateISO === d && p.pick === b.record))).map(b => b.record.name);
+
+// Ten hot July days, 88–92 by day and 76–80 at night.
+const SUMMER = Array.from({ length: 10 }, (_, i) => shift('2026-07-10', i))
+  .flatMap((d, i) => [win(d, 'day', 90 + ((i * 7) % 5) - 2, 70, { lat: 40 }), win(d, 'night', 78 + ((i * 7) % 5) - 2, 68, { lat: 40 })]);
+const sameSet = (out, set) => set.length === out.bottles.length && set.every(f => out.bottles.some(b => b.record.id === f.id));
+
+test('a long trip wears no bottle every day when another set plans nearly as well and rests it', () => {
+  const out = packTrip(fragrances, SUMMER, { max: 3 });
+  assert.deepEqual(out.uncovered, []);
+  assert.deepEqual(wornEveryDay(out), [], out.text);
+  assert.equal(out.variety, null);
+  // The best-planned three wear one every night; these give up under 0.015 a window, and two nights of it, for a rest.
+  const sets = bestSets(SUMMER, 3);
+  assert.ok(sets[0].everyDay > 0);
+  const mine = sets.find(x => sameSet(out, x.set));
+  assert.ok(mine.total < sets[0].total && mine.total >= sets[0].total - 0.015 * SUMMER.length, `${mine.total} vs ${sets[0].total}`);
+  assert.ok(mine.most <= sets[0].most - 2, `${mine.most} vs ${sets[0].most}`);
+  // Two bottles for a week wear both every day: the best plan, as before.
+  const two = packTrip(fragrances, CANCUN, { max: 2 });
+  const [best2] = bestSets(CANCUN, 2);
+  assert.ok(sameSet(two, best2.set));
+});
+
+test('a set that only breaks a run of nights once isn’t variety: the plan stands, and the text says which night bottle to add', () => {
+  // Cancún: the three that wear none every day only take one of Supremacy's seven nights, at a cost.
+  const out = packTrip(fragrances, CANCUN, { max: 3 });
+  const sets = bestSets(CANCUN, 3), [best] = sets;
+  assert.ok(best.everyDay > 0 && sameSet(out, best.set), out.text);
+  assert.ok(sets.filter(x => !x.everyDay && x.total >= best.total - 0.015 * CANCUN.length).every(x => x.most > best.most - 2));
+  const [daily] = wornEveryDay(out);
+  assert.equal(out.variety.slot, 'night');
+  assert.match(out.text, new RegExp(`${daily} \\(every night\\)`));
+  assert.match(out.text, new RegExp(`${daily} is worn every night of the trip; pack ${out.variety.add.name} too and each gets a night off\\.`));
+  assert.doesNotMatch(out.text, /every day of the trip/);
+});
+
+test('when no three rest a bottle worn every day, the plan names the fourth that would, and packs it when there’s room', () => {
+  // London in December: three bottles for twenty windows wear one every day, whichever three.
+  assert.ok(bestSets(LONDON, 3).filter(x => x.reached === LONDON.length).every(x => x.everyDay > 0));
+  const three = packTrip(fragrances, LONDON, { max: 3 });
+  assert.equal(three.bottles.length, 3);
+  const [daily] = wornEveryDay(three), add = three.variety?.add;
+  assert.ok(daily && add && three.variety.everyDay.map(f => f.name).includes(daily), three.text);
+  assert.equal(three.variety.slot, 'day');
+  assert.match(three.text, new RegExp(`${daily} \\(every day\\).+ ${daily} is worn every day of the trip; pack ${add.name} too and each gets a day off\\.`));
+  const four = packTrip(fragrances, LONDON, { max: 4 });
+  assert.equal(four.bottles.length, 4, four.text);
+  assert.ok(four.bottles.some(b => b.record.id === add.id) && !wornEveryDay(four).length && !four.variety, four.text);
+  // A trip under a week packs as before.
+  assert.equal(packTrip(fragrances, LONDON.slice(0, 10), { max: 4 }).variety, null);
 });
 
 test('a bottle you rate 2★ or lower stays home unless nothing else suits a window', () => {

@@ -58,6 +58,14 @@ const RATING_PRIOR_VOTES = 1000;
 const RATING_RANGE = [0.75, 1.2];
 const KEEP_RANGE = [0.8, 1.1];
 const VALUE_RANGE = [0.85, 1.15];
+// Reach: how much a bottle's fans also like the pool's most-owned bottles
+// (`reach`, scripts/decant.py; the pool's median 0.85). Under REACH_FULL its
+// fans are a crowd of their own, most often a home market's (Granado, Phebo,
+// Natura and O Boticário sit about 0.2), and the bottle is likelier hard to
+// buy elsewhere: it counts for up to REACH_DAMP less, at no reach. Owners
+// don't show it: Granado has as many per rating as Lattafa.
+const REACH_FULL = 0.35;
+const REACH_DAMP = 0.2;
 // How much value counts, learned from the wardrobe: VALUE_SLOPE + 0.1 × how
 // far its median value sits above the pool's, within VALUE_SLOPE_RANGE. A
 // wardrobe at a median of PREFER_VALUE or more prefers great value by default.
@@ -111,7 +119,7 @@ export function poolRowOf(record, byId) {
 }
 
 const NONE = Object.freeze({
-  known: false, value: null, safe: null, keep: null, lean: null, now: null,
+  known: false, value: null, safe: null, keep: null, lean: null, now: null, owners: null, reach: null,
   like: Object.freeze([]), family: Object.freeze([]), alt: Object.freeze([]), clones: Object.freeze([]), flags: Object.freeze([]),
 });
 
@@ -122,6 +130,8 @@ const fromExtras = x => ({
   keep: x.keep ?? null,
   lean: x.lean ?? null,
   now: x.now ?? null,
+  owners: x.owners ?? null,
+  reach: x.reach ?? null,
   like: ids(x.like),
   family: ids(x.family),
   alt: ids(x.alt),
@@ -130,7 +140,7 @@ const fromExtras = x => ({
 });
 
 // The pool's signals as a bottle's about data has them: no safety, keep,
-// popularity or cheaper alternatives, and family links from its top 5 only.
+// popularity, reach or cheaper alternatives, and family links from its top 5 only.
 function fromAbout(a) {
   const v = a.value, agreed = (a.smellsLike ?? []).filter(s => s.up - s.down >= LIKE_MIN_NET && s.up >= 2 * s.down);
   return {
@@ -138,6 +148,7 @@ function fromAbout(a) {
     known: true,
     value: v?.votes ? round2((v.avg * v.votes + VALUE_PRIOR * VALUE_PRIOR_VOTES) / (v.votes + VALUE_PRIOR_VOTES)) : null,
     lean: a.crowdGender?.lean ?? null,
+    owners: a.owners?.have ?? null,
     like: ids(agreed.slice(0, LIKE_TOP).map(s => s.id)),
     family: ids(agreed.filter(s => s.up >= FAMILY_MIN_UP && s.up >= FAMILY_RATIO * s.down).map(s => s.id)),
     flags: [...(a.flags ?? [])],
@@ -149,7 +160,7 @@ const remember = (key, make) => signals.get(key) ?? signals.set(key, make()).get
 
 /**
  * A record's signals, pool or owned alike: { known, value, safe, keep, lean,
- * now, like, family, alt, clones, flags }. Read from its `extras`, else its
+ * now, owners, reach, like, family, alt, clones, flags }. Read from its `extras`, else its
  * pool row in `byId` (by id, or name and brand: poolRowOf), else its `about`;
  * ids are strings. Numbers are null and lists empty when nothing is known
  * (known false).
@@ -180,10 +191,12 @@ export function leanWindow(owned, margin = LEAN_MARGIN, byId = null) {
 /**
  * What allow() checks against, from the wardrobe: { owned, originals (id
  * Sets; an owned bottle under another id adds its pool row's), lean [lo, hi],
- * minRating, minValue, byId }. `minValue` (null: none) is for a "great value
- * only" filter.
+ * minRating, minValue, mists, byId }. `minValue` (null: none) is for a "great
+ * value only" filter; `mists` lets in body and hair mists, body sprays and
+ * splashes, which suggestions leave out unless asked (a mist is a body-care
+ * product, not the bottle someone shopping for a perfume means).
  */
-export function allowContext(owned, { byId = null, margin = LEAN_MARGIN, minRating = MIN_RATING, minValue = null } = {}) {
+export function allowContext(owned, { byId = null, margin = LEAN_MARGIN, minRating = MIN_RATING, minValue = null, mists = false } = {}) {
   const mine = new Set();
   for (const f of owned) {
     mine.add(String(f.id));
@@ -196,14 +209,16 @@ export function allowContext(owned, { byId = null, margin = LEAN_MARGIN, minRati
     lean: leanWindow(owned, margin, byId),
     minRating,
     minValue,
+    mists,
     byId,
   };
 }
 
-/** Whether a bottle may be suggested: not owned or an owned dupe's original, not brigaded, rated well, in the lean window. */
+/** Whether a bottle may be suggested: not owned or an owned dupe's original, not brigaded, not a mist (unless ctx.mists), rated well, in the lean window. */
 export function allow(record, ctx) {
   const id = String(record.id);
   if (ctx.owned.has(id) || ctx.originals.has(id) || flagged(record, 'brigaded', ctx.byId)) return false;
+  if (!ctx.mists && flagged(record, 'mist', ctx.byId)) return false;
   if (!(record.rating >= ctx.minRating)) return false;
   if (ctx.minValue != null && !(signalsOf(record, ctx.byId).value >= ctx.minValue)) return false;
   const lean = genderLean(record, ctx.byId);
@@ -219,10 +234,13 @@ export function poolNorms(records) {
   };
 }
 
+/** reach's multiplier on a candidate's worth: 1 from REACH_FULL (and unknown), 1 - REACH_DAMP at none. */
+export const reachMult = reach => (reach == null ? 1 : 1 - REACH_DAMP * clamp((REACH_FULL - reach) / REACH_FULL, [0, 1]));
+
 /**
- * What a candidate is worth beyond its fit: { mult, rating, keep, value },
- * mult about 0.5 to 1.5 (1 for a bottle at the pool's medians). `valueSlope`
- * as valueSlope().
+ * What a candidate is worth beyond its fit: { mult, rating, keep, value,
+ * reach }, mult about 0.4 to 1.5 (1 for a bottle at the pool's medians).
+ * `valueSlope` as valueSlope().
  */
 export function candidateQuality(record, norms, { valueSlope: slope = VALUE_SLOPE, byId = null } = {}) {
   const s = signalsOf(record, byId), votes = record.ratingVotes ?? 0;
@@ -230,8 +248,9 @@ export function candidateQuality(record, norms, { valueSlope: slope = VALUE_SLOP
   const keep = s.keep ?? norms.keep, value = s.value ?? norms.value;
   const mult = clamp(1 + (rating - norms.rating), RATING_RANGE)
     * clamp(1 + (keep - norms.keep), KEEP_RANGE)
-    * clamp(1 + slope * (value - norms.value), VALUE_RANGE);
-  return { mult, rating, keep, value };
+    * clamp(1 + slope * (value - norms.value), VALUE_RANGE)
+    * reachMult(s.reach);
+  return { mult, rating, keep, value, reach: s.reach };
 }
 
 // The wardrobe's median value for money, or null under MIN_BOTTLES known.
@@ -393,14 +412,14 @@ export function novelty(record, vecs, family = null) {
  * first), from byId: { record, value, owned, text } or null. Given an
  * allowContext, a twin the wardrobe owns comes first ("You own its twin");
  * otherwise the twin rates at least the floor (ctx.minRating, else
- * MIN_RATING) and isn't brigaded or discontinued.
+ * MIN_RATING) and isn't brigaded, discontinued or a mist (unless ctx.mists).
  */
 export function cheaperTwin(record, byId, ctx = null) {
   const minRating = ctx?.minRating ?? MIN_RATING;
   const alts = signalsOf(record, byId).alt.map(id => byId.get(id)).filter(Boolean);
   const mine = ctx && alts.find(twin => ctx.owned.has(twin.id));
   if (mine) return { record: mine, value: signalsOf(mine).value, owned: true, text: `You own its twin, ${mine.name}.` };
-  const twin = alts.find(t => t.rating >= minRating && !flagged(t, 'brigaded') && !flagged(t, 'discontinued'));
+  const twin = alts.find(t => t.rating >= minRating && !flagged(t, 'brigaded') && !flagged(t, 'discontinued') && (ctx?.mists || !flagged(t, 'mist')));
   return twin ? { record: twin, value: signalsOf(twin).value, owned: false, text: `${twin.name} by ${twin.brand} smells like it, for far less.` } : null;
 }
 
@@ -412,8 +431,11 @@ export function weakLongevity(record) {
 
 /**
  * How risky a blind buy it is: { level: 'low' | 'medium' | 'high' |
- * 'unknown', reasons }, reasons short plain sentences, the weightiest first.
- * A bottle with no crowd data (signalsOf known false) is unknown, and says so.
+ * 'unknown', reasons, major }, reasons short plain sentences, the weightiest
+ * first; `major` when one of them counts double (a voting campaign, not a
+ * safe blind buy, divisive, very few love it), a warning on its own rather
+ * than a quirk. A bottle with no crowd data (signalsOf known false) is
+ * unknown, and says so.
  */
 export function riskOf(record, byId = null) {
   const s = signalsOf(record, byId), found = [];
@@ -429,6 +451,7 @@ export function riskOf(record, byId = null) {
   if (weakLongevity(record)) add(1, 'It doesn’t last long.');
   const points = found.reduce((sum, r) => sum + r.points, 0);
   const reasons = found.sort((a, b) => b.points - a.points).map(r => r.text);
-  if (!s.known) return { level: 'unknown', reasons: [...reasons, 'There’s no crowd data on it yet.'] };
-  return { level: points >= RISK_HIGH ? 'high' : points >= RISK_MEDIUM ? 'medium' : 'low', reasons };
+  const major = found.some(r => r.points >= 2);
+  if (!s.known) return { level: 'unknown', reasons: [...reasons, 'There’s no crowd data on it yet.'], major };
+  return { level: points >= RISK_HIGH ? 'high' : points >= RISK_MEDIUM ? 'medium' : 'low', reasons, major };
 }

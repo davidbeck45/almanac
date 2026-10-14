@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { loadSkin, setSkin, withSkin, applySkin } from '../src/skin.js';
-import { rank, quality, performanceLevel } from '../src/engine.js';
+import { rank, planWindows, quality, performanceLevel, PLAN_MARGIN } from '../src/engine.js';
 import { occasionById, OCCASIONS } from '../src/occasions.js';
 
 const fragrances = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url))).fragrances
@@ -61,31 +61,88 @@ test('your stars outweigh the crowd’s', () => {
   assert.ok(texts(after[0]).includes('+ You rate it 5★'), texts(after[0]).join(' | '));
 });
 
-test('a bottle you rate 1★ is never the pick, and one at 2★ gives way to any other S bottle', () => {
-  // Every window's top pick, rated low: 8 temperatures, day and night, four months, daily and every occasion.
-  let windows = 0;
+// Every window's ranking: 8 temperatures, day and night, four months, daily and every occasion.
+function grid(records, each) {
   for (const month of ['01', '04', '07', '10']) {
     for (const feelsF of [25, 35, 45, 55, 65, 75, 85, 95]) {
       for (const slot of ['day', 'night']) {
         const dateISO = `2026-${month}-15`;
         const c = { feelsF, humidity: 60, dewF: Math.min(feelsF - 8, 72), category: 'clear', date: new Date(`${dateISO}T12:00:00`), dateISO, lat: 40 };
-        for (const occasion of [null, ...OCCASIONS]) {
-          const plain = rank(fragrances, c, slot, { occasion });
-          const top = plain[0].fragrance;
-          const where = `${top.name}, ${feelsF} ${slot} ${month} ${occasion?.id ?? 'daily'}`;
-          const one = rank(applySkin(fragrances, { [top.id]: { rating: 1 } }), c, slot, { occasion });
-          const benched = one.find(r => r.fragrance.id === top.id);
-          assert.notEqual(one[0].fragrance.id, top.id, where);
-          assert.ok(!['S', 'A'].includes(benched.tier), `${where}: ${benched.tier}`);
-          if (plain.slice(1).some(r => r.tier === 'S')) {
-            assert.notEqual(rank(applySkin(fragrances, { [top.id]: { rating: 2 } }), c, slot, { occasion })[0].fragrance.id, top.id, where);
+        for (const occasion of [null, ...OCCASIONS]) each(c, slot, occasion, rank(records, c, slot, { occasion }));
+      }
+    }
+  }
+}
+
+test('a bottle you rate 1★ or 2★ drops out of the top 3 unless it’s clearly the only fit', () => {
+  // The top pick of each window rated low: where it stays in the top 3, it led the 4th by far.
+  const kept = { 1: 0, 2: 0 };
+  let windows = 0;
+  for (const records of [fragrances, fragrances.filter((_, i) => i % 3 === 0)]) {
+    grid(records, (c, slot, occasion, plain) => {
+      const top = plain[0].fragrance, lead = plain[0].score - plain[3].score;
+      const where = `${top.name}, ${c.feelsF} ${slot} ${c.dateISO} ${occasion?.id ?? 'daily'}`;
+      for (const stars of [1, 2]) {
+        const rated = rank(applySkin(records, { [top.id]: { rating: stars } }), c, slot, { occasion });
+        const at = rated.findIndex(r => r.fragrance.id === top.id);
+        if (at < 3) {
+          kept[stars]++;
+          assert.ok(lead >= (stars === 1 ? 0.1 : 0.06), `${where}: ${stars}★ kept at ${at + 1}, leading the 4th by ${lead.toFixed(3)}`);
+        }
+        if (at === 0) assert.ok(stars === 2 && plain[0].score - plain[1].score >= 0.06, `${where}: ${stars}★ still the pick`);
+        // Far ahead of the rest, it's still worth showing.
+        if (lead >= (stars === 1 ? 0.15 : 0.1)) assert.ok(at < 3, `${where}: ${stars}★ dropped though it led the 4th by ${lead.toFixed(3)}`);
+      }
+      windows++;
+    });
+  }
+  assert.equal(windows, 2 * 64 * (OCCASIONS.length + 1));
+  assert.ok(kept[1] > 0 && kept[2] > kept[1], `kept ${JSON.stringify(kept)}`);
+});
+
+test('a week’s plan never brings in a bottle you rate 1★ or 2★ for variety', () => {
+  // Synthetic weeks (day and night, 4 months × 8 temperatures), each owned bottle rated 1★ then 2★: a
+  // disliked bottle is planned only where it ranks first and no bottle new to the plan comes within reach.
+  const win = (dateISO, slot, feelsF) => ({ feelsF, humidity: 60, dewF: Math.min(feelsF - 8, 72), category: 'clear',
+    date: new Date(`${dateISO}T${slot === 'day' ? '13' : '21'}:00:00`), dateISO, lat: 40, slot });
+  const weeks = [];
+  for (const month of ['01', '04', '07', '10']) {
+    for (const base of [20, 30, 40, 50, 60, 70, 80, 90]) {
+      const wins = [];
+      for (let d = 1; d <= 7; d++) {
+        const iso = `2026-${month}-${String(10 + d).padStart(2, '0')}`, wobble = ((d * 7) % 5) - 2;
+        wins.push(win(iso, 'day', base + 6 + wobble), win(iso, 'night', base - 4 + wobble));
+      }
+      weeks.push(wins);
+    }
+  }
+  for (const f of fragrances) {
+    for (const stars of [1, 2]) {
+      const rated = applySkin(fragrances, { [f.id]: { rating: stars } });
+      for (const wins of weeks) {
+        const used = new Set();
+        for (const { win: w, ranked, pick } of planWindows(rated, wins)) {
+          if (pick.fragrance.id === f.id) {
+            const where = `${f.name} ${stars}★, ${w.dateISO} ${w.slot} ${w.feelsF}`;
+            assert.equal(ranked[0], pick, `${where}: planned at #${ranked.indexOf(pick) + 1}`);
+            assert.ok(!ranked.some(r => r !== pick && !used.has(r.fragrance.id) && pick.score - r.score <= PLAN_MARGIN), `${where}: a new bottle was within reach`);
           }
-          windows++;
+          used.add(pick.fragrance.id);
         }
       }
     }
   }
-  assert.equal(windows, 64 * (OCCASIONS.length + 1));
+});
+
+test('a bottle you rate 5★ wins near ties but doesn’t take every window', () => {
+  // The bottle that tops most windows, rated 5★, tops more of them, not all.
+  const tops = new Map();
+  grid(fragrances, (c, slot, occasion, plain) => tops.set(plain[0].fragrance.id, (tops.get(plain[0].fragrance.id) ?? 0) + 1));
+  const [id, before] = [...tops].sort((a, b) => b[1] - a[1])[0];
+  let after = 0, windows = 0;
+  const loved = applySkin(fragrances, { [id]: { rating: 5 } });
+  grid(loved, (c, slot, occasion, ranked) => { windows++; if (ranked[0].fragrance.id === id) after++; });
+  assert.ok(after > before && after < windows / 3, `${before} -> ${after} of ${windows}`);
 });
 
 test('a low rating says so, and your stars replace the crowd favorite line', () => {
@@ -96,7 +153,7 @@ test('a low rating says so, and your stars replace the crowd favorite line', () 
   assert.ok(texts(low).includes('- You rate it 2★'));
   assert.ok(!texts(low).some(t => t.includes('Crowd favorite')));
   const middling = rank(applySkin([supremacy], { [supremacy.id]: { rating: 3 } }), mildDay, 'day')[0];
-  assert.ok(!texts(middling).some(t => t.includes('rate it') || t.includes('Crowd favorite')), '3★ neither pushes nor pulls');
+  assert.ok(!texts(middling).some(t => t.includes('rate it') || t.includes('Crowd favorite')), '3★ says nothing either way');
   assert.ok(low.score < plain.score);
 });
 

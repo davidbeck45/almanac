@@ -12,9 +12,10 @@
 // point come from real days). Owned bottles are measured against the
 // suggestion pool's scores in the same cell, every bottle read on the
 // pool's evidence (sameFooting).
-import { SEASONS, seasonFit, timeFit, weatherFit, quality, occasionRaw, occasionPart, scoreOf, targetSeasonWeights } from './engine.js';
+import { seasonFit, timeFit, weatherFit, quality, personalPart, occasionRaw, occasionPart, scoreOf, targetSeasonWeights, DISLIKED } from './engine.js';
 import { occasionById } from './occasions.js';
 import { similarity, sharedTraits } from './similar.js';
+import { styleScores, styleMix, styleById, topOf, closeOf } from './scent-styles.js';
 import {
   signalsOf, genderLean, leanWindow, allowContext, allow, poolNorms, candidateQuality, valueSlope, preferValueDefault,
   familyIndex, ownedVectors, novelty, cheaperTwin, riskOf, weakLongevity, poolRowOf, PREFER_VALUE, FAMILY_MULT, MIN_RATING,
@@ -159,32 +160,16 @@ export const cellLabel = cell => cellTitle(cell.use, cell.slot, cell.band);
 // to 10, and the extra two moved owned bottles' occasion cells by up to 8
 // points, against a FILL_MARGIN of 2.
 export const MAX_ACCORDS = 8;
-// Season or day/night votes that say nothing: the least-voted season (or
-// slot) drew FLAT_TURNOUT of the raters or more and the shares sit within
-// FLAT_SPREAD (most raters ticked everything: Elyon Dubai's 2025 releases),
-// or 3 seasons, or both slots, carry one identical count of FLAT_SAME or
-// more (some Louis Vuitton pages: 765 on every season and both slots).
-// Read as votes, they make a perfect all-rounder of a rose-oud.
-const FLAT_SPREAD = 0.03;
-const FLAT_TURNOUT = 0.5;
-const FLAT_SAME = 50;
-
-/** Whether vote counts ([winter, spring, summer, fall] or [day, night]) from `raters` raters say nothing. */
-export function flatVotes(counts, raters) {
-  const n = counts.reduce((a, b) => a + b, 0);
-  if (!n) return false;
-  const lo = Math.min(...counts), hi = Math.max(...counts);
-  if ((hi - lo) / n < FLAT_SPREAD && lo >= FLAT_TURNOUT * raters) return true;
-  return counts.some(c => c >= FLAT_SAME && counts.filter(x => x === c).length >= Math.min(3, counts.length));
-}
+// Flat season or day/night votes read as none in the engine itself
+// (steadyShares), so rank(), the gap finder and Discover agree on them.
+export { flatVotes } from './engine.js';
 
 const footed = new WeakMap();
 /**
  * A record as the gap finder scores it, on the pool's evidence: no Parfumo
  * occasion votes (the pool has none, and a lucky vote shouldn't read as
- * coverage), its MAX_ACCORDS strongest accords, and flat votes (flatVotes)
- * zeroed, so steadyShares reads the prediction alone. Parfumo's longevity
- * and sillage stay: the pool has Fragrantica's, on the same scale. The same
+ * coverage) and its MAX_ACCORDS strongest accords. Parfumo's longevity and
+ * sillage stay: the pool has Fragrantica's, on the same scale. The same
  * record comes back when nothing changes.
  */
 export function sameFooting(record) {
@@ -196,9 +181,6 @@ export function sameFooting(record) {
   }
   const accords = Object.entries(record.accords ?? {});
   if (accords.length > MAX_ACCORDS) patch.accords = Object.fromEntries(accords.sort((a, b) => b[1] - a[1]).slice(0, MAX_ACCORDS));
-  const sv = record.seasonVotes, tv = record.timeVotes;
-  if (sv && flatVotes(SEASONS.map(s => sv[s]), record.ratingVotes)) patch.seasonVotes = { winter: 0, spring: 0, summer: 0, fall: 0 };
-  if (tv && flatVotes([tv.day, tv.night], record.ratingVotes)) patch.timeVotes = { day: 0, night: 0 };
   const out = Object.keys(patch).length ? { ...record, ...patch } : record;
   footed.set(record, out);
   return out;
@@ -208,9 +190,11 @@ const allFooted = records => footedLists.get(records) ?? footedLists.set(records
 
 /**
  * Every bottle's fit in every cell, row-major [bottle][cell]: rank()'s score
- * with no recent wears, averaged over the cell's windows. The score is linear
- * in the parts, so the season and weather fits are averaged per slot × band
- * and shared by every use, and occasionPart is worked out once per occasion.
+ * with no recent wears, averaged over the cell's windows, your stars included
+ * (`personal`: only owned records carry them, so the pool's table and
+ * reference stay the crowd's). The score is linear in the parts, so the
+ * season and weather fits are averaged per slot × band and shared by every
+ * use, and occasionPart is worked out once per occasion.
  */
 export function fitTable(bottles, { cells, slotBands }) {
   const m = cells.length, out = new Float32Array(bottles.length * m);
@@ -218,7 +202,7 @@ export function fitTable(bottles, { cells, slotBands }) {
   const occasions = [...new Set(cells.map(c => c.occasion).filter(Boolean))];
   const fit = new Map(), occ = new Map();
   bottles.forEach((b, i) => {
-    const q = quality(b);
+    const q = quality(b), personal = personalPart(b);
     const time = { day: timeFit(b, 'day'), night: timeFit(b, 'night') };
     for (const o of occasions) occ.set(o, occasionPart(occasionRaw(b, o), o));
     for (const k of keys) {
@@ -232,7 +216,7 @@ export function fitTable(bottles, { cells, slotBands }) {
     }
     for (let j = 0; j < m; j++) {
       const c = cells[j], [season, weather] = fit.get(c.sb);
-      const parts = { season, time: time[c.slot], weather, quality: q, occasion: c.occasion ? occ.get(c.occasion) : null };
+      const parts = { season, time: time[c.slot], weather, quality: q, occasion: c.occasion ? occ.get(c.occasion) : null, personal };
       out[i * m + j] = scoreOf(parts, c.occasion);
     }
   });
@@ -407,12 +391,15 @@ export function gapSummary(cov, { limit = Infinity, minWeight = MIN_WEIGHT, minD
 /**
  * One line on the whole wardrobe, before its gaps: { strongShare (the share
  * of wears with a strong pick), short (gap and thin cells named), text }.
+ * `owned`: how many bottles the wardrobe holds, liked or not.
  */
-export function overview(cov) {
+export function overview(cov, { owned = null } = {}) {
   const strongShare = cov.reduce((sum, c) => sum + (c.strong ? c.cell.weight : 0), 0);
   const listed = cov.filter(c => named(c));
   const short = listed.filter(c => c.status !== 'room').length;
-  const text = !cov.some(c => c.top.length) ? 'You don’t own anything yet, so every situation is open.'
+  const none = !cov.some(c => c.top.length);
+  const text = none && owned ? 'You rate everything you own 2★ or lower, so every situation is open.'
+    : none ? 'You don’t own anything yet, so every situation is open.'
     : short ? `You have a strong pick for ${strongShare >= 0.95 ? 'nearly everything' : `${pct(strongShare)} of what`} you wear; here’s where it falls short.`
       : listed.length ? 'Your wardrobe covers every situation well; here’s where it could go further.'
         : 'Your wardrobe covers every situation well.';
@@ -452,30 +439,36 @@ export function strengths(cov, { limit = 4, minWeight = MIN_WEIGHT } = {}) {
  * Everything the report and the buy check share, for one wardrobe, climate
  * and set of shares. records: the pool (fromPool); byId: id -> record over
  * them; owned: the wardrobe's records (a visitor's outside the pool with
- * `about` attached); preferValue: only suggest bottles valued PREFER_VALUE or
- * more (default from the wardrobe, preferValueDefault). Every bottle is
- * scored as sameFooting has it.
+ * `about` attached, and `personal` for your stars, src/skin.js); preferValue:
+ * only suggest bottles valued PREFER_VALUE or more (default from the
+ * wardrobe, preferValueDefault); mists: suggest body mists and sprays too
+ * (allowContext). Every bottle is scored as sameFooting has it. Coverage
+ * counts the bottles you'd wear (`worn`): one you rate DISLIKED or lower
+ * covers nothing, as rank() all but benches it, though it still counts as
+ * owned (its twins are Redundant) and toward your styles.
  */
-export function gapContext({ owned, records, byId, summary = DEFAULT_CLIMATE, shares = null, preferValue = null }) {
+export function gapContext({ owned, records, byId, summary = DEFAULT_CLIMATE, shares = null, preferValue = null, mists = false }) {
   summary ??= DEFAULT_CLIMATE;
   const cc = cellsFor(summary, { shares });
   const m = cc.cells.length;
   const table = poolTable(allFooted(records), summary, cc);
   const prefer = preferValue ?? preferValueDefault(owned, byId);
-  const ctx = allowContext(owned, { byId, minValue: prefer ? PREFER_VALUE : null });
-  // The reference: well-voted bottles in the wardrobe's lean range, not brigaded.
+  const ctx = allowContext(owned, { byId, minValue: prefer ? PREFER_VALUE : null, mists });
+  // The reference: well-voted bottles in the wardrobe's lean range, not
+  // brigaded, and perfumes unless mists are let in (what it could suggest).
   const rows = [];
   records.forEach((r, i) => {
-    const lean = genderLean(r, byId);
-    if (lean >= ctx.lean[0] && lean <= ctx.lean[1] && !signalsOf(r).flags.includes('brigaded')) rows.push(i);
+    const lean = genderLean(r, byId), { flags } = signalsOf(r);
+    if (lean >= ctx.lean[0] && lean <= ctx.lean[1] && !flags.includes('brigaded') && (mists || !flags.includes('mist'))) rows.push(i);
   });
   const ref = poolReference(table, records.length, m, rows);
-  const ownTable = fitTable(owned.map(sameFooting), cc);
-  const cov = coverage(owned, ownTable, cc.cells, ref);
+  const worn = owned.filter(f => !(f.personal?.rating <= DISLIKED));
+  const ownTable = fitTable(worn.map(sameFooting), cc);
+  const cov = coverage(worn, ownTable, cc.cells, ref);
   const norms = poolNorms(records);
   const leans = owned.map(f => genderLean(f, byId));
   return {
-    owned, records, byId, summary, cc, table, rows, ref, ownTable, cov, norms,
+    owned, worn, records, byId, summary, cc, table, rows, ref, ownTable, cov, norms,
     allow: ctx,
     preferValue: prefer,
     valueSlope: valueSlope(owned, norms, byId),
@@ -490,12 +483,13 @@ export function gapContext({ owned, records, byId, summary = DEFAULT_CLIMATE, sh
 }
 
 // What the wardrobe has per cell, which suggestions add to: its best and
-// second best scores, who holds the best, how many strong bottles, and
-// whether the gap list names the cell (`short`: suggestions only count gains
-// there, so the gaps a report lists are the ones its picks fill).
+// second best scores, who holds the best (of the bottles you'd wear), how
+// many strong bottles, and whether the gap list names the cell (`short`:
+// suggestions only count gains there, so the gaps a report lists are the
+// ones its picks fill).
 function ownedState(ctx) {
   const m = ctx.cc.cells.length, s1 = new Float32Array(m), s2 = new Float32Array(m), who = new Array(m).fill(null);
-  ctx.owned.forEach((b, i) => {
+  ctx.worn.forEach((b, i) => {
     for (let j = 0; j < m; j++) {
       const x = ctx.ownTable[i * m + j];
       if (x > s1[j]) [s2[j], s1[j], who[j]] = [s1[j], x, b];
@@ -726,21 +720,62 @@ function fillsText(fills) {
 
 const lower = t => t.charAt(0).toLowerCase() + t.slice(1);
 
+// Taste: a bottle adds to a style someone likes when the wardrobe holds
+// under STYLE_THIN bottles of it (styleMix: what each bottle leans toward).
+// It's in a liked scent style when that's one of its two shown styles;
+// Intimate (a wear style) counts on its own only when no scent style is
+// liked: beside them it's how they wear, and a quiet aquatic isn't the skin
+// scent someone means.
+export const STYLE_THIN = 3;
+const STYLE_NOUN = {
+  skin: 'skin scents', clean: 'clean scents', intimate: 'close-wearing scents', citrus: 'fresh citrus scents', aromatic: 'barbershop scents',
+  gourmand: 'gourmands', amber: 'ambers', oud: 'ouds', leather: 'leathers', incense: 'smoky incense scents', whiteFloral: 'white florals',
+  floral: 'florals', powdery: 'powdery iris scents', chypre: 'chypres',
+};
+const styleNoun = id => STYLE_NOUN[id] ?? `${styleById(id).label.toLowerCase()} scents`;
+const mixes = new WeakMap(); // ctx -> the wardrobe's style mix
+const countWord = n => (n === 0 ? 'none yet' : n === 1 ? 'one' : String(n));
+
+/**
+ * What a bottle adds to the styles someone likes (style ids): { styles (its
+ * shown scent styles, ids), style (the liked one it adds to, the one the
+ * wardrobe holds fewest of; null), owned (how many the wardrobe holds),
+ * thin (under STYLE_THIN) }, or null without liked styles.
+ */
+export function tasteOf(record, ctx, liked) {
+  const ids = (liked ?? []).filter(id => styleById(id));
+  if (!ids.length) return null;
+  if (!mixes.has(ctx)) mixes.set(ctx, styleMix(ctx.owned));
+  const mix = mixes.get(ctx), scores = styleScores(record);
+  const shown = topOf(scores, 2).map(s => s.id);
+  const scent = ids.filter(id => styleById(id).kind === 'scent');
+  const hits = scent.length ? scent.filter(id => shown.includes(id)) : closeOf(scores) ? ids : [];
+  const owned = id => (styleById(id).kind === 'wear' ? mix.intimate : mix.counts[id]);
+  const [style = null] = hits.sort((a, b) => owned(a) - owned(b) || scores[b] - scores[a]);
+  return { styles: shown, style, owned: style ? owned(style) : null, thin: style != null && owned(style) < STYLE_THIN };
+}
+
 /**
  * Whether a bottle is worth buying for this wardrobe: { verdict: 'Strong fit'
- * | 'Good' | 'Redundant' | 'Risky', reasons (2–3 short sentences), fills (the
- * ones that matter), gain, realGain, overlap: { bottle, via, sim, link },
- * risk, twin, quality }. It's scored as its pool row when it has one, else
- * as sameFooting has it, so a catalog record and its pool row check alike.
+ * | 'Good' | 'Covered' | 'Redundant' | 'Risky', reasons (2–3 short
+ * sentences), fills (the ones that matter), gain, realGain, overlap: {
+ * bottle, via, sim, link }, risk, twin, quality, taste }. It's scored as its
+ * pool row when it has one, else as sameFooting has it, so a catalog record
+ * and its pool row check alike. opts.liked: the style ids the person likes
+ * (Discover's chips; DEMO_LIKED for David), which tasteOf reads.
  * In order: Redundant when it duplicates something owned (owned, an owned
  * dupe's original or a twin of one, SAME_SIM alike to an owned bottle, or
  * KIN_SIM alike and placed in an owned bottle's family by voters). Risky
- * when riskOf says high. Redundant when nothing it adds matters: the
- * wardrobe already does what it would. Risky when voters rate it under
- * MIN_RATING. Strong fit when its fills cut the named gaps by strongBar,
- * with quality at or above the pool's usual and low risk. Good otherwise.
+ * when riskOf says high. Covered when nothing it adds matters (the wardrobe
+ * already does what it would) and it adds no liked style the wardrobe is
+ * thin on (a body mist's style counts only with ctx.allow.mists). Risky when
+ * voters rate it under MIN_RATING, or when only its style speaks for it and
+ * riskOf has a major warning (not a safe blind buy, divisive). Strong fit
+ * when its fills cut the named gaps by strongBar, with quality at or above
+ * the pool's usual and low risk, and it isn't a body mist. Good otherwise:
+ * it fills something, or brings more of a style you like.
  */
-export function buyCheck(record, ctx) {
+export function buyCheck(record, ctx, { liked = null } = {}) {
   const scored = sameFooting(poolRowOf(record, ctx.byId) ?? record);
   const state = ownedState(ctx), cells = ctx.cc.cells;
   const nov = novelty(scored, ctx.vecs, ctx.family);
@@ -762,12 +797,17 @@ export function buyCheck(record, ctx) {
   const twinOwned = dupe && ['owned', 'original', 'near'].includes(dupe.kind);
   const lookalike = !twinOwned && (nov.sim >= SAME_SIM || (dupe && nov.sim >= KIN_SIM));
   const lowRated = scored.ratingVotes >= RATED_VOTES && scored.rating < MIN_RATING;
+  const taste = tasteOf(scored, ctx, liked);
+  const mist = signalsOf(scored, ctx.byId).flags.includes('mist');
+  // Taste alone (it fills nothing) vouches only for a perfume, as suggestions
+  // leave mists out unless asked, and not past a warning that counts double.
+  const byTaste = !fills.length && Boolean(taste?.thin) && !(mist && !ctx.allow.mists);
   let verdict;
   if (twinOwned || lookalike) verdict = 'Redundant';
   else if (risk.level === 'high') verdict = 'Risky';
-  else if (!fills.length) verdict = 'Redundant';
-  else if (lowRated) verdict = 'Risky';
-  else if (realGain >= strongBar(ctx) && q.mult >= 1 && risk.level === 'low') verdict = 'Strong fit';
+  else if (!fills.length && !byTaste) verdict = 'Covered';
+  else if (lowRated || (byTaste && risk.major)) verdict = 'Risky';
+  else if (fills.length && realGain >= strongBar(ctx) && q.mult >= 1 && risk.level === 'low' && !mist) verdict = 'Strong fit';
   else verdict = 'Good';
 
   const nearWho = near && (near.record === near.via ? `your ${near.via.name}` : `${near.record.name}, the original of your ${near.via.name}`);
@@ -780,9 +820,16 @@ export function buyCheck(record, ctx) {
   const lean = genderLean(scored, ctx.byId), [lo, hi] = ctx.leanRange ?? [-Infinity, Infinity];
   const leanLine = lean < lo - LEAN_NOTE ? 'Voters call it more feminine than anything you own.'
     : lean > hi + LEAN_NOTE ? 'Voters call it more masculine than anything you own.' : null;
-  const ratedLine = lowRated ? `Voters rate it only ${scored.rating.toFixed(1)}★.`
+  const ratedLine = lowRated ? `Voters rate it only ${scored.rating.toFixed(scored.rating.toFixed(1) >= MIN_RATING ? 2 : 1)}★.`
     : scored.ratingVotes ? `Rated ${scored.rating.toFixed(1)}★ by ${scored.ratingVotes.toLocaleString('en-US')} voters.`
       : 'There’s no crowd data on it yet.';
+  // What it adds to the styles you like ("More of the skin scents you like: you own 2."), or why not.
+  const styleLabels = taste?.styles.map(id => styleById(id).label.toLowerCase());
+  const tasteLine = !taste ? null
+    : taste.thin ? `More of the ${styleNoun(taste.style)} you like: you own ${countWord(taste.owned)}.`
+      : taste.style ? `You own ${taste.owned} ${styleNoun(taste.style)} already.`
+        : styleLabels.length ? `It’s ${list(styleLabels)}, none of the styles you like.` : 'It isn’t one of the styles you like.';
+  const mistLine = mist ? 'It’s a body mist: lighter and shorter-lived than a perfume.' : null;
   // Why it adds nothing: it fades where it would help, or where it does best
   // (closest to the wardrobe's best, in a cell that comes up) it's matched.
   const fades = all.filter(f => f.fades);
@@ -792,11 +839,11 @@ export function buyCheck(record, ctx) {
     if (cell.weight >= MIN_WEIGHT && state.who[j] && (!close || by > close.by)) close = { cell, who: state.who[j], by };
   });
   const unlike = nov.sim < LIKE_SIM && !dupe;
+  const likeLine = unlike ? 'Nothing you own smells like it.' : overlapLine;
   const coveredLine = fades.length ? `It would be your best for ${fillsText(fades)}, but it doesn’t last long enough for that.`
     : !close ? 'It wouldn’t beat anything you own, in any weather or occasion.'
-      : `${unlike ? 'Nothing you own smells like it, but' : 'It adds little:'} ${close.by > 0
-        ? `it would barely beat your ${close.who.name} for ${cellLabel(close.cell)}${unlike ? ', where it does best' : ''}`
-        : `your ${close.who.name} outdoes it even for ${cellLabel(close.cell)}, where it does best`}.`;
+      : close.by > 0 ? `It would barely beat your ${close.who.name} for ${cellLabel(close.cell)}, where it does best.`
+        : `Your ${close.who.name} outdoes it even for ${cellLabel(close.cell)}, where it does best.`;
 
   const reasons = [];
   if (mine) reasons.push('You own it.');
@@ -805,14 +852,16 @@ export function buyCheck(record, ctx) {
     reasons.push(dupe ? `${dupe.text}.` : `It smells ${nov.sim >= 0.9 ? 'nearly the same as' : 'a lot like'} ${nearWho}.`,
       fillLine ? `Still, ${lower(fillLine)}` : `It would add nothing your ${same.name} doesn’t already do.`);
   } else if (verdict === 'Risky') {
-    reasons.push(...[lowRated && ratedLine, ...risk.reasons].filter(Boolean).slice(0, 2), fillLine ?? coveredLine);
-  } else if (verdict === 'Redundant') {
-    reasons.push(coveredLine, lowRated || unlike ? (!lowRated && twin && !twin.owned && twin.text) || ratedLine : overlapLine);
+    const why = [lowRated && ratedLine, ...risk.reasons].filter(Boolean);
+    // Its warning, then what it would add: the style you like, or its fills.
+    reasons.push(...(byTaste ? [why[0], tasteLine, likeLine] : [...why.slice(0, 2), fillLine ?? coveredLine]));
+  } else if (verdict === 'Covered') {
+    reasons.push(coveredLine, tasteLine ?? likeLine, lowRated ? ratedLine : mistLine ?? (tasteLine ? likeLine : (twin && !twin.owned && twin.text) || ratedLine));
   } else {
-    reasons.push(fillLine, overlapLine);
-    reasons.push((risk.level === 'medium' && risk.reasons[0]) || leanLine || (twin && !twin.owned && twin.text) || ratedLine);
+    reasons.push(fillLine ?? tasteLine, fillLine ? (taste?.thin && tasteLine) || overlapLine : likeLine);
+    reasons.push(mistLine || (risk.level === 'medium' && risk.reasons[0]) || leanLine || (twin && !twin.owned && twin.text) || ratedLine);
   }
-  return { verdict, reasons: reasons.filter(Boolean).slice(0, 3), fills, gain, realGain, overlap, risk, twin, quality: q };
+  return { verdict, reasons: reasons.filter(Boolean).slice(0, 3), fills, gain, realGain, overlap, risk, twin, quality: q, taste };
 }
 
 // ---------------------------------------------------------------- plain output
@@ -845,7 +894,7 @@ export function gapReport(ctx, { k = 5, gaps = Infinity } = {}) {
     valueSlope: round(ctx.valueSlope, 3),
     severity: round(ctx.severity, 5),
     gapSeverity: round(ctx.gapSeverity, 5),
-    overview: overview(ctx.cov),
+    overview: overview(ctx.cov, { owned: ctx.owned.length }),
     climate: Object.fromEntries(Object.entries(ctx.cc.slotBands).map(([key, sb]) => [key, sb.share])),
     coverage: ctx.cov.map(c => ({
       cell: c.cell.id, use: c.cell.use, slot: c.cell.slot, band: c.cell.band, title: cellLabel(c.cell),
@@ -880,11 +929,12 @@ export function gapReport(ctx, { k = 5, gaps = Infinity } = {}) {
 
 /** buyCheck as plain data, like gapReport. */
 export function checkJSON(record, check) {
-  const o = check.overlap;
+  const o = check.overlap, t = check.taste;
   return {
     ...stub(record),
     verdict: check.verdict,
     reasons: check.reasons,
+    taste: t ? { styles: t.styles, style: t.style, label: t.style ? styleById(t.style).label : null, owned: t.owned, thin: t.thin } : null,
     gain: round(check.gain, 5),
     fills: check.fills.map(fillJSON),
     overlap: o && { ...stub(o.bottle), via: o.bottle === o.via ? null : stub(o.via), sim: round(o.sim, 3), link: o.link },

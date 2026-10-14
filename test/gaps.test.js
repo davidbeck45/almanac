@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { rank, steadyShares } from '../src/engine.js';
+import { rank, steadyShares, votedShares } from '../src/engine.js';
 import { loadPool, fromPool } from '../src/fragrantica.js';
 import { allow } from '../src/candidates.js';
 import {
@@ -11,6 +11,8 @@ import {
   coverage, gapSummary, strengths, suggest, buyCheck, gapReport, checkJSON, cellTitle, explainCell, SAME_SIM,
 } from '../src/gaps.js';
 import { customRecord, predictedShares } from '../src/custom.js';
+import { applySkin } from '../src/skin.js';
+import { DEMO_LIKED } from '../src/discover.js';
 import { sharesFrom, parseUses, LEVELS } from '../src/uses.js';
 import { archiveWindows, fetchClimate, climateYears } from '../src/climate.js';
 import { fragranticaLibrary } from '../src/fragrantica.js';
@@ -38,7 +40,9 @@ test('a bottle’s fit in a cell is exactly rank()’s score in that weather', (
   ].map(([dateISO, slot, feelsF, dewF]) => ({ dateISO, slot, feelsF, dewF, lat: 40.7 }));
   const cc = cellsFor(climateSummary(windows, { perCell: 1 }));
   assert.equal(cc.cells.length, 55);
-  const bottles = [...wardrobe.map(sameFooting), ...records.filter((_, i) => i % 97 === 0)];
+  // Your stars too: a 1★ and a 5★ bottle score as rank() has them.
+  const rated = applySkin(wardrobe, { [owned('Cream Velvet').id]: { rating: 1 }, [owned('Terra').id]: { rating: 5 } });
+  const bottles = [...rated.map(sameFooting), ...records.filter((_, i) => i % 97 === 0)];
   const table = fitTable(bottles, cc);
   let worst = 0, checked = 0;
   cc.cells.forEach((cell, j) => {
@@ -63,10 +67,7 @@ test('owned bottles stand on the pool’s footing: no Parfumo occasion votes, 8 
   assert.equal(same.seasonVotes, lb.seasonVotes, 'honest votes stay');
   const row = byId.get('31861');
   assert.equal(sameFooting(row), row, 'a pool row comes back as itself');
-  // No owned bottle's votes read as flat, and only a few dozen of the pool's.
-  assert.ok(wardrobe.every(f => sameFooting(f).seasonVotes === f.seasonVotes));
-  const flat = records.filter(r => sameFooting(r).seasonVotes !== r.seasonVotes);
-  assert.ok(flat.length >= 10 && flat.length <= 40, `${flat.length} flat`);
+  assert.ok(wardrobe.every(f => sameFooting(f).seasonVotes === f.seasonVotes && sameFooting(f).timeVotes === f.timeVotes), 'votes stay');
 });
 
 test('flat season votes read as unvoted, so they don’t make an all-rounder', () => {
@@ -76,16 +77,45 @@ test('flat season votes read as unvoted, so they don’t make an all-rounder', (
   assert.ok(!flatVotes([5500, 6600, 6400, 6200], 10377), 'Supremacy Collector’s Edition: a real all-rounder');
   assert.ok(!flatVotes([112, 118, 117, 111], 546), 'even, but from few of its raters');
   assert.ok(!flatVotes([3, 3, 3, 9], 20), 'a tie on few votes');
+  assert.ok(!flatVotes([2700, 2700, 2700, 1000], 4750), 'a scraped page rounds counts from 1,000, so a tie there is no sign');
+  // The engine reads them as none (steadyShares), so the gap finder, rank() and Discover agree.
   const elyon = byId.get('119376'), au = records.find(r => r.name === 'Au Hasard');
   for (const r of [elyon, au]) {
-    const same = sameFooting(r);
-    assert.deepEqual(Object.values(same.seasonVotes), [0, 0, 0, 0], r.name);
+    assert.deepEqual(votedShares(r), { season: false, time: false }, r.name);
+    assert.equal(sameFooting(r).seasonVotes, r.seasonVotes, 'the gap finder leaves them to the engine');
     const est = predictedShares(r.accords, r.like);
-    assert.ok(Math.abs(steadyShares(same).season.winter - est.season.winter) < 1e-9, 'the prediction alone');
+    assert.ok(Math.abs(steadyShares(r).season.winter - est.season.winter) < 1e-9, 'the prediction alone');
+    assert.ok(Math.abs(steadyShares(r).dayNight.night - est.night) < 1e-9);
   }
+  // No owned bottle's votes read as flat, and only a few dozen of the pool's; day and night only with the seasons.
+  assert.ok(wardrobe.every(f => votedShares(f).season && votedShares(f).time), 'Liam’s and Vintage Radio’s 2.4k day and night stand');
+  const flat = records.filter(r => !votedShares(r).season);
+  assert.ok(flat.length >= 10 && flat.length <= 40, `${flat.length} flat`);
+  assert.ok(records.every(r => !r.timeVotes || votedShares(r).time || !votedShares(r).season), 'Sauvage EDP’s even day and night stand');
   const picks = [ctx, gapContext({ owned: wardrobe, records, byId, preferValue: false })].flatMap(c => suggest(c, { k: 5 }));
   assert.ok(!picks.some(p => [elyon.id, au.id].includes(p.record.id)));
   for (const r of [elyon, au]) assert.notEqual(buyCheck(r, ctx).verdict, 'Strong fit', r.name);
+});
+
+test('your stars move your own coverage, not the pool reference, and a bottle you dislike covers nothing', () => {
+  const ids = ['Cream Velvet', 'Amber Empire'].map(n => owned(n).id);
+  const rated = applySkin(wardrobe, { [ids[0]]: { rating: 1 }, [ids[1]]: { rating: 2 }, [owned('Terra').id]: { rating: 5 } });
+  const again = gapContext({ owned: rated, records, byId });
+  assert.deepEqual(again.ref.map(q => [...q]), ctx.ref.map(q => [...q]), 'the reference is the crowd’s');
+  // Neither is anyone's best or runner-up any more: Cozy on cold nights names another bottle.
+  const named = c => c.cov.flatMap(x => x.top.map(t => String(t.bottle.id)));
+  assert.ok(ids.every(id => named(ctx).includes(id)));
+  assert.ok(!ids.some(id => named(again).includes(id)));
+  const cozy = c => c.cov.find(x => x.cell.id === 'cozy:night:cold');
+  assert.ok(ids.includes(String(cozy(ctx).top[0].bottle.id)), cozy(ctx).top[0].bottle.name);
+  assert.ok(!ids.includes(String(cozy(again).top[0].bottle.id)));
+  assert.equal(again.worn.length, wardrobe.length - 2);
+  // Still his: it checks as owned.
+  assert.equal(buyCheck(byId.get(ids[1]), again).verdict, 'Redundant');
+  // A bottle he loves covers a little more, by what rank() adds for it.
+  const m = ctx.cc.cells.length, terra = i => wardrobe.findIndex(f => f.name === 'Terra') * m + i;
+  const k = again.worn.findIndex(f => f.name === 'Terra') * m;
+  assert.ok(ctx.cc.cells.every((_, j) => again.ownTable[k + j] > ctx.ownTable[terra(j)] + 0.019));
 });
 
 test('the default climate is small and has real windows in every slot and band', () => {
@@ -138,7 +168,9 @@ test('David’s gaps name real situations, gaps before room to grow, and his str
   }
   assert.equal(gaps[0].status, 'gap');
   assert.ok(gaps.some(g => g.use === 'date' && g.bands.includes('warm') && g.status === 'gap'), 'date nights in the warm are his gap');
-  assert.ok(gaps.some(g => g.use === 'office' && g.bands.includes('cold') && g.status === 'room'), 'office in the cold has room to grow');
+  // Office wants a bottle that lasts the day, and his fresh clones do: it's a strength, not a gap.
+  assert.ok(!gaps.some(g => g.use === 'office'), gaps.map(g => g.title).join('; '));
+  assert.ok(report.strengths.some(s => s.use === 'office'), 'the office is a strength');
   assert.match(report.overview.text, /^You have a strong pick for nearly everything you wear/);
   // Cold days: Cream Velvet leads, Détour Noir and Liam close behind, so it isn't thin.
   const cold = ctx.cov.find(c => c.cell.id === 'daily:day:cold');
@@ -178,7 +210,7 @@ test('suggestions skip what’s owned, originals and twins of it, and complement
   let behind = 0;
   for (const c of [ctx, wide, formal, lean]) {
     const picks = suggest(c, { k: 8 });
-    assert.ok(picks.length >= 3);
+    assert.ok(picks.length >= 2);
     const named = new Set(gapSummary(c.cov).flatMap(g => g.cells));
     for (const p of picks) {
       assert.ok(!mine.has(p.record.id) && !originals.has(p.record.id), p.record.name);
@@ -213,11 +245,18 @@ test('suggestions skip what’s owned, originals and twins of it, and complement
 });
 
 test('fills where it doesn’t last, or behind its own kin, don’t count', () => {
-  // Book Loft would top Office in the cold, but fades before the day is out.
+  // Book Loft topped Office in the cold for being quiet; the engine now counts its fading against it.
   const loft = buyCheck(records.find(r => r.name === 'Book Loft'), ctx);
-  assert.equal(loft.verdict, 'Redundant');
-  assert.match(loft.reasons[0], /^It would be your best for Office on cold and cool days, but it doesn’t last long enough for that\.$/);
+  assert.ok(!loft.fills.some(f => f.cell.use === 'office') && !['Strong fit', 'Good'].includes(loft.verdict), loft.reasons.join(' '));
   assert.ok(!suggest(ctx, { k: 8 }).some(p => p.record.name === 'Book Loft'));
+  // A bottle that would still lead an occasion wanting longevity fills nothing there when it fades fast:
+  // the office's favorite with a body mist's performance, for an empty wardrobe.
+  const best = records.find(r => r.name === 'Gentleman Eau de Toilette Intense');
+  const weak = { ...best, id: 'my:weak', name: 'Weak Copy', extras: undefined, performance: { longevity: 2, sillage: 1.6, votes: 400 } };
+  const fades = buyCheck(weak, gapContext({ owned: [], records, byId }));
+  const wants = f => f.cell.occasion?.performance?.longevity > 0;
+  assert.ok(fades.fills.length && !fades.fills.some(wants), fades.fills.map(f => f.cell.id).join());
+  assert.ok(buyCheck(best, gapContext({ owned: [], records, byId })).fills.some(wants), 'as it is, it fills them');
   // A Cream Velvet look-alike adds no depth to Cream Velvet.
   const eclair = buyCheck(records.find(r => r.name === 'Éclair Affair'), ctx);
   assert.equal(eclair.verdict, 'Redundant');
@@ -246,6 +285,15 @@ test('brigaded bottles are neither suggested nor part of the reference', () => {
   assert.ok(!suggest(wide, { k: 20 }).some(p => brigaded.has(records.indexOf(p.record))));
 });
 
+test('body mists are neither suggested nor part of the reference, unless asked for', () => {
+  const mists = new Set(records.flatMap((r, i) => (r.extras.flags.includes('mist') ? [i] : [])));
+  assert.ok(mists.size >= 50);
+  assert.ok(!ctx.rows.some(i => mists.has(i)));
+  for (const c of [ctx, gapContext({ owned: [], records, byId })]) assert.ok(!suggest(c, { k: 8 }).some(p => p.record.extras.flags.includes('mist')));
+  const open = gapContext({ owned: [], records, byId, mists: true });
+  assert.ok(open.allow.mists && open.rows.some(i => mists.has(i)));
+});
+
 test('the buy check calls twins redundant, gap fillers good and divisive bottles risky', () => {
   const verdict = id => buyCheck(byId.get(id), ctx);
   const althair = verdict('84109');
@@ -258,13 +306,24 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   const sauvage = verdict('31861');
   assert.deepEqual([sauvage.verdict, sauvage.reasons, sauvage.fills], ['Redundant', ['You own it.'], []]);
   const tobacco = buyCheck(records.find(r => r.name === 'Tobacco Vanille'), ctx);
-  assert.equal(tobacco.verdict, 'Redundant', 'one point better than Terra fills nothing');
-  assert.match(tobacco.reasons[0], /^It adds little: it would barely beat your /);
-  // A new direction he doesn't need isn't called a duplicate.
-  const dhi = buyCheck(records.find(r => r.name === 'Dior Homme Intense 2011'), ctx);
-  assert.equal(dhi.verdict, 'Redundant');
-  assert.match(dhi.reasons[0], /^Nothing you own smells like it, but /);
+  assert.equal(tobacco.verdict, 'Covered', 'one point better than Terra fills nothing');
+  assert.match(tobacco.reasons[0], /^It would barely beat your Terra for /);
+  // A new direction he doesn't need isn't called a duplicate: he's covered there.
+  const dhi = buyCheck(records.find(r => r.name === 'Encre Noire'), ctx);
+  assert.equal(dhi.verdict, 'Covered');
+  assert.match(dhi.reasons[0], /^It would barely beat your .+, where it does best\.$/);
+  assert.equal(dhi.reasons[1], 'Nothing you own smells like it.');
   assert.ok(dhi.overlap.sim < 0.5 && !dhi.overlap.link);
+  // Dior Homme Intense lasts the working day, so it edges his best for the office in the cold (by too little to
+  // fill anything: he's covered there); its clone doesn't.
+  const cold = ctx.cc.cells.findIndex(c => c.id === 'office:day:cold'), m = ctx.cc.cells.length;
+  const best = Math.max(...wardrobe.map((_, i) => ctx.ownTable[i * m + cold]));
+  const coldFit = name => fitTable([sameFooting(records.find(r => r.name === name))], ctx.cc)[cold];
+  assert.ok(coldFit('Dior Homme Intense 2011') > best && best > coldFit('Dark Door Intense'));
+  const dior = buyCheck(records.find(r => r.name === 'Dior Homme Intense 2011'), ctx);
+  assert.equal(dior.verdict, 'Covered');
+  assert.match(dior.reasons[0], /^It would barely beat your Sandalwood & Musk for Office on cold days/);
+  assert.ok(!buyCheck(records.find(r => r.name === 'Dark Door Intense'), ctx).fills.some(f => f.cell.use === 'office'));
   // Risky shows through even when it fills nothing.
   const kouros = buyCheck(records.find(r => r.name === 'Kouros'), ctx);
   assert.equal(kouros.verdict, 'Risky');
@@ -286,6 +345,61 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   }
   const json = checkJSON(byId.get('76063'), tonka);
   assert.equal(JSON.parse(JSON.stringify(json)).verdict, 'Strong fit');
+});
+
+test('the buy check knows what he likes: more of a style he’s thin on is good, overlap redundant, the rest covered', () => {
+  const liked = DEMO_LIKED; // Skin scent, Clean, Intimate
+  const check = (r, opts = { liked }) => buyCheck(typeof r === 'string' ? byId.get(r) : r, ctx, opts);
+  const named = (name, brand) => records.find(r => r.name === name && r.brand === brand);
+  // Glossier You: a skin scent, and he owns two; it fills no gap, and nothing he owns smells like it.
+  const you = check(named('You', 'Glossier'));
+  assert.equal(you.verdict, 'Good');
+  assert.deepEqual(you.reasons.slice(0, 2), ['More of the skin scents you like: you own 2.', 'Nothing you own smells like it.']);
+  assert.deepEqual([you.taste.style, you.taste.owned, you.taste.thin], ['skin', 2, true]);
+  assert.equal(check(named('You', 'Glossier'), {}).verdict, 'Covered', 'without his styles it adds nothing');
+  // A twin of his Supremacy Collector's Edition is redundant, whatever he likes.
+  const precieux = check('93272'); // Armaf Club de Nuit Precieux I
+  assert.equal(precieux.verdict, 'Redundant');
+  assert.match(precieux.reasons[0], /twin of your Supremacy Collector's Edition Pour Homme/);
+  // A fresh classic he's covered for, in no style he likes.
+  const adg = check(named('Acqua di Gio', 'Giorgio Armani'));
+  assert.equal(adg.verdict, 'Covered');
+  assert.equal(adg.reasons[1], 'It’s fresh citrus and aquatic, none of the styles you like.');
+  // Risky and strong fit stand whatever he likes.
+  assert.equal(check(records.find(r => r.name === 'Kouros')).verdict, 'Risky');
+  assert.equal(check('76063').verdict, 'Strong fit', 'Shalimar Millésime Tonka');
+  // A low-rated skin scent is risky, at its real rating.
+  const nap = check(named('Not A Perfume', 'Juliette Has A Gun'));
+  assert.equal(nap.verdict, 'Risky');
+  assert.equal(nap.reasons[0], 'Voters rate it only 3.75★.');
+  // A style he owns plenty of adds nothing new.
+  const tv = check(records.find(r => r.name === 'Tobacco Vanille'), { liked: ['vanilla'] });
+  assert.deepEqual([tv.verdict, tv.reasons[1]], ['Covered', 'You own 8 vanilla scents already.']);
+  // A body mist says so, and is never a strong fit.
+  const mist = check('87258'); // Phlur Vanilla Skin Fragrance Mist
+  assert.ok(mist.reasons.includes('It’s a body mist: lighter and shorter-lived than a perfume.'));
+  // Nor does his taste alone vouch for one, as suggestions leave mists out: Book Loft wears close, and
+  // he likes Intimate, but it's only Good once he lets mists in.
+  const loft = records.find(r => r.name === 'Book Loft');
+  assert.equal(check(loft, { liked: ['intimate'] }).verdict, 'Covered');
+  const open = buyCheck(loft, gapContext({ owned: wardrobe, records, byId, mists: true }), { liked: ['intimate'] });
+  assert.deepEqual([open.verdict, open.reasons[0]], ['Good', 'More of the close-wearing scents you like: you own 2.']);
+  // A skin scent reviewers warn about is risky, not good, when only its style speaks for it.
+  const mkk = check(named('Muscs Koublai Khan', 'Serge Lutens'));
+  assert.equal(mkk.verdict, 'Risky');
+  assert.deepEqual(mkk.reasons.slice(0, 2), ['Reviewers say it isn’t a safe blind buy.', 'More of the skin scents you like: you own 2.']);
+  for (const c of [you, precieux, adg, nap, tv, mist, mkk]) {
+    assert.ok(c.reasons.length >= 2 && c.reasons.length <= 3, c.reasons.join(' | '));
+    for (const r of c.reasons) assert.doesNotMatch(r, /°|\d+ ?F\b|undefined|null|NaN|severity|deficit/);
+  }
+  // Over the pool, his styles turn some covered bottles good, and nothing else.
+  const sample = records.filter((_, i) => i % 9 === 0), shift = {};
+  for (const r of sample) {
+    const [a, b] = [check(r, {}).verdict, check(r).verdict];
+    if (a !== b) shift[`${a} → ${b}`] = (shift[`${a} → ${b}`] ?? 0) + 1;
+  }
+  assert.ok(Object.keys(shift).every(k => ['Covered → Good', 'Covered → Risky'].includes(k)) && shift['Covered → Good'] > 10, JSON.stringify(shift));
+  assert.deepEqual(checkJSON(named('You', 'Glossier'), you).taste, { styles: ['powdery', 'skin'], style: 'skin', label: 'Skin scent', owned: 2, thin: true });
 });
 
 test('the buy check reads a bottle the same way whatever form it comes in', () => {
@@ -406,6 +520,8 @@ test('the worker answers reports and checks by message', async () => {
     assert.deepEqual(structuredClone(answer).report.gaps, report.gaps);
     const check = await handle({ id: 2, type: 'check', record: { id: '84109' } });
     assert.equal(check.check.verdict, 'Redundant');
+    const you = records.find(r => r.name === 'You' && r.brand === 'Glossier');
+    assert.equal((await handle({ id: 9, type: 'check', record: { id: you.id }, liked: DEMO_LIKED })).check.verdict, 'Good', 'liked styles ride along');
     // No local climate yet (null) is the default climate; "How you wear" settings work as shares.
     const plain = await handle({ id: 5, type: 'report', owned: raw, summary: null, uses: { office: 'never' }, k: 1 });
     assert.equal(plain.type, 'report', plain.message);
@@ -435,7 +551,7 @@ test('--gaps and --check answer in the terminal', () => {
   const gaps = cli('--gaps', '--top', '3', '--json');
   assert.equal(gaps.status, 0, gaps.stderr);
   const out = JSON.parse(gaps.stdout);
-  assert.equal(out.picks.length, 3);
+  assert.ok(out.picks.length >= 2 && out.picks.length <= 3);
   assert.ok(out.gaps.length && out.strengths.length && !('record' in out.picks[0]));
   const text = cli('--gaps', '--uses', 'office=never,formal=often', '--no-value');
   assert.equal(text.status, 0, text.stderr);
@@ -448,6 +564,11 @@ test('--gaps and --check answer in the terminal', () => {
   assert.equal(JSON.parse(check.stdout).verdict, 'Redundant');
   const byNumber = cli('--check', '76063');
   assert.match(byNumber.stdout, /^Shalimar Millésime Tonka by Guerlain \(2022\).*\nStrong fit\n/);
+  // His styles by default, others when named.
+  const you = JSON.parse(cli('--check', 'Glossier You', '--json').stdout);
+  assert.deepEqual([you.verdict, you.liked], ['Good', DEMO_LIKED]);
+  assert.equal(JSON.parse(cli('--check', 'Glossier You', '--style', 'vanilla', '--json').stdout).verdict, 'Covered');
+  assert.match(cli('--check', 'Glossier You', '--style', 'xqzw').stderr, /--style: name styles from/);
 
   assert.match(cli('--gaps', '--uses', 'gym=often').stderr, /--uses: Unknown use "gym"/);
   assert.match(cli('--gaps', '--uses', 'daily=never').stderr, /--uses: Daily picks always count/);

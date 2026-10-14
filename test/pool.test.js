@@ -90,6 +90,28 @@ test('pool signals: brigaded pages, cheaper alternatives, value', () => {
   assert.ok(median > 2.8 && median < 3.3, `median value ${median}`);
 });
 
+test('pool owners and reach: owners to a quarter of a doubling, reach a share of the fans’ other loves', async () => {
+  for (const id of ['48100', '96622', '112348', '9828']) {
+    const { extras } = fromPool(pool, pool.index.get(id)), about = await loadAbout(id, load);
+    assert.ok(Math.abs(extras.owners / about.owners.have - 1) < 0.1, `${id}: ${extras.owners} vs ${about.owners.have}`);
+    assert.ok(extras.reach >= 0 && extras.reach <= 1);
+  }
+  const reach = pool.cols.rc.filter(x => x >= 0).sort((a, b) => a - b);
+  assert.ok(reach[reach.length >> 1] >= 70, `median reach ${reach[reach.length >> 1]}`);
+  assert.ok(fromPool(pool, pool.index.get('96622')).extras.reach < 0.1, 'Granado Íris: its fans love Brazilian bottles');
+  // A house's best known bottles reach no further than the house does, plus a little: Granado's Bossa and
+  // Phebo's Limão Siciliano had 0.40 and 0.55 of their own; Le Labo's and Riiffs' stand.
+  const reachOf = id => fromPool(pool, pool.index.get(id)).extras.reach;
+  assert.ok(reachOf('63970') <= 0.21 && reachOf('25456') <= 0.3, `${reachOf('63970')}, ${reachOf('25456')}`);
+  assert.ok(reachOf('10131') > 0.9 && reachOf('124649') > 0.25, 'Another 13, Zenith');
+  // A mist is said so by its name, page or the members' summary; a perfume called a mist isn't one.
+  assert.ok((await loadAbout('112348', load)).flags.includes('mist'), 'Book Loft, in its about data too');
+  assert.ok(!fromPool(pool, pool.index.get('496')).extras.flags.includes('mist'), 'Cashmere Mist');
+  // A name says so only with the kind: not a plain "spray" or "brume" (801 sea spray, Thomas Kosmala's Brume Radieuse).
+  for (const id of ['51012', '53744']) assert.ok(!(await loadAbout(id, load)).flags.includes('mist'), id);
+  for (const id of ['37572', '43933']) assert.ok((await loadAbout(id, load)).flags.includes('mist'), id); // Miss Dior Brume Soyeuse pour le Corps, Sauvage Very Cool Spray
+});
+
 test('discontinued only when a con says so of the bottle itself', () => {
   const at = id => fromPool(pool, pool.index.get(id)).extras.flags;
   for (const id of ['81508', '102208', '65051']) {

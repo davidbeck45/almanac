@@ -75,8 +75,17 @@ function windowsPhrase(wins, all, { the = false } = {}) {
   return listOf(parts);
 }
 
-// A trip this many days or longer packs at least three bottles.
+// A trip this many days or longer packs at least three bottles, and wears
+// none of them every day when another set covers as much, plans within
+// VARIETY_MARGIN a window of the best and gives the most-worn bottle at least
+// VARIETY_RELIEF windows off (London in December: three bottles for twenty
+// windows wear one every day whichever three they are, and the set that at
+// least splits the days cost 0.037 a window). Without the relief, a set
+// "wore none every day" by breaking a run of nights once (Cancún: Aristo on
+// one night of Supremacy's seven), at a cost and no rest.
 const LONG_TRIP_DAYS = 7;
+const VARIETY_MARGIN = 0.015;
+const VARIETY_RELIEF = 2;
 // The most sets of one size packTrip weighs one by one; past it (a large
 // collection of your own), it builds the set a bottle at a time.
 const SEARCH_LIMIT = 100_000;
@@ -91,11 +100,17 @@ const SEARCH_LIMIT = 100_000;
  * counts it: an extra bottle goes where it most improves the picks or
  * spares a bottle worn day after day (a night's top, not a copy of the
  * first). Bottles you rate DISLIKED or lower only go in for a window nothing
- * else suits. Windows can carry an occasion (`occasionOf`, default
- * win.occasion).
+ * else suits. On a trip of LONG_TRIP_DAYS or more, three or more bottles
+ * that wear none every day (on every date, by day or night) win when they
+ * plan nearly as well (VARIETY_MARGIN) and rest the most-worn bottle for real
+ * (VARIETY_RELIEF), a fourth goes in (as `max` allows) when three can't rest
+ * one, and when the set packed still wears one every day, `variety` names the
+ * bottle that, packed too, would rest it (`slot`: 'day' or 'night' when every
+ * wear of the bottle worn every day is one, else null). Windows can carry an
+ * occasion (`occasionOf`, default win.occasion).
  * -> { bottles: [{ record, covers: [window], wears, why }],
  *      plan: [{ window, occasion, pick, score, tier, reasons, top: { record, score }, covered }],
- *      uncovered: [{ window, occasion, best, score }], text }
+ *      uncovered: [{ window, occasion, best, score }], variety: { add, everyDay: [record], slot } | null, text }
  */
 export function packTrip(frags, windows, { max = 3, occasionOf = win => win.occasion ?? null } = {}) {
   if (!frags.length || !windows.length) return { bottles: [], plan: [], uncovered: [], text: 'Nothing to pack for.' };
@@ -120,9 +135,23 @@ export function packTrip(frags, windows, { max = 3, occasionOf = win => win.occa
     scores: pool.map(f => rows.map(row => row.byId.get(f.id).score)),
     floor: rows.map(row => row.top.score - PLAN_MARGIN),
     day: rows.map(row => daysBetween(rows[0].win.dateISO, row.win.dateISO)),
+    // On a long trip, each date's windows, for telling a bottle worn every day.
+    dates: days >= LONG_TRIP_DAYS ? [...new Set(windows.map(w => w.dateISO))].map(d => rows.flatMap((row, w) => (row.win.dateISO === d ? [w] : []))) : null,
   };
   const set = chooseSet(trip, least, most);
   const { picks } = wearPlan(set, trip);
+  // Still one worn every day with no room to spare: the bottle that, packed too, would rest it.
+  const everyDay = everyDayOf(set, picks, trip);
+  let variety = null;
+  if (everyDay.length && set.length >= Math.max(most, 3)) {
+    const now = judgeSet(set, trip);
+    const add = pool.map((_, i) => i).filter(i => !set.includes(i)).map(i => judgeSet([...set, i], trip))
+      .filter(o => rests(o, now)).reduce((a, b) => (!a || betterSet(b, a) ? b : a), null);
+    if (add) {
+      const slots = new Set(everyDay.flatMap(i => picks.flatMap((p, w) => (p === i ? [rows[w].win.slot] : []))));
+      variety = { add: pool[add.set.at(-1)], everyDay: everyDay.map(i => pool[i]), slot: slots.size === 1 ? [...slots][0] : null };
+    }
+  }
   // In the order they're first worn.
   const first = i => (picks.includes(i) ? picks.indexOf(i) : Infinity);
   const packed = [...set].sort((a, b) => first(a) - first(b)).map(i => pool[i]);
@@ -155,8 +184,11 @@ export function packTrip(frags, windows, { max = 3, occasionOf = win => win.occa
   });
 
   const uncovered = plan.filter(p => !p.covered).map(p => ({ window: p.window, occasion: p.occasion, best: p.top.record, score: p.top.score }));
-  return { bottles, plan, uncovered, text: packText(bottles, plan, uncovered, wins, packed.length >= max) };
+  return { bottles, plan, uncovered, variety, text: packText(bottles, plan, uncovered, wins, packed.length >= max, variety) };
 }
+
+// The packed bottles (indexes) a plan wears on every date of a long trip.
+const everyDayOf = (set, picks, { dates }) => (dates ? set.filter(i => dates.every(ws => ws.some(w => picks[w] === i))) : []);
 
 /**
  * Which packed bottle (indexes into trip.scores) to wear in each window, in
@@ -189,66 +221,86 @@ const choose = (n, k) => {
   return c;
 };
 
+// A set as chooseSet weighs it: windows reached, its wearPlan's total, each
+// window's best packed score, how many it wears every day (long trips) and
+// the most windows one bottle is worn.
+function judgeSet(set, trip) {
+  const { scores, floor } = trip;
+  let reached = 0, best = 0;
+  for (let w = 0; w < floor.length; w++) {
+    let top = -Infinity;
+    for (const i of set) top = Math.max(top, scores[i][w]);
+    if (top >= floor[w]) reached++;
+    best += top;
+  }
+  const { picks, total } = wearPlan(set, trip);
+  const most = Math.max(...set.map(i => picks.filter(p => p === i).length));
+  return { set, reached, total, best, daily: everyDayOf(set, picks, trip).length, most };
+}
+// More windows reached, then a better plan, then better-packed.
+const betterSet = (a, b) => (a.reached !== b.reached ? a.reached > b.reached
+  : Math.abs(a.total - b.total) > 1e-9 ? a.total > b.total : a.best > b.best);
+// Whether set a rests what b wears every day: fewer worn every day, and its
+// most-worn bottle at least VARIETY_RELIEF windows short of b's.
+const rests = (a, b) => a.daily < b.daily && a.most <= b.most - VARIETY_RELIEF;
+// The best of `options` by betterSet, unless (with `vary`) one that reaches
+// as many windows and plans within VARIETY_MARGIN a window of it rests what
+// it wears every day.
+function bestSet(options, windows, vary) {
+  const top = options.reduce((a, b) => (betterSet(b, a) ? b : a));
+  if (!vary || !top.daily) return top;
+  let varied = top;
+  for (const o of options) {
+    if (o.reached === top.reached && o.total >= top.total - VARIETY_MARGIN * windows && rests(o, top)
+      && (varied === top || o.daily < varied.daily || (o.daily === varied.daily && betterSet(o, varied)))) varied = o;
+  }
+  return varied;
+}
+
 /**
  * Which bottles to pack, as indexes into trip.scores (per bottle, its score
  * in each window; trip.floor is each window's top less PLAN_MARGIN): the
- * fewest from `least` to `most` that reach every window, else `most` that
+ * fewest from `least` to `most` that reach every window (on a long trip,
+ * one more when that rests a bottle worn every day), else `most` that
  * reach the most. Sets compare by windows reached, then by their wearPlan's
- * total, then by each window's best packed score. Every set of a size is
- * weighed while there are at most SEARCH_LIMIT of them; past that, the set
- * grows a bottle at a time by the same order.
+ * total, then by each window's best packed score (judgeSet, betterSet), and
+ * three or more for a long trip wearing no bottle every day win within
+ * VARIETY_MARGIN (bestSet: two for twenty windows wear both every day). Every set of a size is weighed while there are at most
+ * SEARCH_LIMIT of them; past that, the set grows a bottle at a time by the
+ * same order.
  */
 function chooseSet(trip, least, most) {
   const { scores, floor } = trip;
-  const keyOf = set => {
-    let reached = 0, best = 0;
-    for (let w = 0; w < floor.length; w++) {
-      let top = -Infinity;
-      for (const i of set) top = Math.max(top, scores[i][w]);
-      if (top >= floor[w]) reached++;
-      best += top;
-    }
-    return [reached, wearPlan(set, trip).total, best];
-  };
-  const beats = (a, b) => {
-    if (!b) return true;
-    if (a[0] !== b[0]) return a[0] > b[0];
-    if (Math.abs(a[1] - b[1]) > 1e-9) return a[1] > b[1];
-    return a[2] > b[2];
-  };
-
-  let found = { set: [], key: null };
+  let found = null, full = null;
   for (let k = Math.max(1, least); k <= most && k <= scores.length; k++) {
-    found = { set: [], key: null };
     if (choose(scores.length, k) <= SEARCH_LIMIT) {
+      const options = [];
       const walk = (from, set) => {
-        if (set.length === k) {
-          const key = keyOf(set);
-          if (beats(key, found.key)) found = { set, key };
-          return;
-        }
+        if (set.length === k) return void options.push(judgeSet(set, trip));
         for (let i = from; i <= scores.length - (k - set.length); i++) walk(i + 1, [...set, i]);
       };
       walk(0, []);
+      found = bestSet(options, floor.length, k >= 3);
     } else {
-      while (found.set.length < k) {
-        let next = null;
-        for (let i = 0; i < scores.length; i++) {
-          if (found.set.includes(i)) continue;
-          const set = [...found.set, i];
-          const key = keyOf(set);
-          if (beats(key, next?.key)) next = { set, key };
-        }
-        found = next;
+      let set = [];
+      while (set.length < k) {
+        const options = scores.map((_, i) => i).filter(i => !set.includes(i)).map(i => judgeSet([...set, i], trip));
+        found = bestSet(options, floor.length, k >= 3);
+        set = found.set;
       }
     }
-    if (found.key[0] === floor.length) break;
+    if (found.reached === floor.length) {
+      // On a long trip, one more (as `most` allows) when that rests a bottle worn every day.
+      if (full && !rests(found, full)) return full.set;
+      full = found;
+      if (!found.daily || !trip.dates) break;
+    }
   }
-  return found.set;
+  return (full ?? found).set;
 }
 
 // "Pack Essence de Blanc (every day) and Supremacy (every night). …"
-function packText(bottles, plan, uncovered, wins, full) {
+function packText(bottles, plan, uncovered, wins, full, variety) {
   // Each bottle with the windows it suits and is worn for.
   const worn = bottles.map(b => {
     const mine = plan.filter(p => p.pick === b.record && p.covered).map(p => p.window);
@@ -260,6 +312,12 @@ function packText(bottles, plan, uncovered, wins, full) {
   for (const u of uncovered) missing.set(u.best, [...(missing.get(u.best) ?? []), u.window]);
   for (const [best, missed] of missing) {
     out.push(`Nothing packed is quite right for ${windowsPhrase(missed, wins, { the: true })}; ${best.name} would be${full ? ', if there\'s room' : ''}.`);
+  }
+  if (variety) {
+    // By what it's worn for: "every night … a night off", or by day and night alike "a break".
+    const [when, rest] = variety.slot === 'night' ? ['every night of the trip', 'a night off']
+      : variety.slot === 'day' ? ['every day of the trip', 'a day off'] : ['every day of the trip, by day or night', 'a break'];
+    out.push(`${listOf(variety.everyDay.map(f => f.name))} ${variety.everyDay.length > 1 ? 'are' : 'is'} worn ${when}; pack ${variety.add.name} too and each gets ${rest}.`);
   }
   if (wins.every(w => w.typical)) out.push('The dates are past the forecast, so this plans on typical weather for them.');
   else if (wins.some(w => w.typical)) out.push('Dates past the forecast use typical weather.');

@@ -1,6 +1,6 @@
 {
   "source": "fragrantica.com, the originals that dupes in data/ are inspired by",
-  "fetched": "2026-10-12",
+  "fetched": "2026-10-14",
   "fragrances": [
     {
       "id": 97924,
@@ -255,6 +255,8 @@
         "flags": [
           "notBlindBuy"
         ],
+        "owners": 4727,
+        "reach": 0.83,
         "clones": [
           118549,
           115548
@@ -463,6 +465,8 @@
         ],
         "alt": [],
         "flags": [],
+        "owners": 15550,
+        "reach": 0.9,
         "clones": [
           85097,
           100143,
@@ -677,6 +681,8 @@
         "flags": [
           "hardToFind"
         ],
+        "owners": 1456,
+        "reach": 0.75,
         "clones": [
           138575
         ]
@@ -936,6 +942,8 @@
         "flags": [
           "notBlindBuy"
         ],
+        "owners": 5427,
+        "reach": 0.95,
         "clones": [
           116876,
           92425,
@@ -1188,6 +1196,8 @@
           106403
         ],
         "flags": [],
+        "owners": 6230,
+        "reach": 1.0,
         "clones": [
           98689,
           121661,
@@ -1421,6 +1431,8 @@
           136382
         ],
         "flags": [],
+        "owners": 10898,
+        "reach": 1.0,
         "clones": [
           105076,
           108244,
@@ -1648,6 +1660,8 @@
         "flags": [
           "notBlindBuy"
         ],
+        "owners": 4821,
+        "reach": 0.95,
         "clones": [
           121449
         ]
@@ -1861,6 +1875,8 @@
         ],
         "alt": [],
         "flags": [],
+        "owners": 20307,
+        "reach": 1.0,
         "clones": [
           93628,
           102358,
@@ -2095,6 +2111,8 @@
         ],
         "alt": [],
         "flags": [],
+        "owners": 8361,
+        "reach": 0.95,
         "clones": [
           122274,
           125391,
@@ -2305,6 +2323,8 @@
           42250
         ],
         "flags": [],
+        "owners": 1857,
+        "reach": 0.75,
         "clones": [
           137096
         ]
@@ -2514,6 +2534,8 @@
           95613
         ],
         "flags": [],
+        "owners": 6806,
+        "reach": 0.85,
         "clones": [
           83513,
           95613
@@ -2720,6 +2742,8 @@
           98002
         ],
         "flags": [],
+        "owners": 13432,
+        "reach": 0.8,
         "clones": [
           99849
         ]
@@ -2935,6 +2959,8 @@
           114754
         ],
         "flags": [],
+        "owners": 6422,
+        "reach": 0.9,
         "clones": [
           89454,
           89762,
@@ -3156,6 +3182,8 @@
         ],
         "alt": [],
         "flags": [],
+        "owners": 44522,
+        "reach": 1.0,
         "clones": [
           97995,
           95265,
@@ -3373,6 +3401,8 @@
           99815
         ],
         "flags": [],
+        "owners": 26346,
+        "reach": 0.35,
         "clones": [
           99815
         ]
@@ -3602,6 +3632,8 @@
           106802
         ],
         "flags": [],
+        "owners": 18116,
+        "reach": 1.0,
         "clones": [
           94713,
           106802,
@@ -3835,6 +3867,8 @@
           63711
         ],
         "flags": [],
+        "owners": 35108,
+        "reach": 1.0,
         "clones": [
           70748,
           63711,
@@ -4046,6 +4080,8 @@
         ],
         "alt": [],
         "flags": [],
+        "owners": 3196,
+        "reach": 0.9,
         "clones": [
           113595,
           103256,
@@ -4279,6 +4315,8 @@
         "flags": [
           "hardToFind"
         ],
+        "owners": 8305,
+        "reach": 0.95,
         "clones": [
           99060,
           102788,
