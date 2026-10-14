@@ -190,9 +190,10 @@ async function refresh(app) {
   }
   // Checks judge against the ranked list, so they wait for it.
   if (listLoading()) return;
-  const liked = likedFor(lib).ids;
+  // Styles only guessed from the bottles are ones you reach for (`stated`), as on a bottle page.
+  const { ids: liked, stated } = likedFor(lib);
   const check = wants.filter(w => !ownedWord(w.id));
-  const key = JSON.stringify([inputsKey(lib), check.map(w => w.id), liked]);
+  const key = JSON.stringify([inputsKey(lib), check.map(w => w.id), liked, stated]);
   if (key === wish.key) return;
   const n = ++asked;
   Object.assign(wish, { key, busy: check.length > 0, error: '' });
@@ -200,7 +201,7 @@ async function refresh(app) {
   paint(app);
   try {
     const inputs = await poolInputs();
-    const r = await askPool('check', { ...inputs, records: check.map(w => w.record ?? w.id), liked }, { channel: 'wish-checks' });
+    const r = await askPool('check', { ...inputs, records: check.map(w => w.record ?? w.id), liked, stated }, { channel: 'wish-checks' });
     if (r.stale || n !== asked) return;
     wish.checks = new Map(r.checks.map(c => [String(c.id), c]));
   } catch (err) {
