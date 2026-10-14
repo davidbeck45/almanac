@@ -18,7 +18,7 @@ test('occasions resolve by id or label, any case or spacing', () => {
   assert.equal(findOccasion('date').id, 'date');
   assert.equal(findOccasion('Date Night').id, 'date');
   assert.equal(findOccasion('night out').id, 'nightout');
-  assert.equal(findOccasion('EVERYDAY').id, 'casual');
+  assert.equal(findOccasion('CASUAL').id, 'casual');
   assert.equal(findOccasion('evening'), null);
 });
 
@@ -36,7 +36,7 @@ test('bad arguments stop with a message before any request', () => {
   assert.match(slot.stderr, /--slot must be day or night/);
   const occ = cli('--loc', '40.7,-74', '--occasion', 'Evening');
   assert.equal(occ.status, 1);
-  assert.match(occ.stderr, /Pick one of: casual \(Everyday\), office/);
+  assert.match(occ.stderr, /Pick one of: casual \(Casual\), office/);
   const loc = cli('--loc', '40.7');
   assert.equal(loc.status, 1);
   assert.match(loc.stderr, /--loc takes LAT,LON/);
