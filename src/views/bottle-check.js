@@ -76,10 +76,10 @@ export function fillGroups(fills) {
   return [...groups.values()].map(g => ({ title: g.when ? `${g.use} · ${bandsText(g.bands)} ${g.when}` : g.use, first: g.first }));
 }
 
-// The styles you like that it adds to: "Skin scent and Wears close". Only
+// The styles you like that it adds to: "Skin scent and Intimate". Only
 // guessed from your bottles (`stated` false), they're styles you reach for.
 function likedLine(r, stated) {
-  const labels = (r.likedShown ?? []).map(id => (id === 'intimate' ? 'Wears close' : styleById(id)?.label)).filter(Boolean);
+  const labels = (r.likedShown ?? []).map(id => styleById(id)?.label).filter(Boolean);
   if (!labels.length || r.reasons.some(t => /\byou (like|reach for)\b/.test(t))) return '';
   const list = labels.length > 1 ? `${labels.slice(0, -1).join(', ')} and ${labels.at(-1)}` : labels[0];
   const what = `${labels.length > 1 ? 'Styles' : 'A style'} you ${stated ? 'like' : 'reach for'}`;

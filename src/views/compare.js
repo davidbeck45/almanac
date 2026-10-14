@@ -188,7 +188,7 @@ function valueCell(f, about) {
 
 function stylesCell(f) {
   const styles = topStyles(f).map(s => s.label);
-  if (wearsClose(f)) styles.push('Wears close');
+  if (wearsClose(f)) styles.push('Intimate');
   return styles.length ? `<ul class="cmp-tags">${styles.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : '<span class="muted">No clear style</span>';
 }
 

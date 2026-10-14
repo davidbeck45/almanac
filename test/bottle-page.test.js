@@ -271,7 +271,7 @@ test('the buy check: nothing for a bottle you own, a skeleton until it answers, 
 
   // The styles you like that it adds to, unless a reason says so already.
   const liked = buyCheckHTML(m, { status: 'ready', result: { ...check, likedShown: ['skin', 'intimate'] } });
-  assert.match(liked, /Styles you like: Skin scent and Wears close/);
+  assert.match(liked, /Styles you like: Skin scent and Intimate/);
   const said = buyCheckHTML(m, { status: 'ready', result: { ...check, reasons: ['More of the skin scents you like: you own two.'], likedShown: ['skin'] } });
   assert.ok(!said.includes('A style you like'));
   // Styles only guessed from the bottles: ones you reach for, and never the Want heart.
@@ -349,12 +349,12 @@ test('on my skin: stars, nudges and where the bottle moved', () => {
 
 // ---------- Styles ----------
 
-test('styles link to Discover, and a quiet bottle says it wears close', () => {
+test('styles link to Discover, and a quiet bottle is Intimate, which wears close', () => {
   const skin = stylesHTML(modelOf(byName('Sandalwood & Musk')));
   assert.match(skin, /href="#\/discover\?styles=skin"/);
   assert.match(skin, /Skin scent/);
   const close = stylesHTML(modelOf(byName('Shiyaaka Sky')));
-  assert.match(close, /Wears close/);
+  assert.match(close, /<b>Intimate<\/b>.*Wears close: people notice it/s);
   assert.match(close, /href="#\/discover\?styles=intimate"/);
   assert.equal(stylesHTML(modelOf({ ...evil, accords: {} })), '');
   assert.deepEqual(parseRoute('#/discover?styles=skin,clean', { discover: [] }).query, { styles: 'skin,clean' }, 'the router keeps the styles');
