@@ -10,7 +10,7 @@ import { ACCORDS, barStrength } from './accords.js';
 import { performanceRating, steadyShares, DISLIKED } from './engine.js';
 import { fromPool } from './fragrantica.js';
 import { journalStats } from './history.js';
-import { STYLES, STYLE_MIN, STYLE_LEAN, WEARS_CLOSE, styleScores, topOf, leanOf, closeOf, styleMix } from './scent-styles.js';
+import { STYLES, STYLE_MIN, STYLE_LEAN, WEARS_CLOSE, styleScores, topOf, shownOf, leanOf, closeOf, styleMix } from './scent-styles.js';
 import { centroid, sharedTraits, similarity } from './similar.js';
 import {
   MIN_RATING, allow, allowContext, candidateQuality, cheaperTwin, familyIndex, genderLean, novelty, ownedVectors,
@@ -369,7 +369,7 @@ function describe(ctx, record, { score, nov, extra = {} }) {
     id: record.id,
     record,
     score,
-    styles: topOf(scores),
+    styles: shownOf(scores),
     close: closeOf(scores),
     nearest,
     family: nov.dupe && nov.dupe.kind !== 'owned' ? nov.dupe.text : null,
@@ -541,7 +541,7 @@ function stylesWith(scores, chosen) {
     const { label } = STYLES.find(s => s.id === id);
     return scores[id] >= STYLE_MIN ? { id, label, score: scores[id] } : { id, label: `Leans ${lower(label)}`, score: scores[id], leans: true };
   });
-  const rest = topOf(scores).filter(s => !chosen.includes(s.id));
+  const rest = (first.length ? topOf(scores) : shownOf(scores)).filter(s => !chosen.includes(s.id));
   return [...first, ...rest].slice(0, Math.max(3, first.length));
 }
 
