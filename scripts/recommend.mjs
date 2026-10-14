@@ -18,6 +18,8 @@
 //   node scripts/recommend.mjs --more-like "Liquid Brun,Amber Empire"   (bottles to buy that smell like them)
 //   node scripts/recommend.mjs --notes "iris leather" [--season winter] [--slot night] [--lean unisex] [--min-value 3.8] [--min-rating 3.6]
 //   node scripts/recommend.mjs --dupes "Aventus"           (its original, cheaper alternatives and smell-alikes)
+// Suggestions (--gaps, --style, --more-like, --notes) leave out body mists and
+// sprays; --mists lets them in.
 // --journal FILE takes the app's journal export (Export in the wear journal), so
 // recent wears rotate out as they do in the app. --top N gives reasons for the
 // first N picks. Every bottle in the wardrobe counts, Jake included (these
@@ -168,6 +170,7 @@ async function main() {
         lean: { type: 'string' },
         'min-value': { type: 'string' },
         'min-rating': { type: 'string' },
+        mists: { type: 'boolean', default: false },
       },
     }));
   } catch (err) {
@@ -523,7 +526,7 @@ async function main() {
     const records = Array.from({ length: parsed.count }, (_, i) => fromPool(parsed, i));
     const byId = new Map(records.map(r => [r.id, r]));
     const preferValue = args.value ? true : args['no-value'] ? false : null;
-    const ctx = gapContext({ owned: fragrances, records, byId, summary, shares, preferValue });
+    const ctx = gapContext({ owned: fragrances, records, byId, summary, shares, preferValue, mists: args.mists });
     const pct = x => `${Math.round(x * 100)}%`;
     const stars = r => `${r.rating.toFixed(1)}★ from ${r.ratingVotes.toLocaleString('en-US')} votes`;
     const byLine = r => `${r.name} by ${r.brand}${r.year ? ` (${r.year})` : ''}`;
@@ -758,7 +761,7 @@ async function discover(args, fragrances, { slot, count, history }) {
   const minRating = args['min-rating'] == null ? undefined : Number(args['min-rating']);
   if (minRating !== undefined && !(minRating >= 0 && minRating <= 5)) fail(`--min-rating takes a Fragrantica rating from 0 to 5, not "${args['min-rating']}"`);
   // A style query sets its own rating floor (the style's), unless one is given.
-  const filters = { seasons, slot: slot ?? null, lean: lean ?? null, minValue, ...(minRating !== undefined && { minRating }) };
+  const filters = { seasons, slot: slot ?? null, lean: lean ?? null, minValue, mists: args.mists, ...(minRating !== undefined && { minRating }) };
 
   const [pool, styles] = await Promise.all([loadPool(datasetFile), loadPoolStyles(datasetFile)]);
   const ctx = discoverContext(pool, fragrances, { styles });
@@ -866,7 +869,7 @@ async function discover(args, fragrances, { slot, count, history }) {
   for (const r of more.values()) r.about = await loadAbout(r.id, datasetFile);
   const family = dupesOf(record, ctx, { more });
   const entryJSON = e => e && ({ id: e.id, name: e.name, brand: e.brand, rating: e.rating, votes: e.votes, value: e.value, similarity: e.sim, risk: e.risk.level,
-    owned: e.owned, smellsLikeVotes: e.up == null ? null : [e.up, e.down], why: e.why, ...(e.notesDiffer && { notesDiffer: true }), ...(e.built != null && { built: e.built }) });
+    owned: e.owned, mist: e.mist, smellsLikeVotes: e.up == null ? null : [e.up, e.down], why: e.why, ...(e.notesDiffer && { notesDiffer: true }), ...(e.built != null && { built: e.built }) });
   if (args.json) {
     console.log(JSON.stringify({ name: record.name, brand: record.brand, original: entryJSON(family.original),
       cheaper: family.cheaper.map(entryJSON), siblings: family.siblings.map(entryJSON) }, null, 2));
@@ -875,7 +878,7 @@ async function discover(args, fragrances, { slot, count, history }) {
   const says = n => (n === 1 ? 'says' : 'say');
   const entryLine = e => `${line(e, e)}${e.sim != null ? ` · ${Math.round(100 * e.sim)}% alike` : ''}`
     + `${e.up != null ? ` · ${e.up} ${says(e.up)} it smells like it, ${e.down} not` : ''}${e.why === 'notes' ? ' · alike by notes' : ''}`
-    + `${e.notesDiffer ? ' · notes differ' : ''}${e.risk.level !== 'low' ? ` · ${e.risk.level} risk` : ''}${e.owned ? ' · you own it' : ''}`;
+    + `${e.notesDiffer ? ' · notes differ' : ''}${e.mist ? ' · a body mist' : ''}${e.risk.level !== 'low' ? ` · ${e.risk.level} risk` : ''}${e.owned ? ' · you own it' : ''}`;
   const section = (title, list) => {
     if (!list.length) return;
     console.log(`\n${title}:`);
@@ -897,9 +900,9 @@ const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,N
        node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,NAME]) --date YYYY-MM-DD [--occasion ID] [--slot day|night] [--journal FILE] [--json]
        node scripts/recommend.mjs --pack (--city NAME | --loc LAT,LON[,NAME]) --from YYYY-MM-DD --to YYYY-MM-DD [--max N] [--events "DATE [day|night] OCCASION; …"] [--json]
        node scripts/recommend.mjs --spray NAME [--city NAME | --loc LAT,LON[,NAME]] [--date YYYY-MM-DD] [--occasion ID] [--slot day|night] [--json]
-       node scripts/recommend.mjs --gaps [--city NAME | --loc LAT,LON[,NAME]] [--uses USE=never|sometimes|often,…] [--value | --no-value] [--top N] [--exclude NAME,NAME] [--demo] [--json]
+       node scripts/recommend.mjs --gaps [--city NAME | --loc LAT,LON[,NAME]] [--uses USE=never|sometimes|often,…] [--value | --no-value] [--mists] [--top N] [--exclude NAME,NAME] [--demo] [--json]
        node scripts/recommend.mjs --check NAME|ID [--city NAME | --loc LAT,LON[,NAME]] [--uses …] [--value | --no-value] [--json]
-       node scripts/recommend.mjs (--style STYLE,STYLE|liked [--all] | --more-like NAME,NAME|favorites | --notes "NOTE NOTE") [--season S,S] [--slot day|night] [--lean feminine|unisex|masculine] [--min-value V] [--min-rating R] [--top N] [--exclude NAME,NAME] [--json]
+       node scripts/recommend.mjs (--style STYLE,STYLE|liked [--all] | --more-like NAME,NAME|favorites | --notes "NOTE NOTE") [--season S,S] [--slot day|night] [--lean feminine|unisex|masculine] [--min-value V] [--min-rating R] [--mists] [--top N] [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --dupes NAME [--top N] [--json]`;
 
 if (import.meta.main) await main();

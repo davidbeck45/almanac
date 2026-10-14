@@ -91,6 +91,7 @@ export const FILTERS = Object.freeze({
   minSafe: null, // blind-buy safety percentile, 0–100
   minRating: MIN_RATING, // style queries: the style's own floor (RATING_SLACK) unless one is given
   hideDiscontinued: true,
+  mists: false, // let in body and hair mists, body sprays and splashes
   excludeOwned: true, // search only: style and example picks never include owned bottles or their twins
 });
 
@@ -307,6 +308,7 @@ export function admitter(ctx, filters = {}) {
     lean: f.lean ? LEAN_WINDOWS[f.lean] : ctx.allowed.lean,
     minRating: f.minRating ?? 0,
     minValue: f.minValue,
+    mists: Boolean(f.mists),
   };
   return record => {
     if (!allow(record, base)) return false;
@@ -990,6 +992,7 @@ export function dupesOf(record, ctx, { more = null } = {}) {
       risk: riskOf(r, ctx.byId),
       sim,
       owned: ctx.allowed.owned.has(id),
+      mist: sig.flags.includes('mist'),
       up: v?.up ?? null,
       down: v?.down ?? null,
       why,

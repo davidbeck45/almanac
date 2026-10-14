@@ -434,21 +434,23 @@ export function strengths(cov, { limit = 4, minWeight = MIN_WEIGHT } = {}) {
  * and set of shares. records: the pool (fromPool); byId: id -> record over
  * them; owned: the wardrobe's records (a visitor's outside the pool with
  * `about` attached); preferValue: only suggest bottles valued PREFER_VALUE or
- * more (default from the wardrobe, preferValueDefault). Every bottle is
- * scored as sameFooting has it.
+ * more (default from the wardrobe, preferValueDefault); mists: suggest body
+ * mists and sprays too (allowContext). Every bottle is scored as sameFooting
+ * has it.
  */
-export function gapContext({ owned, records, byId, summary = DEFAULT_CLIMATE, shares = null, preferValue = null }) {
+export function gapContext({ owned, records, byId, summary = DEFAULT_CLIMATE, shares = null, preferValue = null, mists = false }) {
   summary ??= DEFAULT_CLIMATE;
   const cc = cellsFor(summary, { shares });
   const m = cc.cells.length;
   const table = poolTable(allFooted(records), summary, cc);
   const prefer = preferValue ?? preferValueDefault(owned, byId);
-  const ctx = allowContext(owned, { byId, minValue: prefer ? PREFER_VALUE : null });
-  // The reference: well-voted bottles in the wardrobe's lean range, not brigaded.
+  const ctx = allowContext(owned, { byId, minValue: prefer ? PREFER_VALUE : null, mists });
+  // The reference: well-voted bottles in the wardrobe's lean range, not
+  // brigaded, and perfumes unless mists are let in (what it could suggest).
   const rows = [];
   records.forEach((r, i) => {
-    const lean = genderLean(r, byId);
-    if (lean >= ctx.lean[0] && lean <= ctx.lean[1] && !signalsOf(r).flags.includes('brigaded')) rows.push(i);
+    const lean = genderLean(r, byId), { flags } = signalsOf(r);
+    if (lean >= ctx.lean[0] && lean <= ctx.lean[1] && !flags.includes('brigaded') && (mists || !flags.includes('mist'))) rows.push(i);
   });
   const ref = poolReference(table, records.length, m, rows);
   const ownTable = fitTable(owned.map(sameFooting), cc);

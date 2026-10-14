@@ -5,7 +5,7 @@ import { loadPool, fromPool, fragranticaLibrary, loadAbout } from '../src/fragra
 import { customRecord } from '../src/custom.js';
 import {
   FAMILY_MULT, MIN_RATING, poolRowOf, signalsOf, genderLean, leanWindow, allowContext, allow, poolNorms, candidateQuality,
-  valueSlope, preferValueDefault, familyIndex, ownedVectors, novelty, cheaperTwin, riskOf,
+  valueSlope, preferValueDefault, familyIndex, ownedVectors, novelty, cheaperTwin, riskOf, reachMult,
 } from '../src/candidates.js';
 
 const dir = new URL('../data/fragrantica/', import.meta.url);
@@ -27,8 +27,10 @@ test('signals read the same from an owned record and its pool row', () => {
   let compared = 0;
   for (const f of wardrobe) {
     if (!byId.has(String(f.id))) continue;
-    const { clones, ...mine } = signalsOf(f), { clones: none, ...row } = signalsOf(at(f.id));
+    const { clones, owners, ...mine } = signalsOf(f), { clones: none, owners: about, ...row } = signalsOf(at(f.id));
     assert.deepEqual(mine, row, f.name);
+    // The pool keeps owners to a quarter of a doubling.
+    assert.ok(Math.abs(about / owners - 1) < 0.1, `${f.name}: ${owners} owners, ${about} in the pool`);
     assert.deepEqual(none, []);
     compared++;
   }
@@ -187,6 +189,26 @@ test('quality counts rating, keeping and value, and value counts more for a clon
   // Few votes lean on the pool's median rating.
   const few = { ...at(34696), extras: undefined, rating: 5, ratingVotes: 10 };
   assert.ok(candidateQuality(few, norms).rating < 4.05);
+});
+
+test('body mists stay out of suggestions unless asked for, and so does reach, a little', () => {
+  const ctx = allowContext(wardrobe, { byId });
+  const mists = records.filter(r => r.extras.flags.includes('mist'));
+  assert.ok(mists.length >= 50 && mists.length <= 150, `${mists.length} mists`);
+  for (const id of ['87258', '112348', '43933']) assert.ok(at(id).extras.flags.includes('mist'), at(id).name); // Phlur Vanilla Skin Fragrance Mist, Book Loft, Sauvage Very Cool Spray
+  for (const id of ['496', '1281', '72665']) assert.ok(!at(id).extras.flags.includes('mist'), at(id).name); // Cashmere Mist, Iris Silver Mist, Missing Person
+  const loft = at('112348');
+  assert.equal(allow(loft, { ...ctx, minRating: 0 }), false);
+  assert.equal(allow(loft, { ...allowContext(wardrobe, { byId, mists: true }), minRating: 0 }), true);
+  // Reach: Granado's Íris and Phebo's Entrelaço have fans of their own; Sauvage EDP's like the world's best sellers.
+  assert.ok(at('96622').extras.reach < 0.1 && at('105693').extras.reach < 0.1 && at('48100').extras.reach > 0.9);
+  assert.equal(reachMult(null), 1);
+  assert.equal(reachMult(0.85), 1);
+  assert.ok(Math.abs(reachMult(0) - 0.8) < 1e-12 && reachMult(0.2) > 0.8 && reachMult(0.2) < 1);
+  const q = r => candidateQuality(r, norms).mult;
+  assert.ok(Math.abs(q(at('96622')) / q({ ...at('96622'), extras: { ...at('96622').extras, reach: 0.85 } }) - 0.8) < 1e-9);
+  // The pool keeps owners to a quarter of a doubling.
+  for (const r of [at('48100'), at('96622'), loft]) assert.ok(r.extras.owners > 400 && r.extras.owners < 40000, r.name);
 });
 
 test('a cheaper twin is a real, better-value clone', () => {

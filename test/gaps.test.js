@@ -268,6 +268,15 @@ test('brigaded bottles are neither suggested nor part of the reference', () => {
   assert.ok(!suggest(wide, { k: 20 }).some(p => brigaded.has(records.indexOf(p.record))));
 });
 
+test('body mists are neither suggested nor part of the reference, unless asked for', () => {
+  const mists = new Set(records.flatMap((r, i) => (r.extras.flags.includes('mist') ? [i] : [])));
+  assert.ok(mists.size >= 50);
+  assert.ok(!ctx.rows.some(i => mists.has(i)));
+  for (const c of [ctx, gapContext({ owned: [], records, byId })]) assert.ok(!suggest(c, { k: 8 }).some(p => p.record.extras.flags.includes('mist')));
+  const open = gapContext({ owned: [], records, byId, mists: true });
+  assert.ok(open.allow.mists && open.rows.some(i => mists.has(i)));
+});
+
 test('the buy check calls twins redundant, gap fillers good and divisive bottles risky', () => {
   const verdict = id => buyCheck(byId.get(id), ctx);
   const althair = verdict('84109');

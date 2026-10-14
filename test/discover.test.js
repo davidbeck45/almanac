@@ -295,6 +295,16 @@ test('filters hold', () => {
   for (const p of moreLike([owned('Liquid Brun')], ctx, { k: 10, filters: { slot: 'day' } })) assert.ok(night(p) < 0.45);
 });
 
+test('body mists come up only when asked for', () => {
+  const isMist = p => p.record.extras.flags.includes('mist');
+  const lists = filters => [
+    moreOfStyles(['vanilla', 'gourmand'], ctx, { k: 40, filters }), moreLike([owned('Cream Velvet')], ctx, { k: 40, filters }),
+    searchNotes('vanilla musk', ctx, filters, { k: 40 }).results, searchNotes('strawberry', ctx, filters, { k: 40 }).results,
+  ].flat();
+  assert.ok(!lists({}).some(isMist), lists({}).filter(isMist).map(p => p.record.name).join());
+  assert.ok(lists({ mists: true }).some(isMist), 'they’re in the pool');
+});
+
 test('the dupe explorer: originals, cheaper alternatives and smell-alikes', async () => {
   const withAbout = async r => ({ ...r, about: await loadAbout(r.id, load) });
   const aventus = dupesOf(await withAbout(at(9828)), ctx);

@@ -67,7 +67,7 @@ export function fromFragrantica(id, row) {
 }
 
 // As scripts/decant.py FLAGS: bit i of a pool or about row's flags.
-export const FLAGS = ['discontinued', 'reformulated', 'notBlindBuy', 'brigaded', 'polarizing', 'hardToFind'];
+export const FLAGS = ['discontinued', 'reformulated', 'notBlindBuy', 'brigaded', 'polarizing', 'hardToFind', 'mist'];
 const flagNames = bits => FLAGS.filter((_, i) => bits & (1 << i));
 // Fragrantica's usual page slug, as scripts/decant.py slug_of; the pool lists the rest.
 const slugPart = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -77,7 +77,8 @@ const pooled = new WeakMap();
  * Bottle `i` of the suggestion pool (data/fragrantica/pool.json, from
  * loadPool) -> engine record. It goes through fromFragrantica, so it scores as
  * the bottle's r/ row would (rating, Fragrantica longevity/sillage and the
- * smells-like shares are rounded to 2 decimals). Its signals ride along as
+ * smells-like shares are rounded to 2 decimals, the longevity and sillage
+ * vote counts to 2 significant digits). Its signals ride along as
  * `extras` (see scripts/decant.py); its strongest notes too, when
  * pool-notes.json loaded.
  */
@@ -119,6 +120,9 @@ export function fromPool(pool, i) {
     family: c.like[i].filter((_, j) => c.fam[i] & (1 << j)),
     alt: c.alt[i],
     flags: flagNames(c.f[i]),
+    // Owners as 4 × log2(1 + owners), whole: back to about 2 significant digits.
+    owners: c.o ? Math.round(2 ** (c.o[i] / 4) - 1) : null,
+    reach: c.rc && c.rc[i] >= 0 ? c.rc[i] / 100 : null,
   };
   return (memo[i] = record);
 }
