@@ -79,7 +79,44 @@ export function refocus(el, scope = '#app') {
   if (target !== el && 'selectionStart' in el) {
     try { target.setSelectionRange(el.selectionStart, el.selectionEnd); } catch {} // not every input type has a caret
   }
+  reveal(target);
   return true;
+}
+
+// Focus moves without scrolling, so a redraw doesn't jump the page; but it
+// mustn't sit out of sight (WCAG 2.4.11). Once the redraw has settled (the
+// shelves' and the bottle page's scroll put back), an element that a
+// sideways strip, a scrolling panel or the window cuts off scrolls just into
+// view.
+function reveal(el) {
+  requestAnimationFrame(() => {
+    if (document.activeElement === el && outOfSight(el)) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  });
+}
+
+function outOfSight(el) {
+  const r = el.getBoundingClientRect();
+  if (!r.width && !r.height) return false;
+  let top = -Infinity, bottom = Infinity, left = -Infinity, right = Infinity;
+  const clip = b => { top = Math.max(top, b.top); bottom = Math.min(bottom, b.bottom); left = Math.max(left, b.left); right = Math.min(right, b.right); };
+  let page = true; // whether it scrolls with the window
+  for (let p = el; p && p !== document.body; p = p.parentElement) {
+    const { overflowX, overflowY, position } = getComputedStyle(p);
+    if (p !== el && /auto|scroll/.test(overflowX + overflowY)) clip(p.getBoundingClientRect());
+    // A sheet, the bottle page, the head bar, the tab bar: they don't move
+    // with the window, so only their own scrolling counts.
+    if (position === 'fixed' || position === 'sticky' || p.matches('.bp-panel, .sheet-panel')) {
+      page = false;
+      break;
+    }
+  }
+  // The window, less what sticks over its edges (the head bar, the tab bar:
+  // the page's scroll padding).
+  if (page) {
+    const pad = getComputedStyle(document.documentElement);
+    clip({ top: parseFloat(pad.scrollPaddingTop) || 0, bottom: innerHeight - (parseFloat(pad.scrollPaddingBottom) || 0), left: 0, right: innerWidth });
+  }
+  return r.left < left - 1 || r.right > right + 1 || r.top < top - 1 || r.bottom > bottom + 1;
 }
 
 // Views and sheets re-render whole, which replaces the control that asked for
@@ -223,7 +260,9 @@ export function closeSheet({ instant = false, fromHistory = false, then = null }
 // it's the last stop in the tab order, a long way off. Ctrl+Z (⌘Z) presses
 // its Undo from anywhere outside a text field. Following one of its controls
 // puts it away (the shell's clicks). Callers pass HTML: escape names, and an
-// Undo button goes inside.
+// Undo button goes inside. `tone`: 'success' (the default) leads with a
+// check, 'error' (it didn't work, or can't be done) with an alert mark, and
+// 'info' (a fallback, a note) with nothing.
 
 const TOAST_MS = 5000;
 let toastTimer;
@@ -234,9 +273,12 @@ function armToast(ms = TOAST_MS) {
   if (!toastWaits) toastTimer = setTimeout(hideToast, ms);
 }
 const undoButton = () => [...$('#toast').querySelectorAll('button')].find(b => b.textContent.trim() === 'Undo');
-export function showToast(html) {
+const TOAST_GLYPH = { success: icon.check, error: icon.alert, info: '' };
+export function showToast(html, { tone = 'success' } = {}) {
   const el = $('#toast');
-  el.innerHTML = `${icon.check}${html}`;
+  const known = Object.hasOwn(TOAST_GLYPH, tone) ? tone : 'success';
+  el.innerHTML = `${TOAST_GLYPH[known]}${html}`;
+  el.dataset.tone = known;
   el.hidden = false;
   // A message on two lines takes the rounded box, not the pill.
   const text = el.querySelector(':scope > span');

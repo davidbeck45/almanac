@@ -7,22 +7,24 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { SECTIONS, bottlePageHTML, pooled, sectionsFor, linkId, likedStyleIds, likedTaste } from '../src/views/bottle.js';
-import { state, computeToday } from '../src/app/state.js';
+import { state, computeToday, nowSlot, keepBottles } from '../src/app/state.js';
 import '../src/views/sections.js';
 import { buyCheckHTML, checkable, fillGroups } from '../src/views/bottle-check.js';
 import { sprayHTML, figureSVG, sprayCount } from '../src/views/bottle-spray.js';
-import { skinHTML, moveText, listLabel, ordinal } from '../src/views/bottle-skin.js';
+import { skinHTML, moveText, listLabel, ordinal, sprayText } from '../src/views/bottle-skin.js';
 import { stylesHTML } from '../src/views/bottle-styles.js';
 import { dupesHTML } from '../src/views/bottle-dupes.js';
 import { crowdHTML, riskLine, wholePercents } from '../src/views/bottle-crowd.js';
 import { reviewsHTML } from '../src/views/bottle-reviews.js';
-import { compareHTML, compareModel, relation, leader, verdictHTML, pickerLists, pickerHTML, pickerMatches, MAX_COMPARE } from '../src/views/compare.js';
+import {
+  compareHTML, compareModel, relation, leader, verdictHTML, pickerLists, pickerHTML, pickerMatches, pickerStatus, andList, compare as comparePage, MAX_COMPARE,
+} from '../src/views/compare.js';
 import { parseRoute, routeHash, compareIds } from '../src/app/router.js';
 import { shareToken, customRecord } from '../src/custom.js';
 import { rank, comfortRange } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { summarize } from '../src/weather.js';
-import { esc } from '../src/ui.js';
+import { esc, matchPct } from '../src/ui.js';
 import { icon } from '../src/ui/components.js';
 import { syntheticForecast } from './fixtures.js';
 
@@ -129,6 +131,27 @@ test('why it ranks here: the rating bar says whose rating it is, and a bottle no
   assert.match(why(byHand), /bar-label">Season</);
   assert.ok(!/bar-label">(Your r|R)ating</.test(why(byHand)), 'no crowd, no rating bar');
   assert.match(why({ ...byHand, personal: { rating: 5, longevity: 0, sillage: 0 } }), /bar-label">Your rating</);
+  // Every bar says what its number is.
+  assert.ok([...why(f).matchAll(/bar-value">([^<]*)</g)].every(([, v]) => /^\d+%$/.test(v)), 'bars read as percents');
+  // A recent wear: what it takes off, in the app's words (rotation is the on/off switch).
+  const worn = rec => {
+    const e = rank([rec], wx.night, 'night', { history: [{ id: rec.id, date: '2026-09-25', slot: 'night' }], todayISO: wx.night.dateISO })[0];
+    const html = bottlePageHTML(modelOf(rec, { entry: e }));
+    return [e, html.slice(html.indexOf('data-section="why"'), html.indexOf('data-section="alts"'))];
+  };
+  const [e, rest] = worn(f);
+  assert.ok(e.parts.rotation > 0);
+  assert.ok(rest.includes(`Worn 3 days ago: ${Math.round(e.parts.rotation * 100)}% lower so others get a turn.`), rest);
+  assert.ok(!/rotation/i.test(rest));
+  const planned = rank([f], wx.night, 'night', { history: [{ id: f.id, date: wx.night.dateISO, slot: 'day', planned: true }], todayISO: wx.night.dateISO })[0];
+  assert.match(bottlePageHTML(modelOf(f, { entry: planned })), /Already picked for that day: \d+% lower so others get a turn\./);
+});
+
+test('day and night read as whole percents that add up to 100, as Compare shows them', () => {
+  const dn = f => [...bottlePageHTML(modelOf(f)).matchAll(/bar-label">(day|night)<[^]*?bar-value">(\d+)%</g)].map(m => [m[1], Number(m[2])]);
+  // Détour Noir's .475 / .525 read 48 and 53 when each rounds alone.
+  assert.deepEqual(dn(byName('Détour Noir')), [['day', 47], ['night', 53]]);
+  for (const f of fragrances) assert.equal(dn(f).reduce((a, [, v]) => a + v, 0), 100, f.name);
 });
 
 test('notes listed flat show under their heading alone, and estimated seasons say so in words', () => {
@@ -139,6 +162,8 @@ test('notes listed flat show under their heading alone, and estimated seasons sa
   assert.match(section(bottlePageHTML(modelOf(byName('Liquid Brun'))), 'notes'), /layer-label">Top</);
   const byHand = customRecord({ name: 'Rose', accords: ['rose', 'musky'] });
   assert.match(bottlePageHTML(modelOf(byHand, { entry: null })), /Time of day, estimated/);
+  assert.match(bottlePageHTML(modelOf(byHand, { entry: null })), /<h3>Seasons, estimated<\/h3>/, 'both halves say they’re estimated');
+  assert.ok(!bottlePageHTML(modelOf(byHand, { entry: null })).includes('Season fit'));
 });
 
 test('also good: only today, tonight and tomorrow go lower case in its heading', () => {
@@ -211,6 +236,46 @@ test('a pooled answer: replaced on its channel it’s asked again, a changed que
   state.route = null;
 });
 
+test('an answer landing after the record swapped for its own r/ record draws its section alone; one that brings signals draws the page', async () => {
+  // A pool record (8 notes, its signals) open on its page; loadFullRecord swaps in its r/ record, keeping them.
+  const pooledRecord = { ...byName('Liquid Brun'), id: '9828', name: 'Aventus', source: 'fragrantica', about: undefined, original: null, extras: { value: 2.1 } };
+  state.bottles.set('9828', pooledRecord);
+  state.route = { dest: 'bottle', arg: '9828', query: {} };
+  const drawn = [];
+  const panel = { getBoundingClientRect: () => ({ top: 0 }) };
+  const slot = { getBoundingClientRect: () => ({ top: 400 }), closest: () => panel, contains: () => false, nextElementSibling: null, set innerHTML(html) { drawn.push(html); } };
+  globalThis.document = { querySelector: sel => (sel === '#bottle [data-section="notes"]' ? slot : null), activeElement: null };
+  let whole = 0, release;
+  const app = { renderBottle: () => whole++, refocus: () => true };
+  const answers = pooled('check', 'test-swap', m => ({ id: m.f.id }), { section: 'notes', ask: () => new Promise(r => { release = () => r({ n: 1 }); }) });
+  try {
+    const asking = answers.ask({ f: pooledRecord, arg: '9828' }, app);
+    await new Promise(r => setTimeout(r, 0));
+    keepBottles([{ ...pooledRecord, extras: undefined, notes: { top: ['Bergamot'], mid: ['Birch'], base: ['Musk'] } }]);
+    assert.notEqual(state.bottles.get('9828'), pooledRecord, 'swapped');
+    release();
+    await asking;
+    assert.equal(whole, 0, 'the page isn’t drawn again: it was when the record landed');
+    assert.equal(drawn.length, 1, 'only the section');
+    assert.match(drawn[0], /Birch/, 'from the record as it is now');
+
+    // An r/ record (no signals) whose answer brought them: the crowd block reads them, so the page.
+    const bare = { ...pooledRecord, id: '9829', extras: undefined };
+    state.bottles.set('9829', bare);
+    state.route = { dest: 'bottle', arg: '9829', query: {} };
+    const signals = answers.ask({ f: bare, arg: '9829' }, app);
+    await new Promise(r => setTimeout(r, 0));
+    keepBottles([{ ...bare, extras: { value: 2.1 } }]);
+    release();
+    await signals;
+    assert.equal(whole, 1, 'the whole page');
+  } finally {
+    delete globalThis.document;
+    state.bottles.clear();
+    state.route = null;
+  }
+});
+
 // ---------- Buy check ----------
 
 const check = {
@@ -246,7 +311,7 @@ test('the buy check: nothing for a bottle you own, a skeleton until it answers, 
   assert.match(html, /Closest you own · 62% alike/);
   assert.match(html, /data-action="bp-want" data-id="34696" aria-pressed="true"/, 'the twin can be wanted, and shows that it is');
   assert.match(html, /data-action="open" data-ctx="night" data-id="34696"/, 'the twin opens its page');
-  assert.match(html, /Smells like it, for less · great value/, 'value in words');
+  assert.match(html, /Smells like it, for less · Great value/, 'value in words, as every section says it');
 
   // Seven groups of fills: "+3 more", never "3 mores".
   const many = buyCheckHTML(m, { status: 'ready', result: { ...check, fills: ['Formal', 'Office', 'Casual', 'Cozy', 'Date Night', 'Night Out', 'Outdoors'].map((u, i) => ({ title: `${u} on cold nights`, first: i < 2 })) } });
@@ -308,6 +373,8 @@ test('the spray guide counts sprays, lights the spots and says why', () => {
   assert.equal(sprayHTML(modelOf({ ...evil, accords: {} })), '');
   const office = sprayHTML(modelOf(evil, { occasion: occasionById('office') }));
   assert.match(office, /Office · tonight/);
+  const saturday = sprayHTML(modelOf(evil, { occasion: occasionById('date'), win: { ...wx.night, label: 'Saturday night' } }));
+  assert.match(saturday, /Date Night · Saturday night/, 'only today, tonight and tomorrow go lower case');
   const sky = byName('Shiyaaka Sky');
   const louder = sprayHTML(modelOf(sky, { skin: { rating: null, longevity: 0, sillage: 1 } }));
   assert.match(louder, /projects more on you/i, 'your skin nudges change the advice');
@@ -342,6 +409,11 @@ test('on my skin: stars, nudges and where the bottle moved', () => {
   assert.equal(moveText(1, 3, 'for tonight'), 'Now 3rd for tonight, was 1st.');
   assert.equal(moveText(2, 2, 'for tonight'), 'Still 2nd for tonight.');
   assert.equal(moveText(1, null, 'for tonight'), '');
+  // A nudge that leaves the count where it was says so, not "updated".
+  assert.equal(sprayText('1–2 sprays', '1–2 sprays'), 'Spray guide unchanged: 1–2 sprays.');
+  assert.equal(sprayText('1–2 sprays', '1 spray'), 'Now 1 spray, was 1–2.');
+  assert.equal(sprayText('2 sprays', '3 sprays'), 'Now 3 sprays, was 2.');
+  assert.equal(sprayText(null, null), '');
   assert.equal(listLabel(wx.night, null), 'for tonight');
   assert.equal(listLabel(wx.night, occasionById('date')), 'for date night tonight');
   assert.equal(listLabel({ label: 'Friday night' }, null), 'for Friday night');
@@ -379,6 +451,10 @@ const entry = (id, extra = {}) => ({
 test('smells like: the original, cheaper twins and siblings, each opening its page or a comparison', () => {
   const m = modelOf(stranger, { owned: false });
   assert.match(clean(dupesHTML(m, undefined), 'loading'), /aria-busy="true"/);
+  // Not asked yet, its skeleton holds still (the reader may never scroll to
+  // it); it shimmers only while the question is out.
+  assert.match(dupesHTML(m, undefined), /class="bp-section bp-waiting"/);
+  assert.ok(!dupesHTML(m, { status: 'loading', result: null }).includes('bp-waiting'));
   assert.match(clean(dupesHTML(m, { status: 'error', error: EVIL }), 'error'), /data-action="bp-dupes-retry"/);
   assert.equal(dupesHTML(m, { status: 'ready', result: { original: null, cheaper: [], siblings: [] } }), '', 'nobody smells like it');
   assert.equal(dupesHTML(modelOf({ ...evil, id: 'my:x', accords: {} }), undefined), '', 'nothing to compare by');
@@ -396,7 +472,8 @@ test('smells like: the original, cheaper twins and siblings, each opening its pa
   assert.match(html, /1,200 say it smells like it · Great value/, 'what the count counts');
   assert.match(html, /Alike by its notes/);
   assert.match(html, /You own it/);
-  assert.match(html, /Risky blind buy/);
+  assert.match(html, /You own it · 1,200 say it smells like it · Great value · Risky/, 'risk in the word every screen uses');
+  assert.ok(!html.includes('Risky blind buy'));
   assert.match(html, /<span>Compare<\/span>/, 'the compare link says what it does');
   assert.match(html, /id="bp-dupes"/, 'Discover’s Similar & cheaper scrolls here');
   assert.equal((html.match(/<li class="row/g) ?? []).length, 6, 'four cheaper at most, the original and a sibling');
@@ -422,7 +499,9 @@ test('what voters say: value, keepers, blind buy, buzz, ratings and lean, credit
   const keep = f.about.owners.have / (f.about.owners.have + f.about.owners.had);
   assert.ok(html.includes(`${Math.round(keep * 100)}%`), 'the share of owners who keep it');
   assert.ok(!html.includes('Blind buy'), 'a bottle you own isn’t a blind buy');
-  assert.match(html, /<b>92%<\/b><span>of 27K owners/, 'kept says it once');
+  const owners = (f.about.owners.have + f.about.owners.had).toLocaleString('en-US');
+  assert.ok(html.includes(`<b>92%</b><span>of ${owners} owners`), 'kept says it once');
+  assert.ok(!/\d+(\.\d)?K\b/.test(html), 'counts in full, as the votes beside them are: one format in the card');
   assert.match(html, /Top 1%/);
   assert.equal((html.match(/class="crowd-hist-fill"/g) ?? []).length, 5);
   assert.match(html, /love or like it/);
@@ -635,14 +714,23 @@ test('compare ranks with your stars, and reads Now’s entries for bottles in it
     state.shared = null;
     state.wx = wx;
     computeToday();
-    const slot = state.today.night ? 'night' : 'day';
+    // Now's window (the day one at 4 pm), whichever it is.
+    const slot = nowSlot().win.slot;
     const [a, b] = state.contexts[slot].ranked.map(e => e.fragrance);
     const stranger2 = { ...byName('Sauvage'), id: '424242', name: 'Not owned' };
     state.bottles.set(stranger2.id, stranger2);
     const route = { dest: 'compare', arg: [a.id, b.id, stranger2.id].join(','), query: {} };
     let m = compareModel(route);
     assert.equal(m.bottles.filter(x => x.owned).length, 2);
-    if (m.now.win.slot === slot) assert.equal(m.now.entries.get(a.id), state.contexts[slot].entries.get(a.id), 'the % Now shows');
+    assert.equal(m.now.win, nowSlot().win);
+    assert.equal(m.now.entries.get(a.id), state.contexts[slot].entries.get(a.id), 'the % Now shows');
+    // By day the verdict is about tonight, and tonight's matches have a row of their own.
+    assert.equal(slot, 'day', 'the fixture’s Now is the day window');
+    assert.equal(m.tonight.entries.get(a.id), state.contexts.night.entries.get(a.id), 'tonight’s % as Now’s night list has it');
+    const page = compareHTML(m);
+    assert.match(page, /id="cmp-tonight">Match tonight</);
+    const tonightPct = `${matchPct(m.tonight.entries.get(a.id))}%`;
+    assert.ok(page.split('id="cmp-tonight"')[1].split('</section>')[0].includes(tonightPct), 'the verdict’s numbers show in a row');
     const before = m.occ.entries.get(stranger2.id).score;
     store.set('scentcast.skin', JSON.stringify({ [stranger2.id]: { rating: 1 } }));
     m = compareModel(route);
@@ -695,6 +783,34 @@ test('compare with… lists its family, the list it came from and your bottles, 
   assert.match(html, /data-field="cmp-query"/);
   assert.match(pickerHTML({ base: ['1', '2', '3'], query: '' }, lists), /Three is the most/);
   assert.match(pickerHTML({ base: [a.id], query: '' }, lists), /data-action="cmp-pick" data-id="o"/);
+
+  // What a screen reader hears as you search: searching, how many, or none.
+  const status = (sheet, ls = []) => pickerStatus({ base: [a.id], ...sheet }, ls);
+  assert.equal(status({ query: '' }), '', 'nothing typed, nothing said');
+  assert.equal(status({ query: 'aventus', results: null }), 'Searching…', 'until the library answers');
+  assert.equal(status({ query: 'aventus', results: [], busy: true }), 'Searching…');
+  assert.equal(status({ query: 'aventus', results: [] }, [{ records: [a, b] }, { records: [c] }]), '3 bottles found.');
+  assert.equal(status({ query: 'zzz', results: [] }), 'No bottles match “zzz”.');
+  assert.equal(status({ query: 'zzz', results: [], error: 'Can’t reach the fragrance library.' }), 'No bottles match “zzz”. Can’t reach the fragrance library.');
+  assert.equal(status({ query: 'j', results: null }, [{ records: [a] }]), '1 bottle found.', 'one letter: only your own bottles, no library search');
+  assert.equal(pickerStatus({ base: ['1', '2', '3'], query: 'x' }, []), '', 'full: nothing to search');
+  const live = pickerHTML({ base: [a.id], query: EVIL, results: [] }, []);
+  assert.match(live, /role="status" id="cmp-pick-live" data-say="No bottles match/, 'a status line in the sheet');
+});
+
+test('compare’s words: names listed with commas, and no tapping on a desktop', () => {
+  assert.deepEqual([andList([]), andList(['A']), andList(['A', 'B']), andList(['A', 'B', 'C'])], ['', 'A', 'A and B', 'A, B and C']);
+  const [a, b, c] = fragrances;
+  for (const f of [a, b, c]) state.bottles.set(f.id, f);
+  try {
+    assert.equal(comparePage.title({ arg: [a.id, b.id, c.id].join(',') }), `${a.name}, ${b.name} and ${c.name}`);
+    assert.equal(comparePage.title({ arg: '' }), 'Compare');
+  } finally {
+    state.bottles.clear();
+  }
+  const empty = compareHTML({ ids: [], bottles: [] });
+  assert.match(empty, /Open any bottle and choose Compare/);
+  assert.ok(!/\btap\b/i.test(empty));
 });
 
 test('the buy check reads the liked styles as Insights does: none liked is none, not the wardrobe’s leanings', async () => {

@@ -1,7 +1,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { fromFragella, cleanName } from '../src/fragella.js';
-import worker, { normalizeQuery } from '../worker/index.js';
+import worker from '../worker/index.js';
 
 // Synthetic records in Fragella's documented shape (real responses stay out of
 // the repo per Fragella's terms).
@@ -65,7 +65,7 @@ const kv = {
   get: async (k, type) => (store.has(k) ? (type === 'json' ? JSON.parse(store.get(k)) : store.get(k)) : null),
   put: async (k, v) => { store.set(k, v); },
 };
-const env = { CACHE: kv, FRAGELLA_KEY: 'test', FRAGELLA_BASE: 'https://up.test/api/v1', ALLOWED_ORIGINS: 'https://app.test', DAILY_LOOKUPS_PER_IP: '3' };
+const env = { CACHE: kv, FRAGELLA_KEY: 'test', FRAGELLA_BASE: 'https://up.test/api/v1', ALLOWED_ORIGINS: 'https://app.test', DAILY_LOOKUPS_PER_IP: '3', DAILY_LOOKUPS: '4' };
 const get = (path, headers = {}) => worker.fetch(new Request(`https://api.test${path}`, { headers: { 'CF-Connecting-IP': '1.2.3.4', ...headers } }), env);
 
 beforeEach(() => {
@@ -82,43 +82,43 @@ beforeEach(() => {
   };
 });
 
-test('search converts results and caches them; repeat searches are free', async () => {
-  const first = await (await get('/search?q=Test%20Brand')).json();
-  assert.equal(first.cached, false);
-  assert.deepEqual(first.results.map(r => r.id), ['fg:Test-Brand-Warm-One', 'fg:Test-Brand-Cool-One']);
-  const again = await (await get('/search?q=test  brand!')).json();
-  assert.equal(again.cached, true);
-  assert.equal(upstreamCalls.length, 1);
+test('lookup by id serves cached bottles and fetches only the missing ones, a few a call', async () => {
+  const first = await (await get('/fragrances?ids=fg:Test-Brand-Cool-One,31861')).json();
+  assert.deepEqual([first.records.map(r => r.id), first.missing], [['fg:Test-Brand-Cool-One'], []]);
+  const again = await (await get('/fragrances?ids=fg:Test-Brand-Cool-One')).json();
+  assert.deepEqual(again.records.map(r => r.id), ['fg:Test-Brand-Cool-One']);
+  assert.equal(upstreamCalls.length, 1, 'a found bottle is free after');
+  // A crafted link with ten made-up ids asks upstream for three, and the misses are remembered.
+  const nope = Array.from({ length: 10 }, (_, i) => `fg:nope${i}`).join(',');
+  const body = await (await get(`/fragrances?ids=${nope}`, { 'CF-Connecting-IP': '5.6.7.8' })).json();
+  assert.equal(body.missing.length, 10);
+  assert.equal(upstreamCalls.length, 4);
+  await get(`/fragrances?ids=fg:nope0,fg:nope1,fg:nope2`, { 'CF-Connecting-IP': '9.9.9.9' });
+  assert.equal(upstreamCalls.length, 4, 'a miss isn’t asked again');
 });
 
-test('lookup by id serves cached bottles and fetches only the missing ones', async () => {
-  await get('/search?q=test brand');
-  store.delete('f:fg:Test-Brand-Cool-One');
-  const body = await (await get('/fragrances?ids=fg:Test-Brand-Warm-One,fg:Test-Brand-Cool-One,fg:Nope,31861')).json();
-  assert.deepEqual(body.records.map(r => r.id), ['fg:Test-Brand-Warm-One', 'fg:Test-Brand-Cool-One']);
-  assert.deepEqual(body.missing, ['fg:Nope']);
-  assert.equal(upstreamCalls.filter(u => u.includes('/fragrances/')).length, 2);
+test('upstream lookups are capped per IP and for everyone, per day', async () => {
+  const ask = (n, ip) => get(`/fragrances?ids=fg:x${n}`, { 'CF-Connecting-IP': ip });
+  for (let n = 0; n < 3; n++) await ask(n, '1.1.1.1');
+  assert.equal(upstreamCalls.length, 3);
+  assert.deepEqual((await (await ask(3, '1.1.1.1')).json()).missing, ['fg:x3'], 'past its share, an IP gets the rest as missing');
+  assert.equal(upstreamCalls.length, 3);
+  await ask(4, '2.2.2.2');
+  assert.equal(upstreamCalls.length, 4);
+  await ask(5, '3.3.3.3');
+  assert.equal(upstreamCalls.length, 4, 'and everyone together stop at the day’s budget');
 });
 
-test('upstream lookups are capped per IP per day', async () => {
-  for (const q of ['aaa', 'bbb', 'ccc']) assert.equal((await get(`/search?q=${q}`)).status, 200);
-  const blocked = await get('/search?q=ddd');
-  assert.equal(blocked.status, 429);
-  assert.equal((await blocked.json()).error, 'rate_limited');
-  assert.equal((await get('/search?q=aaa')).status, 200, 'cached queries still work');
-});
-
-test('an exhausted Fragella quota comes back as a friendly error', async () => {
+test('an exhausted Fragella quota leaves the rest missing, without an error', async () => {
   upstreamStatus = 429;
-  const res = await get('/search?q=sauvage');
-  assert.equal(res.status, 429);
-  assert.equal((await res.json()).error, 'quota');
+  const res = await get('/fragrances?ids=fg:Test-Brand-Cool-One');
+  assert.equal(res.status, 200);
+  assert.deepEqual((await res.json()).missing, ['fg:Test-Brand-Cool-One']);
 });
 
-test('short queries are rejected before spending a lookup', async () => {
-  assert.equal((await get('/search?q=ab')).status, 400);
+test('search is gone: nothing in the app asks for it', async () => {
+  assert.equal((await get('/search?q=sauvage')).status, 404);
   assert.equal(upstreamCalls.length, 0);
-  assert.equal(normalizeQuery('  Dior   SAUVAGE!! '), 'dior sauvage');
 });
 
 test('CORS allows only configured origins', async () => {

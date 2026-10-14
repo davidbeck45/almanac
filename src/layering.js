@@ -526,9 +526,12 @@ export function commonNotes(collection) {
 // pair in the last collection asked about, and each bottle's sum over the
 // rest. The bottle page passes the collection without the open bottle, so
 // each open asks about a different list: any list within the kept one reads
-// its averages off these in O(n) instead of redoing the n² pass.
+// its averages off these in O(n) instead of redoing the n² pass. A record
+// counts as kept while its id, accords and notes are (applySkin's copies
+// with your stars pair as before).
 let pairsFor = { records: [], at: new Map(), scores: new Float64Array(0), sums: new Float64Array(0) };
-function pairScores(records) {
+// The n² pass, a row at a time (warmPairing pauses between rows).
+function* pairRows(records) {
   const n = records.length, scores = new Float64Array(n * n), sums = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
@@ -537,15 +540,55 @@ function pairScores(records) {
       sums[i] += model;
       sums[j] += model;
     }
+    yield i;
   }
   return { records, at: new Map(records.map((f, i) => [f.id, i])), scores, sums };
 }
+function pairScores(records) {
+  const rows = pairRows(records);
+  let step;
+  while (!(step = rows.next()).done);
+  return step.value;
+}
 
+const sameScent = (a, b) => a === b || (a.id === b.id && a.accords === b.accords && a.notes === b.notes && a.noteVotes === b.noteVotes);
 // Positions of `collection`'s records among the kept ones, or null when one isn't kept.
-const keptAt = collection => {
+function keptAt(collection) {
   const at = collection.map(f => pairsFor.at.get(f.id));
-  return at.every((i, k) => i !== undefined && pairsFor.records[i] === collection[k]) ? at : null;
-};
+  return at.every((i, k) => i !== undefined && sameScent(pairsFor.records[i], collection[k])) ? at : null;
+}
+// keptAt, or null too when they're under three in four of the kept: worth a fresh pass.
+const keptFor = collection => (collection.length < 0.75 * pairsFor.records.length ? null : keptAt(collection));
+// The pass's list: the collection, and `frag` when it isn't in it.
+const passFor = (collection, frag) => (frag && !collection.some(f => f.id === frag.id) ? [...collection, frag] : [...collection]);
+
+/** Whether pairingMeans(collection) answers from the kept pairs, without the n² pass. */
+export const pairingKept = collection => keptFor(collection) !== null;
+
+// The browser's next idle moment, else the next turn.
+const nextIdle = () => new Promise(resolve => {
+  if (globalThis.requestIdleCallback) globalThis.requestIdleCallback(() => resolve(), { timeout: 100 });
+  else setTimeout(resolve, 0);
+});
+
+/**
+ * pairingMeans' n² pass for `collection` (and `frag`, as pairingMeans takes
+ * them) in slices of about `slice` ms, waiting for `pause()` between them,
+ * so a page can draw first and work it out while nobody's tapping. Resolves
+ * once pairingMeans answers from the kept pairs.
+ */
+export async function warmPairing(collection, frag = null, { pause = nextIdle, slice = 8 } = {}) {
+  if (keptFor(collection)) return;
+  const rows = pairRows(passFor(collection, frag));
+  let start = performance.now(), step;
+  while (!(step = rows.next()).done) {
+    if (performance.now() - start > slice) {
+      await pause();
+      start = performance.now();
+    }
+  }
+  pairsFor = step.value;
+}
 
 /**
  * Each bottle's average pairing score across the rest of `collection`, before
@@ -554,11 +597,9 @@ const keptAt = collection => {
  * kept pairs, so opening each bottle of a collection in turn reuses them.
  */
 export function pairingMeans(collection, frag = null) {
-  let at = keptAt(collection);
-  // Fewer than three in four of the kept bottles: worth a fresh pass.
-  if (!at || collection.length < 0.75 * pairsFor.records.length) {
-    const joins = frag && !collection.some(f => f.id === frag.id);
-    pairsFor = pairScores(joins ? [...collection, frag] : collection);
+  let at = keptFor(collection);
+  if (!at) {
+    pairsFor = pairScores(passFor(collection, frag));
     at = keptAt(collection);
   }
   const { records, scores, sums } = pairsFor, n = records.length;
@@ -581,18 +622,19 @@ export const byPick = (x, y) => x.offWeather - y.offWeather || y.rank - x.rank;
 let lastPicks = { frag: null, collection: [], limit: 0, conditions: null, picks: [] };
 
 /**
- * The best partners for `frag` among `collection`, best first, for the weather
- * when `conditions` are given. Each pick's `rank` orders them and can pass 1
- * where Parfumo's votes lift a pair the model already rates perfect; a pair
- * off for the weather comes after every pair that isn't.
+ * The best partners for `frag` among `collection` (with or without `frag`
+ * in it: partners' averages are over the rest without it), best first, for
+ * the weather when `conditions` are given. Each pick's `rank` orders them
+ * and can pass 1 where Parfumo's votes lift a pair the model already rates
+ * perfect; a pair off for the weather comes after every pair that isn't.
  */
 export function layerPicks(frag, collection, limit = 3, conditions = null) {
   const last = lastPicks;
   if (last.frag === frag && last.limit === limit && last.conditions === conditions
     && last.collection.length === collection.length && last.collection.every((f, i) => f === collection[i])) return [...last.picks];
-  const { means, overall, common } = pairingMeans(collection, frag);
-  const picks = collection
-    .filter(f => f.id !== frag.id)
+  const others = collection.filter(f => f.id !== frag.id);
+  const { means, overall, common } = pairingMeans(others, frag);
+  const picks = others
     .map(f => {
       const pair = layerPair(frag, f, conditions, { common });
       const generalist = (means.get(f.id) ?? overall) - overall;

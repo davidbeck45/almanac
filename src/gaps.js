@@ -15,7 +15,7 @@
 import { seasonFit, timeFit, weatherFit, quality, personalPart, occasionRaw, occasionPart, scoreOf, targetSeasonWeights, DISLIKED } from './engine.js';
 import { occasionById } from './occasions.js';
 import { similarity, sharedTraits } from './similar.js';
-import { styleScores, styleMix, styleById, topOf, closeOf } from './scent-styles.js';
+import { styleScores, styleMix, styleById, topOf, shownOf, closeOf } from './scent-styles.js';
 import {
   signalsOf, genderLean, leanWindow, allowContext, allow, poolNorms, candidateQuality, valueSlope, preferValueDefault,
   familyIndex, ownedVectors, novelty, cheaperTwin, riskOf, weakLongevity, poolRowOf, PREFER_VALUE, FAMILY_MULT, MIN_RATING,
@@ -229,6 +229,29 @@ let lastTable = null;
 export function poolTable(records, summary, cc = cellsFor(summary)) {
   const key = JSON.stringify(summary);
   if (lastTable?.records !== records || lastTable.key !== key) lastTable = { records, key, table: fitTable(records, cc) };
+  return lastTable.table;
+}
+
+const nextTurn = () => new Promise(resolve => setTimeout(resolve, 0));
+
+/**
+ * gapContext's pool table for `records` (the pool's) in a climate, worked
+ * out ahead of time in slices of `chunk` bottles, pausing between them so a
+ * Worker answers other questions meanwhile: the first report or buy check
+ * then finds it done (about 230 ms of a 340 ms context in Node). Stops when
+ * one already is. -> the table.
+ */
+export async function warmPoolTable(records, summary = DEFAULT_CLIMATE, { pause = nextTurn, chunk = 500 } = {}) {
+  summary ??= DEFAULT_CLIMATE;
+  const key = JSON.stringify(summary), footed = allFooted(records);
+  const done = () => lastTable?.records === footed && lastTable.key === key;
+  const cc = cellsFor(summary), m = cc.cells.length, table = new Float32Array(footed.length * m);
+  for (let i = 0; i < footed.length; i += chunk) {
+    await pause();
+    if (done()) return lastTable.table;
+    table.set(fitTable(footed.slice(i, i + chunk), cc), i * m);
+  }
+  if (!done()) lastTable = { records: footed, key, table };
   return lastTable.table;
 }
 
@@ -837,13 +860,21 @@ export function buyCheck(record, ctx, { liked = null, stated = true } = {}) {
   // styles only guessed from the wardrobe are ones you reach for.
   const styleLabels = taste?.styles.map(id => styleById(id).label.toLowerCase());
   const like = stated ? 'you like' : 'you reach for';
+  // Beside scent styles, a liked wear style (Intimate) doesn't count alone
+  // (tasteOf), so the line says scent styles, and that it wears close.
+  const kinds = new Set((liked ?? []).map(id => styleById(id)?.kind).filter(Boolean));
+  const which = kinds.size > 1 ? `scent styles ${like}` : `styles ${like}`;
+  const wears = kinds.size > 1 && closeOf(styleScores(scored)) ? ' and wears close, but' : ',';
+  // No clear style, but one its page shows as a lean ("Leans skin scent"): say so.
+  const [leaning] = taste && !styleLabels.length ? shownOf(styleScores(scored)) : [];
+  const leansTo = leaning && `It only leans toward ${styleById(leaning.id).label.toLowerCase()}, ${liked.includes(leaning.id) ? 'one' : 'none'} of the ${which}.`;
   const tasteLine = !taste ? null
     : taste.thin ? `More of the ${styleNoun(taste.style)} ${like}: you own ${countWord(taste.owned)}.`
       : taste.style ? `You own ${taste.owned} ${styleNoun(taste.style)} already.`
-        : styleLabels.length ? `It’s ${list(styleLabels)}, none of the styles ${like}.` : `It isn’t one of the styles ${like}.`;
+        : styleLabels.length ? `It’s ${list(styleLabels)}${wears} none of the ${which}.` : leansTo || `It isn’t one of the ${which}.`;
   const mistLine = mist ? 'It’s a body mist: lighter and shorter-lived than a perfume.' : null;
-  // Why it adds nothing: it fades where it would help, or where it does best
-  // (closest to the wardrobe's best, in a cell that comes up) it's matched.
+  // Why it adds nothing: it fades where it would help, or where it comes
+  // closest to the wardrobe's best (in a cell that comes up) it's matched.
   const fades = all.filter(f => f.fades);
   let close = null;
   cells.forEach((cell, j) => {
@@ -854,8 +885,8 @@ export function buyCheck(record, ctx, { liked = null, stated = true } = {}) {
   const likeLine = unlike ? 'Nothing you own smells like it.' : overlapLine;
   const coveredLine = fades.length ? `It would be your best for ${fillsText(fades)}, but it doesn’t last long enough for that.`
     : !close ? 'It wouldn’t beat anything you own, in any weather or occasion.'
-      : close.by > 0 ? `It would barely beat your ${close.who.name} for ${cellLabel(close.cell)}, where it does best.`
-        : `Your ${close.who.name} outdoes it even for ${cellLabel(close.cell)}, where it does best.`;
+      : close.by > 0 ? `It would barely beat your ${close.who.name} for ${cellLabel(close.cell)}, and nowhere by more.`
+        : `Your ${close.who.name} outdoes it even for ${cellLabel(close.cell)}, where it comes closest.`;
 
   const reasons = [];
   if (mine) reasons.push('You own it.');

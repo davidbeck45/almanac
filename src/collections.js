@@ -4,23 +4,27 @@
 //   Full records are stored with it, so it works offline and never spends
 //   another lookup.
 // A share link (?c=id,id&n=Name) opens someone's list as a temporary view.
-import { isCustomId, shareToken } from './custom.js';
+import { isCustomId, shareToken, upTo } from './custom.js';
 
 const MINE_KEY = 'scentcast.mine';
 const ACTIVE_KEY = 'scentcast.active';
 const MAX_SHARED = 80;
 const MAX_IMPORT_LINES = 15;
+// A share link's name, in characters.
+const MAX_NAME = 40;
 
 const isObject = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 
 /**
  * Whether a stored record has what ranking reads: an id, a name, accords,
- * season and day/night shares. Mine and the want list keep only these, so
- * a record stored in another shape is left out rather than breaking a screen.
+ * season and day/night shares (numbers, every one). Mine and the want list
+ * keep only these, so a record stored in another shape is left out rather
+ * than breaking a screen.
  */
+const shares = (o, keys) => isObject(o) && keys.every(k => Number.isFinite(o[k]) && o[k] >= 0);
 export const usableRecord = r => isObject(r) && (typeof r.id === 'string' ? r.id !== '' : Number.isFinite(r.id))
   && typeof r.name === 'string' && isObject(r.accords) && Object.keys(r.accords).length > 0
-  && isObject(r.season) && isObject(r.dayNight);
+  && shares(r.season, ['winter', 'spring', 'summer', 'fall']) && shares(r.dayNight, ['day', 'night']);
 
 export function loadMine() {
   try {
@@ -50,7 +54,7 @@ export function saveActive(active) {
 export function shareURL(records, name) {
   // Built by hand so ids read cleanly (commas and colons unescaped).
   const ids = records.map(r => encodeURIComponent(isCustomId(r.id) ? shareToken(r) : r.id).replace(/%3A/gi, ':')).join(',');
-  const suffix = name ? `&n=${encodeURIComponent(name)}` : '';
+  const suffix = name ? `&n=${encodeURIComponent(upTo(name, MAX_NAME))}` : '';
   return `${location.origin}${location.pathname}?c=${ids}${suffix}`;
 }
 
@@ -58,7 +62,7 @@ export function parseShare(params) {
   const raw = params.get('c');
   if (!raw) return null;
   const ids = [...new Set(raw.split(',').map(s => s.trim()).filter(Boolean))].slice(0, MAX_SHARED);
-  return ids.length ? { ids, name: params.get('n')?.trim().slice(0, 40) || null } : null;
+  return ids.length ? { ids, name: upTo(params.get('n')?.trim() ?? '', MAX_NAME).trim() || null } : null;
 }
 
 export const normalize = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -76,9 +80,10 @@ export function localMatches(query, records, limit = 5) {
 // Whether a search hit is plausibly the bottle someone typed: every word of its
 // name was typed (a plural counts). Online search is fuzzy and returns its
 // nearest guess even for bottles it doesn't have ("Caramello" for "Caramellino").
+// A year the dataset puts after a name ("Ombré Leather (2018)") needn't be typed.
 export function nameMatches(query, record) {
   const typed = normalize(query).split(' ');
-  const words = normalize(record.name).split(' ').filter(w => w.length > 1);
+  const words = normalize(String(record.name).replace(/\s*\(\d{4}\)\s*$/, '')).split(' ').filter(w => w.length > 1);
   return words.length > 0 && words.every(w => typed.some(t => t === w || t === `${w}s`));
 }
 
@@ -92,12 +97,13 @@ export function sameBottle(a, b) {
 // "1. Pear Pavlova by French Cowboy 50ml"
 //   -> { line: 'Pear Pavlova French Cowboy', name: 'Pear Pavlova', brand: 'French Cowboy' }
 // `line` is the search query; name and brand prefill a bottle entered by hand.
-export function importLines(text) {
+// `max` lines at most (Infinity counts them all).
+export function importLines(text, max = MAX_IMPORT_LINES) {
   const tidy = s => s.replace(/\s+/g, ' ').trim();
   return text.split(/\r?\n/)
     .map(l => tidy(l.replace(/^\s*(?:[-*•·]|\d+[.)])\s*/, '').replace(/\b\d+(?:[.,]\d+)?\s?(?:ml|oz)\b/gi, '')))
     .filter(l => l.length >= 3)
-    .slice(0, MAX_IMPORT_LINES)
+    .slice(0, max)
     .map(l => {
       // Only "by" says which side is the brand ("Dior - Sauvage" could go either way).
       const [name, brand = ''] = l.split(/\s+by\s+/i);

@@ -49,21 +49,29 @@ export function useLibLoader(fn) {
 
 /**
  * Re-renders the page when an answer lands, focus kept: on the successor of
- * the control that had it (data attributes, as the shell does), else on the
- * element with its id (a heading).
+ * the control that had it (data attributes, as the shell does) in the same
+ * section, else on the element with its id (a heading), else on the
+ * section's heading, brought into view. `reveal`: bring the focus into view
+ * even when it found its successor (the layout above it changed).
  */
-export function repaint(app) {
+export function repaint(app, { reveal = false } = {}) {
   const el = document.activeElement;
   if (!el?.closest?.('#main')) return app.renderPage();
   const id = el.id;
   const section = el.closest('section[aria-labelledby]')?.getAttribute('aria-labelledby');
-  app.keepingFocus(el, '#app', app.renderPage);
-  if (el.isConnected || document.activeElement?.closest?.('#main')) return;
-  // Nothing took its place (an owned suggestion's card left the list): its
-  // section's heading, else the page's, never the body.
-  const heading = (id && document.getElementById(id)) || (section && document.getElementById(section));
-  if (heading && !heading.matches('a, button, input, [tabindex]')) heading.tabIndex = -1;
-  (heading ?? document.getElementById('page-title'))?.focus({ preventScroll: true });
+  // Only a successor in its own section: a suggestion's name, its card gone,
+  // isn't the button for the same bottle in the map's detail far up the page.
+  const scope = section ? `#main section[aria-labelledby="${CSS.escape(section)}"]` : '#app';
+  app.keepingFocus(el, scope, app.renderPage);
+  if (!el.isConnected && !document.activeElement?.closest?.('#main')) {
+    // Nothing took its place (an owned suggestion's card left the list): its
+    // section's heading, else the page's, never the body.
+    const heading = (id && document.getElementById(id)) || (section && document.getElementById(section));
+    if (heading && !heading.matches('a, button, input, [tabindex]')) heading.tabIndex = -1;
+    (heading ?? document.getElementById('page-title'))?.focus({ preventScroll: true });
+    reveal = true;
+  }
+  if (reveal && document.activeElement?.closest?.('#main')) document.activeElement.scrollIntoView({ block: 'nearest' });
 }
 
 // ---------- Saying what changed ----------
@@ -223,7 +231,8 @@ const at = x => (100 * Math.max(0, Math.min(1, (x - LO) / (HI - LO)))).toFixed(1
  */
 export function fillHTML(f) {
   const to = Math.round(f.to * 100), from = Math.round(f.from * 100);
-  const who = !f.beats ? null : f.beatsPick ? `${f.beats.name} (suggested above)` : `your ${f.beats.name}`;
+  // "Earlier", not "above": side by side, the earlier pick sits to the left.
+  const who = !f.beats ? null : f.beatsPick ? `${f.beats.name} (suggested earlier)` : `your ${f.beats.name}`;
   const vs = !who ? 'where you have nothing yet' : f.first ? `over ${who} at ${from}%` : `beside ${who} at ${from}%`;
   const [lo, hi] = [Math.min(f.from, f.to), Math.max(f.from, f.to)];
   return `<li class="fill">

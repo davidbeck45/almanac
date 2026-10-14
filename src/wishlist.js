@@ -66,9 +66,6 @@ export const removeWant = (wants, id) => wants.filter(w => w.id !== String(id));
 /** Whether a bottle is on the list. */
 export const hasWant = (wants, id) => wants.some(w => w.id === String(id));
 
-/** The list's ids that need loading (no record kept), for fragranticaLibrary().records. */
-export const wantIdsToLoad = wants => wants.filter(w => !w.record).map(w => w.id);
-
 /**
  * Add, remove or toggle and save in one go, as the UI does: -> the new list.
  * `want` true adds, false removes, undefined toggles.

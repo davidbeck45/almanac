@@ -44,6 +44,9 @@
 @media (min-width: 720px) { .hero-top { top: var(--s-4); left: var(--s-4); right: var(--s-4); } }
 
 .hero-foot { position: absolute; left: var(--s-4); bottom: var(--s-4); z-index: 1; max-width: 50%; color: var(--on-scene); }
+/* On a narrow phone it stops short of the name under the bottle (centered
+   at 73%, wear.js stageX, 168px wide), wrapping its last line instead. */
+@media (max-width: 719px) { .hero-pick ~ .hero-foot { max-width: min(50%, 73% - 84px - var(--s-2)); } }
 .hero.compact .hero-foot { max-width: none; right: var(--s-4); }
 .hero-wx { display: grid; gap: var(--s-1); }
 .hero-temp {
@@ -142,10 +145,32 @@
   background: radial-gradient(closest-side, rgb(var(--ink-deep) / 0.5), rgb(var(--ink-deep) / 0.28) 55%, transparent);
   pointer-events: none;
 }
-.hero-label small { display: inline-flex; align-items: center; gap: var(--s-1); color: color-mix(in srgb, var(--on-scene) 80%, transparent); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 500; }
+/* The kicker is small and stands highest, over the brightest sky: full
+   white with a tight dark halo keeps it over 4.5:1 in clear, fog and snow. */
+.hero-label small {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  color: var(--on-scene);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgb(var(--shade) / 0.7), 0 0 8px rgb(var(--ink-deep) / 0.8), 0 0 16px rgb(var(--ink-deep) / 0.7);
+}
 .hero-label small svg { width: 12px; height: 12px; }
 .hero-label b { max-width: 100%; overflow: hidden; font-family: var(--display); font-size: var(--fs-headline); line-height: var(--lh-headline); font-style: italic; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .hero-label > span { max-width: 100%; overflow: hidden; color: color-mix(in srgb, var(--on-scene) 78%, transparent); font-size: var(--fs-caption); line-height: var(--lh-caption); text-overflow: ellipsis; white-space: nowrap; }
+/* On phones a long name (`.long`, over about 18 characters, which is what
+   one line holds) takes two lines, and the brand joins the kicker's line
+   above it ("Tonight · Afnan"), so the label still ends inside the hero.
+   The outer columns center that line; the name spans them all. */
+@media (max-width: 719px) {
+  .hero-pick.long .hero-label { grid-template-columns: minmax(0, 1fr) auto minmax(0, max-content) minmax(0, 1fr); column-gap: var(--s-1); margin-top: var(--s-1); }
+  .hero-pick.long .hero-label small { grid-area: 1 / 2; }
+  .hero-pick.long .hero-label > span { grid-area: 1 / 3; justify-self: start; }
+  .hero-pick.long .hero-label > span::before { content: '· ' / ''; }
+  .hero-pick.long .hero-label b { grid-area: 2 / 1 / 3 / -1; display: -webkit-box; line-height: 1.25; white-space: normal; text-wrap: balance; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+}
 @media (min-width: 720px) {
   .hero-pick {
     --bh: 132px;
@@ -161,6 +186,8 @@
     text-align: left;
   }
   .hero-label { justify-items: start; margin: 0 0 var(--s-1); }
+  /* Beside the bottle the kicker stands over open sky: the shade reaches up behind it. */
+  .hero-label::before { inset: calc(-1 * var(--s-6)) calc(-1 * var(--s-5)) calc(-1 * var(--s-3)); }
   .hero-label b { font-size: var(--fs-title-3); line-height: var(--lh-title-3); white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   .hero-label small svg { width: 14px; height: 14px; }
 }
@@ -228,9 +255,10 @@
 .spray-hint svg { width: 16px; height: 16px; flex: none; color: var(--ambient); }
 .spray-hint svg:last-child { width: 14px; height: 14px; color: var(--text-tertiary); }
 @media (hover: hover) { .spray-hint:hover { color: var(--text-primary); background: var(--fill); } }
-/* It sits above Wear this, in line with the reasons (beside it, a long
-   count wrapped under the button on all but the widest cards). */
-.pick-actions .spray-hint { order: -1; width: calc(100% + var(--s-2)); margin: calc(-1 * var(--s-3)) 0 0 calc(-1 * var(--s-2)); }
+/* It sits above Wear this (before it in the markup too, so Tab meets it
+   there), in line with the reasons: beside it, a long count wrapped under
+   the button on all but the widest cards. */
+.pick-actions .spray-hint { width: calc(100% + var(--s-2)); margin: calc(-1 * var(--s-3)) 0 0 calc(-1 * var(--s-2)); }
 .spray-hint svg:last-child { margin-left: auto; }
 /* Elsewhere the card shows the bottle too. Its wash is a fixed size, so on
    a wide card it lights the bottle and fades before the kicker beside it
@@ -427,8 +455,7 @@
   mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 28px), transparent);
 }
 .occasions::-webkit-scrollbar { display: none; }
-/* A tile: the occasion's glyph over its name (positioned, so its hidden
-   blurb stays inside the strip and doesn't widen the page). */
+/* A tile: the occasion's glyph over its name. */
 .occ {
   position: relative;
   display: grid;
@@ -444,7 +471,7 @@
   border: 1px solid var(--border-subtle);
   box-shadow: var(--e2);
   text-align: center;
-  scroll-snap-align: center;
+  scroll-snap-align: start;
   transition: transform var(--dur-1) var(--ease-out), background-color var(--dur-2), border-color var(--dur-2);
 }
 .occ:active { transform: scale(0.97); }
@@ -454,6 +481,11 @@
 .occ-icon svg { width: 22px; height: 22px; }
 .occ.on .occ-icon { color: var(--accent); }
 .occ-label { font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; white-space: nowrap; }
+/* Forced colors drop the gold border, tint and glow: the chosen tile gets
+   the system's highlight ring. */
+@media (forced-colors: active) {
+  .occ[aria-checked='true'] { outline: 2px solid Highlight; outline-offset: -2px; }
+}
 @container page (min-width: 700px) {
   .occasions { display: grid; grid-template-columns: repeat(var(--n, 7), minmax(0, 1fr)); margin: 0; padding: 0; overflow: visible; mask-image: none; }
   .occ { min-width: 0; min-height: 76px; padding-inline: var(--s-1); }
@@ -617,10 +649,16 @@
 .trip-role { margin-top: var(--s-1); color: var(--text-primary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
 .trip-bag .reasons { margin: var(--s-0) 0 0; color: var(--text-secondary); }
 @container page (min-width: 560px) {
-  .trip-bags { grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: var(--s-4); }
-  .trip-bag { grid-template-columns: 1fr; grid-template-rows: auto 1fr; align-items: start; gap: var(--s-3); text-align: center; }
-  .trip-bag-photo { height: 116px; padding-bottom: var(--s-2); border-bottom: 1px solid var(--border-strong); border-radius: 0; background: radial-gradient(closest-side at 50% 100%, var(--fill), transparent); }
+  /* The bags share rows (subgrid): photo, name, brand, role, reason, so a
+     name on two lines moves the lines under every bag alike. */
+  .trip-bags { grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); grid-template-rows: repeat(4, auto) 1fr; gap: 0 var(--s-4); }
+  .trip-bag { grid-row: span 5; grid-template-columns: 1fr; grid-template-rows: subgrid; align-items: start; gap: 0; text-align: center; }
+  .trip-bag-text { display: grid; grid-row: 2 / span 4; grid-template-rows: subgrid; }
+  .trip-bag-photo { height: 116px; margin-bottom: var(--s-3); padding-bottom: var(--s-2); border-bottom: 1px solid var(--border-strong); border-radius: 0; background: radial-gradient(closest-side at 50% 100%, var(--fill), transparent); }
   .trip-bag-photo img { height: 100px; }
+  /* A shorter name sits on its brand. */
+  .trip-bag-name { align-self: end; }
+  .trip-bag-name .pick-name-btn { text-align: center; }
   .trip-bag .reasons { justify-items: center; }
   .trip-bag .reasons li { text-align: left; }
 }

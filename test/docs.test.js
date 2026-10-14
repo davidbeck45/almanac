@@ -2,17 +2,25 @@
 // the dataset README names every file in data/fragrantica/ (its licence note
 // covers each), the modules Insights and the Wishlist load on demand stay out
 // of the boot graph, a bottle page's shopping order reads as the page does,
-// and the --journal example names the file Export saves.
+// its order slots are the registry's, the --journal example names the file
+// Export saves, the names CLAUDE.md gives are still in use, and nothing
+// tracked points at the git-excluded sweep notes.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, normalize } from 'node:path';
-import { sectionsFor } from '../src/views/bottle.js';
+import { SECTIONS, sectionsFor } from '../src/views/bottle.js';
 import '../src/views/sections.js';
+import { riskWord } from '../src/ui.js';
 
 const root = new URL('../', import.meta.url);
 const read = path => readFileSync(new URL(path, root), 'utf8');
 const claude = read('CLAUDE.md');
+
+// The text files under some folders of the repo, as { path, text }.
+const filesUnder = (dirs, ext = /\.(js|mjs|py|html|css|json|qml|md|sh)$/) => dirs.flatMap(dir =>
+  readdirSync(new URL(`${dir}/`, root), { recursive: true }).filter(f => ext.test(f))
+    .map(f => ({ path: `${dir}/${f}`, text: read(`${dir}/${f}`) })));
 
 // The modules main.js loads, following static imports (as test/shell.test.js).
 function moduleGraph(file = 'src/main.js', seen = new Set()) {
@@ -60,6 +68,50 @@ test('a bottle page you shop from reads in the order CLAUDE.md gives', () => {
 });
 
 test("README's --journal example names the file Export saves", () => {
-  assert.match(read('src/views/wardrobe.js'), /a\.download = `scentcast-journal-\$\{data\.exported\.slice\(0, 10\)\}\.json`/);
+  assert.match(read('src/views/wardrobe.js'), /a\.download = `scentcast-journal-\$\{deviceToday\(\)\}\.json`/, 'named by the device’s date, not UTC’s');
   assert.ok(/--journal scentcast-journal-\d{4}-\d{2}-\d{2}\.json/.test(read('README.md')), 'README.md runs --journal on scentcast-journal-<date>.json');
+});
+
+test('CLAUDE.md lists every bottle-page section at its order slot', () => {
+  const list = claude.match(/The slots by `order`[^:]*: ([^\n]+)\.\n/)?.[1];
+  assert.ok(list, 'CLAUDE.md still lists the slots under "The bottle page"');
+  // "`spray` 250 (800)": its order, then the shopOrder in brackets.
+  const slots = [...list.matchAll(/`([\w-]+)` (\d+)(?: \((?:[^()]*?)(\d+)\))?/g)]
+    .map(([, id, order, shop]) => ({ id, order: Number(order), shopOrder: shop ? Number(shop) : undefined }));
+  const registry = SECTIONS.map(({ id, order, shopOrder }) => ({ id, order, shopOrder }));
+  assert.deepEqual(slots, registry);
+});
+
+test('the want-list functions CLAUDE.md names are exported and used', () => {
+  const sentence = claude.match(/`src\/wishlist.js` keeps the want list[^\n]*?\. (`addWant`[^\n]*?)\.\n/)?.[1];
+  assert.ok(sentence, 'CLAUDE.md still lists the want list\'s functions');
+  const names = [...sentence.matchAll(/`(\w+)`/g)].map(m => m[1]);
+  const wishlist = read('src/wishlist.js');
+  const src = filesUnder(['src'], /\.js$/).map(f => f.text).join('\n');
+  for (const name of names) {
+    assert.ok(new RegExp(`^export (?:const|function) ${name}\\b`, 'm').test(wishlist), `src/wishlist.js exports ${name}`);
+    const uses = src.match(new RegExp(`\\b${name}\\b`, 'g'))?.length ?? 0;
+    assert.ok(uses > 1, `${name} is used in src/, not only declared`);
+  }
+});
+
+test("the buy check reads the liked styles through the function CLAUDE.md names", () => {
+  const name = claude.match(/the buy check \(`bottle-check.js`\): [^\n]*?the styles you like \(`(\w+)`/)?.[1];
+  assert.ok(name, 'CLAUDE.md names how the buy check reads the liked styles');
+  assert.ok(new RegExp(`\\b${name}\\(`).test(read('src/views/bottle-check.js')), `bottle-check.js calls ${name}`);
+});
+
+test("Insights' risk words in CLAUDE.md are riskWord's", () => {
+  const words = claude.match(/blind-buy risk in `riskWord`'s words \(([^)]+)\)/)?.[1].split(', ');
+  assert.ok(words, 'CLAUDE.md says which words Insights uses for risk');
+  const said = new Set(['high', 'medium', 'low'].flatMap(level => [riskWord(level), riskWord(level, 80)]));
+  assert.deepEqual(new Set(words), said);
+});
+
+test('nothing points at the sweep notes, which git leaves out', () => {
+  const notes = new RegExp(['\\.sweep/', 'shell-map'].join('|'));
+  const files = [...filesUnder(['src', 'scripts', 'dev', 'test', 'omarchy']),
+    ...['CLAUDE.md', 'README.md', 'index.html', 'sw.js', 'data/fragrantica/README.md'].map(path => ({ path, text: read(path) }))];
+  const hits = files.filter(f => f.path !== 'test/docs.test.js' && notes.test(f.text)).map(f => f.path);
+  assert.deepEqual(hits, [], 'point these at CLAUDE.md instead');
 });

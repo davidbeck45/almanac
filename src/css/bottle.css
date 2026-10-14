@@ -8,12 +8,24 @@
    (src/views/bottle.js redrawSection, keepReading), so the browser's own
    scroll anchoring would move it twice. */
 .bp-panel { overflow-anchor: none; }
+/* A page just drawn lays out and paints only the sections in view, the rest
+   standing at a section's height, until the frame after (.bp-settled, src/
+   views/bottle.js afterBottle): it comes up sooner. Each slot reaches the
+   panel's edges, where the panel clips anyway, so the clip a skipped section
+   gets doesn't cut an edge-to-edge shelf or a focus ring. A section's top
+   margin sits inside its slot until then and collapses through it after,
+   which moves nothing; a margin at the bottom of one would (.bp-summary).
+   An empty slot takes no room. */
+#bottle .bp-slot:not(:empty) { margin-inline: calc(-1 * var(--sheet-px)); padding-inline: var(--sheet-px); }
+#bottle .bp-panel:not(.bp-settled) > .bp-slot:not(:empty) { content-visibility: auto; contain-intrinsic-size: auto 320px; }
 /* The sky's accent as text on its own tint (a tag, a lead): drawn toward
    --paper, as --ambient alone is only about 4.8:1 on gruvbox's surfaces and
    any tint under it takes it below 4.5. */
 .bp-panel, .cmp { --ambient-ink: color-mix(in srgb, var(--ambient) 65%, var(--paper)); }
 
-.bp-head { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: var(--s-4); align-items: center; padding-right: var(--s-7); }
+/* Clear of the close button (44px at --s-2 from the edge, src/css/shell.css)
+   with air to spare: an italic name's last letter overhangs its box. */
+.bp-head { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: var(--s-4); align-items: center; padding-right: calc(var(--hit) + var(--s-1)); }
 .bp-bottle {
   display: grid;
   place-items: center;
@@ -39,6 +51,9 @@
 :is(.inspired, .performance) a { position: relative; z-index: 1; padding: calc((var(--hit) - 1.25em) / 2) 0; text-underline-offset: 2px; }
 
 .bp-summary { margin-top: var(--s-4); }
+/* The gap to the actions is theirs (a margin here would hold the actions
+   lower in a page's first frame, its slot's margins kept in). */
+.bp-summary > :last-child { margin-bottom: 0; }
 .reasons.full { margin: 0 0 var(--s-3); }
 .fact { display: flex; align-items: center; gap: var(--s-2); margin: 0 0 var(--s-2); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .fact svg { width: 14px; height: 14px; flex: none; color: var(--text-tertiary); }
@@ -111,6 +126,9 @@
 .bp-section h3[tabindex] { outline-offset: 4px; }
 /* An answer being asked again stays on screen, dimmed. */
 .bp-refreshing { opacity: 0.6; transition: opacity var(--dur-2); }
+/* A skeleton for a question not asked yet holds still: a shimmer repaints
+   the whole sheet every frame, for as long as the page stays open. */
+.bp-waiting .sk { animation: none; }
 .bp-sk-thumb { width: 34px; height: 38px; flex: none; }
 .bp-section .rows .sk-lines { gap: var(--s-1); }
 .bp-section .rows .sk-line.w70 { height: 14px; }
@@ -326,7 +344,8 @@
 
 .cmp-heads { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: var(--s-2); }
 .cmp-corner { display: none; }
-.cmp-head { position: relative; display: grid; justify-items: center; align-content: start; gap: var(--s-1); min-width: 0; padding: var(--s-3) var(--s-2) var(--s-2); border-radius: var(--r-inset); border: 1px solid var(--border-subtle); background: var(--surface-1); text-align: center; }
+/* A column: Remove sits at the foot of every card, at one height across them. */
+.cmp-head { position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--s-1); min-width: 0; padding: var(--s-3) var(--s-2) var(--s-2); border-radius: var(--r-inset); border: 1px solid var(--border-subtle); background: var(--surface-1); text-align: center; }
 .cmp-open { display: grid; justify-items: center; gap: var(--s-0); width: 100%; min-width: 0; padding: var(--s-1); border-radius: var(--r-control); }
 @media (hover: hover) { .cmp-open:hover .cmp-name { text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; } }
 .cmp-photo img { width: auto; height: 64px; object-fit: contain; filter: var(--drop-small); }
@@ -335,15 +354,15 @@
 .cmp-owned { display: inline-flex; align-items: center; gap: var(--s-1); color: var(--positive); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; }
 .cmp-owned svg { width: 12px; height: 12px; }
 /* Remove: a small text button under the card on phones, a corner × with room. */
-.cmp-remove { display: inline-flex; align-items: center; justify-content: center; gap: var(--s-1); min-height: var(--hit); padding: 0 var(--s-3); border-radius: var(--r-control); color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
+.cmp-remove { display: inline-flex; align-items: center; justify-content: center; gap: var(--s-1); min-height: var(--hit); margin-top: auto; padding: 0 var(--s-3); border-radius: var(--r-control); color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
 .cmp-remove svg { width: 14px; height: 14px; }
 @media (hover: hover) { .cmp-remove:hover { color: var(--text-primary); background: var(--fill); } }
 .cmp-missing { padding: var(--s-5) 0 var(--s-2); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .cmp-sk-photo { width: 48px; height: 64px; margin-bottom: var(--s-2); }
 .cmp-head .sk-line.w70 { width: 70%; height: 14px; }
 /* One bottle alone: an empty column asking for another. */
-.cmp-add { justify-items: stretch; align-content: center; gap: var(--s-2); padding: var(--s-4) var(--s-3); border: 1px dashed var(--border-strong); background: none; text-align: left; }
-.cmp-add > .btn { justify-self: center; }
+.cmp-add { align-items: stretch; justify-content: center; gap: var(--s-2); padding: var(--s-4) var(--s-3); border: 1px dashed var(--border-strong); background: none; text-align: left; }
+.cmp-add > .btn { align-self: center; }
 .cmp-add-sub { margin-top: var(--s-2); color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; text-align: center; }
 .cmp-suggests { display: grid; gap: var(--s-1); }
 .cmp-suggest { display: grid; grid-template-columns: 24px minmax(0, 1fr) 16px; align-items: center; gap: var(--s-2); width: 100%; min-height: var(--hit); padding: var(--s-1) var(--s-2); border-radius: var(--r-control); font-size: var(--fs-footnote); line-height: var(--lh-footnote); text-align: left; }
@@ -354,7 +373,9 @@
 
 .cmp-relations { padding: var(--s-4); border-radius: var(--r-surface); border: 1px solid var(--border-subtle); background: var(--surface-1); }
 .cmp-relations ul { display: grid; gap: var(--s-2); }
-.cmp-relations li { display: flex; align-items: baseline; gap: var(--s-3); font-size: var(--fs-body); line-height: var(--lh-body); }
+/* The tags in a column of their own, so every sentence starts at one edge. */
+.cmp-relations li { display: grid; grid-template-columns: 5.75em minmax(0, 1fr); align-items: baseline; column-gap: var(--s-3); font-size: var(--fs-body); line-height: var(--lh-body); }
+.cmp-relations .cmp-sim { justify-self: start; }
 .cmp-sim { flex: none; padding: 0 var(--s-2); border-radius: var(--r-pill); background: color-mix(in srgb, var(--ambient) 15%, transparent); color: var(--ambient-ink); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 .cmp-table { position: relative; display: grid; gap: var(--s-3); }

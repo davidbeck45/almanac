@@ -5,7 +5,7 @@
 // bottle into Mine. Also the Want button every screen shares (wish-toggle,
 // drawn by parts.js wantButton). Styles: src/css/wardrobe.css.
 import { rank } from '../../engine.js';
-import { esc, plural, shortDate } from '../../ui.js';
+import { esc, plural, shortDate, toastName } from '../../ui.js';
 import { icon, img, messageHTML, sectionHead, matchBadge } from '../../ui/components.js';
 import { askPool, warmPool } from '../../app/pool.js';
 import { state, findRecord, nowSlot, poolInputs, ownedIn } from '../../app/state.js';
@@ -110,7 +110,7 @@ export function wishlistHTML({ items, busy = false, error = '', reload = false, 
     return messageHTML({
       glyph: icon.heart,
       title: 'Nothing on your wishlist yet',
-      body: 'Tap Want on a suggestion, and it lands here with a verdict on how it would fit your shelf.',
+      body: 'Choose Want on a suggestion, and it lands here with a verdict on how it would fit your shelf.',
       action: `<div class="message-actions">
         <a class="btn primary" href="#/wardrobe/insights">${icon.chart}<span>See what would fill your gaps</span></a>
         <a class="btn secondary" href="#/discover">${icon.discover}<span>Discover bottles</span></a>
@@ -263,7 +263,7 @@ export const actions = {
     redraw(el, app);
     if (!hasWant(next, id)) return removed(app, id, before);
     const name = findRecord(id)?.name ?? 'Bottle';
-    app.showToast(onPane() ? `<span>${esc(name)} is on your wishlist</span>`
+    app.showToast(onPane() ? `<span>${esc(toastName(name))} is on your wishlist</span>`
       : `<span class="note">${esc(name)} is on your wishlist</span><a class="btn secondary compact" href="#/wardrobe/wishlist">See it</a>`);
   },
   'wish-remove'(el, app) {
@@ -296,9 +296,9 @@ export const actions = {
     try {
       record = await ownable(id, want?.record ?? findRecord(id));
     } catch (err) {
-      return app.showToast(`<span>${esc(err.message)}</span>`);
+      return app.showToast(`<span>${esc(err.message)}</span>`, { tone: 'error' });
     }
-    if (!record) return app.showToast('<span>That bottle didn’t load. Try again.</span>');
+    if (!record) return app.showToast('<span>That bottle didn’t load. Try again.</span>', { tone: 'error' });
     const next = nextWant(el);
     setWant(id, false);
     app.own(record);

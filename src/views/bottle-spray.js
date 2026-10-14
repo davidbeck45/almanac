@@ -5,7 +5,7 @@
 // (#bp-spray).
 import { sprayGuide } from '../spray.js';
 import { esc, cap } from '../ui.js';
-import { addSection } from './bottle.js';
+import { addSection, inSentence } from './bottle.js';
 
 // Where each spot sits on the figure (viewBox 0 0 80 100); `back` ones are
 // drawn hollow (the back of the neck, fabric).
@@ -34,10 +34,10 @@ export function figureSVG(where) {
   </svg>`;
 }
 
-/** A guide's spray count in words: "2 sprays", "2–3 sprays". */
+/** A guide's spray count in words: "2 sprays", "2–3 sprays" ("1–2 dabs" for a perfume oil). */
 export function sprayCount(guide) {
-  const [lo, hi] = guide.sprays;
-  return lo === hi ? `${lo} spray${lo === 1 ? '' : 's'}` : `${lo}–${hi} sprays`;
+  const [lo, hi] = guide.sprays, unit = guide.unit ?? 'spray';
+  return lo === hi ? `${lo} ${unit}${lo === 1 ? '' : 's'}` : `${lo}–${hi} ${unit}s`;
 }
 
 /** The guide for a bottle's model, with its skin nudges. */
@@ -49,9 +49,10 @@ export function sprayHTML(m) {
   const g = guideFor(m);
   // The guide's text opens with the count ("2–3 sprays, on the neck…"); the rest is where and why.
   const rest = cap(g.text.replace(/^[^,]*,\s*/, ''));
-  const when = m.win ? (m.occasion ? `${m.occasion.label} · ${m.win.label.toLowerCase()}` : m.win.label) : '';
+  // "Date Night · tonight", "Date Night · Saturday night".
+  const when = m.win ? (m.occasion ? `${m.occasion.label} · ${inSentence(m.win.label)}` : m.win.label) : '';
   return `<section class="bp-section" id="bp-spray" aria-labelledby="spray-title">
-    <h3 id="spray-title" tabindex="-1">How much to spray${when ? ` <span class="h3-aside">${esc(when)}</span>` : ''}</h3>
+    <h3 id="spray-title" tabindex="-1">${g.unit === 'dab' ? 'How much to put on' : 'How much to spray'}${when ? ` <span class="h3-aside">${esc(when)}</span>` : ''}</h3>
     <div class="spray-guide">
       ${figureSVG(g.where)}
       <div class="spray-text">

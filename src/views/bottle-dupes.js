@@ -2,12 +2,13 @@
 // family from the suggestion pool (src/discover.js dupesOf): the original a
 // dupe copies, bottles that smell like it for far less, and the ones voters
 // link it with. Each opens its own page, or a side-by-side with this one.
-// Asking loads the whole pool (about 0.8 MB), and the section sits well
-// below the fold, so it asks once its slot nears the reader (askNear).
-import { esc, valueWord, ratingMark } from '../ui.js';
+// Asking loads the whole pool (about 0.8 MB) the first time, and then the
+// records and about data of the family members outside it (up to 300 KB),
+// and the section sits well below the fold, so it asks only once its slot
+// nears the reader (askNear), pool or no pool.
+import { esc, valueWord, riskWord, ratingMark } from '../ui.js';
 import { icon, rowHTML } from '../ui/components.js';
 import { routeHash } from '../app/router.js';
-import { poolStatus } from '../app/pool.js';
 import { addSection, pooled, aboutOf, linkId, showing, bottleModel } from './bottle.js';
 import { state, findRecord } from '../app/state.js';
 
@@ -17,9 +18,17 @@ const num = n => Number(n).toLocaleString('en-US');
 const NOT_IN_LIBRARY = /isn’t in the fragrance library/;
 
 // The record whenever it has accords (a bottle newer than the dataset is in
-// neither the pool nor r/); a dataset id alone otherwise.
-const payload = m => (Object.keys(m.f.accords ?? {}).length ? { record: m.f } : /^\d+$/.test(m.f.id) ? { id: m.f.id } : null);
+// neither the pool nor r/); a dataset id alone otherwise. The about data the
+// page has goes with it, so the pool doesn't load it again (it doesn't count
+// toward the question: pooled() keys a payload by the record's id).
+function payload(m) {
+  const own = Object.keys(m.f.accords ?? {}).length ? { record: m.f } : /^\d+$/.test(m.f.id) ? { id: m.f.id } : null;
+  const about = m.f.about ? undefined : aboutOf(m);
+  return own && about !== undefined ? { ...own, about } : own;
+}
 const families = pooled('dupes', 'bp-dupes', payload, { section: 'dupes' });
+// A dataset bottle's about data still on its way: the question waits for it.
+const aboutPending = m => /^\d+$/.test(m.f.id) && aboutOf(m) === undefined && !m.aboutFailed;
 // How far below the panel's view the slot starts asking.
 const NEAR = '0px 0px 400px 0px';
 
@@ -41,7 +50,7 @@ function entryMeta(e, m) {
   else if (e.why === 'votes') bits.push('Voters link them');
   if (e.value != null) bits.push(valueWord(e.value));
   if (bits.length < 2 && e.rating) bits.push(ratingMark(e.rating));
-  if (e.risk?.level === 'high') bits.push('Risky blind buy');
+  if (e.risk?.level === 'high') bits.push(riskWord('high'));
   return esc(bits.join(' · '));
 }
 
@@ -70,8 +79,10 @@ export function dupesHTML(m, answer) {
   }
   const r = answer?.result;
   if (!r) {
+    // Still, until it's asked (it may never be: the reader stays up the
+    // page); it shimmers only while the question is out.
     const row = '<li class="row"><span class="row-main"><span class="sk bp-sk-thumb"></span><span class="sk-lines"><span class="sk sk-line w70"></span><span class="sk sk-line w40"></span></span></span></li>';
-    return `<section class="bp-section" id="bp-dupes" aria-labelledby="dupes-title" aria-busy="true">${head}<span class="visually-hidden">Finding bottles that smell like it</span><ul class="rows">${row.repeat(3)}</ul></section>`;
+    return `<section class="bp-section${answer ? '' : ' bp-waiting'}" id="bp-dupes" aria-labelledby="dupes-title" aria-busy="true">${head}<span class="visually-hidden">Finding bottles that smell like it</span><ul class="rows">${row.repeat(3)}</ul></section>`;
   }
   const rows = list => list.slice(0, MAX).map(e => entryRow(e, m)).join('');
   const body = [
@@ -91,13 +102,14 @@ let watched = null;
 /**
  * Asks for the bottle's family once its slot comes within NEAR of the
  * panel's view (scrolled to, or a jump to #bp-dupes such as Discover's
- * Smells like); the skeleton stands until then. At once when the pool is
- * already in, or when it asked before (pooled() then asks again only for a
- * changed wardrobe).
+ * Smells like), and its about data is in (the page draws again when that
+ * lands, and watches anew); the still skeleton stands until then. At once
+ * when it asked before (pooled() then asks again only for a changed
+ * wardrobe).
  */
 function askNear(m, app) {
   if (!payload(m)) return;
-  if (families.get(m.f.id) || poolStatus() === 'ready' || typeof IntersectionObserver === 'undefined') return families.ask(m, app);
+  if (families.get(m.f.id) || typeof IntersectionObserver === 'undefined') return families.ask(m, app);
   const slot = document.querySelector('#bottle [data-section="dupes"]');
   const panel = slot?.closest('.bp-panel');
   if (!panel || watched?.slot === slot) return;
@@ -107,7 +119,7 @@ function askNear(m, app) {
     observer.disconnect();
     if (watched?.observer === observer) watched = null;
     const now = showing(m.arg ?? m.f.id) ? bottleModel(state.route) : null;
-    if (now?.f.id === m.f.id) families.ask(now, app);
+    if (now?.f.id === m.f.id && !aboutPending(now)) families.ask(now, app);
   }, { root: panel, rootMargin: NEAR });
   observer.observe(slot);
   watched = { slot, observer };

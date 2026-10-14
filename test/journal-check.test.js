@@ -44,6 +44,13 @@ test('a file that isn’t a journal export reads as null', () => {
   assert.equal(parseJournal(null), null);
   assert.deepEqual(parseJournal({ app: 'scentcast-journal', history: [{ id: 7, date: '2026-01-01', slot: 'day' }, { id: 8 }] }).history,
     [{ id: '7', date: '2026-01-01', slot: 'day' }]);
+  // Wears in another shape are left out, and a `hidden` that isn't a list reads as none.
+  const odd = parseJournal({ app: 'scentcast-journal', hidden: 'Jake', location: 'home', history: [
+    { id: 1, date: '2026-01-01', slot: 'evening' }, { id: 2, date: 20260101, slot: 'day' }, { id: 3, date: '2026-13-45', slot: 'day' },
+    { date: '2026-01-02', slot: 'day' }, null, { id: 4, date: '2026-01-02', slot: 'night' },
+  ] });
+  assert.deepEqual(odd.history, [{ id: '4', date: '2026-01-02', slot: 'night' }]);
+  assert.deepEqual([odd.hidden, odd.location], [[], null]);
 });
 
 test('journal-check ranks with the export’s ratings, and for the occasion a wear was logged for', () => {
@@ -89,4 +96,17 @@ test('journal-check says what went wrong in a sentence, and skips wears whose we
   const { summary } = JSON.parse(busy.stdout);
   assert.equal(summary.wears, 3);
   assert.equal(summary.skipped.noWeather, 3);
+  // The archive's day used up says so, by name; with nothing checked, no meaningless averages.
+  const spent = run([file], { MOCK_ARCHIVE_STATUS: '429', MOCK_FORECAST_STATUS: '429', MOCK_REASON: 'Daily API request limit exceeded. Please try again tomorrow.' });
+  assert.equal(spent.status, 0, spent.stderr);
+  assert.match(spent.stderr, /The weather archive’s daily limit is used up\. Try again tomorrow\. Wears it would cover are skipped\./);
+  assert.match(spent.stderr, /The forecast service’s daily limit is used up\. Try again tomorrow\./);
+  assert.match(spent.stdout, /^No wears to check \(0 outside the demo, 0 without a place, 6 without weather\)\.\n$/);
+  // A wear logged for a slot that isn't day or night is left out, not a stack trace.
+  const evening = join(dir, 'evening.json');
+  writeFileSync(evening, JSON.stringify({ app: 'scentcast-journal', location: { lat: 40.71, lon: -74.01 }, hidden: 'x', history: [{ id: ids[0], date: dayISO(-30), slot: 'evening' }] }));
+  const odd = run([evening]);
+  assert.equal(odd.status, 0, odd.stderr);
+  assert.equal(odd.stderr, '');
+  assert.match(odd.stdout, /^No wears to check/);
 });

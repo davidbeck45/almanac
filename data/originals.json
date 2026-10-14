@@ -55,7 +55,7 @@
         "top": [
           "Frankincense",
           "Cardamom",
-          "elemi",
+          "Elemi",
           "Lemon",
           "Bergamot",
           "Sichuan Pepper"
@@ -90,7 +90,7 @@
         "Vanilla": 376,
         "Cardamom": 355,
         "Amber": 335,
-        "elemi": 283,
+        "Elemi": 283,
         "Patchouli": 282,
         "Benzoin": 248,
         "Oud": 216,
@@ -3466,7 +3466,7 @@
         ],
         "mid": [
           "Bourbon Vanilla",
-          "elemi"
+          "Elemi"
         ],
         "base": [
           "Praline",
@@ -3485,7 +3485,7 @@
         "Cardamom": 991,
         "Musk": 773,
         "Ambroxan": 653,
-        "elemi": 540,
+        "Elemi": 540,
         "Tonka": 528,
         "Guaiac Wood": 514,
         "Bergamot": 505,
@@ -4142,7 +4142,7 @@
         "top": [
           "Black and Pink Pepper",
           "Black Pepper",
-          "elemi",
+          "Elemi",
           "Pink Pepper"
         ],
         "mid": [
@@ -4160,7 +4160,7 @@
         "Suede": 941,
         "Olibanum": 652,
         "Black Pepper": 616,
-        "elemi": 480,
+        "Elemi": 480,
         "Pink Pepper": 446,
         "Saffron": 437,
         "Cedar": 309

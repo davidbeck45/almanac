@@ -75,6 +75,19 @@ def brand_case(brand: str) -> str:
     return brand.title() if brand.isupper() and len(brand.replace(" ", "")) > 4 else brand
 
 
+SMALL_WORDS = {"de", "of", "la", "le", "du", "des", "and", "the", "et", "di", "da"}
+
+
+def note_case(note: str) -> str:
+    """A note written all in lowercase ("oak moss", "elemi") in title case, as
+    Fragrantica writes most ("Oak Moss"), as src/fragrantica.js noteCase does;
+    others stay as they are."""
+    if note != note.lower():
+        return note
+    parts = re.split(r"([ -])", note)
+    return "".join(w if i and w in SMALL_WORDS else w[:1].upper() + w[1:] for i, w in enumerate(parts))
+
+
 def build(raw: dict) -> dict:
     brand_slug, rest = raw["slug"].split("/")
     pid = int(rest.rsplit("-", 1)[1])
@@ -105,8 +118,8 @@ def build(raw: dict) -> dict:
         "season": {s: round(wear[s] / season_total, 3) for s in SEASONS},
         "dayNight": {"day": round(wear["day"] / time_total, 3), "night": round(wear["night"] / time_total, 3)},
         **({"sentiment": raw["likes"]} if "likes" in raw else {}),
-        "notes": raw["notes"],
-        **({"noteVotes": raw["noteVotes"]} if raw.get("noteVotes") else {}),
+        "notes": {tier: [note_case(n) for n in names] for tier, names in raw["notes"].items()},
+        **({"noteVotes": {note_case(n): v for n, v in raw["noteVotes"].items()}} if raw.get("noteVotes") else {}),
     }
 
 

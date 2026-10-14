@@ -2,10 +2,11 @@
 // is ranked and sharing it, the journal export, and where the data comes
 // from. Also the location sheet. Styles: src/css/shell.css (.set-*).
 import { loadRecent, deviceLocation, searchCities } from '../location.js';
-import { setTheme, theme } from '../theme.js';
+import { theme } from '../theme.js';
 import { esc, plural, setUnits, shortDate } from '../ui.js';
 import { icon, segHTML, sheetFrame, switchHTML } from '../ui/components.js';
-import { state, savePrefs, activeFragrances, sourceRecords, setStillSky } from '../app/state.js';
+import { state, savePrefs, activeFragrances, sourceRecords, setStillSky, chooseTheme } from '../app/state.js';
+import { samePlace, placesStatus } from './wear/pickers.js';
 
 // "Oct 14" as every date in the app reads, with the year when it isn't this one.
 function syncedOn(fetched, now = new Date()) {
@@ -17,14 +18,16 @@ function syncedOn(fetched, now = new Date()) {
 
 // The credits every page carries in its footer, and Settings in full.
 // `scraped`: the list on screen has bottles synced from Fragrantica itself
-// (on `fetched`), not only from the dataset.
+// (on `fetched`), not only from the dataset. Parfumo's votes (how long a
+// bottle lasts and projects, what voters wear it for and layer it with) are
+// on screen everywhere, so they're always credited.
 export function creditsHTML({ fetched = null, scraped = false, fragella = false }) {
   const dataset = '<a href="https://www.kaggle.com/datasets/ledecanteur/fragrantica-perfumes" target="_blank" rel="noopener">Le Decanteur’s dataset</a> (<a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noopener">CC BY-NC-SA 4.0</a>)';
   const sources = [
     scraped ? `Fragrantica, synced ${syncedOn(fetched)}, and ${dataset}` : `Fragrantica via ${dataset}`,
     fragella && '<a href="https://api.fragella.com" target="_blank" rel="noopener">Fragella</a>',
   ].filter(Boolean).join(' · ');
-  return `<span>Fragrance data: ${sources}</span><span>Forecast by <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a></span>`;
+  return `<span>Fragrance data: ${sources}</span><span>Longevity, sillage, occasion and layering votes from <a href="https://www.parfumo.com" target="_blank" rel="noopener">Parfumo</a></span><span>Forecast by <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a></span>`;
 }
 
 const group = (title, rows) => `<section class="set-group" aria-labelledby="set-${title.toLowerCase().replace(/\W+/g, '-')}">
@@ -87,6 +90,9 @@ export const settings = {
 
 // ---------- Location sheet ----------
 
+// Recent places, without the one you're in (its forecast is on screen).
+const recentPlaces = () => loadRecent().filter(r => !samePlace(r, state.loc));
+
 export function cityResultsHTML({ results = null, query = '', busy = false }, recent) {
   if (busy && !results) return '<p class="muted small searching"><span class="spinner small" aria-hidden="true"></span>Searching…</p>';
   if (results === null) {
@@ -101,18 +107,19 @@ export function locationSheetHTML(s = {}, recent = []) {
   const { locating = false, error = '', query = '' } = s;
   return sheetFrame('loc-title', `
       <h2 id="loc-title" class="sheet-title">Where are you?</h2>
-      <p class="muted lede">Used only to fetch your local forecast from Open-Meteo.</p>
+      <p class="muted lede">Used to get your forecast and climate from Open-Meteo. Wears you log note roughly where you were, on this device only.</p>
       <button class="btn primary block" data-action="geo"${locating ? ' aria-disabled="true"' : ''}>${locating ? '<span class="spinner small" aria-hidden="true"></span>' : icon.pin}<span>${locating ? 'Locating…' : 'Use my location'}</span></button>
       <div class="or"><span>or</span></div>
       <form class="search-form" data-form="city">
         <label class="filter big">${icon.search}<input type="search" name="q" data-field="city" placeholder="Search a city" autocomplete="off" value="${esc(query)}" aria-label="City" enterkeyhint="search"></label>
       </form>
       ${error ? `<p class="error" role="alert">${esc(error)}</p>` : ''}
-      <div class="city-slot" aria-live="polite">${cityResultsHTML(s, recent)}</div>`);
+      <p class="visually-hidden city-status" role="status">${esc(placesStatus({ ...s, error: '' }))}</p>
+      <div class="city-slot">${cityResultsHTML(s, recent)}</div>`);
 }
 
 export const sheets = {
-  location: s => locationSheetHTML(s, loadRecent()),
+  location: s => locationSheetHTML(s, recentPlaces()),
 };
 
 // City search runs as you type. Only the results list re-renders, so the
@@ -141,7 +148,10 @@ async function runCitySearch(query) {
     sheet.busy = false;
   }
   const slot = document.querySelector('#sheet .city-slot');
-  if (slot) slot.innerHTML = sheet.error ? `<p class="error" role="alert">${esc(sheet.error)}</p>` : cityResultsHTML(sheet, loadRecent());
+  if (slot) slot.innerHTML = sheet.error ? `<p class="error" role="alert">${esc(sheet.error)}</p>` : cityResultsHTML(sheet, recentPlaces());
+  // (An error speaks for itself, role=alert.)
+  const status = document.querySelector('#sheet .city-status');
+  if (status) status.textContent = placesStatus({ ...sheet, error: '' });
 }
 
 export const actions = {
@@ -149,18 +159,25 @@ export const actions = {
     app.openSheet({ kind: 'location' });
   },
   // While it looks, the button stays focusable (aria-disabled, "Locating…"),
-  // so focus doesn't drop out of the sheet; a second press does nothing.
+  // so focus doesn't drop out of the sheet; a second press does nothing. The
+  // answer can take ten seconds and a permission prompt: by then the sheet
+  // may be gone, or another open. A place still applies (setLocation leaves
+  // another sheet alone); an error only says so in this sheet.
   async geo(el, app) {
     if (state.sheet?.locating) return;
     app.updateSheet({ locating: true, error: '' });
+    const sheet = state.sheet;
+    let place;
     try {
-      await app.setLocation(await deviceLocation());
+      place = await deviceLocation();
     } catch (err) {
-      app.updateSheet({ locating: false, error: err.message });
+      if (state.sheet === sheet) app.updateSheet({ locating: false, error: err.message });
+      return;
     }
+    await app.setLocation(place);
   },
   async recent(el, app) {
-    const r = loadRecent()[+el.dataset.value];
+    const r = recentPlaces()[+el.dataset.value];
     if (r) await app.setLocation(r);
   },
   async city(el, app) {
@@ -175,8 +192,7 @@ export const actions = {
     app.keepingFocus(el, '#app', app.render);
   },
   theme(el, app) {
-    setTheme(el.dataset.value);
-    savePrefs();
+    chooseTheme(el.dataset.value);
     app.keepingFocus(el, '#app', app.render);
   },
   // The scene's loops (stars, rain, smoke, lightning) can be held still

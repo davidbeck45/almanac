@@ -64,7 +64,7 @@
           "Amber"
         ],
         "base": [
-          "oak moss",
+          "Oak Moss",
           "Musk",
           "Ambergris"
         ]
@@ -72,7 +72,7 @@
       "noteVotes": {
         "Pineapple": 1854,
         "Bergamot": 1144,
-        "oak moss": 1045,
+        "Oak Moss": 1045,
         "Orange Blossom": 837,
         "White Flowers": 791,
         "Musk": 767,
@@ -1425,7 +1425,7 @@
           "Vetiver",
           "Patchouli",
           "Geranium",
-          "elemi"
+          "Elemi"
         ],
         "base": [
           "Ambroxan",
@@ -1444,7 +1444,7 @@
         "Vetiver": 1114,
         "Patchouli": 1016,
         "Geranium": 864,
-        "elemi": 759,
+        "Elemi": 759,
         "Labdanum": 662
       },
       "parfumo": {
@@ -3161,7 +3161,7 @@
         ],
         "mid": [
           "Bourbon Vanilla",
-          "elemi"
+          "Elemi"
         ],
         "base": [
           "Praline",
@@ -3179,7 +3179,7 @@
         "Ambroxan": 740,
         "Musk": 677,
         "Guaiac Wood": 656,
-        "elemi": 517,
+        "Elemi": 517,
         "Bergamot": 452
       },
       "original": {
@@ -5715,7 +5715,7 @@
       "notes": {
         "top": [
           "Black Pepper",
-          "elemi",
+          "Elemi",
           "Pink Pepper"
         ],
         "mid": [
@@ -5731,7 +5731,7 @@
         "Vanilla": 1014,
         "Olibanum": 660,
         "Black Pepper": 614,
-        "elemi": 492,
+        "Elemi": 492,
         "Pink Pepper": 425,
         "Saffron": 361,
         "Cedarwood": 347
@@ -6857,7 +6857,7 @@
       "notes": {
         "top": [
           "Cardamom",
-          "elemi",
+          "Elemi",
           "Sichuan Pepper",
           "Bergamot",
           "Lemon"
@@ -6893,7 +6893,7 @@
         "Vanilla": 262,
         "Amber": 255,
         "Benzoin": 221,
-        "elemi": 187,
+        "Elemi": 187,
         "Patchouli": 133,
         "Sichuan Pepper": 126,
         "Opoponax": 120,

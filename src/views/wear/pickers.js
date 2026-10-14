@@ -3,7 +3,7 @@
 // and a date pill over a native date input (the system's own picker on
 // phones, Chromium's calendar on desktops). Styles: src/css/wear.css.
 import { loadRecent, searchCities } from '../../location.js';
-import { esc } from '../../ui.js';
+import { esc, plural } from '../../ui.js';
 import { icon, sheetFrame } from '../../ui/components.js';
 import { state } from '../../app/state.js';
 
@@ -15,6 +15,16 @@ const takers = {};
 export const onPlace = (who, fn) => { takers[who] = fn; };
 
 export const samePlace = (a, b) => Boolean(a && b) && Math.abs(a.lat - b.lat) < 0.01 && Math.abs(a.lon - b.lon) < 0.01;
+
+// What a screen reader hears as a city search answers (a role=status line
+// beside the list, which itself isn't live: it read out every city).
+export function placesStatus({ results = null, query = '', busy = false, error = '' }) {
+  if (error) return error;
+  if (busy && !results) return 'Searching…';
+  if (results === null) return '';
+  const n = results.length;
+  return n ? `${plural(n, 'place')} ${n === 1 ? 'matches' : 'match'} “${query}”` : `No places match “${query}”`;
+}
 
 export function placeResultsHTML({ results = null, query = '', busy = false }, recent) {
   if (busy && !results) return '<p class="muted small searching"><span class="spinner small" aria-hidden="true"></span>Searching…</p>';
@@ -38,7 +48,8 @@ export function placeSheetHTML(s = {}, recent = [], home = null) {
         <label class="filter big">${icon.search}<input type="search" name="q" data-field="place-search" placeholder="Search a city" autocomplete="off" value="${esc(query)}" aria-label="City" enterkeyhint="search"></label>
       </form>
       ${error ? `<p class="error">${esc(error)}</p>` : ''}
-      <div class="city-slot" aria-live="polite">${placeResultsHTML(s, recent)}</div>`);
+      <p class="visually-hidden city-status" role="status">${esc(placesStatus(s))}</p>
+      <div class="city-slot">${placeResultsHTML(s, recent)}</div>`);
 }
 
 // Recent places, without your own (it has its own button).
@@ -73,6 +84,8 @@ async function search(query) {
   }
   const slot = document.querySelector('#sheet .city-slot');
   if (slot) slot.innerHTML = sheet.error ? `<p class="error">${esc(sheet.error)}</p>` : placeResultsHTML(sheet, recentPlaces());
+  const status = document.querySelector('#sheet .city-status');
+  if (status) status.textContent = placesStatus(sheet);
 }
 
 // Hands the place to the pane that asked, renders it, then closes the sheet

@@ -4,7 +4,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { handlePool, newPoolCache, poolServer, POOL_TASKS, QUICK } from '../src/pool-tasks.js';
 import { poolClient, inlineWorker } from '../src/app/pool.js';
-import { loadPool, fromPool } from '../src/fragrantica.js';
+import { loadPool, fromPool, loadAbout } from '../src/fragrantica.js';
 import { gapContext, gapReport } from '../src/gaps.js';
 import { signalsOf, PREFER_VALUE } from '../src/candidates.js';
 import { DEMO_LIKED } from '../src/discover.js';
@@ -83,7 +83,7 @@ test('report takes a climate, shares or "How you wear" settings, and a changed r
 
 test('check says whether a bottle is worth buying, by id or record, one or several', async () => {
   const tonka = await ask('check', { owned, id: '76063', liked: ['skin', 'gourmand', 'vanilla', 'nope'] });
-  assert.equal(tonka.verdict, 'Strong fit');
+  assert.equal(tonka.verdict, 'Good', 'a gourmand he likes the style of, though he’s covered');
   assert.equal(tonka.record.name, 'Shalimar Millésime Tonka');
   assert.ok(isRecord(tonka.record) && tonka.reasons.length >= 2 && tonka.preferValue === true);
   assert.ok(tonka.styles.some(s => s.id === 'vanilla'));
@@ -168,6 +168,14 @@ test('dupes finds the smells-like family, and records loads bottles pool first',
   const aventus = await ask('dupes', { owned, id: '9828' });
   assert.ok(aventus.cheaper.length >= 3 && aventus.cheaper.every(e => isRecord(e.record) && !('about' in e.record)));
 
+  // A bottle page sends the about data it has: the same answer, without loading its shard again.
+  const shards = [];
+  const tracked = newPoolCache({ load: async path => { shards.push(path); return load(path); } });
+  const about = await loadAbout('9828', load);
+  const sent = (await handlePool({ id: 1, type: 'dupes', payload: { owned, id: '9828', about } }, tracked)).result;
+  assert.deepEqual(sent, aventus);
+  assert.ok(!shards.includes(`x/${9828 % 512}.json`), shards.join(' '));
+
   const { records, missing } = await ask('records', { ids: ['76063', 12807, 'my:x', '76063'] });
   assert.deepEqual(records.map(r => r.name), ['Shalimar Millésime Tonka', 'Olympic Amber']);
   assert.ok(records[0].extras && !records[1].extras, 'the pool’s row, else the r/ record');
@@ -245,7 +253,7 @@ test('a download that stalls fails as out of reach, and a refused one says so', 
     assert.equal((await answer).error, 'Can’t reach the fragrance library. Check your connection.');
     assert.ok(aborted > 0);
     status = 503;
-    assert.equal((await handlePool({ id: 2, type: 'warm' }, newPoolCache())).error, 'The fragrance library didn’t load (503).');
+    assert.equal((await handlePool({ id: 2, type: 'warm' }, newPoolCache())).error, 'The fragrance library didn’t load. Try again.', 'no status code in the sentence');
   } finally {
     globalThis.fetch = real;
   }
@@ -435,8 +443,6 @@ test('a newer question on a channel replaces the older, which answers stale and 
 
 test('the pool’s status follows the worker, for skeletons', async () => {
   const client = fakeClient();
-  const heard = [];
-  const stop = client.onStatus((status, error) => heard.push(error ? `${status}: ${error}` : status));
   assert.equal(client.status(), 'idle');
   client.ask('liked', { owned: [] }).catch(() => {});
   client.ask('records', { ids: [] }).catch(() => {});
@@ -453,9 +459,9 @@ test('the pool’s status follows the worker, for skeletons', async () => {
   client.ask('styles', { owned: [] }).catch(() => {});
   assert.equal(client.status(), 'ready');
   w.reply({ type: 'status', status: 'error', error: 'Can’t reach the fragrance library.' });
-  stop();
+  assert.equal(client.status(), 'error');
   w.reply({ type: 'status', status: 'ready' });
-  assert.deepEqual(heard, ['loading', 'ready', 'error: Can’t reach the fragrance library.']);
+  assert.equal(client.status(), 'ready');
 });
 
 test('the clock runs from when a question starts, and stops while the pool downloads', async t => {

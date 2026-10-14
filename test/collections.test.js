@@ -34,6 +34,12 @@ test('pasted lines split into a search query and a name and brand', () => {
   assert.deepEqual(importLines('- Dior - Sauvage 100 ml'), [{ line: 'Dior Sauvage', name: 'Dior Sauvage', brand: '' }]);
 });
 
+test('pasted lines past the first fifteen are counted, not dropped unseen', () => {
+  const text = Array.from({ length: 18 }, (_, i) => `Bottle number ${i + 1}`).join('\n');
+  assert.equal(importLines(text).length, 15);
+  assert.equal(importLines(text, Infinity).length, 18, 'Paste a list says how many wait for the next round');
+});
+
 test('the catalog finds the pasted indie bottles offline', () => {
   const found = importLines(PASTED).map(l => localMatches(l.line, [...demo, ...catalog], 1)[0]);
   assert.deepEqual(found.map(f => f && `${f.name} · ${f.brand}`), [
@@ -63,6 +69,9 @@ test('a fuzzy search hit counts only when its name was typed', () => {
   assert.ok(nameMatches('Supremacy Collectors Edition', { name: "Supremacy Collector's Edition" }));
   assert.ok(!nameMatches('Liquid Brun', { name: 'Liquid Illusion' }));
   assert.ok(!nameMatches('Caramellino Litoralle Aromatica', { name: 'Caramello' }));
+  assert.ok(nameMatches('Ombre Leather', { name: 'Ombré Leather (2018)' }), 'the dataset’s year needn’t be typed');
+  assert.ok(nameMatches('Opium 1977', { name: 'Opium (1977)' }));
+  assert.ok(!nameMatches('Opium', { name: 'Opium Pour Homme' }));
 });
 
 test('share links carry hand-entered bottles alongside catalog ids', () => {
@@ -75,12 +84,26 @@ test('share links carry hand-entered bottles alongside catalog ids', () => {
   assert.equal(fromShareToken(link.ids[1]).name, 'Caramellino');
 });
 
+test('a link’s name cut inside an emoji still shares', () => {
+  globalThis.location = { origin: 'https://example.test', pathname: '/scentcast/' };
+  const link = parseShare(new URLSearchParams(`c=69541,122015&n=${'A'.repeat(39)}%F0%9F%98%80`));
+  assert.equal(link.name, 'A'.repeat(39) + '😀', 'cut by characters, the emoji whole');
+  const cut = parseShare(new URLSearchParams(`c=1&n=${'A'.repeat(40)}%F0%9F%98%80`)).name;
+  assert.equal(cut, 'A'.repeat(40));
+  // A name saved before, with half an emoji, still makes a link.
+  const url = shareURL([catalog[0]], `${'A'.repeat(39)}\uD83D`);
+  assert.ok(new URL(url).searchParams.get('n').startsWith('A'.repeat(39)));
+  const token = customRecord({ name: `${'B'.repeat(79)}😀x`, accords: ['woody'] });
+  assert.doesNotThrow(() => shareURL([token], 'Me'));
+});
+
 test('Mine keeps only records it can rank, whatever was stored', () => {
   const store = new Map();
   globalThis.localStorage = { getItem: k => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) };
   try {
     const good = customRecord({ name: 'Lone', accords: ['woody'] });
-    for (const stored of [{ records: 'x' }, { records: [null] }, { records: [{ id: 'my:abc', name: 'Lone' }] }, [1, 2], 'x', null]) {
+    const noShares = { ...good, season: {} }, textShares = { ...good, dayNight: { day: '0.5', night: 0.5 } };
+    for (const stored of [{ records: 'x' }, { records: [null] }, { records: [{ id: 'my:abc', name: 'Lone' }] }, [1, 2], 'x', null, { records: [noShares, textShares] }]) {
       store.set('scentcast.mine', JSON.stringify(stored));
       assert.deepEqual(loadMine().records, [], JSON.stringify(stored));
     }

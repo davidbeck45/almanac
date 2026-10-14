@@ -129,6 +129,11 @@ export function shareToken(record) {
   return `${record.id}~${toBase64Url(JSON.stringify(body))}`;
 }
 
+// The first n characters, counted as code points so an emoji isn't cut in
+// half (a lone surrogate makes encodeURIComponent throw), and well formed.
+export const upTo = (text, n) => wellFormed([...String(text)].slice(0, n).join(''));
+const wellFormed = text => (text.toWellFormed ? text.toWellFormed() : text);
+
 export function fromShareToken(token) {
   const [id, data] = String(token).split('~');
   if (!/^my:[a-z0-9]{1,16}$/.test(id) || !data) return null;
@@ -143,8 +148,8 @@ export function fromShareToken(token) {
     if (!(total > 0) || !(Number.isFinite(night) && night >= 0 && night <= 100)) return null;
     return fromParts({
       id,
-      name: name.slice(0, 80),
-      brand: String(brand ?? '').slice(0, 80),
+      name: upTo(name, 80),
+      brand: upTo(String(brand ?? ''), 80),
       accords,
       season: Object.fromEntries(SEASONS.map((s, i) => [s, round3(nums[i] / total)])),
       night: round3(night / 100),

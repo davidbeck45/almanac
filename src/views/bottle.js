@@ -2,18 +2,19 @@
 // tablets and an inspector beside the page from 1100px (src/css/shell.css
 // places it, src/css/bottle.css draws it). It's built from SECTIONS, an
 // ordered registry: a new section registers itself from its own module with
-// addSection() and the shell imports that module (.sweep/notes/shell-map.md).
+// addSection() and src/views/sections.js imports that module (CLAUDE.md,
+// "The bottle page", lists the order slots).
 // The sections in their own modules are src/views/bottle-*.js; the ones that
 // ask the suggestion pool keep their answers with pooled(), and draw again
 // on their own when an answer lands (redrawSection).
 import { rank, comfortRange, SEASONS } from '../engine.js';
-import { layerPicks } from '../layering.js';
+import { layerPicks, pairingKept, warmPairing } from '../layering.js';
 import { setHidden } from '../hidden.js';
 import { loadWants, saveWants, hasWant, setWant } from '../wishlist.js';
 import { loadSkin, applySkin } from '../skin.js';
 import { isCustomId, shareToken } from '../custom.js';
 import { styleById } from '../scent-styles.js';
-import { esc, deg, temp, matchPct, relativeDay } from '../ui.js';
+import { esc, deg, temp, matchPct, relativeDay, toastName } from '../ui.js';
 import { icon, img, bar, reasonsList, accordColor, wearButton, magDot, messageHTML, shelfHTML } from '../ui/components.js';
 import { askPool } from '../app/pool.js';
 import {
@@ -50,7 +51,22 @@ export function sectionsFor(model) {
 
 /** The sections' `after` hooks, for the shell to call once the page is drawn. */
 export function afterBottle(model, app) {
+  settleSoon(globalThis.document?.querySelector('#bottle .bp-panel'));
   for (const s of SECTIONS) s.after?.(model, app);
+}
+
+/**
+ * A page just drawn lays out and paints only the sections in view (the
+ * rest skip it: content-visibility in src/css/bottle.css), so it comes up
+ * sooner; the frame after, every section takes its real height
+ * (.bp-settled), so nothing above the reader changes size as they scroll,
+ * jump to a section or drag the scrollbar (the panel holds the reader's
+ * place itself, without the browser's scroll anchoring). At once when the
+ * reader's place has to be measured (keepReading).
+ */
+const settle = panel => panel?.classList.add('bp-settled');
+function settleSoon(panel) {
+  if (panel && !panel.classList.contains('bp-settled')) requestAnimationFrame(() => setTimeout(() => settle(panel)));
 }
 
 // Whether the page on screen is still this bottle's (after an await). `id`:
@@ -61,8 +77,9 @@ export const showing = id => state.route?.dest === 'bottle' && state.route.arg =
 // on and off), the place's climate, "How you wear" and "Prefer great value".
 const inputsKey = i => JSON.stringify([i.owned.map(f => f.id), i.exclude.map(f => f.id), i.summary, i.shares, i.preferValue]);
 // A payload's part of the key: a record counts by its id (its notes may
-// arrive later; the answer doesn't change with them).
-const payloadKey = own => JSON.stringify(own, (k, v) => (k === 'record' && v && typeof v === 'object' ? String(v.id) : v));
+// arrive later; the answer doesn't change with them), and the about data sent
+// with it not at all (it saves the pool loading it; the answer is the same).
+const payloadKey = own => JSON.stringify(own, (k, v) => (k === 'record' && v && typeof v === 'object' ? String(v.id) : k === 'about' ? undefined : v));
 
 /**
  * A section's answers from the pool (src/app/pool.js), one per bottle, asked
@@ -114,8 +131,10 @@ export function pooled(type, channel, payload, { section = null, prepare = null,
     answers.set(id, next);
     if (!showing(model.arg ?? id)) return;
     // The answer brought the bottle's signals (value, safety: the crowd block
-    // reads them), so the record changed: the whole page, reader kept in place.
-    if (section && findRecord(id) === model.f) redrawSection(section, app);
+    // reads them): the whole page, reader kept in place. A record swapped
+    // meanwhile for its own r/ record (every note, the same signals) has had
+    // its page drawn already: the section alone.
+    if (section && findRecord(id)?.extras === model.f.extras) redrawSection(section, app);
     else app.renderBottle();
   }
   return { ask, get: id => answers.get(id), forget: id => answers.delete(id) };
@@ -160,7 +179,10 @@ export function readingAt(panel) {
 /** Scrolls a panel drawn again so the section the reader was at sits where it did (readingAt). */
 export function keepReading(panel, at) {
   const slot = at && panel.querySelector(`:scope > [data-section="${at.id}"]`);
-  if (slot) panel.scrollTop += slot.getBoundingClientRect().top - panel.getBoundingClientRect().top - at.offset;
+  if (!slot) return;
+  // The sections above at their real heights, not a skipped one's stand-in.
+  settle(panel);
+  panel.scrollTop += slot.getBoundingClientRect().top - panel.getBoundingClientRect().top - at.offset;
 }
 
 // ---------- The styles someone likes ----------
@@ -243,7 +265,8 @@ export function bottleModel(route) {
     wears: wearInfo(f.id),
     todayISO: todayISO(),
     alts: ctx && !solo ? ctx.ranked.filter(r => r.fragrance.id !== id).slice(0, 4) : [],
-    partners: others.length ? layerPicks(f, others, 3, win ?? undefined) : null,
+    // undefined while a long list's pairings are worked out after the page draws (layeringAfter).
+    partners: !others.length ? null : others.length <= LAYER_NOW || pairingKept(others) ? layerPicks(f, others, 3, win ?? undefined) : undefined,
     comfort: comfortRange(f),
     about: state.about.get(id),
     wanted: hasWant(loadWants(), f.id),
@@ -381,6 +404,12 @@ function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned, inMine,
   </div>`;
 }
 
+// Why a bottle is given a rest, in the words of its reason (src/engine.js).
+function restText({ daysAgo: d, planned }) {
+  if (planned) return d === 0 ? 'Already picked for that day' : d > 0 ? `Picked ${d === 1 ? 'the day' : `${d} days`} before` : 'Picked for a day nearby';
+  return d === 0 ? 'Already wearing it today' : d === 1 ? 'Worn yesterday' : d > 1 ? `Worn ${d} days ago` : 'Worn recently';
+}
+
 function whySection({ entry, solo, win }) {
   if (!entry) return '';
   const p = entry.parts;
@@ -391,16 +420,17 @@ function whySection({ entry, solo, win }) {
   const yours = Number.isFinite(f.personal?.rating);
   const crowd = f.source !== 'custom' && f.rating > 0 && f.ratingVotes > 0;
   const bars = FACTORS.filter(([k]) => p[k] !== null && p[k] !== undefined && (k !== 'quality' || yours || crowd))
-    .map(([k, label, color]) => bar(k === 'quality' && yours ? 'Your rating' : label, p[k] * 100, color, `${Math.round(p[k] * 100)}`)).join('');
+    .map(([k, label, color]) => bar(k === 'quality' && yours ? 'Your rating' : label, p[k] * 100, color, `${Math.round(p[k] * 100)}%`)).join('');
+  // What a recent wear (or a pick for a day nearby) takes off its match.
   const rotation = p.rotation > 0
-    ? `<p class="why-note">−${Math.round(p.rotation * 100)} for rotation: ${esc(p.planned ? 'already in the plan nearby' : 'worn recently')}.</p>`
+    ? `<p class="why-note">${esc(restText(p))}: ${Math.round(p.rotation * 100)}% lower so others get a turn.</p>`
     : '';
   const title = solo ? `How it would do ${win.slot === 'day' ? 'by day' : 'tonight'}` : 'Why it ranks here';
   return `<section class="bp-section"><h3>${title} <span class="h3-aside">${matchPct(entry)}% match</span></h3><div class="bars why">${bars}</div>${rotation}</section>`;
 }
 
 // Only the relative words go lower case: "Also good for tonight", "Also good for Saturday night".
-const inSentence = label => label.replace(/^(Today|Tonight|Tomorrow)\b/, w => w.toLowerCase());
+export const inSentence = label => label.replace(/^(Today|Tonight|Tomorrow)\b/, w => w.toLowerCase());
 
 // The next few from the same list, on the same shelf the list draws.
 function altsSection({ alts, ctx, ctxLabel, worn }) {
@@ -409,7 +439,27 @@ function altsSection({ alts, ctx, ctxLabel, worn }) {
 }
 
 // Partners from the same collection (src/layering.js), heavier one sprayed first.
+// A list this long works out its pairings (n²) after the page draws, while
+// nobody's tapping, so the first page each session opens at once.
+const LAYER_NOW = 12;
+let warming = null;
+function layeringAfter(model, app) {
+  if (model.partners !== undefined || warming) return;
+  warming = warmPairing(activeFragrances().filter(o => o.id !== model.f.id), model.f).finally(() => { warming = null; });
+  warming.then(() => {
+    if (!showing(model.arg)) return;
+    redrawSection('layering', app);
+    // The list changed meanwhile (another one switched on): work that one out too.
+    const now = bottleModel(state.route);
+    if (now?.partners === undefined) layeringAfter(now, app);
+  }, () => {});
+}
+
 function layeringSection({ f, partners, ctx }) {
+  if (partners === undefined) {
+    const row = '<li class="row"><span class="row-main"><span class="sk bp-sk-thumb"></span><span class="sk-lines"><span class="sk sk-line w70"></span><span class="sk sk-line w40"></span></span></span></li>';
+    return `<section class="bp-section" aria-busy="true"><h3>Layer it with</h3><span class="visually-hidden">Finding what layers with it</span><ul class="rows">${row.repeat(3)}</ul></section>`;
+  }
   if (!partners) return '';
   const rows = partners.map(p => {
     const o = p.fragrance;
@@ -438,9 +488,12 @@ function seasonsSection({ f }) {
   const peak = Math.max(...SEASONS.map(s => f.season[s]));
   const seasonBars = SEASONS.map(s => bar(s, (f.season[s] / peak) * 100, SEASON_COLORS[s], `${Math.round(f.season[s] * 100)}%`)).join('');
   const dnPeak = Math.max(f.dayNight.day, f.dayNight.night);
-  const dnBars = ['day', 'night'].map(s => bar(s, (f.dayNight[s] / dnPeak) * 100, SEASON_COLORS[s], `${Math.round(f.dayNight[s] * 100)}%`)).join('');
+  // Whole percents that add up to 100, as Compare shows them.
+  const night = Math.round(f.dayNight.night * 100);
+  const shown = { day: 100 - night, night };
+  const dnBars = ['day', 'night'].map(s => bar(s, (f.dayNight[s] / dnPeak) * 100, SEASON_COLORS[s], `${shown[s]}%`)).join('');
   return `<section class="bp-section two-col">
-    <div><h3>${estimated ? 'Season fit' : 'Seasons voted'}</h3><div class="bars">${seasonBars}</div></div>
+    <div><h3>${estimated ? 'Seasons, estimated' : 'Seasons voted'}</h3><div class="bars">${seasonBars}</div></div>
     <div><h3>${estimated ? 'Time of day, estimated' : 'Time of day'}</h3><div class="bars">${dnBars}</div></div>
   </section>`;
 }
@@ -456,23 +509,24 @@ function notesSection({ f }) {
   return `<section class="bp-section"><h3>Notes</h3>${body}</section>`;
 }
 
-// Orders leave room between them for wave 4's sections (shell-map.md lists
-// them). Shopping for a bottle, what it smells like (accords and notes, its
-// styles and look-alikes, what voters say) comes before how to wear it
-// (spray, layering): `shopOrder`.
+// Orders leave room between them for the sections in their own modules
+// (src/views/bottle-*.js; CLAUDE.md, "The bottle page", lists every slot).
+// Shopping for a bottle, what it smells like (accords and notes, its styles
+// and look-alikes, what voters say) comes before how to wear it (spray,
+// layering): `shopOrder`.
 addSection({ id: 'head', order: 0, render: headSection });
 addSection({ id: 'summary', order: 100, render: summarySection });
 addSection({ id: 'actions', order: 150, render: actionsSection });
 addSection({ id: 'why', order: 200, render: whySection });
 addSection({ id: 'alts', order: 300, render: altsSection });
-addSection({ id: 'layering', order: 400, shopOrder: 850, render: layeringSection });
+addSection({ id: 'layering', order: 400, shopOrder: 850, render: layeringSection, after: layeringAfter });
 addSection({ id: 'accords', order: 500, shopOrder: 360, render: accordsSection });
 addSection({ id: 'seasons', order: 600, render: seasonsSection });
 addSection({ id: 'notes', order: 700, shopOrder: 370, render: notesSection });
 
 // ---------- Actions ----------
 
-// The want list before the last bottle came off it, for Undo.
+// The want list before the last bottle came off it, and that bottle, for Undo.
 let wantsBefore = null;
 
 export const actions = {
@@ -488,7 +542,7 @@ export const actions = {
     setHidden(state.hiding, id, true, viewingDemo());
     app.closeBottle();
     app.render();
-    app.showToast(`<span>${esc(findRecord(id)?.name ?? 'Bottle')} hidden from picks</span><button class="btn primary compact" data-action="unhide" data-id="${esc(id)}">Undo</button>`);
+    app.showToast(`<span>${esc(toastName(findRecord(id)?.name ?? 'Bottle'))} hidden from picks</span><button class="btn primary compact" data-action="unhide" data-id="${esc(id)}">Undo</button>`);
   },
   unhide(el, app) {
     setHidden(state.hiding, el.dataset.id, false, viewingDemo());
@@ -516,20 +570,24 @@ export const actions = {
     const on = hasWant(setWant(f), f.id);
     app.keepingFocus(el, '#bottle', app.render);
     if (!on) {
-      wantsBefore = before;
+      wantsBefore = { list: before, id: f.id };
       return app.showToast(`<span class="note">${esc(f.name)} removed from your wishlist</span><button class="btn primary compact" data-action="bp-want-undo">Undo</button>`);
     }
     wantsBefore = null;
     const onList = state.base?.dest === 'wardrobe' && state.base.pane === 'wishlist';
-    app.showToast(onList ? `<span>${esc(f.name)} is on your wishlist</span>`
+    app.showToast(onList ? `<span>${esc(toastName(f.name))} is on your wishlist</span>`
       : `<span class="note">${esc(f.name)} is on your wishlist</span><a class="btn secondary compact" href="#/wardrobe/wishlist">See it</a>`);
   },
+  // The list as it was; focus back on the heart that took it off (the
+  // page's Want, or a twin's in the buy check), as the Wishlist's Undo does.
   'bp-want-undo'(el, app) {
     if (!wantsBefore) return;
-    saveWants(wantsBefore);
+    const { list, id } = wantsBefore;
+    saveWants(list);
     wantsBefore = null;
     app.render();
     app.hideToast();
+    document.querySelector(`#bottle [data-action="bp-want"][data-id="${CSS.escape(id)}"]`)?.focus();
   },
   // Compare (bp-compare) opens "Compare with…", whose handler lives with it in src/views/compare.js.
 };

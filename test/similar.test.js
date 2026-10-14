@@ -84,9 +84,12 @@ test('shared traits keep different things apart and leave out repeats', () => {
   // Notes fold into the accord they name; kinds of notes and the spicy accords stay apart.
   const a = { accords: { 'warm spicy': 80, 'fresh spicy': 80, vanilla: 70 }, notes: { base: ['Bourbon Vanilla', 'Green Notes', 'Sea Notes', 'Violet Leaf'] } };
   const traits = sharedTraits(a, { ...a }, 10);
-  assert.deepEqual([...traits].sort(), ['bourbon vanilla', 'fresh spicy', 'green notes', 'sea notes', 'violet leaf', 'warm spicy']);
+  assert.deepEqual([...traits].sort(), ['bourbon vanilla', 'crisp spice', 'green notes', 'sea notes', 'violet leaf', 'warm spice']);
+  // Accords read as the engine's nouns, and fold with their own note: aldehydic with aldehydes, musky with musk.
+  const soft = { accords: { aldehydic: 90, musky: 80, woody: 60 }, notes: { base: ['Aldehydes', 'White Musk', 'Cedar'] } };
+  assert.deepEqual(sharedTraits(soft, { ...soft }, 10).sort(), ['aldehydes', 'cedar', 'white musk', 'woods']);
   assert.deepEqual(sharedTraits({ accords: { fresh: 90, 'fresh spicy': 80, woody: 70 }, notes: { base: ['Woody Notes'] } },
-    { accords: { fresh: 90, 'fresh spicy': 80, woody: 70 }, notes: { base: ['Woody Notes'] } }), ['woody notes', 'fresh']);
+    { accords: { fresh: 90, 'fresh spicy': 80, woody: 70 }, notes: { base: ['Woody Notes'] } }), ['woody notes', 'fresh notes']);
   // Across David's bottles and their nearest neighbours, no name repeats another.
   const words = name => new Set(name.split(/[^a-z0-9]+/).filter(w => w && w !== 'notes').map(w => w.replace(/[eys]+$/, '')));
   const within = (x, y) => [...x].every(w => y.has(w));

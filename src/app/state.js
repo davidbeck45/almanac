@@ -13,7 +13,7 @@ import { fragranticaLibrary } from '../fragrantica.js';
 import { onPoolRecords } from './pool.js';
 import { setHidden } from '../hidden.js';
 import { setUnits } from '../ui.js';
-import { setTheme, theme } from '../theme.js';
+import { setTheme } from '../theme.js';
 
 const PREFS_KEY = 'scentcast.prefs';
 const DUSTY_AFTER_DAYS = 30;
@@ -27,10 +27,19 @@ export function loadPrefs() {
 export function savePrefs() {
   try {
     localStorage.setItem(PREFS_KEY, JSON.stringify({
-      occasion: state.occasion, units: state.units, theme: theme(), preferValue: state.preferValue, likedStyles: state.likedStyles,
+      occasion: state.occasion, units: state.units, theme: savedTheme ?? undefined, preferValue: state.preferValue, likedStyles: state.likedStyles,
       stillSky: state.stillSky || undefined,
     }));
   } catch {}
+}
+
+// The theme Settings saved, apart from the one showing: a link's ?theme=
+// shows its theme for the visit without becoming the device's.
+let savedTheme = null;
+/** Settings › Theme: show it and save it. */
+export function chooseTheme(name) {
+  savedTheme = setTheme(name);
+  savePrefs();
 }
 
 function defaultUnits() {
@@ -61,7 +70,9 @@ export const state = {
   slot: null, // the window Now shows ('day' | 'night'); null = the next one
   history: loadHistory(),
   hiding: loadHidden(), // { hidden, shown }: this device's hides and the defaults it switched on (src/hidden.js)
-  contexts: {}, // ctx key -> { win, occasion, ranked, entries: Map(id -> ranked entry) }
+  // ctx key -> { win, occasion, ranked, entries: Map(id -> ranked entry) }.
+  // No prototype: the key comes from the URL (?ctx=constructor finds nothing).
+  contexts: Object.create(null),
   today: null, // { day: plan, night: plan } where plan = { win, ranked, pick }
   bottles: new Map(), // dataset records loaded for bottle pages, and every one a pool answer names (keepBottles), by id
   about: new Map(), // id -> loadAbout() result (null: none), for bottle pages
@@ -90,7 +101,8 @@ export const state = {
   lastRemoved: null, // { record, index } for undo
 };
 setUnits(state.units);
-setTheme(prefs.theme);
+const shownTheme = setTheme(prefs.theme);
+savedTheme = typeof prefs.theme === 'string' ? shownTheme : null;
 
 // ---------- Collections ----------
 
@@ -234,9 +246,12 @@ export function computeWeek() {
   return days.map(d => ({ ...d, day: slotPlan(d.day), night: slotPlan(d.night) }));
 }
 
-// Wear logging is for today's two windows, not days further out.
+// Wear logging is for today's two windows, dated today: once the day window
+// has rolled over at night, Now's Day shows tomorrow's, which can only be
+// worn tomorrow (and Worn would hide a wear dated ahead).
 export function canWear(win) {
-  return Boolean(state.wx) && [state.wx.day, state.wx.night].some(w => w && w.dateISO === win.dateISO && w.slot === win.slot);
+  return Boolean(state.wx) && win.dateISO === state.wx.todayISO
+    && [state.wx.day, state.wx.night].some(w => w && w.dateISO === win.dateISO && w.slot === win.slot);
 }
 
 export const wornId = win => wornIn(state.history, win.dateISO, win.slot)?.id ?? null;

@@ -90,18 +90,14 @@ export function writeQuery(d) {
  * `value`: "Prefer great value" is on, which counts as one (it lives in
  * prefs, not the URL).
  */
-export const filterCount = (filters, { mists = true, value = false } = {}) => {
+export const filterCount = (filters, { value = false } = {}) => {
   const f = { ...NO_FILTERS, ...filters };
-  return [f.seasons.length > 0, f.time, f.lean, f.longevity != null, f.projection != null, f.safe, f.discontinued, mists && f.mists, value]
+  return [f.seasons.length > 0, f.time, f.lean, f.longevity != null, f.projection != null, f.safe, f.discontinued, f.mists, value]
     .filter(Boolean).length;
 };
 
-/**
- * The filters as src/discover.js FILTERS overrides. `mists` says whether
- * the logic knows the body-mist flag (FILTERS.mists); without it the switch
- * isn't offered and nothing is sent.
- */
-export function poolFilters(filters, { mists = true } = {}) {
+/** The filters as src/discover.js FILTERS overrides (mists only when let in). */
+export function poolFilters(filters) {
   const f = { ...NO_FILTERS, ...filters };
   return {
     seasons: f.seasons.length ? [...f.seasons] : null,
@@ -111,7 +107,7 @@ export function poolFilters(filters, { mists = true } = {}) {
     minSillage: f.projection,
     minSafe: f.safe ? SAFE_MIN : null,
     hideDiscontinued: !f.discontinued,
-    ...(mists && f.mists && { mists: true }),
+    ...(f.mists && { mists: true }),
   };
 }
 

@@ -50,6 +50,13 @@ function bandClear(aspect, [temp, cond, ...rest]) {
   const px = 20 + 14.5 * temp.length + 12 + 8.2 * cond.length + rest.filter(Boolean).reduce((sum, t) => sum + 8 + 6.3 * t.length, 0);
   return Math.min(1, px / (aspect * BAND_H));
 }
+// The full hero's words stand in its left part (at most half its width,
+// wear.css): with no bottle on the hill the scene keeps that ground open,
+// as it does with one (src/scene.js FOOT_W).
+const FOOT_CLEAR = 0.45;
+// About what one line of the hero's label holds on a phone (16px Fraunces
+// italic in 168px): a longer name takes two lines there (wear.css `.long`).
+const LONG_NAME = 18;
 
 /**
  * The hero: the weather scene with the place, the temperature and, on Now,
@@ -61,9 +68,10 @@ export function heroHTML({ loc, wx, loading, error, updating }, { aspect, compac
   const now = wx?.now;
   const sky = sceneNow(wx, { error: Boolean(error) });
   const stage = pick && !compact ? stagePoint(aspect, stageX(aspect)) : null;
-  // The words over the scene: the temperature, the condition, a line under it.
+  // The words over the scene: the temperature, the condition, a line under it
+  // (each reading kept to its number, should the line wrap).
   const [big, cond, sub, status] = now
-    ? [`${temp(now.tempF)}°`, now.label, `Feels ${deg(now.feelsF)} · H ${deg(now.hiF)} L ${deg(now.loF)}`, updating ? 'Updating…' : wx.stale ? 'Offline' : '']
+    ? [`${temp(now.tempF)}°`, now.label, `Feels\u00a0${deg(now.feelsF)} · H\u00a0${deg(now.hiF)} L\u00a0${deg(now.loF)}`, updating ? 'Updating…' : wx.stale ? 'Offline' : '']
     : error ? ['', 'Weather unavailable', loc?.name ?? '', '']
       : ['', loading ? 'Checking the sky…' : 'Where are you?', loading ? '' : 'Set a location to get picks.', ''];
   const scene = renderScene({
@@ -74,7 +82,7 @@ export function heroHTML({ loc, wx, loading, error, updating }, { aspect, compac
     label: now ? `${now.label}, ${deg(now.tempF)}` : 'Weather scene',
     theme: theme(),
     stage: stage?.scene ?? null,
-    clear: compact ? bandClear(aspect, [big, cond, sub, status]) : 0,
+    clear: compact ? bandClear(aspect, [big, cond, sub, status]) : stage ? 0 : FOOT_CLEAR,
   });
   const locBtn = `<button class="loc-btn glass" data-action="location" aria-label="Change location: ${esc(loc?.name ?? 'not set')}">${icon.pin}<span>${esc(loc?.name ?? 'Set location')}</span></button>`;
   const toggle = !compact && slots.length > 1
@@ -94,7 +102,7 @@ export function heroHTML({ loc, wx, loading, error, updating }, { aspect, compac
     const light = skyLight({ ...sky, aspect, theme: theme(), stage: stage.scene });
     // The rim catches the light on the side it comes from.
     const side = light.x >= stage.x ? 1 : -1;
-    bottle = `<button class="hero-pick" data-action="open" data-ctx="${esc(pick.win.slot)}" data-id="${esc(f.id)}"
+    bottle = `<button class="hero-pick${f.name.length > LONG_NAME ? ' long' : ''}" data-action="open" data-ctx="${esc(pick.win.slot)}" data-id="${esc(f.id)}"
       style="--x:${(stage.x * 100).toFixed(2)}%;--y:${(stage.y * 100).toFixed(2)}%;--rim:${light.color};--rim-side:${side};--rim-k:${light.strength}">
       <span class="hero-bottle">${img(f, { lazy: false })}</span>
       <span class="hero-label"><small>${pick.worn ? `${icon.check}Wearing` : `${slotIcon(pick.win.slot)}${esc(pick.win.label)}`}</small><b>${esc(f.name)}</b><span>${esc(f.brand)}</span></span>
@@ -148,8 +156,8 @@ function reasonsOf(entry, n) {
 
 // "2 sprays · chest", from src/spray.js's guide, for the pick card.
 const SPOT_WORDS = { 'collar or scarf': 'collar', 'back of the neck': 'nape' };
-export function sprayLine({ sprays: [lo, hi], where }) {
-  const count = lo === hi ? plural(lo, 'spray') : `${lo}–${hi} sprays`;
+export function sprayLine({ sprays: [lo, hi], where, unit = 'spray' }) {
+  const count = lo === hi ? plural(lo, unit) : `${lo}–${hi} ${unit}s`;
   return `${count} · ${where.map(w => SPOT_WORDS[w] ?? w).join(', ')}`;
 }
 
@@ -167,7 +175,7 @@ export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicke
       ${nudgeHTML(nudgeOf(entry))}
       ${reasonsList(reasonsOf(entry, 3), 'lead')}
       ${chips(f.accords)}
-      ${canWear || hint ? `<div class="pick-actions">${canWear ? wearButton(entry, ctx, worn) : ''}${hint}</div>` : ''}
+      ${canWear || hint ? `<div class="pick-actions">${hint}${canWear ? wearButton(entry, ctx, worn) : ''}</div>` : ''}
     </div>`;
   }
   return `<div class="pick full" style="${wash}">
@@ -186,7 +194,9 @@ export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicke
 
 // The other window of today, beside the first on a wide column (the hero's
 // Day/Night toggle does this on phones): its pick with photo and name, and a
-// button that brings its shelf up.
+// button that brings its shelf up. A landmark named by its window, with no
+// heading of its own: under the card's h2 ("Today") a heading here would
+// file tonight's bottle, and the shelf after it, under today.
 export function nextWindowHTML({ win, pick }, worn, hour) {
   const f = pick.fragrance;
   const open = (cls, inner, label = '') => `<button class="${cls}" data-action="open" data-ctx="${esc(win.slot)}" data-id="${esc(f.id)}"${label ? ` aria-label="${esc(label)}"` : ''}>${inner}</button>`;
@@ -195,7 +205,7 @@ export function nextWindowHTML({ win, pick }, worn, hour) {
     <div class="next-pick">
       ${open('pick-bottle', img(f), `Details for ${f.name}`)}
       <div class="pick-info">
-        <h3 class="pick-name">${open('pick-name-btn', `<span class="clamp">${esc(f.name)}</span>`)}</h3>
+        <p class="pick-name">${open('pick-name-btn', `<span class="clamp">${esc(f.name)}</span>`)}</p>
         <p class="brand">${worn === f.id ? 'Wearing · ' : ''}${esc(f.brand)}</p>
         ${matchBadge(pick)}
       </div>
@@ -261,13 +271,13 @@ export function weekHTML(days) {
 
 // A radio group: one tab stop, arrow keys move the choice (the shell's
 // roving keys). Compact tiles, a glyph over a name, so the picks below lead
-// the page; each blurb is the tile's tooltip and what a screen reader hears.
+// the page; each blurb is the tile's tooltip, which screen readers give as
+// its description (its name is the label alone).
 export function occasionPickerHTML(activeId) {
   return `<div class="occasions" role="radiogroup" aria-label="Occasion" data-keep-scroll="occasions" style="--n:${OCCASIONS.length}">
     ${OCCASIONS.map(o => `<button class="occ${o.id === activeId ? ' on' : ''}" role="radio" aria-checked="${o.id === activeId}" tabindex="${o.id === activeId ? 0 : -1}" data-action="occasion" data-value="${o.id}" title="${esc(o.blurb)}">
       <span class="occ-icon">${icon[o.icon] ?? icon.sparkle}</span>
       <span class="occ-label">${esc(o.label)}</span>
-      <span class="visually-hidden">: ${esc(o.blurb)}</span>
     </button>`).join('')}
   </div>`;
 }
@@ -311,10 +321,12 @@ const banner = () => (state.shared ? sharedBannerHTML(state.shared, state.mine.r
 
 function emptyState() {
   if (state.shared) {
+    // Closing the link ranks the list under it again: name that one.
+    const under = state.active === 'mine' ? 'Mine' : 'David’s wardrobe';
     return state.shared.loading
       ? skeletonHTML(1)
       : messageHTML({ glyph: icon.share, title: 'Nothing to show', body: 'None of the bottles in this link could be loaded.',
-        action: '<button class="btn primary" data-action="shared-close"><span>Back to my picks</span></button>' });
+        action: `<button class="btn primary" data-action="shared-close"><span>Back to ${under}</span></button>` });
   }
   if (!sourceRecords().length) {
     return messageHTML({ glyph: icon.bottle, title: 'Your collection is empty', body: 'Add the bottles you own and picks start right away.',
@@ -368,11 +380,15 @@ const occasionOf = route => occasionById(route.arg ?? state.occasion) ?? occasio
 // "formal wear", "the office", "a night in": the occasion as the engine's reasons name it.
 const phraseOf = occasion => occasion.phrase ?? occasion.label.toLowerCase();
 
-// "Formal · Sat night in Chicago" once the window is known.
+// "Formal · Sat night in Chicago": the window's once it's known, before that
+// (or when its weather didn't come) the date and time asked for.
 function occasionHeading(route, ev = state.wx ? when.eventWindow(state.occasionSlot ?? occasionOf(route).slot) : null) {
   const occasion = occasionOf(route);
-  if (ev?.status !== 'ready') return `Picks for ${phraseOf(occasion)}${when.when.place ? ` in ${when.when.place.name}` : ''}`;
-  return when.occasionTitle(occasion, ev.win, { today: state.wx.todayISO, place: when.when.place });
+  const { dateISO, place } = when.when;
+  const today = state.wx?.todayISO;
+  if (ev?.status === 'ready') return when.occasionTitle(occasion, ev.win, { today, place });
+  if (today && (dateISO || place)) return when.occasionTitle(occasion, { dateISO: dateISO ?? today, slot: state.occasionSlot ?? occasion.slot }, { today, place });
+  return `Picks for ${phraseOf(occasion)}${place ? ` in ${place.name}` : ''}`;
 }
 
 function occasionPane(app, route) {
@@ -385,7 +401,8 @@ function occasionPane(app, route) {
   const head = `${banner()}${occasionPickerHTML(occasion.id)}${bar}`;
   if (ev.status === 'loading') return head + skeletonHTML(1);
   if (ev.status === 'error') {
-    return head + messageHTML({ glyph: icon.cloud, title: 'Couldn’t get the weather there', body: ev.error,
+    const where = when.when.place ? `in ${when.when.place.name}` : 'for that date';
+    return head + messageHTML({ glyph: icon.cloud, title: `Couldn’t get the weather ${where}`, body: ev.error,
       action: `<button class="btn primary" data-action="occ-when-retry">${icon.refresh}<span>Try again</span></button>` });
   }
   const { win } = ev;
@@ -403,16 +420,21 @@ function occasionPane(app, route) {
     </section>`;
 }
 
-// Keeps the chosen occasion in view in the sideways strip on phones: in the
-// middle, so tiles peek out at both edges and the strip reads as one that
-// scrolls. Only when it's cut off, so a tap doesn't jolt the strip.
+// Keeps the chosen occasion in view in the sideways strip on phones, with a
+// whole tile before it (a tile cut at the edge read as one of its own:
+// "Night" beside "Night Out"), so the ones after it peek out at the far edge
+// and the strip reads as one that scrolls. The tiles snap to that edge too
+// (wear.css). Only when it's cut off, so a tap doesn't jolt the strip.
 function showChosenOccasion() {
   const strip = document.querySelector('.occasions');
   const card = strip?.querySelector('[aria-checked="true"]');
   if (!card || strip.scrollWidth <= strip.clientWidth) return;
   const s = strip.getBoundingClientRect(), c = card.getBoundingClientRect(), pad = 16, fade = 28;
   if (c.left >= s.left + pad && c.right <= s.right - fade) return;
-  strip.scrollLeft += c.left + c.width / 2 - (s.left + s.width / 2);
+  const lead = card.previousElementSibling ?? card;
+  let by = lead.getBoundingClientRect().left - (s.left + pad);
+  if (c.right - by > s.right - fade) by = c.left - (s.left + pad);
+  strip.scrollLeft += by;
 }
 
 function weekPane() {

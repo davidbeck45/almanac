@@ -10,11 +10,17 @@ const sw = read('sw.js');
 const html = read('index.html');
 const SHELL = JSON.parse(sw.match(/const SHELL = (\[[\s\S]*?\]);/)[1].replace(/'/g, '"').replace(/,\s*\]/, ']'));
 
-// The modules main.js loads, following static imports (paths from the repo root).
+// The modules main.js loads, following static imports (paths from the repo
+// root), and main.js's own `await import()` of the shell, which it loads
+// right after starting the forecast. Other modules' dynamic imports load on
+// demand and stay out.
 function moduleGraph(file = 'src/main.js', seen = new Set()) {
   if (seen.has(file)) return seen;
   seen.add(file);
-  for (const [, dep] of read(file).matchAll(/^\s*import\s[^'"]*['"](\.{1,2}\/[\w/.-]+\.js)['"]/gm)) moduleGraph(normalize(join(dirname(file), dep)), seen);
+  const source = read(file);
+  const deps = [...source.matchAll(/^\s*import\s[^'"]*['"](\.{1,2}\/[\w/.-]+\.js)['"]/gm)];
+  if (file === 'src/main.js') deps.push(...source.matchAll(/await import\(['"](\.{1,2}\/[\w/.-]+\.js)['"]\)/g));
+  for (const [, dep] of deps) moduleGraph(normalize(join(dirname(file), dep)), seen);
   return seen;
 }
 
@@ -37,7 +43,7 @@ test('index.html preloads the whole module graph and the self-hosted fonts', () 
   assert.deepEqual([...preloaded].sort(), [...graph].sort(), 'modulepreload links match what main.js imports');
 
   const fonts = [...html.matchAll(/<link rel="preload" href="(fonts\/[\w-]+\.woff2)" as="font" type="font\/woff2" crossorigin>/g)].map(m => m[1]);
-  assert.ok(fonts.length >= 2);
+  assert.deepEqual(fonts, ['fonts/inter.woff2'], 'Inter alone: preloading Fraunces too held the first paint back');
   for (const font of fonts) {
     assert.ok(existsSync(new URL(font, root)), `${font} exists`);
     assert.ok(SHELL.includes(font), `${font} works offline`);
@@ -67,8 +73,9 @@ test('the stylesheets take their colors from the tokens, so every theme follows'
 });
 
 // Runs sw.js against an in-memory Cache Storage and a fake network. The
-// network answers after `net.delay` ms, each file with an ETag of
-// `net.version`; `puts` counts the writes into Cache Storage.
+// network answers after `net.delay` ms (or `net.slow[path]`), each file with
+// an ETag of `net.version`, and a 304 when asked with that ETag already;
+// `puts` counts the writes into Cache Storage, `net.sent` the bodies sent.
 function serviceWorker(scope = 'https://example.org/scentcast/') {
   const listeners = {};
   const stores = new Map();
@@ -88,7 +95,7 @@ function serviceWorker(scope = 'https://example.org/scentcast/') {
       match: async (key, { ignoreSearch } = {}) => find(m, key, ignoreSearch),
     };
   };
-  const net = { online: true, status: 200, delay: 0, version: 'v1' };
+  const net = { online: true, status: 200, delay: 0, slow: {}, version: 'v1', sent: 0, notModified: 0 };
   const self = {
     addEventListener: (type, fn) => { listeners[type] = fn; },
     registration: { scope },
@@ -103,15 +110,26 @@ function serviceWorker(scope = 'https://example.org/scentcast/') {
       }
     },
   };
-  const fetch = async input => {
+  const fetch = async (input, init = {}) => {
     const version = net.version;
-    if (net.delay) await new Promise(r => setTimeout(r, net.delay));
-    if (!net.online) throw new TypeError('Failed to fetch');
     const { pathname } = new URL(typeof input === 'string' ? input : input.url);
+    const delay = net.slow[pathname.replace(new URL(scope).pathname, '')] ?? net.delay;
+    if (delay) await new Promise(r => setTimeout(r, delay));
+    if (!net.online) throw new TypeError('Failed to fetch');
+    const asked = init.headers?.['If-None-Match'];
+    if (asked === `"${version}"` && net.status === 200) {
+      net.notModified++;
+      return new Response(null, { status: 304, headers: { etag: `"${version}"` } });
+    }
+    net.sent++;
     return new Response(`${pathname} from the network (${version})`, { status: net.status, headers: { etag: `"${version}"` } });
   };
   const context = { self, caches, fetch, Response, URL, setTimeout, clearTimeout };
-  vm.runInNewContext(sw, context);
+  // The waits for a slow network, cut short so the suite doesn't sit through them.
+  const [, waitMs, slowMs] = sw.match(/const NETWORK_WAIT_MS = (\d+);\nconst SLOW_MS = (\d+);/).map(Number);
+  assert.ok(slowMs < waitMs, 'a slow page still comes in time');
+  vm.runInNewContext(sw.replace(/const NETWORK_WAIT_MS = \d+;/, `const NETWORK_WAIT_MS = ${TEST_WAIT_MS};`)
+    .replace(/const SLOW_MS = \d+;/, `const SLOW_MS = ${TEST_SLOW_MS};`), context);
   async function get(path, mode = 'cors', { clientId = '', resultingClientId = '' } = {}) {
     let responded = null;
     const waits = [];
@@ -121,8 +139,11 @@ function serviceWorker(scope = 'https://example.org/scentcast/') {
     return res ? res.text() : null;
   }
   const cached = (name, path) => stores.get(name)?.get(new URL(path, scope).href)?.clone();
-  return { get, cached, net, puts, wait: Number(sw.match(/const NETWORK_WAIT_MS = (\d+)/)[1]) };
+  return { get, cached, net, puts, wait: TEST_WAIT_MS, slow: TEST_SLOW_MS };
 }
+// sw.js's waits, cut short in the same order (SLOW_MS under NETWORK_WAIT_MS).
+const TEST_WAIT_MS = 400;
+const TEST_SLOW_MS = 200;
 
 test('the service worker keeps one copy of the app page, and other pages opened in a tab never replace it', async () => {
   const CACHE = sw.match(/const CACHE = '([\w-]+)'/)[1];
@@ -163,15 +184,15 @@ test('a launch on a slow line opens the saved app, one version throughout', asyn
   // A new version is out, but the line is slow: the saved page opens without
   // waiting it out, and its files and its worker's come from the cache.
   w.net.version = 'v2';
-  w.net.delay = w.wait + 400;
+  w.net.delay = w.wait + 200;
   const start = Date.now();
   assert.equal(await w.get('', 'navigate', { resultingClientId: 'b' }), '/scentcast/ from the network (v1)');
-  assert.ok(Date.now() - start < w.wait + 300, 'it didn’t wait for the network');
+  assert.ok(Date.now() - start < w.wait + 150, 'it didn’t wait for the network');
   w.net.delay = 0;
   assert.equal(await w.get('src/main.js', 'cors', { clientId: 'b' }), '/scentcast/src/main.js from the network (v1)');
   assert.equal(await w.get('src/pool-worker.js', 'cors', { clientId: 'b', resultingClientId: 'worker' }), '/scentcast/src/pool-worker.js from the network (v2)', 'a file it never saved comes from the network');
   assert.equal(await w.get('src/main.js', 'cors', { clientId: 'worker' }), '/scentcast/src/main.js from the network (v1)', 'the worker keeps to the page’s version');
-  await new Promise(r => setTimeout(r, 500)); // the late page lands
+  await new Promise(r => setTimeout(r, w.wait + 200)); // the late page lands
   assert.equal(await w.cached(CACHE, './').text(), '/scentcast/ from the network (v1)', 'the late page isn’t saved over the version its files are');
   // A launch where the network answers in time takes the new version.
   assert.equal(await w.get('', 'navigate', { resultingClientId: 'c' }), '/scentcast/ from the network (v2)');
@@ -194,6 +215,100 @@ test('the service worker leaves a file it already holds alone', async () => {
   w.net.version = 'v2';
   await w.get('src/main.js');
   assert.equal(w.puts.length, before + 1, 'a new version is saved');
+});
+
+test('a file the worker holds costs a 304, even once the browser’s own cache has let it go', async () => {
+  const w = serviceWorker();
+  await w.get('', 'navigate');
+  await w.get('src/main.js');
+  const sent = w.net.sent;
+  // The fake network has no HTTP cache: only the worker's own ETag makes it a 304.
+  assert.equal(await w.get('', 'navigate', { resultingClientId: 'a' }), '/scentcast/ from the network (v1)');
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'a' }), '/scentcast/src/main.js from the network (v1)');
+  assert.equal(w.net.sent, sent, 'nothing downloaded again');
+  assert.equal(w.net.notModified, 2);
+  // A new version downloads.
+  w.net.version = 'v2';
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'a' }), '/scentcast/src/main.js from the network (v2)');
+  assert.equal(w.net.sent, sent + 1);
+});
+
+test('a slow check on an unchanged launch takes the rest of the launch from the cache', async () => {
+  const w = serviceWorker();
+  await w.get('', 'navigate');
+  for (const f of ['src/main.js', 'src/app/shell.js', 'src/engine.js']) await w.get(f);
+  await w.get('', 'navigate', { resultingClientId: 'a' });
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'a' }), '/scentcast/src/main.js from the network (v1)');
+  // The shell's check is slow: the saved copy answers at SLOW_MS, and the
+  // files after it don't wait on the network at all.
+  w.net.slow['src/app/shell.js'] = w.slow * 3;
+  let start = Date.now();
+  assert.equal(await w.get('src/app/shell.js', 'cors', { clientId: 'a' }), '/scentcast/src/app/shell.js from the network (v1)');
+  assert.ok(Date.now() - start < w.slow * 2, 'it waited no longer than SLOW_MS');
+  w.net.delay = w.slow * 3;
+  start = Date.now();
+  assert.equal(await w.get('src/engine.js', 'cors', { clientId: 'a' }), '/scentcast/src/engine.js from the network (v1)');
+  assert.ok(Date.now() - start < w.slow / 2, 'the rest came from the cache at once');
+  // A page that came in time but slow does the same from the start.
+  w.net.slow = {};
+  w.net.delay = (w.slow + w.wait) / 2;
+  await w.get('', 'navigate', { resultingClientId: 'b' });
+  w.net.delay = w.slow * 3;
+  start = Date.now();
+  await w.get('src/main.js', 'cors', { clientId: 'b' });
+  assert.ok(Date.now() - start < w.slow / 2, 'a slow page puts its files on the cache');
+});
+
+test('a launch that met a new version waits for the network, so versions never mix', async () => {
+  const w = serviceWorker();
+  await w.get('', 'navigate');
+  for (const f of ['src/main.js', 'src/app/shell.js']) await w.get(f);
+  // The page itself is new: no file may come from the cache.
+  w.net.version = 'v2';
+  await w.get('', 'navigate', { resultingClientId: 'a' });
+  w.net.delay = w.slow * 1.5;
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'a' }), '/scentcast/src/main.js from the network (v2)', 'it waited past SLOW_MS');
+  // The page is as saved, but a file comes back new: from there it waits too.
+  w.net.delay = 0;
+  await w.get('', 'navigate', { resultingClientId: 'b' });
+  w.net.version = 'v3';
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'b' }), '/scentcast/src/main.js from the network (v3)');
+  w.net.delay = w.slow * 1.5;
+  assert.equal(await w.get('src/app/shell.js', 'cors', { clientId: 'b' }), '/scentcast/src/app/shell.js from the network (v3)', 'not the saved v2 beside a v3 main.js');
+});
+
+test('dataset files answer from the cache at once and are checked behind it', async () => {
+  const w = serviceWorker();
+  w.net.version = 'v2';
+  await w.get('data/fragrantica/pool.json');
+  w.net.version = 'v3';
+  assert.equal(await w.get('data/fragrantica/pool.json'), '/scentcast/data/fragrantica/pool.json from the network (v2)', 'the saved copy first');
+  assert.equal(await w.get('data/fragrantica/pool.json'), '/scentcast/data/fragrantica/pool.json from the network (v3)', 'the check behind it saved the new one');
+  w.net.version = 'v4';
+  await w.get('data/fragrantica/x/7.json');
+  w.net.version = 'v5';
+  assert.equal(await w.get('data/fragrantica/x/7.json'), '/scentcast/data/fragrantica/x/7.json from the network (v4)', 'a shard too');
+});
+
+test('the forecast goes out before the app loads, from a module that imports almost nothing', async () => {
+  assert.deepEqual([...moduleGraph('src/app/early.js')].sort(), ['src/app/early.js', 'src/location.js', 'src/weather.js', 'src/wmo.js'],
+    'weather.js stays clear of the engine (its dew point lives in wmo.js)');
+  const main = read('src/main.js');
+  assert.ok(main.indexOf('startForecast()') < main.indexOf("await import('./app/shell.js')"), 'main.js starts the forecast, then loads the shell');
+  const { startForecast, locationFromURL } = await import('../src/app/early.js');
+  assert.deepEqual(locationFromURL(new URLSearchParams('loc=40.71,-74.01,New%20York')), { name: 'New York', lat: 40.71, lon: -74.01 });
+  assert.equal(locationFromURL(new URLSearchParams('loc=nowhere')), null);
+  const realFetch = globalThis.fetch;
+  const asked = [];
+  globalThis.fetch = async url => { asked.push(String(url)); throw new TypeError('Failed to fetch'); };
+  try {
+    const early = startForecast('?loc=40.71,-74.01,New%20York');
+    assert.deepEqual(early.loc, { name: 'New York', lat: 40.71, lon: -74.01 });
+    await assert.rejects(early.forecast);
+    assert.ok(asked.some(u => u.includes('latitude=40.71')), 'the request went out');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });
 
 test('the suggestion pool’s files stay cached offline, however many dataset shards come and go', async () => {
@@ -229,5 +344,58 @@ test('a climate archive that fails isn’t asked again by every pool question', 
   } finally {
     globalThis.fetch = realFetch;
     state.loc = null;
+  }
+});
+
+test('Wear this is for windows dated today: at night, tomorrow’s daytime can’t be logged yet', async () => {
+  const { state, canWear } = await import('../src/app/state.js');
+  const tonight = { dateISO: '2026-10-14', slot: 'night' }, tomorrow = { dateISO: '2026-10-15', slot: 'day' };
+  try {
+    // 22:49: the day window has rolled over to tomorrow's.
+    state.wx = { todayISO: '2026-10-14', day: tomorrow, night: tonight };
+    assert.equal(canWear(tonight), true);
+    assert.equal(canWear(tomorrow), false, 'Now’s Day toggle and Week’s tomorrow offer no Wear this');
+    assert.equal(canWear({ dateISO: '2026-10-16', slot: 'day' }), false);
+    state.wx = { todayISO: '2026-10-14', day: { dateISO: '2026-10-14', slot: 'day' }, night: tonight };
+    assert.equal(canWear({ dateISO: '2026-10-14', slot: 'day' }), true);
+  } finally {
+    state.wx = null;
+  }
+});
+
+test('a link’s ?ctx= can’t name a property every object has', async () => {
+  const { state } = await import('../src/app/state.js');
+  const { bottleModel } = await import('../src/views/bottle.js');
+  const [f] = JSON.parse(read('data/collection.json')).fragrances;
+  const id = String(f.id);
+  state.bottles.set(id, { ...f, id });
+  try {
+    for (const ctx of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+      assert.equal(state.contexts[ctx], undefined, ctx);
+      assert.equal(bottleModel({ dest: 'bottle', arg: id, query: { ctx } }).f.id, id, `?ctx=${ctx} opens the page`);
+    }
+  } finally {
+    state.bottles.delete(id);
+  }
+});
+
+test('a link’s ?theme= shows for the visit, and only Settings saves a theme', async () => {
+  const { savePrefs, chooseTheme } = await import('../src/app/state.js');
+  const { setTheme } = await import('../src/theme.js');
+  const store = new Map();
+  globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k) };
+  const saved = () => JSON.parse(store.get('scentcast.prefs')).theme;
+  try {
+    setTheme('gruvbox'); // ?theme=gruvbox, no theme saved
+    savePrefs(); // picking an occasion, say
+    assert.equal(saved(), undefined, 'the link’s theme isn’t the device’s');
+    chooseTheme('gruvbox');
+    assert.equal(saved(), 'gruvbox');
+    setTheme('default'); // ?theme=default on a device that saved gruvbox
+    savePrefs();
+    assert.equal(saved(), 'gruvbox', 'a link doesn’t lose the saved one either');
+  } finally {
+    delete globalThis.localStorage;
+    setTheme('default');
   }
 });

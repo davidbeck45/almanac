@@ -15,7 +15,7 @@ import { FILTERS } from '../src/discover.js';
 import { STYLES } from '../src/scent-styles.js';
 import { handlePool, newPoolCache } from '../src/pool-tasks.js';
 import { fragranticaLibrary } from '../src/fragrantica.js';
-import { seedSheetHTML, sheets, NONE_FOUND } from '../src/views/discover.js';
+import { seedSheetHTML, sheets, NONE_FOUND, withPins } from '../src/views/discover.js';
 
 const PANES = { wear: ['now'], wardrobe: ['owned'], discover: [] };
 const viaURL = d => readQuery(parseRoute(routeHash({ dest: 'discover', query: writeQuery(d) }), PANES).query);
@@ -79,11 +79,11 @@ test('filters become the pool’s, and the Filters button counts them', () => {
   assert.deepEqual(poolFilters(f), {
     seasons: ['winter'], slot: 'night', lean: 'unisex', minLongevity: 7.5, minSillage: 7.8, minSafe: SAFE_MIN, hideDiscontinued: false, mists: true,
   });
-  assert.equal(poolFilters(f, { mists: false }).mists, undefined, 'no mist flag for logic that doesn’t know mists');
-  for (const key of Object.keys(poolFilters(f, { mists: false }))) assert.ok(key in FILTERS, `${key} is one of src/discover.js FILTERS`);
+  assert.equal(poolFilters({ ...f, mists: false }).mists, undefined, 'mists only when let in');
+  for (const key of Object.keys(poolFilters(f))) assert.ok(key in FILTERS, `${key} is one of src/discover.js FILTERS`);
   assert.equal(filterCount(NO_FILTERS), 0);
   assert.equal(filterCount(f), 8);
-  assert.equal(filterCount(f, { mists: false }), 7);
+  assert.equal(filterCount({ ...f, mists: false }), 7);
   assert.equal(filterCount(NO_FILTERS, { value: true }), 1, 'Prefer great value counts, though it lives in prefs');
 });
 
@@ -183,8 +183,9 @@ test('a notes pick leads with what it matched; a more-like pick with what it sha
   const leather = T.pickCardHTML(pick('p4', { matched: [{ term: 'leather', name: 'leather', via: 'accord', strength: 0.9 }], styles: [{ id: 'leather', label: 'Leather', score: 0.8 }] }));
   assert.equal((leather.match(/>Leather</g) ?? []).length, 1, 'a match and a style of the same name show once');
   const like = T.whyLines(pick('p3', { shares: ['vanilla', 'amber', 'sweet'], alsoLiked: 2, family: null }), { max: 9 });
-  assert.equal(like[0], 'Shares vanilla, amber and sweet with your picks.');
-  assert.equal(like.at(-1), 'Fans of your picks like it too.');
+  // The seeds are "these bottles": "picks" are what the app recommends.
+  assert.equal(like[0], 'Shares vanilla, amber and sweet with these bottles.');
+  assert.equal(like.at(-1), 'Fans of these bottles like it too.');
   // Bare picks still render.
   clean(T.pickCardHTML({ id: 'b', record: record('b', 'Bare', { rating: 0, year: null }), styles: [], close: false, nearest: null, risk: { level: 'low', reasons: [] } }), 'bare card');
 });
@@ -209,7 +210,7 @@ test('marks say value and risk in words', () => {
   assert.equal(T.valueMark(2.1).text, 'Pricey');
   assert.equal(T.riskMark({ level: 'low', reasons: ['It doesn’t last long.'] }), null);
   assert.deepEqual(T.riskMark({ level: 'medium', reasons: ['Owners often let it go.'] }), { text: 'Some risk', tone: 'warn', spoken: 'Some risk. Owners often let it go.' });
-  assert.equal(T.riskMark({ level: 'high', reasons: ['It divides people: many voters hate it.'] }).spoken, 'Risky. It divides people: many voters hate it.', 'one colon at most');
+  assert.equal(T.riskMark({ level: 'high', reasons: ['It divides people: more voters hate it than most.'] }).spoken, 'Risky. It divides people: more voters hate it than most.', 'one colon at most');
   assert.equal(T.riskMark({ level: 'high', reasons: [] }).spoken, 'Risky');
 });
 
@@ -253,7 +254,12 @@ test('style chips: the chosen pressed, the rest folded on wide columns, a tip fo
   const one = T.stylePickerHTML({ styles: STYLES, order, selected: ['clean'], mode: 'any' });
   assert.ok(!one.includes('disc-mode'), 'one style needs no Any/All');
   assert.match(one, /Soap, laundry/, 'one style says what it is');
-  assert.match(T.stylePickerHTML({ styles: STYLES, order, selected: [], mode: 'any' }), /Pick a style/);
+  // None chosen: the line says how to read a style, and a message where the cards go says how to start.
+  const none = T.stylePickerHTML({ styles: STYLES, order, selected: [], mode: 'any' });
+  assert.match(none, /<span class="hint-pointer">Point at a style<\/span> to see what it is\./);
+  const empty = T.stylesEmptyHTML();
+  assert.match(empty, /class="message"/);
+  assert.match(empty, /Pick a style to start/);
 });
 
 test('seeds: chips to remove, Add until five, the way back to the defaults, ones the library lost', () => {
@@ -271,6 +277,7 @@ test('seeds: chips to remove, Add until five, the way back to the defaults, ones
   assert.equal(T.likeHead({ from: 'rated', none: true }).title, 'More like bottles you love', 'no “best-rated” over an empty row');
   assert.equal(T.likeHead({ from: 'rated', none: true }).line, '');
   assert.deepEqual(T.likeHead({ loading: true }), { title: 'More like your favorites', line: 'Loading your favorites…' });
+  assert.equal(T.likeHead({ from: 'given', chosen: true }).title, 'More like the bottles you chose', 'not “your picks”');
   // The pool's words when it finds none of a link's seeds: no Try again.
   assert.match('None of those bottles are in the fragrance library.', NONE_FOUND);
 });
@@ -300,15 +307,30 @@ test('filters: radio groups with one stop each, the value toggle as answered, mi
   assert.match(html, /role="switch" aria-checked="true" data-action="disc-value"/);
   assert.match(html, /aria-checked="true" data-action="disc-switch" data-id="discontinued"/, 'Hide discontinued is on by default');
   assert.match(html, /data-id="mists"/);
-  assert.ok(!T.filtersHTML(NO_FILTERS, { mists: false }).includes('data-id="mists"'));
+  // Every option carries the check it shows once chosen (by its state, in discover.css), its label after it.
+  const opts = [...html.matchAll(/<button type="button"[^>]*class="opt"[^>]*>([\s\S]*?)<\/button>/g)].map(m => m[1]);
+  assert.equal(opts.length, 4 + 3 + 4 + 3 + 3);
+  for (const o of opts) assert.match(o, /^<svg[^>]*aria-hidden="true"[\s\S]*<\/svg><span>[^<]+<\/span>$/);
+  // Unset, with the gap finder's default on: the switch reads off, and its note says why.
+  const byDefault = T.filtersHTML(NO_FILTERS, { preferValue: false, valueDefault: true });
+  assert.match(byDefault, /role="switch" aria-checked="false" data-action="disc-value"/);
+  assert.match(byDefault, /great value for money\. Insights and Fill a gap use it by default; here it’s off until you turn it on\./);
+  assert.ok(!html.includes('use it by default'), 'not once it’s on');
+  assert.ok(!T.filtersHTML(NO_FILTERS, { preferValue: false }).includes('use it by default'), 'nor when the default is off too');
   assert.match(T.filterButtonHTML({ ...NO_FILTERS, safe: true, lean: 'unisex' }), /aria-label="Filters, 2 on"/);
   assert.match(T.filterButtonHTML(NO_FILTERS, { value: true }), /aria-label="Filters, 1 on"/, 'Prefer great value shows on the button');
-  assert.match(T.filterSheetHTML(NO_FILTERS, { preferValue: true, mists: true, status: '' }), /data-action="disc-filters-reset">Reset/, 'and Reset can turn it off');
+  assert.match(T.filterSheetHTML(NO_FILTERS, { preferValue: true, status: '' }), /data-action="disc-filters-reset">Reset/, 'and Reset can turn it off');
+  assert.match(T.filterButtonHTML({ ...NO_FILTERS, mists: true }), /aria-label="Filters, 1 on"/, 'mists count like the rest');
   assert.ok(!/class="count"/.test(T.filterButtonHTML(NO_FILTERS)));
-  clean(T.filterSheetHTML(NO_FILTERS, { preferValue: false, mists: true, status: EVIL }), 'filter sheet');
+  clean(T.filterSheetHTML(NO_FILTERS, { preferValue: false, status: EVIL }), 'filter sheet');
+  assert.match(T.filterSheetHTML(NO_FILTERS, { preferValue: false, valueDefault: true, status: '' }), /use it by default/);
+  assert.equal(T.fitLine(1, 12), '1 bottle fits');
+  assert.equal(T.fitLine(7, 12), '7 bottles fit');
+  assert.equal(T.fitLine(12, 12), 'Showing the top 12');
+  assert.equal(T.fitLine(0, 12), 'Nothing fits');
   assert.match(html, /Safe blind buys<\/b><small>Safer than most popular bottles\.<\/small>/, 'the safety percentile, not “most voters love it”');
   // A change redraws the parts; the status line keeps its node (only its text changes), so it's heard.
-  const sheet = T.filterSheetHTML(NO_FILTERS, { preferValue: false, mists: true, status: '12 bottles fit' });
+  const sheet = T.filterSheetHTML(NO_FILTERS, { preferValue: false, status: '12 bottles fit' });
   assert.match(sheet, /<div data-part="filters">/);
   assert.match(sheet, /role="status" data-live="filter-status">12 bottles fit</);
   assert.ok(sheet.indexOf('data-live=') > sheet.indexOf('class="sheet-bar'), 'the status sits outside what redraws');
@@ -317,6 +339,13 @@ test('filters: radio groups with one stop each, the value toggle as answered, mi
 test('search: names with where they are, the two readings, typos and nothing found', () => {
   const names = clean(T.namesHTML({ results: [record('n1'), record('n2')] }, new Map([['n2', `In ${EVIL}’s`]]), { wantedOf: id => id === 'n1' }), 'names');
   assert.equal((names.match(/data-action="own-result"/g) ?? []).length, 1);
+  // Named by what it shows, then whose (two Aventus differ by brand): no aria-label to hide the words.
+  const aventus = T.namesHTML({ results: [{ id: 'a1', name: 'Aventus', brand: 'Creed' }, { id: 'a2', name: 'Aventus', brand: 'Nish Parfum' }] }, new Map());
+  const owns = [...aventus.matchAll(/<button[^>]*data-action="own-result"[^>]*>([\s\S]*?)<\/button>/g)];
+  assert.equal(owns.length, 2);
+  for (const [button] of owns) assert.ok(!button.includes('aria-label'), 'its label is its words');
+  assert.match(owns[0][1], /<span>I own it<\/span><span class="visually-hidden">: Aventus by Creed<\/span>$/);
+  assert.match(owns[1][1], /: Aventus by Nish Parfum<\/span>$/);
   assert.match(names, /data-action="disc-want" data-id="n1" aria-pressed="true"/, 'Want on every row');
   assert.match(names, /data-action="disc-want" data-id="n2" aria-pressed="false"/);
   assert.equal((names.match(/class="row wrap"/g) ?? []).length, 2, 'names get two lines');
@@ -349,6 +378,22 @@ test('the teaser: the thinnest gap and what fills it, a skeleton, nothing when i
   assert.match(T.teaserHTML({ status: 'done', result: { gaps: [], picks: [], overview: { text: 'You have a strong pick for everything.' } } }), /strong pick for everything/);
 });
 
+test('a card owned from a list keeps its place when the list is asked again without it', () => {
+  const p = id => ({ id });
+  const ids = list => list.map(q => q.id);
+  const pins = [{ id: 'x', index: 2, pick: p('x') }];
+  assert.deepEqual(ids(withPins([p('a'), p('b'), p('c'), p('d')], pins)), ['a', 'b', 'x', 'c', 'd']);
+  assert.deepEqual(ids(withPins([p('a'), p('x'), p('b')], pins)), ['a', 'x', 'b'], 'one the answer has stays where the answer has it');
+  assert.deepEqual(ids(withPins([p('a')], pins)), ['a', 'x'], 'past the end: last');
+  // Owned in turn from [y, a, x, b, c]: each back where it was.
+  assert.deepEqual(ids(withPins([p('a'), p('b'), p('c')], [pins[0], { id: 'y', index: 0, pick: p('y') }])), ['y', 'a', 'x', 'b', 'c']);
+  const plain = [p('a')];
+  assert.equal(withPins(plain, []), plain);
+  // A pinned card renders as any other, saying where it is now.
+  const card = T.picksHTML({ status: 'done', result: { picks: withPins([pick('p1')], [{ id: 'p0', index: 0, pick: pick('p0', { nearest: null, family: null }) }]) } }, { name: 'styles', ownedOf: id => (id === 'p0' ? 'In Mine' : null), empty: '' });
+  assert.match(card, /data-id="p0"[\s\S]*In Mine[\s\S]*data-id="p1"/);
+});
+
 test('the kit’s bottle card keeps ids apart per list and escapes what it’s given', () => {
   const f = record('my:1"><b>');
   const a = bottleCardHTML(f, { key: 'styles', marks: [{ text: EVIL, spoken: EVIL }], tags: [{ text: EVIL, color: '#fff' }] });
@@ -366,7 +411,16 @@ test('the seed picker: picked first, then the library’s hits, then yours', () 
   assert.match(html, /data-action="disc-seed-toggle" data-id="m2" aria-pressed="true"/);
   assert.match(html, /data-id="l1" aria-pressed="false"/);
   assert.equal((html.match(/data-id="m1"/g) ?? []).length, 1, 'an owned hit shows once, under yours');
-  assert.match(html, /role="status" data-live="seed-status">1 of 5 picked</);
+  assert.match(html, /role="status" data-live="seed-status">1 of 5 picked</, 'no count for words it didn’t search');
+  // Once a search is in, the line says what it found (it's live: a screen reader hears it).
+  const said = sheet => seedSheetHTML(sheet, { owned: mine, chosen: ['m2'], picked: [mine[1]] }).match(/data-live="seed-status">([^<]*)</)[1];
+  const layton = [record('l1', 'Layton'), record('l2', 'Layton Exclusif')];
+  assert.equal(said({ query: 'layton', searched: 'layton', results: layton }), '2 bottles from the library · 1 of 5 picked');
+  assert.equal(said({ query: 'brun', searched: 'brun', results: [record('m1', 'Liquid Brun'), record('l1', 'Brun Noir')] }), '1 from the library, 1 of yours · 1 of 5 picked');
+  assert.equal(said({ query: 'brun', searched: 'brun', results: [record('m1', 'Liquid Brun')] }), '1 bottle of yours · 1 of 5 picked');
+  assert.equal(said({ query: 'zzqx', searched: 'zzqx', results: [] }), 'No bottles match “zzqx” · 1 of 5 picked');
+  assert.equal(said({ query: 'laytonx', searched: 'layton', results: layton }), '1 of 5 picked', 'typing on: not the last search’s count');
+  assert.equal(said({ query: 'layton', searched: 'layton', results: layton, busy: true }), 'Searching…');
   // Typing redraws the lists under the field, never the field (it keeps focus and the keyboard).
   assert.ok(html.indexOf('data-field="disc-seed-q"') < html.indexOf('data-part="seed-lists"'));
   assert.ok(html.indexOf('data-live=') > html.indexOf('class="sheet-bar'), 'nor the status line');

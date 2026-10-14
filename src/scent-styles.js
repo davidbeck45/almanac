@@ -499,14 +499,31 @@ export function topOf(scores, n = 3, min = STYLE_MIN) {
   return out.sort((a, b) => b.score - a.score).slice(0, n);
 }
 
+// A bottle no style clears STYLE_MIN for shows its best one from this far
+// under it as a lean ("Leans skin scent"): Narciso Rodriguez For Her (skin
+// scent 0.54), Guerlain Vetiver, Kouros.
+export const LEAN_SHOWN = 0.1;
+
+/**
+ * The scent styles a card or page shows: topOf, or, when none clears
+ * STYLE_MIN, its best within LEAN_SHOWN of it as [{ id, label: "Leans
+ * skin scent", score, leans: true }]. Logic reads topOf.
+ */
+export function shownOf(scores, n = 3) {
+  const top = topOf(scores, n);
+  if (top.length) return top;
+  const [best] = topOf(scores, 1, STYLE_MIN - LEAN_SHOWN);
+  return best ? [{ ...best, label: `Leans ${best.label.charAt(0).toLowerCase()}${best.label.slice(1)}`, leans: true }] : [];
+}
+
 /** The scent styles a bottle leans toward, which a style mix counts: its top 2 from STYLE_LEAN. */
 export const leanOf = scores => topOf(scores, 2, STYLE_LEAN);
 
 /** Whether the scores say it sits close to the skin (the Intimate style). */
 export const closeOf = scores => scores.intimate >= WEARS_CLOSE;
 
-/** topOf for one record. */
-export const topStyles = (frag, n = 3, min = STYLE_MIN) => topOf(styleScores(frag), n, min);
+/** shownOf for one record (topOf from `min`, when one is given). */
+export const topStyles = (frag, n = 3, min = null) => (min == null ? shownOf(styleScores(frag), n) : topOf(styleScores(frag), n, min));
 
 /** closeOf for one record. */
 export const wearsClose = frag => closeOf(styleScores(frag));

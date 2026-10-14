@@ -22,8 +22,8 @@ const LEAN_STRONG = 0.7;
 const SENTIMENT = [['love', 'Love'], ['like', 'Like'], ['ok', 'OK'], ['dislike', 'Dislike'], ['hate', 'Hate']];
 
 const pct = x => `${Math.round(x * 100)}%`;
+// Counts in full, as the page's head gives the rating votes: one format in the card.
 const num = n => Number(n).toLocaleString('en-US');
-const compact = n => (n >= 10_000 ? `${Math.round(n / 1000)}K` : n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K` : String(n));
 const lower = t => t.charAt(0).toLowerCase() + t.slice(1);
 const unstop = t => t.replace(/\.$/, '');
 
@@ -58,12 +58,12 @@ function tiles(f, about, owned) {
   const value = x.value ?? about?.value?.avg ?? null;
   if (value != null) {
     const votes = about?.value?.votes;
-    out.push(tile('Value for money', `${value.toFixed(1)}<small> of 5</small>`, [valueWord(value), votes && `${compact(votes)} votes`].filter(Boolean).join(' · ')));
+    out.push(tile('Value for money', `${value.toFixed(1)}<small> of 5</small>`, [valueWord(value), votes && `${num(votes)} votes`].filter(Boolean).join(' · ')));
   }
   const o = about?.owners;
   if (o && o.have + o.had >= KEEP_VOTES) {
     const lift = x.keep ?? 0;
-    const sub = `of ${compact(o.have + o.had)} owners${lift >= KEEP_HIGH ? ', more than most' : lift <= KEEP_LOW ? ', fewer than most' : ''}`;
+    const sub = `of ${num(o.have + o.had)} owners${lift >= KEEP_HIGH ? ', more than most' : lift <= KEEP_LOW ? ', fewer than most' : ''}`;
     out.push(tile('Kept', pct(o.have / (o.have + o.had)), sub));
   }
   // A blind buy is for a bottle you don't have yet.

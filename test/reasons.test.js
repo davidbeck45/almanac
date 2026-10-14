@@ -19,6 +19,9 @@ const CONDITIONS = [
   { feelsF: 50, dewF: 46, category: 'rain', date: new Date('2026-10-15T12:00:00'), lat: 47 },
   { feelsF: 84, dewF: 74, category: 'storm', date: new Date('2026-12-15T12:00:00'), lat: 1.3 },
 ];
+// Nouns a reason shouldn't pair (src/engine.js NEAR_SAME).
+const KIN = [['aquatic notes', 'marine notes', 'sea salt', 'airy notes'], ['warm spice', 'soft spice', 'crisp spice', 'cinnamon'], ['fruit', 'tropical fruit'],
+  ['nuts', 'almond'], ['florals', 'white florals', 'yellow florals', 'tuberose']];
 const MULTI_WORD = Object.keys(ACCORDS).filter(a => /[\s-]/.test(a)).map(a => [a, new RegExp(`\\b${a}\\b`, 'i')]);
 
 function* reasons() {
@@ -49,6 +52,11 @@ test('reasons read as plain sentences over the wardrobe and the dataset', () => 
     if (raw) flag(`raw accord name "${raw[0]}"`, text);
     if (/^Fresh (musky|coconut|fruity|tropical|sweet)|musk\w* cuts? the heat/i.test(text)) flag('not a heat cutter', text);
     if (text !== text.charAt(0).toUpperCase() + text.slice(1)) flag('lowercase start', text);
+    // An occasion reason names two different things, not near-synonyms.
+    const pair = text.match(/^(.+) & (.+) suit /);
+    if (pair && KIN.some(kin => kin.includes(pair[1].toLowerCase()) && kin.includes(pair[2]))) flag('near-synonyms', text);
+    // "A favorite" only for a bottle voters placed by day or night.
+    if (/^(Daytime favorite|Built for nighttime)$/.test(text) && !(frag.timeVotes?.day + frag.timeVotes?.night > 0)) flag('unvoted favorite', `${frag.name}: ${text}`);
     // A rain reason names an accord the bottle has.
     const wet = text.match(/^(.+) suits? the rain$/);
     if (wet) {
@@ -71,4 +79,13 @@ test('weather reasons name the accord doing the work', () => {
   // Bottle-specific reasons lead the generic season and time votes.
   const top = hot[0].reasons.filter(r => r.tone === 'good').map(r => r.text);
   assert.match(top[0], /the heat$/, top.join(' | '));
+});
+
+test('a hand-entered bottle is "a daytime scent", not a crowd’s favorite', async () => {
+  const { customRecord } = await import('../src/custom.js');
+  const rain = customRecord({ name: 'Rain Notebook', accords: ['woody', 'aquatic', 'musky'] });
+  const [r] = rank([rain], { ...CONDITIONS[3], feelsF: 66, humidity: 60 }, 'day');
+  const texts = r.reasons.map(x => x.text);
+  assert.ok(!texts.includes('Daytime favorite'), texts.join(' | '));
+  if (rain.dayNight.day >= 0.62) assert.ok(texts.includes('A daytime scent'), texts.join(' | '));
 });

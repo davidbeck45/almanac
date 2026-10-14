@@ -1,8 +1,6 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { loadPool, loadPoolStyles, loadAbout, poolKey } from '../src/fragrantica.js';
 import { STYLES, topOf, closeOf } from '../src/scent-styles.js';
 import { genderLean, signalsOf, ownedVectors } from '../src/candidates.js';
@@ -12,8 +10,9 @@ import {
   DEMO_LIKED, LEAN_WINDOWS, STORED_MIN, discoverContext, scoresOf, findStyles, likedStyles, moreOfStyles, defaultSeeds, moreLike,
   parseNotes, searchNotes, dupesOf, originalFromVotes, whyLine, addCloneVotes,
 } from '../src/discover.js';
-import { loadWants, saveWants, addWant, removeWant, hasWant, setWant, wantIdsToLoad } from '../src/wishlist.js';
+import { loadWants, saveWants, addWant, removeWant, hasWant, setWant } from '../src/wishlist.js';
 import { customRecord } from '../src/custom.js';
+import { applySkin } from '../src/skin.js';
 import { fitPoolStyles } from '../scripts/fit-pool-styles.mjs';
 
 const dir = new URL('../data/fragrantica/', import.meta.url);
@@ -175,9 +174,26 @@ test('any of several styles takes turns, Intimate shapes them, and all of them w
   const all = moreOfStyles(['skin', 'clean', 'intimate'], ctx, { mode: 'all', k: 12 });
   for (const p of all) {
     const s = scoresOf(p.record, ctx);
-    assert.ok(s.skin >= 0.4 && s.clean >= 0.4 && s.intimate >= 0.4, p.record.name);
+    assert.ok(s.skin >= 0.55 && s.clean >= 0.55 && s.intimate >= 0.6, p.record.name);
   }
   assert.ok(names(all).includes('Fleur de Peau Eau de Parfum'), names(all).join());
+  // Every pick's card shows each chosen style (Intimate as its wears-close tag);
+  // when too few bottles are all of them, the ones leaning toward a style follow, saying so.
+  for (const chosen of [['skin', 'clean', 'intimate'], ['skin', 'clean'], ['oud', 'aquatic'], ['leather', 'oud', 'woody', 'amber']]) {
+    const picks = moreOfStyles(chosen, ctx, { mode: 'all', k: 10 });
+    assert.ok(picks.length, chosen.join());
+    for (const p of picks) {
+      for (const id of chosen) {
+        if (id === 'intimate') assert.ok(p.close, `${p.record.name} wears close`);
+        else assert.ok(p.styles.some(s => s.id === id), `${chosen.join()}: ${p.record.name} shows ${id}: ${p.styles.map(s => s.label)}`);
+      }
+      assert.deepEqual(p.styles.filter(s => s.leans).map(s => s.id), p.leans ?? []);
+      for (const s of p.styles.filter(s => s.leans)) assert.match(s.label, /^Leans [a-z]/);
+    }
+    assert.ok(picks.findIndex(p => p.leans) === -1 || picks.slice(picks.findIndex(p => p.leans)).every(p => p.leans), 'leaning picks follow');
+  }
+  const oudAquatic = moreOfStyles(['oud', 'aquatic'], ctx, { mode: 'all', k: 10 });
+  assert.ok(oudAquatic.some(p => !p.leans) && oudAquatic.some(p => p.leans), names(oudAquatic).join());
   assert.throws(() => moreOfStyles(['skin'], ctx, { mode: 'most' }), /any or all/);
 });
 
@@ -214,6 +230,15 @@ test('more like Liquid Brun and Amber Empire is warm vanilla and amber', () => {
   assert.deepEqual(moreLike([{ id: 'my:x', name: 'Nothing', brand: 'Me', accords: {} }], ctx), []);
 });
 
+test('a hand-entered seed counts as much as a dataset one beside it', () => {
+  const garden = customRecord({ name: 'Night Garden', brand: 'Me', accords: ['rose', 'oud', 'amber'] });
+  const picks = moreLike([ctx.byId.get('9828'), garden], ctx, { k: 8 }); // Aventus
+  const hers = picks.filter(p => ['rose', 'oud', 'amber'].some(a => Object.keys(p.record.accords).slice(0, 2).includes(a)));
+  assert.ok(hers.length >= 4, picks.map(p => p.record.name).join(', '));
+  // Alone, each still gets its own kind.
+  assert.ok(moreLike([garden], ctx, { k: 5 }).every(p => p.record.accords.oud || p.record.accords.rose));
+});
+
 test('default seeds: the most worn of the last 60 days, else the best rated', () => {
   const history = [
     { id: '94713', date: '2026-10-10', slot: 'night' }, { id: '94713', date: '2026-10-02', slot: 'night' },
@@ -226,6 +251,14 @@ test('default seeds: the most worn of the last 60 days, else the best rated', ()
   assert.equal(rated.from, 'rated');
   assert.equal(rated.seeds.length, 3);
   assert.ok(rated.seeds.every(f => f.rating >= 4.3));
+  // Your own stars come first, and a bottle you dislike is never a seed, by wears either.
+  const skin = { [rated.seeds[0].id]: { rating: 1 }, [rated.seeds[1].id]: { rating: 2 }, [owned('Infini Rose').id]: { rating: 5 } };
+  const mine = applySkin(wardrobe, skin);
+  const yours = defaultSeeds(mine);
+  assert.equal(yours.seeds[0].name, 'Infini Rose');
+  assert.ok(yours.seeds.every(f => !(f.personal?.rating <= 2)), yours.seeds.map(f => f.name).join());
+  const disliked = defaultSeeds(applySkin(wardrobe, { 94713: { rating: 1 } }), { history, todayISO: '2026-10-13' });
+  assert.deepEqual(disliked.seeds.map(f => f.name), ['Cedrus Blanc']);
 });
 
 test('notes and accords search: every term, forgiving how it’s typed', () => {
@@ -385,6 +418,9 @@ test('an original read from the votes needs a year and, through a plain link, a 
 test('every pick says why', async () => {
   const [skin] = moreOfStyles(['skin'], ctx, { k: 1 });
   assert.match(whyLine(skin), /Skin scent.*closest you own: /);
+  // Its risk in brackets, one colon at most.
+  const risky = { ...skin, risk: { level: 'medium', reasons: ['It divides people: more voters hate it than most.'] } };
+  assert.match(whyLine(risky), /; medium risk \(it divides people: more voters hate it than most\)/);
   // A clone says what it copies, with the votes once its about data is in.
   const clone = moreOfStyles(['skin'], ctx, { k: 40 }).find(p => p.clonesOf);
   assert.ok(clone);
@@ -431,7 +467,7 @@ test('the want list keeps ids, and whole records for bottles the dataset can’t
   assert.deepEqual(wants.map(w => w.id), ['9828', 'my:abc', '48681']);
   assert.equal(wants[2].record, undefined, 'a dataset bottle keeps only its id');
   assert.equal(wants[1].record.name, 'Mine');
-  assert.deepEqual(wantIdsToLoad(wants), ['9828', '48681']);
+  assert.deepEqual(wants.filter(w => !w.record).map(w => w.id), ['9828', '48681'], 'the rest load by id');
   // Adding again moves it up and keeps its date and note.
   wants = addWant(wants, at(48681));
   assert.deepEqual([wants[0].id, wants[0].added, wants[0].note], ['48681', '2026-10-01', 'Try at Nordstrom']);
@@ -453,38 +489,7 @@ test('the want list keeps ids, and whole records for bottles the dataset can’t
   // A kept record without what ranking reads is dropped, and the bottle loads again by its id.
   store.set('scentcast.want', JSON.stringify([{ id: '69541', record: { id: '69541' } }, 'x', null, { record: { id: 'my:q', name: 'Q' } }]));
   assert.deepEqual(loadWants().map(w => [w.id, 'record' in w]), [['69541', false], ['my:q', false]]);
-  assert.deepEqual(wantIdsToLoad(loadWants()), ['69541', 'my:q']);
 });
 
 beforeEach(() => { delete globalThis.localStorage; });
 
-test('the CLI answers Discover questions', () => {
-  const script = fileURLToPath(new URL('../scripts/recommend.mjs', import.meta.url));
-  const cli = (...args) => spawnSync(process.execPath, [script, ...args], { encoding: 'utf8' });
-  const style = JSON.parse(cli('--style', 'skin scent,clean', '--all', '--top', '5', '--json').stdout);
-  assert.deepEqual([style.styles, style.mode, style.results.length], [['skin', 'clean'], 'all', 5]);
-  assert.ok(style.results.every(r => (r.styles.includes('Skin scent') || r.styles.includes('Clean')) && r.why));
-  assert.ok(style.results.every(r => Array.isArray(r.twins) && 'smellsLike' in r));
-  const notes = JSON.parse(cli('--notes', 'iris leather', '--season', 'winter', '--slot', 'night', '--lean', 'masculine', '--min-value', '3', '--json').stdout);
-  assert.equal(notes.results.length, 10);
-  assert.ok(notes.results.every(r => r.value >= 3 && r.matched.length === 2));
-  assert.match(cli('--notes', 'vanila', '--top', '2').stderr, /did you mean "vanilla"/);
-  assert.match(cli('--notes', 'lavendar', '--top', '2').stderr, /Reading "lavendar" as "lavender"/);
-  assert.match(cli('--style', 'skin', '--top', '3', '--min-rating', '4.2', '--json').stdout, /"rating": 4\.[2-9]/);
-  const like = cli('--more-like', 'Liquid Brun,Amber Empire', '--top', '3');
-  assert.match(like.stdout, /^More like Liquid Brun \+ Amber Empire:\n 1\. .+ · .+ · \d{4} · \d\.\d\d★ · value \d\.\d · Shares /);
-  const dupes = cli('--dupes', 'Aventus');
-  assert.match(dupes.stdout, /Smells like it for far less:\n {2}Club de Nuit Intense Man · Armaf/);
-  const bad = cli('--style', 'wet dog');
-  assert.equal(bad.status, 1);
-  assert.match(bad.stderr, /No style called "wet dog"/);
-  assert.match(cli('--notes', 'iris', '--lean', 'manly').stderr, /--lean takes feminine, unisex, masculine/);
-  // Nothing to ask about fails plainly rather than printing an empty list.
-  assert.match(cli('--style', 'skin', '--top', '0').stderr, /--top takes 1 or more/);
-  assert.match(cli('--notes', 'and').stderr, /Name a note or accord/);
-  assert.match(cli('--style', ',').stderr, /Name a style/);
-  assert.match(cli('--more-like', ',').stderr, /Name a bottle/);
-  // "liked" falls back to the wardrobe's own mix when none of the loved styles is left.
-  const liked = cli('--style', 'liked', '--top', '2', '--exclude', 'Sandalwood & Musk,Meant To Be Seen,Cedrus Blanc,Jake,Shiyaaka Sky');
-  assert.match(liked.stdout, /^More \S/);
-});

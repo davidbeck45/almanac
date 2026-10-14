@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { noteFamily, noteFamilies, layerPair, layerPicks, layerProfile, complementOf, commonNotes, pairingMeans } from '../src/layering.js';
+import { noteFamily, noteFamilies, layerPair, layerPicks, layerProfile, complementOf, commonNotes, pairingMeans, pairingKept, warmPairing } from '../src/layering.js';
+import { applySkin } from '../src/skin.js';
 import { heaviness } from '../src/accords.js';
 import { DEFAULT_HIDDEN } from '../src/hidden.js';
 
@@ -242,4 +243,31 @@ test('the bottle page\'s partner averages match a fresh pass, whichever bottle o
   // The page draws twice: the second draw gets the same picks.
   const others = demo.slice(1);
   assert.deepEqual(layerPicks(demo[0], [...others], 3, coldNight), layerPicks(demo[0], [...others], 3, coldNight));
+});
+
+test('partners rank the same with the bottle in the list or not, as the CLI and the bottle page ask', () => {
+  for (const list of [demo, catalog]) {
+    for (const f of list) {
+      const names = picks => picks.map(p => `${p.fragrance.name} ${p.rank.toFixed(12)}`);
+      const without = list.filter(g => g !== f);
+      assert.deepEqual(names(layerPicks(f, list, 5)), names(layerPicks(f, without, 5)), f.name);
+      assert.deepEqual(names(layerPicks(f, list, 5, coldNight)), names(layerPicks(f, without, 5, coldNight)), f.name);
+    }
+  }
+});
+
+test('the n² pass can run in slices before a page needs it, and your stars don’t undo it', async () => {
+  const list = [...demo, ...catalog], frag = list[0], others = list.slice(1);
+  pairingMeans(catalog.slice(0, 5));
+  assert.equal(pairingKept(others), false);
+  let pauses = 0;
+  await warmPairing(others, frag, { pause: async () => { pauses++; }, slice: 0 });
+  assert.ok(pauses >= others.length, 'a pause after every row');
+  assert.equal(pairingKept(others), true);
+  // A rating makes new records with the same scent: the kept pairs still answer.
+  const rated = applySkin(others, { [others[3].id]: { rating: 5 } });
+  assert.notEqual(rated[3], others[3]);
+  assert.equal(pairingKept(rated), true);
+  const want = new Map(others.map(f => [f.id, others.filter(g => g !== f).reduce((s, g) => s + layerPair(f, g).model, 0) / (others.length - 1)]));
+  for (const [id, m] of pairingMeans(rated, frag).means) assert.ok(Math.abs(m - want.get(id)) < 1e-12, id);
 });

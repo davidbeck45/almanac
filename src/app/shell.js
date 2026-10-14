@@ -2,20 +2,23 @@
 // cycle, event delegation into the views' action maps, the forecast, and
 // boot (src/main.js calls it). Browser-only. A view is a module in
 // src/views/ that exports its page or panes, templates, and maps of
-// actions, forms, fields and sheets; .sweep/notes/shell-map.md and CLAUDE.md
-// say how to add one.
+// actions, forms, fields, changes and sheets; CLAUDE.md ("Checking the UI")
+// says how to add one.
 import { summarize, getForecast, cachedForecast, forecastError } from '../weather.js';
 import { saveLocation } from '../location.js';
 import { parseShare } from '../collections.js';
-import { apiReady, fetchFragrances } from '../api.js';
+import { fetchFragrances } from '../api.js';
 import { isFragellaId } from '../fragella.js';
 import { isCustomId, fromShareToken } from '../custom.js';
 import { loadAbout } from '../fragrantica.js';
 import { sceneTint, skyAccent } from '../scene.js';
 import { setTheme, theme, paint } from '../theme.js';
-import { esc, deg, plural } from '../ui.js';
+import { esc, deg, plural, toastName } from '../ui.js';
 import { icon, segLinksHTML, messageHTML, FALLBACK_THUMB } from '../ui/components.js';
 import { parseRoute, routeHash, sameRoute, legacyHash, go, HOME } from './router.js';
+import { locationFromURL } from './early.js';
+import { askPool } from './pool.js';
+import { loadWants, hasWant, setWant } from '../wishlist.js';
 import {
   state, computeToday, sourceRecords, knownBottles, library, setActive as chooseList,
   addToMine as addRecord, markBottlesLoaded, keepBottles, loadFullRecord, retryClimate,
@@ -110,16 +113,18 @@ function addToMine(record) {
 // The list "I own it" moved away from, for the toast's way back.
 let listBefore = null;
 
-// "I own it": the bottle goes into Mine, and picks come from Mine. When that
-// switches lists (from David's wardrobe or a shared link), the toast says so
-// and offers the way back.
+// "I own it": the bottle goes into Mine, and picks come from Mine; it comes
+// off the wishlist, whichever screen said so. When that switches lists (from
+// David's wardrobe or a shared link), the toast says so and offers the way
+// back.
 function own(record) {
   const switching = Boolean(state.shared) || state.active !== 'mine';
   const label = state.shared ? (state.shared.name ? `${state.shared.name}’s` : 'the shared list') : 'David’s';
   const before = { active: state.active, shared: state.shared, search: location.search };
   addToMine(record);
+  if (hasWant(loadWants(), record.id)) setWant(record.id, false);
   render();
-  if (!switching) return showToast(`<span>${esc(record.name)} added to Mine</span>`);
+  if (!switching) return showToast(`<span>${esc(toastName(record.name))} added to Mine</span>`);
   listBefore = before;
   showToast(`<span class="note">${esc(record.name)} added to Mine. Picks now come from your ${plural(state.mine.records.length, 'bottle')}.</span>
     <button class="btn secondary compact" data-action="list-back">Back to ${esc(label)}</button>`);
@@ -266,9 +271,13 @@ function renderHero(r, page) {
   el.innerHTML = page.hero.render(r, state.heroAspect);
 }
 
-// Sideways strips marked data-keep-scroll keep their place through a re-render.
-function keptScrolls() {
-  return new Map([...document.querySelectorAll('#main [data-keep-scroll]')].map(el => [el.dataset.keepScroll, el.scrollLeft]));
+// Sideways strips marked data-keep-scroll (the shelves, the occasion strip)
+// keep their place through a re-render of the page or the bottle page.
+function keptScrolls(region) {
+  return new Map([...region.querySelectorAll('[data-keep-scroll]')].map(el => [el.dataset.keepScroll, el.scrollLeft]));
+}
+function keepScrolls(region, kept) {
+  for (const el of region.querySelectorAll('[data-keep-scroll]')) el.scrollLeft = kept.get(el.dataset.keepScroll) ?? 0;
 }
 
 function renderPage() {
@@ -276,10 +285,10 @@ function renderPage() {
   const { r, page, pane } = currentPage();
   renderHero(r, page);
   const main = $('#main');
-  const kept = keptScrolls();
+  const kept = keptScrolls(main);
   const stuck = Boolean(main.querySelector('.head-bar.stuck'));
   main.innerHTML = `${headHTML(page, pane, r)}<div class="pane" data-pane="${esc(r.dest)}${r.pane ? `/${esc(r.pane)}` : ''}">${pane.render(app, r)}</div>`;
-  for (const el of main.querySelectorAll('[data-keep-scroll]')) el.scrollLeft = kept.get(el.dataset.keepScroll) ?? 0;
+  keepScrolls(main, kept);
   watchHeadBar(stuck);
   main.classList.toggle('updating', state.updating);
   main.setAttribute('aria-busy', String(state.updating));
@@ -313,29 +322,23 @@ const askedFull = new Set(); // pool records whose every note was asked for
 // load stays undefined, marked in state.aboutFailed (the sections say so)
 // until Try again or the connection comes back. A record
 // a pool answer brought (its 8 strongest notes) swaps for its r/ record, all
-// its notes, keeping its signals.
+// its notes, keeping its signals. What a page asks for at once loads
+// together and the page draws once when all of it is in (the sections'
+// skeletons stand meanwhile): each draw rebuilds every section while the
+// sheet slides up.
 function bottleModelFor(r) {
   const id = r.arg;
   const model = bottleView.bottleModel(r);
+  const showing = () => state.route?.dest === 'bottle' && state.route.arg === id;
   if (model) {
+    const loads = [];
     // The wardrobe's and catalog's records carry theirs (`f.about`, the build's).
-    if (/^\d+$/.test(id) && !model.f.about && !askedAbout.has(id) && !state.aboutFailed.has(id)) {
-      askedAbout.add(id);
-      loadAbout(id).then(about => {
-        state.about.set(id, about);
-        if (state.route?.dest === 'bottle' && state.route.arg === id) renderBottle();
-      }, () => {
-        askedAbout.delete(id);
-        state.aboutFailed.add(id);
-        if (state.route?.dest === 'bottle' && state.route.arg === id) renderBottle();
-      });
-    }
+    if (/^\d+$/.test(id) && !model.f.about) loads.push(aboutLoad(id));
     if (model.f.source === 'fragrantica' && model.f.extras && state.bottles.get(id) === model.f && !askedFull.has(id)) {
       askedFull.add(id);
-      loadFullRecord(id).then(() => {
-        if (state.route?.dest === 'bottle' && state.route.arg === id) renderBottle();
-      }, () => askedFull.delete(id));
+      loads.push(loadFullRecord(id).then(() => true, () => { askedFull.delete(id); return false; }));
     }
+    drawWhenIn(loads.filter(Boolean), showing);
     return model;
   }
   if (missing.has(id)) return null;
@@ -351,18 +354,47 @@ function bottleModelFor(r) {
   }
   if (!loadingBottles.has(id)) {
     loadingBottles.add(id);
-    library.records([id]).then(found => {
+    // A bottle in no list has no build's about data: it loads beside the
+    // record. (At boot, before the lists are in, it may be one of theirs.)
+    const record = library.records([id]).then(found => {
       // keepBottles: a pool answer landing meanwhile keeps its signals.
       if (found.get(id)) {
         keepBottles([found.get(id)]);
         askedFull.add(id);
       } else missing.add(id);
-    }, () => failed.add(id)).finally(() => {
-      loadingBottles.delete(id);
-      if (state.route?.dest === 'bottle' && state.route.arg === id) renderBottle();
-    });
+    }, () => fromPool(id).catch(() => failed.add(id))).finally(() => loadingBottles.delete(id));
+    drawWhenIn([record, state.demo && aboutLoad(id)].filter(Boolean), showing);
   }
   return undefined;
+}
+
+// Offline, a dataset bottle's r/ shard can't load, but the suggestion pool
+// the service worker keeps (once Discover or Insights loaded it) may hold the
+// bottle, with its 8 strongest notes. Its answer keeps the record
+// (onPoolRecords); rejects when it isn't there either.
+async function fromPool(id) {
+  await askPool('warm');
+  const { records } = await askPool('records', { ids: [id], poolOnly: true });
+  if (!records?.some(r => String(r.id) === id)) throw new Error('Not in the pool');
+}
+
+// Loads a dataset bottle's about data into state.about, unless it's there
+// (Compare may have loaded it), on its way or failed (state.aboutFailed).
+// -> a promise that never rejects, or null when there's nothing to load.
+function aboutLoad(id) {
+  if (state.about.has(id) || askedAbout.has(id) || state.aboutFailed.has(id)) return null;
+  askedAbout.add(id);
+  return loadAbout(id).then(about => { state.about.set(id, about); }, () => {
+    askedAbout.delete(id);
+    state.aboutFailed.add(id);
+  });
+}
+
+// Draws the bottle page again once every load has settled, if it's still on
+// screen. A load that resolves false (a full record that failed, asked again
+// on the next draw) draws nothing by itself, or offline it would ask forever.
+function drawWhenIn(loads, showing) {
+  if (loads.length) Promise.all(loads).then(done => { if (done.some(d => d !== false) && showing()) renderBottle(); });
 }
 
 function setModal(on) {
@@ -402,9 +434,11 @@ function renderBottle({ fresh = false, instant = false } = {}) {
   // above it grow (an answer landing turns a skeleton into a card).
   const reading = sameBottle && panel ? bottleView.readingAt(panel) : null;
   const focused = sameBottle && el.contains(document.activeElement) ? document.activeElement : null;
+  const kept = sameBottle ? keptScrolls(el) : new Map();
   const model = bottleModelFor(r);
   const opening = el.hidden;
   el.innerHTML = bottleView.bottlePageHTML(model, { modal });
+  keepScrolls(el, kept);
   // Focus on its successor, else on the element with its id, else the close button: never the body.
   if (focused && !refocus(focused, '#bottle')) {
     ((focused.id && document.getElementById(focused.id)) || $('#bottle .bp-close'))?.focus({ preventScroll: true });
@@ -455,11 +489,16 @@ function closeBottle() {
 
 // ---------- Routing ----------
 
-const scrolls = new Map(); // dest/pane -> scrollY
-const scrollKey = r => `${r.dest}/${r.pane ?? ''}`;
+// Where each page was left: by its route less a pane's argument (Occasion's
+// pick), so each of Discover's lists, its own query, keeps its own.
+const scrolls = new Map();
+const scrollKey = r => routeHash({ ...r, arg: null });
+const samePane = (a, b) => Boolean(a && b) && a.dest === b.dest && a.pane === b.pane;
 let pushedBottle = false; // the bottle page's entry was pushed by the app
 
-function navigate(hash, { replace = false, quiet = false, instant = false } = {}) {
+// `restore`: a return to a page (the nav, the sub-navigation), which opens
+// where it was left, as Back and Forward do; any other link opens at the top.
+function navigate(hash, { replace = false, quiet = false, instant = false, restore = false } = {}) {
   const next = parseRoute(hash, PANES);
   if (sameRoute(next, state.route)) {
     // The current tab again goes back to its top.
@@ -468,7 +507,7 @@ function navigate(hash, { replace = false, quiet = false, instant = false } = {}
   }
   go(routeHash(next), { replace });
   if (next.dest === 'bottle' && state.route?.dest !== 'bottle') pushedBottle = !replace;
-  transition(next, { quiet, instant });
+  transition(next, { quiet, instant, restore });
 }
 
 // Moves to a route: the page under a bottle page changes only when the route
@@ -477,7 +516,7 @@ function navigate(hash, { replace = false, quiet = false, instant = false } = {}
 // hashchange; the second must not start the flight again).
 let arriving = null;
 
-function transition(next, { quiet = false, instant = false } = {}) {
+function transition(next, { quiet = false, instant = false, restore = false } = {}) {
   const prev = state.route;
   if (sameRoute(arriving ?? prev, next)) return;
   if (prev?.dest === 'bottle' && next.dest !== 'bottle' && sameRoute(state.base, next) && canMorph()) {
@@ -486,10 +525,10 @@ function transition(next, { quiet = false, instant = false } = {}) {
     const home = () => [...document.querySelectorAll(`#page [data-action="open"][data-id="${CSS.escape(id)}"] img`)].find(visible);
     if (visible(from) && home()) {
       arriving = next;
-      return morph(from, () => { arriving = null; applyRoute(next, { quiet, instant: true }); }, home);
+      return morph(from, () => { arriving = null; applyRoute(next, { quiet, instant: true, restore }); }, home);
     }
   }
-  applyRoute(next, { quiet, instant });
+  applyRoute(next, { quiet, instant, restore });
 }
 
 // The page a bottle page opened straight from a link sits over: the list its
@@ -500,12 +539,25 @@ function baseFor({ query }) {
   return ctx.startsWith('w:') ? '#/wear/week' : ctx.startsWith('trip:') ? '#/wear/trip' : ctx === 'occ' ? '#/wear/occasion' : HOME;
 }
 
-function applyRoute(next, { quiet = false, instant = false } = {}) {
+// The bottle page a link left (its Compare, "More like this") and the page
+// it was over: Back onto it puts that page under it again, as it was, so it
+// doesn't sit over the page the link went to.
+let leftBottle = null; // { bottle, base, opener }
+
+function applyRoute(next, { quiet = false, instant = false, restore = false } = {}) {
   const prev = state.route;
   state.route = next;
   if (next.dest === 'bottle') {
+    const focused = document.activeElement;
+    const back = restore && leftBottle && sameRoute(next, leftBottle.bottle);
     if (!state.base) setBase(parseRoute(baseFor(next), PANES), { quiet: true });
-    if (prev?.dest !== 'bottle') bottleOpener = document.activeElement;
+    else if (back && !sameRoute(state.base, leftBottle.base)) setBase(leftBottle.base, { quiet: true, restore: true });
+    // Focus goes back to what opened it when it closes (Back onto it: what
+    // opened it first). Docked beside the page, that's the latest control on
+    // the page to open one (bottle after bottle); one opened from inside the
+    // bottle page keeps the first.
+    if (back) bottleOpener = leftBottle.opener;
+    else if (prev?.dest !== 'bottle' || (docked() && focused !== document.body && !$('#bottle').contains(focused))) bottleOpener = focused;
     renderBottle({ fresh: true, instant });
     if (!quiet) $('#bottle .bp-close')?.focus({ preventScroll: true });
     return;
@@ -515,19 +567,29 @@ function applyRoute(next, { quiet = false, instant = false } = {}) {
   // what opened it; a new page (a link out of the bottle page, the rail with
   // the inspector open) is a navigation like any other. The bottle page goes
   // first: as a dialog it keeps the page under it inert, and focus can't
-  // land on the new page's heading until it's gone.
+  // land on the new page's heading until it's gone. Docked, it gives focus
+  // back only when focus was in it: a control on the page keeps it.
   const changed = !sameRoute(state.base, next);
+  const focused = document.activeElement;
+  const pageHadFocus = docked() && focused && focused !== document.body && !$('#bottle').contains(focused);
   renderBottle({ instant });
   if (changed) {
+    if (prev?.dest === 'bottle') leftBottle = { bottle: prev, base: state.base, opener: bottleOpener };
     state.from = prev;
-    setBase(next, { quiet });
+    // Back from a bottle page onto the page it was over, whose URL caught up
+    // with it meanwhile (Discover's chips changed beside it): no new page.
+    const closing = prev?.dest === 'bottle' && restore && samePane(state.base, next);
+    setBase(next, { quiet, restore, keepScroll: closing });
   }
-  if (prev?.dest === 'bottle' && !changed && !refocus(bottleOpener)) $('#page-title')?.focus({ preventScroll: true });
+  if (prev?.dest === 'bottle' && !changed && !pageHadFocus && !refocus(bottleOpener)) $('#page-title')?.focus({ preventScroll: true });
   if (prev?.dest === 'bottle') bottleOpener = null;
   syncTitle();
 }
 
-function setBase(next, { quiet = false } = {}) {
+// `restore`: open where it was left (Back, Forward, a tab, the
+// sub-navigation), else at the top (a link: another of Discover's lists
+// too). `keepScroll`: the scroll doesn't move.
+function setBase(next, { quiet = false, restore = false, keepScroll = false } = {}) {
   const prev = state.base;
   const from = document.activeElement;
   if (prev) scrolls.set(scrollKey(prev), scrollY);
@@ -538,8 +600,8 @@ function setBase(next, { quiet = false } = {}) {
   if (newPane) settleToast();
   renderNav();
   renderPage();
-  if (newPane && prev) {
-    scrollTo(0, scrolls.get(scrollKey(next)) ?? 0);
+  if (newPane && prev && !keepScroll) {
+    scrollTo(0, (restore && scrolls.get(scrollKey(next))) || 0);
     if (!reducedMotion()) {
       const main = $('#main');
       main.classList.remove('enter');
@@ -561,7 +623,7 @@ function sync() {
   // Forward onto a bottle page, or a typed one: the page before is its own
   // entry, so closing can go Back to it.
   if (next.dest === 'bottle' && state.route?.dest !== 'bottle') pushedBottle = true;
-  transition(next);
+  transition(next, { restore: true });
 }
 
 window.addEventListener('popstate', () => {
@@ -574,6 +636,7 @@ window.addEventListener('hashchange', () => sync());
 
 // The forecast boot asked for while the wardrobe loads: it doesn't need it.
 let early = null; // { loc, forecast: promise }
+const samePlace = (a, b) => a?.lat === b?.lat && a?.lon === b?.lon;
 
 // Opens on the saved forecast when there is one: fresh, it's all we need;
 // older, it shows under "Updating…", photos faded, until the new one arrives,
@@ -608,13 +671,14 @@ async function refreshWeather({ force = false } = {}) {
 }
 
 // A place picked here replaces one pinned by ?loc=, which would bring the
-// old place back on a reload.
+// old place back on a reload. It closes the location sheet, not another one
+// a late answer from "Use my location" finds open.
 async function setLocation(loc) {
   state.loc = loc;
   state.wx = null;
   state.slot = null;
   saveLocation(loc);
-  closeSheet();
+  if (state.sheet?.kind === 'location') closeSheet();
   if (new URLSearchParams(location.search).has('loc')) replacePageURL(withoutParams('loc').href);
   await refreshWeather();
 }
@@ -631,7 +695,7 @@ async function openSharedLink(link) {
   const legacy = unknown.filter(isFragellaId); // Fragella bottles from older links, via the Worker
   await Promise.all([
     library.records(unknown).then(found => found.forEach((r, id) => remote.set(id, r))).catch(() => {}),
-    legacy.length && apiReady()
+    legacy.length
       ? fetchFragrances(legacy).then(({ records }) => records.forEach(r => remote.set(r.id, r))).catch(() => {})
       : null,
   ]);
@@ -655,7 +719,7 @@ function listen() {
     if (link) {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
       e.preventDefault();
-      navigate(link.getAttribute('href'));
+      navigate(link.getAttribute('href'), { restore: Boolean(link.closest('#nav, .subnav')) });
       if (inToast) hideToast();
       return;
     }
@@ -774,16 +838,9 @@ function listen() {
 
 // ---------- Boot ----------
 
-// ?loc=lat,lon,Name pins a location, e.g. for a home-screen shortcut per city.
-function locationFromURL(params) {
-  const raw = params.get('loc');
-  if (!raw) return null;
-  const [lat, lon, ...name] = raw.split(',');
-  if (!Number.isFinite(+lat) || !Number.isFinite(+lon)) return null;
-  return { name: name.join(',').trim() || 'Pinned location', lat: +lat, lon: +lon };
-}
-
-export async function boot() {
+// `early`: the forecast main.js asked for before the app loaded
+// (src/app/early.js), { loc, forecast }.
+export async function boot({ early: asked = null } = {}) {
   history.scrollRestoration = 'manual';
   // A reload on a sheet's history entry: no sheet is open, so it's the page's.
   if (sheetEntry()) history.replaceState(null, '');
@@ -806,8 +863,10 @@ export async function boot() {
   // A bottle page opened from a link, as a dialog: focus in it, not on the
   // page behind (inert) or the body.
   if (first.dest === 'bottle' && !docked()) $('#bottle .bp-close')?.focus({ preventScroll: true });
-  // A forecast that isn't fresh is asked for now, alongside the wardrobe.
-  if (state.loc && !cachedForecast(state.loc)?.fresh) {
+  // A forecast that isn't fresh is on its way already (main.js), or asked
+  // for now, alongside the wardrobe.
+  if (asked && state.loc && samePlace(asked.loc, state.loc)) early = { loc: state.loc, forecast: asked.forecast };
+  else if (state.loc && !cachedForecast(state.loc)?.fresh) {
     early = { loc: state.loc, forecast: getForecast(state.loc) };
     early.forecast.catch(() => {}); // refreshWeather hears it
   }

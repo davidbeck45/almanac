@@ -5,10 +5,8 @@ const DEPLOYED = 'https://scentcast-api.davidbeck45.workers.dev';
 const LOCAL = ['127.0.0.1', 'localhost'].includes(location.hostname);
 
 export const API_BASE = LOCAL ? 'http://127.0.0.1:8787' : DEPLOYED;
-export const apiReady = () => Boolean(API_BASE);
 
 async function call(path) {
-  if (!API_BASE) throw new Error('The Scentcast API isn’t set up.');
   let res;
   try {
     res = await fetch(API_BASE + path);

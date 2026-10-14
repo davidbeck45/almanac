@@ -4,9 +4,16 @@
 const KEY = 'scentcast.history';
 const MAX_ENTRIES = 730;
 
+// A wear as the log keeps one: a bottle, a real date and day or night.
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const isWear = h => Boolean(h) && typeof h === 'object' && h.id != null && h.id !== ''
+  && typeof h.date === 'string' && ISO_DATE.test(h.date) && !Number.isNaN(Date.parse(h.date)) && (h.slot === 'day' || h.slot === 'night');
+const wearsOf = list => (Array.isArray(list) ? list.filter(isWear).map(h => ({ ...h, id: String(h.id) })) : []);
+
+// Entries stored in another shape (a date as a number, an unknown slot) are left out.
 export function loadHistory() {
   try {
-    return (JSON.parse(localStorage.getItem(KEY)) ?? []).map(h => ({ ...h, id: String(h.id) }));
+    return wearsOf(JSON.parse(localStorage.getItem(KEY)));
   } catch {
     return [];
   }
@@ -56,14 +63,16 @@ export function journalExport(history, loc, hidden, { nowISO = new Date().toISOS
 
 // A journal file read back (scripts/journal-check.mjs, recommend.mjs --journal),
 // ids as strings like the app keeps them. Null when it isn't one. Files from
-// before ratings were exported read with an empty `skin`.
+// before ratings were exported read with an empty `skin`. Wears without an
+// ISO date and day or night, and a `hidden` that isn't a list, are left out.
 export function parseJournal(data) {
   if (data?.app !== 'scentcast-journal' || !Array.isArray(data.history)) return null;
-  const skin = data.skin && typeof data.skin === 'object' ? data.skin : {};
+  const skin = data.skin && typeof data.skin === 'object' && !Array.isArray(data.skin) ? data.skin : {};
+  const loc = data.location;
   return {
-    location: data.location ?? null,
-    hidden: (data.hidden ?? []).map(String),
-    history: data.history.filter(h => h?.date && h.slot).map(h => ({ ...h, id: String(h.id) })),
+    location: loc && Number.isFinite(loc.lat) && Number.isFinite(loc.lon) ? loc : null,
+    hidden: Array.isArray(data.hidden) ? data.hidden.map(String) : [],
+    history: wearsOf(data.history),
     skin: Object.fromEntries(Object.entries(skin).map(([id, e]) => [String(id), e])),
   };
 }
