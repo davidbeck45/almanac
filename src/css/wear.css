@@ -688,9 +688,6 @@ button.trip-cell:active { transform: scale(0.98); }
 /* Packing again: the last plan stays, dimmed, until the new one is in. */
 .trip-out { display: grid; gap: inherit; transition: opacity var(--dur-2); }
 .trip-out.refreshing { opacity: 0.55; }
-/* Scrolled to after packing: clear of the sticky sub-navigation above and
-   the tab bar below. */
-.trip-head, .trip-sk { scroll-margin: calc(var(--s-2) + var(--head-bar) + var(--s-4)) 0 calc(var(--tabbar) + var(--s-4)); }
 .trip-sk:focus { outline: none; } /* focused while the weather loads, for screen readers */
 .trip-sk-bags { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-4); margin-top: var(--s-4); }
 .trip-sk-bags .sk { height: 120px; border-radius: var(--r-inset); }

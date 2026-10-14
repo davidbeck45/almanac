@@ -333,7 +333,7 @@
 .cov-legend .vial[data-status='gap']::after { top: 2px; width: 6px; margin-left: -3px; height: 1.5px; }
 .cov-note { margin-top: var(--s-2); }
 
-.cov-detail { margin-top: var(--s-4); padding: var(--s-4); border-radius: var(--r-inset); border: 1px solid var(--border-subtle); background: var(--surface-2); scroll-margin-top: calc(var(--head-bar) + var(--s-6)); }
+.cov-detail { margin-top: var(--s-4); padding: var(--s-4); border-radius: var(--r-inset); border: 1px solid var(--border-subtle); background: var(--surface-2); }
 .cov-detail-head { display: flex; align-items: center; gap: var(--s-3); margin-bottom: var(--s-1); }
 .cov-detail-head h4 { flex: 1; min-width: 0; font-size: var(--fs-headline); line-height: var(--lh-headline); font-weight: 600; }
 .cov-detail-head h4:focus { outline: none; }
@@ -382,7 +382,6 @@
 
 /* The bottles that would fill the gaps: each stands on a shelf line. */
 .ins-fill > .section-head { padding: 0 var(--s-1); }
-.ins-cov { scroll-margin-top: calc(var(--head-bar) + var(--s-4) + env(safe-area-inset-top)); }
 .ins-picks { display: grid; gap: var(--s-3); }
 @container page (min-width: 680px) { .ins-picks { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .ins-pick {
