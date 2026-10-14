@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { offlineData, offlineFetch, savedPlaceArgs, shiftedForecast, shiftedHistory } from '../dev/offline/saved.mjs';
 import { fetchForecast, summarize, week } from '../src/weather.js';
 import { fetchClimate } from '../src/climate.js';
+import { journalExport, parseJournal } from '../src/history.js';
 
 const NOW = new Date(2027, 2, 5, 15, 20);
 const offline = () => offlineFetch(() => assert.fail('reached the network'), offlineData(NOW));
@@ -18,6 +19,8 @@ test('the saved forecast and wears move to the day asked', () => {
   const wears = shiftedHistory(NOW);
   assert.equal(wears[0].date, '2027-03-02');
   assert.ok(wears.every(w => w.lat === 40.71 && w.lon === -74.01 && /^\d+$/.test(w.id)));
+  // Every sample wear is one the app and --journal keep (they drop malformed ones).
+  assert.deepEqual(parseJournal(journalExport(wears, { name: 'New York', lat: 40.71, lon: -74.01 }, [])).history, wears);
 });
 
 test('its now is the reading for this hour, fresh or an hour old', () => {
@@ -59,4 +62,13 @@ test('the CLI on the saved weather names the place New York (saved), whatever it
   assert.equal(run.status, 0, run.stderr);
   assert.match(run.stdout, /^New York \(saved\) · now/);
   assert.doesNotMatch(run.stdout, /Chicago/);
+  // --gaps --json names the place in `climate`, as --check does, and gives each slot × band's share in `bands`.
+  const gaps = spawnSync(process.execPath, ['--import', path('../dev/offline/stub.mjs'), path('../scripts/recommend.mjs'), '--gaps', '--city', 'Houston', '--top', '1', '--json'], { encoding: 'utf8' });
+  assert.equal(gaps.status, 0, gaps.stderr);
+  const { climate, bands } = JSON.parse(gaps.stdout);
+  assert.equal(climate, 'New York (saved)');
+  for (const slot of ['day', 'night']) {
+    const share = Object.entries(bands).filter(([k]) => k.startsWith(`${slot}:`)).reduce((a, [, v]) => a + v, 0);
+    assert.ok(Math.abs(share - 1) < 0.01, `${slot} bands add up to 1`);
+  }
 });

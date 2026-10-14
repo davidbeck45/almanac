@@ -22,7 +22,7 @@ Run from the repo root. The flags are documented in CLAUDE.md's "Gap finder and 
 | "Dupes of X", "a cheaper X" | `--dupes "X"` |
 | "Does X smell like Y" | `--dupes "X"`, then step 3's "Smells like" chain |
 
-Names take part of a name in any case, with or without accents; add the brand when a name is common. `--check` also takes a Fragrantica id (the number ending its URL), which is exact. Uses are `casual, office, date, nightout, formal, outdoors, cozy` at `never`, `sometimes` or `often`.
+Names take part of a name in any case, with or without accents; add the brand when a name is common. `--check` also takes a Fragrantica id (the number ending its URL) as `id:<number>`, which is exact: a bare number is a name first when a well-voted bottle has it (CLAUDE.md's "Gap finder and buy check"). Uses are `casual, office, date, nightout, formal, outdoors, cozy` at `never`, `sometimes` or `often`.
 
 ## 2. Set who's asking
 
@@ -44,7 +44,7 @@ A list says what a bottle is like; `--check` says whether it earns a place in hi
 
 ```bash
 ids=$(node scripts/recommend.mjs --style "vanilla,powdery" --all --min-value 3.8 --top 4 --json | jq -r '.results[].id')
-for id in $ids; do node scripts/recommend.mjs --check "$id" --json | jq -r '"\(.name): \(.verdict), value \(.quality.value // "unknown"). \(.reasons[0])"'; done
+for id in $ids; do node scripts/recommend.mjs --check "id:$id" --json | jq -r '"\(.name): \(.verdict), value \(.quality.value // "unknown"). \(.reasons[0])"'; done
 ```
 
 - **Widen a gap.** `--gaps` gives the best picks for its gaps and stops there ("Nothing else would fill these gaps by enough" is an answer). For more options for one gap: `--styles "<a pick>"` (plural: one bottle's style scores) shows the pick's styles, `--style "<those>"` (with `--season` or `--slot` matching the gap) lists more, and `--check` keeps the ones whose verdict is Strong fit or Good with that gap in `fills`.
@@ -55,12 +55,12 @@ for id in $ids; do node scripts/recommend.mjs --check "$id" --json | jq -r '"\(.
   ```
 
   Cells are `<use>:<day|night>:<band>`; "cold weather" or winter means the cold and cool bands, "summer" or hot weather the warm and hot ones, by day and by night unless he names one. `plenty` or `covered` means he already has it, and its `text` names the bottle that leads. Say so, then name what is actually short (the `gaps` lines). If he still wants one, `--more-like "<the leader>"` with `--season`/`--slot`, then `--check` each: Covered means it adds nothing he lacks.
-- **Smells like.** `--dupes "X"` lists X's original, cheaper look-alikes and the bottles voters link it with, each with "N say it smells like it, M not" and how alike they are. Find Y there; else run `--dupes "Y"` and look for X. If neither lists the other, voters don't link them: say that, and give the compare page (step 5; ids from `--check "<name>" --json`) for how alike they read.
+- **Smells like.** `--dupes "X"` lists X's original, cheaper look-alikes and the bottles voters link it with, each with how alike they are and, when X's page has the votes, "N say it smells like it, M not". Find Y there; else run `--dupes "Y"` and look for X. If neither lists the other, voters don't link them: say that, and give the compare page (step 5; ids from `--check "<name>" --json`) for how alike they read.
 - **A cheaper one.** For any pick, `--dupes "<pick>"` gives cheaper look-alikes; `--gaps` and `--check` already give a `twin` when voters name one. For a wider net than the votes, `--more-like "<pick>" --min-value 3.8`.
 
 ## 4. Read the output
 
-Text output is enough for `--gaps` and the lists, and shows a list pick's medium or high risk; use `--json` for ids or risk reasons. Read `--check` as `--json` (about 5 KB): its text leaves out `quality.value`.
+Text output is enough for `--gaps` and the lists, and shows a list pick's medium or high risk; use `--json` for ids or risk reasons. Read `--check` as `--json` (2 to 5 KB): its text leaves out `quality.value`.
 
 `--check` verdicts:
 
@@ -78,27 +78,27 @@ Fields worth reading:
 
 - `--gaps`: `gaps[]` (`title`, `status`: gap, then thin, then room to grow; `text`), `strengths[].text`, `coverage[]` per use × day or night × weather band (`status`: plenty, covered, room, thin, gap, off), and `picks[]`: `rating`, `ratingVotes`, `quality.value`, `fills[]` (`title`, `from` → `to`, `beats.name`), `nearest` (closest owned; `via` when it's an owned dupe's original), `twin.text`, `risk`.
 - `--check`: `verdict`, `reasons[]`, `fills[]`, `overlap` (closest owned, `via`, `link`), `risk`, `twin`, `quality.value`.
-- `--style`, `--more-like`, `--notes`: `results[]` with `rating`, `votes`, `value`, `styles`, `wearsClose`, `smellsLike` (what a clone copies, with votes), `closestOwned` (`through` an owned dupe's original; `shares`), `risk`, `cheaperTwin`, `why`.
+- `--style`, `--more-like`, `--notes`: `results[]` with `rating`, `votes`, `value`, `styles`, `wearsClose`, `leansOnly` (under `--all`, the chosen styles a pick only leans toward; the text says how many are all of them), `smellsLike` (what a clone copies, with votes), `closestOwned` (`through` an owned dupe's original; `shares`), `risk`, `cheaperTwin`, `why`.
 - `--dupes`: `original` (`built: true` is the original of a dupe he owns; otherwise "going by the votes"), `cheaper[]` (`why: "notes"`: alike by notes, no votes; `notesDiffer`: voted alike but the notes differ), `siblings[]`, `smellsLikeVotes` [yes, no], `owned`, `mist`.
 - `risk.level`: low, medium (a reason to mention), high (sample first) or unknown (no crowd data yet).
 
-Stderr matters: "matches N bottles; checking the most voted" (confirm the brand or pass the id), "Reading X as Y" (a typo it fixed), "Few bottles list X; did you mean Y?" (run again with Y), "--exclude ... matches no bottle".
+Stderr matters: "matches N bottles (…); using the most voted" (confirm the brand or pass `id:<number>`), `Reading "212" as a name (…)` (pass `id:212` if he meant the id), "Reading X as Y" (a typo it fixed), "Few bottles list X; did you mean Y?" (run again with Y), "--exclude ... matches no bottle".
 
 ## 5. Reply
 
-- Lead with the answer in one line: the verdict, or the two or three gaps that matter ("your one real gap is Date Night on warm nights").
+- Lead with the answer in one line: the verdict, or the two or three gaps that matter, saying "room to grow" when that's all the report finds ("nothing's missing; Date Night on mild and warm nights has the most room to grow").
 - Then two to four bottles in the tool's order, each with why (what it fills, or the style, from the output) and one caveat: value score, blind-buy risk and its reason, a body mist, "a clone of X" (from `smellsLike`), or few votes.
 - For a `--check`, relay the verdict and its reasons, then add what the numbers can't know: price, and whether he likes the notes.
 - Name the closest bottle he already owns for each, and when it's Covered or Redundant, say plainly that he has it covered.
 - Lead with value picks and name a cheaper twin when the output has one: David buys clones.
 - The data has no prices. "Value" is voters' value for money (1–5); say so if he asks about price.
-- The suggestion pool doesn't say where a bottle is sold (CLAUDE.md, Discover); mention it when he wants something from a US store.
-- Credit Le Decanteur's Fragrantica dataset (CC BY-NC-SA 4.0) once when a list came from it.
+- The suggestion pool doesn't say where a bottle is sold (CLAUDE.md's "Discover"); mention it when he wants something from a US store.
+- Credit Le Decanteur's Fragrantica dataset (CC BY-NC-SA 4.0) once, as the output's last line does.
 - Offer the app for a closer look: `https://davidbeck45.github.io/scentcast/#/bottle/<id>`, `#/compare/<id>,<id>`, `#/discover?styles=skin,clean,intimate` or `#/discover?q=iris%20leather`.
 
 The shape, from a `--gaps` run (the bottles change as the data does):
 
-> Your one real gap is Date Night on mild and warm nights.
+> Nothing's missing: you're covered everywhere, with the most room to grow on Date Night on mild and warm nights, and on hot nights.
 > 1. **Zenith** (Riiffs, 4.5★ from 1,055 votes, value 4.1, low risk): your best date-night bottle on mild nights, 88% against Infini Rose's 81%, and on warm ones. Closest you own is Cream Velvet (62% alike, vanilla and powdery), so it's your lane, not a copy.
 > 2. **Infinity For Men** (Armaf, 4.6★ from 613 votes, value 4.1, low risk): for hot nights, where Jake tops out at 79%. Nearest to it is Absolu Aventus 2023, the original of your Supremacy, at 61% alike.
 >

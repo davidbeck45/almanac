@@ -22,7 +22,7 @@ SCREENS=(
   'occasion|#/wear/occasion/formal|.pick'
   'trip|#/wear/trip|.trip-form'
   'owned|#/wardrobe/owned|.row'
-  'wishlist|#/wardrobe/wishlist|.wishes, .message'
+  'wishlist|#/wardrobe/wishlist|.wish-reasons, .message'
   'worn|#/wardrobe/worn|.calendar'
   'insights|#/wardrobe/insights|.ins-pick'
   'discover|#/discover?styles=skin,clean,intimate|.bcard-name'
