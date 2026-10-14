@@ -37,6 +37,8 @@ const FRESH = -0.1;
 // and as a little louder or quieter than most.
 const LEVEL_REASON = 0.35;
 const MILD_REASON = 0.15;
+// A reason pushing against the count is worth a "though" from this many sprays.
+const AGAINST_REASON = 0.5;
 
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
@@ -56,6 +58,21 @@ export function concentrationOf(name) {
   const hit = CONCENTRATIONS.find(([re]) => re.test(name ?? ''));
   return hit ? { sprays: hit[1], why: hit[2] } : null;
 }
+
+// A record's strength: its name's claim, else a body mist by the dataset's
+// flag (most mists don't say so in their name: "At the Beach").
+const isMist = r => [r.extras?.flags, r.about?.flags].some(flags => flags?.includes('mist'));
+function strengthOf(record) {
+  const named = concentrationOf(record.name);
+  if (named || !isMist(record)) return named;
+  const [, sprays, why] = CONCENTRATIONS[0];
+  return { sprays, why };
+}
+
+// A perfume oil, as Discover's cards call one (src/views/discover/templates.js
+// formatOf): dabbed on, not sprayed.
+const OIL = /\b(?:perfume|fragrance|parfum|attar|concentrated|body) oil\b|\b(?:oil|attar)$/i;
+export const isOil = record => OIL.test(String(record?.name ?? ''));
 
 // By occasion id: sprays added, the most it should take, and why.
 const OCCASIONS = {
@@ -84,9 +101,21 @@ const spotText = spot => SPOT_TEXT[spot] ?? `the ${spot}`;
  * Spray guidance for a record in a window (conditions: feelsF, dewF or
  * humidity) and an optional occasion (object or id). `skin` ({ longevity,
  * sillage }, -1..1) overrides the record's own `personal` nudges.
- * -> { sprays: [lo, hi], where: [spot], text, why: [reason], note }
+ * -> { sprays: [lo, hi], unit: 'spray', where: [spot], text, why: [reason],
+ * note }. A perfume oil gets dabs (`unit: 'dab'`) instead.
  */
 export function sprayGuide(record, conditions, occasion = null, skin = null) {
+  if (isOil(record)) {
+    const quiet = (typeof occasion === 'string' ? occasion : occasion?.id) === 'office';
+    return {
+      sprays: quiet ? [1, 1] : [1, 2],
+      unit: 'dab',
+      where: quiet ? ['wrists'] : ['wrists', 'neck'],
+      text: `${quiet ? 'A dab, on the wrists' : 'A dab or two, on the wrists and the neck'}. A perfume oil goes on by touch, and a little goes far.`,
+      why: ['A perfume oil'],
+      note: null,
+    };
+  }
   const frag = skin ? { ...record, personal: { ...record.personal, ...skin } } : record;
   const key = typeof occasion === 'string' ? occasion : occasion?.id ?? null;
   const occ = OCCASIONS[key] ?? {};
@@ -110,7 +139,7 @@ export function sprayGuide(record, conditions, occasion = null, skin = null) {
   else if (longevity <= -LEVEL_REASON) add(-lastsStep * longevity, 'Fades early', 'it fades early');
   else if (longevity >= LEVEL_REASON) add(-lastsStep * longevity, 'Lasts for hours', 'it lasts for hours');
 
-  const strength = concentrationOf(frag.name);
+  const strength = strengthOf(frag);
   if (strength) {
     const rated = (performanceRating(frag)?.votes ?? 0) >= RATED_VOTES;
     add(strength.sprays * (rated ? 0.5 : 1), strength.why, `it’s ${strength.why.charAt(0).toLowerCase()}${strength.why.slice(1)}`);
@@ -145,10 +174,21 @@ export function sprayGuide(record, conditions, occasion = null, skin = null) {
   const where = spots.slice(0, Math.max(1, Math.min(hi, spots.length)));
   const under = spots === SPOTS.office || spots === SPOTS.heat ? ', under your shirt' : '';
 
+  // Why: what moved the count the way it went leads ("and" between two of
+  // them); a big push the other way follows with "though". A count the
+  // occasion caps is the occasion's doing.
   const ranked = terms.filter(t => t.why && Math.abs(t.sprays) >= 0.25).sort((a, b) => Math.abs(b.sprays) - Math.abs(a.sprays));
+  const capped = occ.max != null && amount > occ.max;
+  const way = Math.sign((lo + hi) / 2 - BASE) || Math.sign(amount - BASE) || Math.sign(ranked[0]?.sprays ?? 0);
+  const along = ranked.filter(t => Math.sign(t.sprays) === way), against = ranked.filter(t => Math.sign(t.sprays) === -way);
+  if (capped) along.sort((a, b) => (b.why === occ.why) - (a.why === occ.why));
   const count = lo === hi ? `${lo} spray${lo === 1 ? '' : 's'}` : `${lo}–${hi} sprays`;
   const text = [`${count}, on ${listOf(where.map(spotText))}${under}.`];
-  if (ranked.length) text.push(`${cap(listOf(ranked.slice(0, 2).map(t => t.clause)))}.`);
+  const [lead, next] = along, other = against[0];
+  if (lead) {
+    const though = other && Math.abs(other.sprays) >= AGAINST_REASON && !(next && Math.abs(next.sprays) >= Math.abs(other.sprays));
+    text.push(`${cap(lead.clause)}${though ? `, though ${other.clause}` : next ? ` and ${next.clause}` : ''}.`);
+  } else if (other) text.push(`${cap(other.clause)}.`);
 
   // One note, most useful first: don't chase a loud bottle, top up one that
   // fades (by the crowd's votes or your skin) or burns off in heat, and a
@@ -161,5 +201,5 @@ export function sprayGuide(record, conditions, occasion = null, skin = null) {
   } else if (heat >= 0.5 && h <= FRESH) note = 'Fresh notes burn off fast in heat; take it along to top up.';
   else if (wearsClose(record) && !(mine.sillage > 0)) note = 'It wears close, so this many won’t crowd anyone.';
 
-  return { sprays: [lo, hi], where, text: text.join(' '), why: ranked.map(t => t.why), note };
+  return { sprays: [lo, hi], unit: 'spray', where, text: text.join(' '), why: ranked.map(t => t.why), note };
 }

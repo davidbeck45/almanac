@@ -34,10 +34,10 @@ export function figureSVG(where) {
   </svg>`;
 }
 
-/** A guide's spray count in words: "2 sprays", "2–3 sprays". */
+/** A guide's spray count in words: "2 sprays", "2–3 sprays" ("1–2 dabs" for a perfume oil). */
 export function sprayCount(guide) {
-  const [lo, hi] = guide.sprays;
-  return lo === hi ? `${lo} spray${lo === 1 ? '' : 's'}` : `${lo}–${hi} sprays`;
+  const [lo, hi] = guide.sprays, unit = guide.unit ?? 'spray';
+  return lo === hi ? `${lo} ${unit}${lo === 1 ? '' : 's'}` : `${lo}–${hi} ${unit}s`;
 }
 
 /** The guide for a bottle's model, with its skin nudges. */
@@ -51,7 +51,7 @@ export function sprayHTML(m) {
   const rest = cap(g.text.replace(/^[^,]*,\s*/, ''));
   const when = m.win ? (m.occasion ? `${m.occasion.label} · ${m.win.label.toLowerCase()}` : m.win.label) : '';
   return `<section class="bp-section" id="bp-spray" aria-labelledby="spray-title">
-    <h3 id="spray-title" tabindex="-1">How much to spray${when ? ` <span class="h3-aside">${esc(when)}</span>` : ''}</h3>
+    <h3 id="spray-title" tabindex="-1">${g.unit === 'dab' ? 'How much to put on' : 'How much to spray'}${when ? ` <span class="h3-aside">${esc(when)}</span>` : ''}</h3>
     <div class="spray-guide">
       ${figureSVG(g.where)}
       <div class="spray-text">

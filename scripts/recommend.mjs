@@ -184,7 +184,7 @@ const SPRAY_SITUATIONS = [
   { label: 'Mild day', slot: 'day', feelsF: 66, humidity: 55, dewF: 50, category: 'clear' },
   { label: 'Cold night', slot: 'night', feelsF: 32, humidity: 65, dewF: 22, category: 'clear' },
 ];
-const sprayJSON = g => ({ sprays: g.sprays, where: g.where, text: g.text, why: g.why, ...(g.note && { note: g.note }) });
+const sprayJSON = g => ({ sprays: g.sprays, ...(g.unit !== 'spray' && { unit: g.unit }), where: g.where, text: g.text, why: g.why, ...(g.note && { note: g.note }) });
 
 async function main() {
   let args;
