@@ -2,15 +2,23 @@
 // and a night window. Open-Meteo returns wall-clock times for the location
 // ("2026-09-28T13:00"); we parse them as UTC and shift "now" by the
 // location's UTC offset so all comparisons happen in the location's time.
-import { describe, SEVERITY, isWet } from './wmo.js';
+import { describe, SEVERITY } from './wmo.js';
 import { dewPointF } from './engine.js';
 
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 const ARCHIVE_URL = 'https://archive-api.open-meteo.com/v1/archive';
 export const WINDOWS = { day: [10, 17], night: [19, 23] };
-// How far Open-Meteo forecasts, today included. Past it, trips and events
-// get typical weather for the dates (typicalWindow).
-export const FORECAST_DAYS = 16;
+// How far ahead trips and events take the forecast, today included; past it
+// they get typical weather for the dates (typicalWindow). Open-Meteo runs to
+// 16 days, but the blend thins out: ICON stops after about 7 days and GEM
+// after 10, leaving GFS and ECMWF, then GFS alone. On score-forecasts.py's 14
+// airports (Sep 1 – Oct 6 2026) typical weather missed window temperatures
+// by 5.5°F; the blend by 2.5 four days out and 3.6 at seven, GFS and ECMWF
+// alone by 4.0 at seven, growing about half a degree a day, GFS alone by 5.0.
+// Open-Meteo keeps past runs only seven days out, so ten is that growth's
+// reach. A forecast window also needs FORECAST_MODELS of the blend's models.
+export const FORECAST_DAYS = 10;
+const FORECAST_MODELS = 2;
 
 const CACHE_KEY = 'scentcast.weather';
 const CACHE_VERSION = 3; // bump when the request shape changes
@@ -53,6 +61,9 @@ export function blendModels(raw) {
       return vals.length ? avg(vals) : own(h, key)?.[i] ?? null;
     });
   }
+  // How many models each hour's feels-like averages (a single-model response has no count).
+  const feels = BLEND_MODELS.map(m => h[`apparent_temperature_${m}`]).filter(Boolean);
+  if (feels.length) hourly.models = h.time.map((_, i) => feels.filter(s => s[i] != null).length);
   const temps = date => hourly.temperature_2m.filter((t, i) => t != null && h.time[i].startsWith(date));
   const daily = {
     time: d.time,
@@ -159,6 +170,8 @@ function hourlyRows(forecast) {
     dew: dewPointF(h.temperature_2m[i], h.relative_humidity_2m[i]),
     code: h.weather_code[i],
     pop: h.precipitation_probability?.[i] ?? 0,
+    models: h.models?.[i],
+    rain: h.precipitation?.[i],
   }));
 }
 
@@ -196,6 +209,9 @@ function slotWindow(hours, slot, dateISO, fromHour, ctx) {
     code: cond.code,
     condition: cond.label,
     category: cond.category,
+    // The fewest models behind an hour, and the rain that fell (mm, archived hours only).
+    ...(span.some(x => x.models != null) && { models: Math.min(...span.map(x => x.models ?? 0)) }),
+    ...(span.some(x => x.rain != null) && { rainMM: span.reduce((sum, x) => sum + (x.rain ?? 0), 0) }),
   };
 }
 
@@ -212,7 +228,12 @@ export function windowOn(forecast, dateISO, slot) {
 const TYPICAL_YEARS = 3;
 const TYPICAL_SPREAD = 3;
 const ARCHIVE_LAG_DAYS = 7;
-const TYPICAL_HOURLY = 'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code';
+const TYPICAL_HOURLY = 'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,precipitation';
+// A past window counts as wet from this much rain or snow (mm): the archive
+// codes any hour with a trace as drizzle, which made a Sydney summer read
+// "Light drizzle" and Mumbai's monsoon wet every day.
+const WET_MM = 1;
+const FALLING = new Set(['drizzle', 'rain', 'storm', 'snow']);
 
 const shiftDays = (iso, days) => new Date(Date.parse(`${iso}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 // The same month and day `years` earlier; February 29 falls back to the 28th.
@@ -258,9 +279,10 @@ const mode = xs => {
 /**
  * The typical day or night window on dateISO, from fetchTypical's data:
  * feels-like, humidity and dew point averaged over every archived window
- * within TYPICAL_SPREAD days of the date, `pop` the share of them that were
- * wet, and the commonest condition (a wet one only when most were wet).
- * Shaped like a forecast window, with `typical: true`; null without data.
+ * within TYPICAL_SPREAD days of the date, `pop` the share of them with
+ * WET_MM of rain or snow, and the commonest condition among the wet ones
+ * when most were wet, else among the dry ones. Shaped like a forecast
+ * window, with `typical: true`; null without data.
  */
 export function typicalWindow(climate, dateISO, slot) {
   const wins = [];
@@ -273,10 +295,16 @@ export function typicalWindow(climate, dateISO, slot) {
   }
   if (!wins.length) return null;
   const mean = key => avg(wins.map(w => w[key]));
-  const wet = wins.filter(w => isWet(w.category));
-  const usual = wet.length * 2 >= wins.length ? wet : wins.filter(w => !isWet(w.category));
+  // Archives without a rain total read wet from the condition.
+  const wet = wins.filter(w => (w.rainMM ?? (FALLING.has(w.category) ? WET_MM : 0)) >= WET_MM);
+  const rainy = wet.length * 2 >= wins.length;
+  // The rain or snow on the wet ones, or the skies on the dry ones, where a
+  // trace of drizzle means overcast.
+  const usual = rainy
+    ? wet.filter(w => FALLING.has(w.category))
+    : wins.filter(w => !wet.includes(w)).map(w => (FALLING.has(w.category) ? { ...w, category: 'cloudy', code: 3 } : w));
   const category = mode(usual.map(w => w.category));
-  const cond = describe(mode(usual.filter(w => w.category === category).map(w => w.code)));
+  const cond = describe(category ? mode(usual.filter(w => w.category === category).map(w => w.code)) : 61);
   return {
     slot,
     label: slotLabel(slot, dateISO, null, null),
@@ -310,7 +338,12 @@ export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'
   // The location's date can be a day off UTC's; windowOn finds what's there.
   if (fromISO <= shiftDays(new Date(nowMs).toISOString().slice(0, 10), FORECAST_DAYS)) {
     const forecast = await fetchForecast(loc, { days: FORECAST_DAYS });
-    for (const d of dates) for (const s of slots) found.set(key(d, s), windowOn(forecast, d, s));
+    for (const d of dates) {
+      for (const s of slots) {
+        const win = windowOn(forecast, d, s);
+        if (win && !(win.models < FORECAST_MODELS)) found.set(key(d, s), win);
+      }
+    }
   }
   const missing = dates.filter(d => slots.some(s => !found.get(key(d, s))));
   if (missing.length) {

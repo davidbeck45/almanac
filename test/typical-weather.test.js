@@ -7,8 +7,9 @@ const shift = (iso, days) => new Date(Date.parse(`${iso}T12:00:00Z`) + days * 86
 const daysIn = (from, to) => Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1;
 const json = body => ({ ok: true, status: 200, json: async () => body });
 
-// Archive-shaped hourly data from..to, every hour at `temp`, coded `code`.
-function archive(from, to, temp, code = 1) {
+// Archive-shaped hourly data from..to, every hour at `temp`, coded `code`,
+// with `rain` mm an hour when given.
+function archive(from, to, temp, code = 1, rain = null) {
   const f = syntheticForecast(daysIn(from, to), { start: from });
   return {
     latitude: 51.5,
@@ -18,8 +19,25 @@ function archive(from, to, temp, code = 1) {
       apparent_temperature: f.hourly.time.map(() => temp - 3),
       relative_humidity_2m: f.hourly.time.map(() => 80),
       weather_code: f.hourly.time.map(() => code),
+      ...(rain != null && { precipitation: f.hourly.time.map(() => rain) }),
     },
   };
+}
+
+// A forecast as Open-Meteo sends it for the blend: each variable per model,
+// the models after the first `full` days dropping to GFS alone.
+function multiModel(days, start, full) {
+  const f = syntheticForecast(days, { start });
+  const hourly = { time: f.hourly.time, weather_code_best_match: f.hourly.weather_code, precipitation_probability_best_match: f.hourly.precipitation_probability };
+  const cut = shift(start, full);
+  for (const key of ['temperature_2m', 'apparent_temperature', 'relative_humidity_2m']) {
+    hourly[`${key}_best_match`] = f.hourly[key];
+    for (const m of ['gfs_seamless', 'ecmwf_ifs', 'icon_seamless', 'gem_seamless']) {
+      hourly[`${key}_${m}`] = f.hourly[key].map((v, i) => (m === 'gfs_seamless' || f.hourly.time[i] < cut ? v : null));
+    }
+  }
+  const daily = Object.fromEntries(Object.entries(f.daily).map(([k, v]) => [k === 'time' ? k : `${k}_best_match`, v]));
+  return { ...f, hourly, daily };
 }
 
 // Stubs fetch for one test: forecast and archive answers, and the URLs asked for.
@@ -54,6 +72,17 @@ test('typical weather averages the same dates, give or take three days, over thr
   const dry = typicalWindow({ latitude: 51.5, years: years.slice(1).concat(years[2]) }, '2026-12-15', 'day');
   assert.equal(dry.category, 'clear');
   assert.equal(typicalWindow({ latitude: 51.5, years }, '2026-06-01', 'day'), null, 'no data, no window');
+});
+
+test('a trace of drizzle reads dry; a wet window needs rain that adds up', () => {
+  const years = rain => [1, 2, 3].map(ago => ({ ago, data: archive(`${2027 - ago}-01-01`, `${2027 - ago}-01-31`, 80, 51, rain) }));
+  const trace = typicalWindow({ latitude: -33.9, years: years(0.01) }, '2027-01-13', 'day');
+  assert.equal(trace.pop, 0, 'a tenth of a millimetre over the day is not a wet day');
+  assert.equal(trace.category, 'cloudy');
+  assert.equal(trace.condition, 'Overcast');
+  const soaked = typicalWindow({ latitude: -33.9, years: years(0.5) }, '2027-01-13', 'day');
+  assert.equal(soaked.pop, 100);
+  assert.equal(soaked.category, 'drizzle');
 });
 
 test('the archive is asked for whole past years, a week behind, February 29 included', async () => {
@@ -96,4 +125,18 @@ test('a trip takes the forecast as far as it reaches, then typical weather', asy
     assert.ok(far.every(w => w.typical && w.slot === 'night') && far.length === 2);
     assert.ok(!asked.some(u => u.hostname === 'api.open-meteo.com'), 'no forecast request past its reach');
   });
+});
+
+test('a forecast day left to one model gives way to typical weather', async () => {
+  const today = '2026-10-13';
+  const nowMs = Date.parse(`${today}T12:00:00Z`);
+  await withFetch(u => (u.hostname === 'api.open-meteo.com'
+    ? multiModel(FORECAST_DAYS, today, 4)
+    : archive(u.searchParams.get('start_date'), u.searchParams.get('end_date'), 30)), async () => {
+    const wins = await tripWindows({ lat: 51.5, lon: -0.1 }, shift(today, 2), shift(today, 5), { slots: ['day'], nowMs });
+    assert.deepEqual(wins.map(w => !!w.typical), [false, false, true, true], 'GFS alone past day four');
+    assert.equal(wins[0].models, 4);
+    assert.equal(wins[0].feelsF, 72);
+  });
+  assert.equal(FORECAST_DAYS, 10, 'the blend beats typical weather about ten days out, not sixteen');
 });
