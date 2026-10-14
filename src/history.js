@@ -23,7 +23,8 @@ export function wornIn(history, dateISO, slot) {
 const round2 = x => Math.round(x * 100) / 100;
 
 // Toggle: logging the same bottle again for the same slot clears it. A wear
-// logged for an occasion (the Occasion tab) keeps its id, for occasionCounts.
+// keeps the use it was logged for, for occasionCounts: an occasion id from
+// the Occasion tab, 'daily' from Today and the Week.
 export function toggleWear(id, dateISO, slot, where = null, occasion = null) {
   const history = loadHistory();
   const current = wornIn(history, dateISO, slot);
@@ -40,8 +41,8 @@ export function toggleWear(id, dateISO, slot, where = null, occasion = null) {
 
 // The journal as a file: the wears, plus the device's place and hidden bottles
 // so a check can rebuild what the app was choosing from, and your own
-// ratings and skin nudges (src/skin.js's map) when there are any.
-export function journalExport(history, loc, hidden, nowISO = new Date().toISOString(), skin = null) {
+// ratings and skin nudges (`skin`, src/skin.js's loadSkin()) when there are any.
+export function journalExport(history, loc, hidden, { nowISO = new Date().toISOString(), skin = null } = {}) {
   return {
     app: 'scentcast-journal',
     version: 1,
@@ -68,16 +69,17 @@ export function parseJournal(data) {
 }
 
 /**
- * Logged wears per use, for the gap finder's use shares: { daily, casual,
- * office, … } (only uses worn). A wear logged without an occasion (Today,
- * the Week, or before occasions were recorded) counts as daily; plans don't
- * count. `since` (YYYY-MM-DD) leaves out older wears.
+ * Logged wears per use, for the gap finder's use shares: { daily, office,
+ * date, …, untagged } (only keys worn). A wear logged without a use (before
+ * wears recorded one) counts as `untagged`, not daily: a year of those would
+ * swamp the shares. Plans don't count. `since` (YYYY-MM-DD) leaves out
+ * older wears.
  */
 export function occasionCounts(history, since = null) {
   const counts = {};
   for (const h of history) {
     if (h.planned || (since && h.date < since)) continue;
-    const use = h.occasion ?? 'daily';
+    const use = h.occasion ?? 'untagged';
     counts[use] = (counts[use] ?? 0) + 1;
   }
   return counts;

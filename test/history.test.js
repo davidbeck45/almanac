@@ -38,7 +38,7 @@ test('a logged wear remembers roughly where it happened', () => {
 });
 
 test('the journal export carries the wears, place and hidden bottles', () => {
-  const data = journalExport(history, { name: 'New York', lat: 40.71283, lon: -74.00597 }, new Set(['4310']), '2026-10-03T12:00:00Z');
+  const data = journalExport(history, { name: 'New York', lat: 40.71283, lon: -74.00597 }, new Set(['4310']), { nowISO: '2026-10-03T12:00:00Z' });
   assert.equal(data.app, 'scentcast-journal');
   assert.deepEqual(data.location, { name: 'New York', lat: 40.71, lon: -74.01 });
   assert.deepEqual(data.hidden, ['4310']);
@@ -68,16 +68,17 @@ test('a wear logged for an occasion keeps it, and wears count per use', () => {
     { id: 'd', date: '2026-10-03', slot: 'day', planned: true },
     { id: 'e', date: '2026-08-01', slot: 'day' },
   ];
-  assert.deepEqual(occasionCounts(log), { date: 1, office: 2, daily: 2 }, 'untagged wears are daily; plans don’t count');
+  assert.deepEqual(occasionCounts(log), { date: 1, office: 2, untagged: 2 }, 'untagged wears stay apart; plans don’t count');
+  assert.deepEqual(occasionCounts([{ id: 'a', date: '2026-10-01', slot: 'day', occasion: 'daily' }]), { daily: 1 }, 'daily when Today says so');
   assert.deepEqual(occasionCounts(log, '2026-09-30'), { date: 1, office: 2 });
   assert.deepEqual(occasionCounts([]), {});
 });
 
 test('the export carries ratings when there are some, and older files still read', () => {
   const skin = { 31861: { rating: 5, longevity: 1, sillage: 0, updated: '2026-10-01' } };
-  const data = journalExport(history, null, new Set(), '2026-10-03T12:00:00Z', skin);
+  const data = journalExport(history, null, new Set(), { nowISO: '2026-10-03T12:00:00Z', skin });
   assert.deepEqual(data.skin, skin);
-  assert.ok(!('skin' in journalExport(history, null, new Set(), '2026-10-03T12:00:00Z', {})), 'no empty skin key');
+  assert.ok(!('skin' in journalExport(history, null, new Set(), { skin: {} })), 'no empty skin key');
   assert.ok(!('skin' in journalExport(history, null, new Set())));
   assert.deepEqual(parseJournal(JSON.parse(JSON.stringify(data))).skin, { 31861: skin[31861] });
   const old = parseJournal({ app: 'scentcast-journal', version: 1, history: [{ id: 4310, date: '2026-10-01', slot: 'day', occasion: 'office' }] });
