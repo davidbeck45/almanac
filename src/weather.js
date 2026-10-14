@@ -89,7 +89,7 @@ export async function fetchForecast({ lat, lon }, { days = 7 } = {}) {
     models: [DEFAULT_MODEL, ...BLEND_MODELS].join(','),
   });
   const res = await fetch(`${FORECAST_URL}?${params}`);
-  if (!res.ok) throw Object.assign(new Error(`Weather request failed (${res.status})`), { status: res.status });
+  if (!res.ok) throw await requestError(res);
   return { ...blendModels(await res.json()), fetchedAt: Date.now() };
 }
 
@@ -135,10 +135,25 @@ export async function getForecast(loc, { force = false } = {}) {
 /** What went wrong fetching the forecast, as a sentence for the page. */
 export function forecastError(err) {
   const status = err?.status;
-  if (status === 429) return 'The forecast service is busy. Try again in a minute.';
-  if (status >= 500) return 'The forecast service is down for the moment. Try again soon.';
-  if (status) return `The forecast service turned the request down (error ${status}). Try again later.`;
-  return 'Can’t reach the forecast. Check your connection and try again.';
+  const service = err?.service === 'archive' ? 'The weather archive' : 'The forecast service';
+  // Open-Meteo says why it refused: a minute's burst, or the day's requests used up.
+  if (status === 429 && /daily/i.test(err.reason ?? '')) return `${service}’s daily limit is used up. Try again tomorrow.`;
+  if (status === 429) return `${service} is busy. Try again in a minute.`;
+  if (status >= 500) return `${service} is down for the moment. Try again soon.`;
+  if (status) return `${service} turned the request down (error ${status}). Try again later.`;
+  return err?.service === 'archive' ? 'Can’t reach the weather archive. Check your connection and try again.' : 'Can’t reach the forecast. Check your connection and try again.';
+}
+
+/**
+ * An Open-Meteo answer that isn't ok, as an error forecastError reads: its
+ * status, the `reason` its body gives ("Daily API request limit exceeded…")
+ * and which `service` ('forecast' or 'archive') it came from.
+ */
+export async function requestError(res, service = 'forecast') {
+  let reason = '';
+  try { reason = String((await res.json())?.reason ?? ''); } catch {}
+  const what = service === 'archive' ? 'Weather archive request' : 'Weather request';
+  return Object.assign(new Error(`${what} failed (${res.status})${reason ? `: ${reason}` : ''}`), { status: res.status, reason, service });
 }
 
 function headline(hours) {
@@ -269,7 +284,7 @@ export async function fetchTypical({ lat, lon }, fromISO, toISO, { years = TYPIC
       timezone: 'auto',
     });
     const res = await fetch(`${ARCHIVE_URL}?${params}`);
-    if (!res.ok) throw Object.assign(new Error(`Weather archive request failed (${res.status})`), { status: res.status });
+    if (!res.ok) throw await requestError(res, 'archive');
     return { ago, data: await res.json() };
   };
   const out = await Promise.all(Array.from({ length: years }, (_, i) => get(first + i)));

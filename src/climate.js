@@ -6,7 +6,7 @@
 // the archive fails, it's DEFAULT_CLIMATE. Runs in the browser and in Node
 // (the CLI), where nothing is stored.
 // Weather data by Open-Meteo.com (CC BY 4.0).
-import { WINDOWS } from './weather.js';
+import { WINDOWS, forecastError, requestError } from './weather.js';
 import { climateSummary, DEFAULT_CLIMATE } from './gaps.js';
 
 const ARCHIVE_URL = 'https://archive-api.open-meteo.com/v1/archive';
@@ -57,10 +57,13 @@ const browserStorage = () => {
   }
 };
 
+// The saved places ([{ key, summary }]); anything stored in another shape
+// reads as none, so the next fetch writes the cache afresh.
 function readCache(storage) {
   try {
     const saved = JSON.parse(storage?.getItem(KEY));
-    return saved?.v === VERSION ? saved.places : [];
+    const places = saved?.v === VERSION && Array.isArray(saved.places) ? saved.places : [];
+    return places.filter(p => p && typeof p.key === 'string' && p.summary && typeof p.summary === 'object');
   } catch {
     return [];
   }
@@ -83,7 +86,7 @@ export async function fetchClimate(lat, lon, { now = new Date(), storage = brows
       hourly: 'apparent_temperature,dew_point_2m', temperature_unit: 'fahrenheit', timezone: 'auto',
     });
     const res = await fetch(`${ARCHIVE_URL}?${params}`);
-    if (!res.ok) throw new Error(`The climate archive didn’t answer (${res.status}).`);
+    if (!res.ok) throw new Error(forecastError(await requestError(res, 'archive')));
     const summary = climateSummary(archiveWindows(await res.json(), lat));
     if (!Object.values(summary).some(c => c.wins.length)) throw new Error('The climate archive had no weather for this place.');
     try {

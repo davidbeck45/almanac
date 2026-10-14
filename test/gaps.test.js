@@ -546,6 +546,12 @@ test('a place’s climate comes from one archive call, is kept, and falls back o
     assert.match(calls[0], /archive-api\.open-meteo\.com.*hourly=apparent_temperature%2Cdew_point_2m/);
     const again = await fetchClimate(29.9, -95.3, { storage });
     assert.equal(calls.length, 1, 'the same half-degree cell comes from storage');
+    // A cache stored in another shape reads as none, and the next fetch writes it afresh.
+    const kept = store.get('scentcast.climate');
+    store.set('scentcast.climate', JSON.stringify({ v: JSON.parse(kept).v, places: {} }));
+    assert.ok((await fetchClimate(29.76, -95.37, { storage })).local);
+    assert.equal(calls.length, 2);
+    assert.ok(Array.isArray(JSON.parse(store.get('scentcast.climate')).places));
     assert.deepEqual(again.summary, first.summary);
     globalThis.fetch = async () => { throw new TypeError('fetch failed'); };
     const offline = await fetchClimate(40.7, -74, { storage });

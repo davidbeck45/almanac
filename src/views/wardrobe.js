@@ -524,8 +524,9 @@ async function share(app) {
   const records = activeFragrances();
   if (!records.length) return;
   const name = state.shared?.name ?? (state.active === 'mine' ? state.mine.name.trim() : 'David');
-  const url = shareURL(records, name);
+  let url;
   try {
+    url = shareURL(records, name);
     if (navigator.share) {
       await navigator.share({ title: 'Scentcast', text: name ? `${name}’s fragrance picks` : 'Fragrance picks', url });
       return;
@@ -533,7 +534,8 @@ async function share(app) {
     await navigator.clipboard.writeText(url);
     app.showToast('<span>Share link copied</span>');
   } catch (err) {
-    if (err?.name !== 'AbortError') app.showToast(`<span>Copy this link: ${esc(url)}</span>`);
+    if (!url) app.showToast('<span>Couldn’t make a share link</span>');
+    else if (err?.name !== 'AbortError') app.showToast(`<span>Copy this link: ${esc(url)}</span>`);
   }
 }
 
