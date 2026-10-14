@@ -256,17 +256,19 @@ export function bottleModel(route) {
 /** A bottle's about data: the build's (wardrobe, catalog) or loadAbout's; undefined while that loads. */
 export const aboutOf = m => m.f.about ?? m.about;
 
-// The whole page. `modal`: a dialog over the page (phones and tablets).
+// The whole page. `modal`: a dialog over the page (phones and tablets), a
+// <div> then (an <article> can't take role=dialog); docked, an <article>.
 // model: undefined while its record loads, null for a bottle no source has,
 // false when it couldn't load (offline).
 export function bottlePageHTML(model, { modal = true } = {}) {
+  const tag = modal ? 'div' : 'article';
   const frame = inner => `
     ${modal ? '<div class="bp-backdrop" data-action="close-bottle"></div>' : ''}
-    <article class="bp-panel"${modal ? ' role="dialog" aria-modal="true"' : ''} aria-labelledby="bottle-title">
+    <${tag} class="bp-panel"${modal ? ' role="dialog" aria-modal="true"' : ''} aria-labelledby="bottle-title">
       <div class="sheet-grip" aria-hidden="true"></div>
       <button class="icon-btn bp-close" data-action="close-bottle" aria-label="Close">${icon.close}</button>
       ${inner}
-    </article>`;
+    </${tag}>`;
   // The page's h2 is the tab's title too (the shell reads it).
   const notice = (title, message) => frame(`<h2 id="bottle-title" class="visually-hidden">${title}</h2><div class="bp-notice">${messageHTML(message)}</div>`);
   if (model === undefined) {

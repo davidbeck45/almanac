@@ -102,6 +102,8 @@ test('a whole page renders clean, owned or not', () => {
   assert.ok(!owned.includes('data-action="bp-want"'), 'no Want for a bottle you own');
 
   assert.match(owned, /<div class="bp-slot" data-section="check"><\/div>/, 'every section has its slot, empty or not');
+  assert.match(owned, /<div class="bp-panel" role="dialog" aria-modal="true"/, 'a dialog is a div: an article can’t take role=dialog');
+  assert.match(bottlePageHTML(modelOf(evil), { modal: false }), /<article class="bp-panel" aria-labelledby/, 'docked, it’s an article');
   assert.match(owned, /id="bp-spray"/, 'Now’s spray line finds the spray guide');
 
   const other = clean(bottlePageHTML(modelOf(stranger, { owned: false, active: false, entry: null, solo: true, wanted: true })), 'a bottle you don’t own');
