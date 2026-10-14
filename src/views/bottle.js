@@ -154,12 +154,16 @@ function summarySection({ entry, comfort, wears, todayISO: today, owned }) {
   </div>`;
 }
 
-function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned }) {
-  const own = owned ? '' : `<button class="btn primary" data-action="own" data-id="${esc(f.id)}">${icon.plus}<span>I own it</span></button>`;
+function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned, active }) {
+  const own = `<button class="btn primary" data-action="own" data-id="${esc(f.id)}">${icon.plus}<span>I own it</span></button>`;
+  // Switched off in Wardrobe: it can come back from here.
+  const rotation = active
+    ? `<button class="btn tertiary" data-action="hide" data-id="${esc(f.id)}">${icon.hide}Hide from picks</button>`
+    : `<button class="btn secondary" data-action="unhide" data-id="${esc(f.id)}">${icon.plus}<span>Back in rotation</span></button>`;
   return `<div class="bp-actions">
     ${owned ? (wearable && entry ? wearButton(entry, ctx, worn) : '') : own}
     ${f.url ? `<a class="btn secondary" href="${esc(f.url)}" target="_blank" rel="noopener">Fragrantica ${icon.external}</a>` : ''}
-    ${owned ? `<button class="btn tertiary" data-action="hide" data-id="${esc(f.id)}">${icon.hide}Hide from picks</button>` : ''}
+    ${owned ? rotation : ''}
   </div>`;
 }
 

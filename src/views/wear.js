@@ -274,6 +274,8 @@ function guard() {
 function nowPane() {
   const blocked = guard();
   if (blocked) return blocked;
+  // A forecast without hours for either window (a model gap): nothing to rank yet.
+  if (!nowSlot()) return skeletonHTML(1);
   const { win, ranked, pick } = nowSlot();
   const worn = wornId(win);
   return `${banner()}
