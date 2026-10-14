@@ -67,6 +67,8 @@ export function pooled(type, channel, payload) {
     let inputs;
     try {
       inputs = await poolInputs();
+    } catch {
+      return;
     } finally {
       reading.delete(id);
     }

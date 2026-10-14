@@ -31,8 +31,8 @@ export const wantToggle = (f, on) =>
 
 function overlapRow(o, ctx) {
   const record = o.record ?? findRecord(o.id) ?? o;
-  // An owned dupe's original: say whose.
-  const meta = o.link ? esc(o.link)
+  // The reasons say how voters link them; the row only names it. An owned dupe's original: say whose.
+  const meta = o.link ? `Voters link them · ${pct(o.sim)} alike`
     : o.via ? `The original of your ${esc(o.via.name)} · ${pct(o.sim)} alike`
     : `Closest you own · ${pct(o.sim)} alike`;
   return rowHTML(record, { meta, open: { ctx }, cls: 'wrap' });

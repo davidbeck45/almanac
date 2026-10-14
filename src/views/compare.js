@@ -55,8 +55,12 @@ const aboutFor = f => f.about ?? state.about.get(f.id);
  */
 export function relation(a, b, aboutA = null, aboutB = null) {
   const sim = a.accords && b.accords ? similarity(a, b) : null;
-  const vote = (x, y, about) => about?.smellsLike?.find(v => String(v.id) === y.id && v.up > v.down) && { x, y, v: about.smellsLike.find(v => String(v.id) === y.id) };
-  const voted = vote(a, b, aboutA) || vote(b, a, aboutB);
+  // x's page votes that it smells like y, more for than against.
+  const vote = (x, y, about) => {
+    const v = about?.smellsLike?.find(s => String(s.id) === y.id);
+    return v && v.up > v.down ? { x, y, v } : null;
+  };
+  const voted = vote(a, b, aboutA) ?? vote(b, a, aboutB);
   let text;
   if (String(a.original?.id) === b.id) text = `${a.name} is inspired by ${b.name}.`;
   else if (String(b.original?.id) === a.id) text = `${b.name} is inspired by ${a.name}.`;
@@ -283,7 +287,8 @@ function load(app, route) {
       again();
     });
   }
-  for (const id of ids.filter(id => /^\d+$/.test(id) && !askedAbout.has(id) && !state.about.has(id))) {
+  // The wardrobe's and catalog's bottles carry theirs.
+  for (const id of ids.filter(id => /^\d+$/.test(id) && !askedAbout.has(id) && !state.about.has(id) && !findRecord(id)?.about)) {
     askedAbout.add(id);
     loadAbout(id).then(about => { state.about.set(id, about); again(); }, () => askedAbout.delete(id));
   }
@@ -329,7 +334,7 @@ export function pickerLists(sheet, { family = null, context = [], owned = [] } =
   const fam = family ? [family.original, ...family.cheaper, ...family.siblings].filter(Boolean).map(e => e.record ?? e) : [];
   const lists = [
     { title: 'Smells like it', records: keep(fam).slice(0, 5) },
-    { title: 'Also good right now', records: keep(context).slice(0, 5) },
+    { title: 'From the same list', records: keep(context).slice(0, 5) },
     { title: 'Your bottles', records: keep([...owned].sort((a, b) => a.name.localeCompare(b.name))) },
   ];
   if (q) lists.push({ title: 'From Fragrantica', records: keep(sheet.results ?? []) });

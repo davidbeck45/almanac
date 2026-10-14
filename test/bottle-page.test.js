@@ -6,7 +6,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { SECTIONS, bottlePageHTML } from '../src/views/bottle.js';
+import { SECTIONS, bottlePageHTML, pooled } from '../src/views/bottle.js';
+import { state } from '../src/app/state.js';
 import '../src/views/sections.js';
 import { buyCheckHTML, checkable } from '../src/views/bottle-check.js';
 import { sprayHTML, figureSVG } from '../src/views/bottle-spray.js';
@@ -98,6 +99,30 @@ test('a whole page renders clean, owned or not', () => {
   assert.match(other, /aria-busy="true"/, 'the pool-backed sections show a skeleton until they’re asked');
 });
 
+// ---------- Pool answers ----------
+
+test('a section asks the pool once per bottle and wardrobe, and draws the page when the answer lands', async () => {
+  // In Node the pool can't load its files, so the answer is an error: the path a phone offline takes.
+  state.route = { dest: 'bottle', arg: '9828', query: {} };
+  let renders = 0;
+  const app = { renderBottle: () => renders++ };
+  const answers = pooled('dupes', 'test-dupes', m => (m.f.id.startsWith('my:') ? null : { id: m.f.id }));
+  assert.equal(answers.get('9828'), undefined, 'nothing until it’s asked');
+  await answers.ask({ f: { id: '9828' } }, app);
+  assert.notEqual(answers.get('9828').status, 'loading');
+  assert.equal(renders, 1, 'the page draws again with the answer');
+  await answers.ask({ f: { id: '9828' } }, app);
+  assert.equal(renders, 1, 'the same inputs don’t ask again');
+  answers.forget('9828');
+  assert.equal(answers.get('9828'), undefined, 'Try again forgets it');
+  await answers.ask({ f: { id: 'my:1' } }, app);
+  assert.equal(answers.get('my:1'), undefined, 'nothing to ask, nothing kept');
+  state.route = { dest: 'wear', pane: 'now', arg: null, query: {} };
+  await answers.ask({ f: { id: '9828' } }, app);
+  assert.equal(renders, 1, 'a page no longer on screen isn’t drawn');
+  state.route = null;
+});
+
 // ---------- Buy check ----------
 
 const check = {
@@ -133,6 +158,8 @@ test('the buy check: nothing for a bottle you own, a skeleton until it answers, 
   const covered = buyCheckHTML(m, { status: 'ready', result: { ...check, verdict: 'Covered', fills: [], overlap: null, twin: null } }, { who: 'My collection' });
   assert.match(covered, /data-tone="neutral">Covered/, 'a verdict it doesn’t know reads neutral');
   assert.match(covered, /For your collection/);
+  const linked = buyCheckHTML(m, { status: 'ready', result: { ...check, overlap: { ...check.overlap, link: `Voters call it a twin of ${EVIL}` } } });
+  assert.match(clean(linked, 'linked'), /Voters link them · 62% alike/, 'the row doesn’t repeat the reason');
   assert.ok(!covered.includes('bc-rows'));
   assert.match(buyCheckHTML(m, { status: 'loading', result: check }), /bc-card refreshing/, 'asked again, the old answer dims');
 });
@@ -337,7 +364,7 @@ test('compare with… lists its family, the list it came from and your bottles, 
   const [a, b, c] = fragrances;
   const family = { original: { id: 'o', record: { id: 'o', name: 'Original', brand: 'House' } }, cheaper: [{ id: b.id, record: b }], siblings: [] };
   const lists = pickerLists({ base: [a.id], query: '' }, { family, context: [a, b, c], owned: [c, b, a] });
-  assert.deepEqual(lists.map(l => l.title), ['Smells like it', 'Also good right now']);
+  assert.deepEqual(lists.map(l => l.title), ['Smells like it', 'From the same list']);
   assert.deepEqual(lists[0].records.map(r => r.id), ['o', b.id]);
   assert.deepEqual(lists[1].records.map(r => r.id), [c.id], 'the base and bottles already listed are left out');
   const typed = pickerLists({ base: [], query: 'origin', results: [{ id: '77', name: 'Original Musk', brand: 'X', stub: true }] }, { family, owned: fragrances });

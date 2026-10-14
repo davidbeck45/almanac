@@ -61,6 +61,14 @@ export function skinHTML(m, change = '') {
 
 // The last save's line, by bottle; it goes when the page shows another bottle.
 const changes = new Map();
+let shown = null;
+function changeFor(id) {
+  if (id !== shown) {
+    changes.clear();
+    shown = id;
+  }
+  return changes.get(id) ?? '';
+}
 
 // The bottle's place (1-based) in the list the page was opened from, as ranked now.
 function placeIn(key, id) {
@@ -87,7 +95,7 @@ function save(el, app, patch) {
 addSection({
   id: 'skin',
   order: 260,
-  render: m => skinHTML(m, changes.get(m.f.id) ?? ''),
+  render: m => skinHTML(m, changeFor(m.f.id)),
   actions: {
     // The same star again takes the rating off.
     'bp-skin-rate'(el, app) {
