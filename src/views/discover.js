@@ -25,6 +25,8 @@ import * as T from './discover/templates.js';
 const MIN_QUERY = 3;
 // How long Smells like waits for the bottle page's section (its record and the pool's answer).
 const DUPES_WAIT_MS = 15000;
+// Where that section is, best first: itself, its heading, its slot (drawn empty).
+const DUPES_MARKS = ['#bp-dupes', '#dupes-title', '[data-section="dupes"]'];
 const TYPING_MS = 320;
 // The styles last picked here, kept on this device: they start Discover next time.
 const STYLES_KEY = 'scentcast.styles';
@@ -32,7 +34,7 @@ const STYLES_KEY = 'scentcast.styles';
 const HOLD_MS = 450;
 
 // ---------- Modules loaded on demand ----------
-// src/discover.js (DEMO_LIKED, likedStyles, FILTERS) and "How you wear"
+// src/discover.js (DEMO_LIKED, likedStyles) and "How you wear"
 // (src/uses.js) stay out of the boot graph, as Wardrobe's panes keep them:
 // the page shows skeletons until they're in. (The scent styles are in it
 // already: the bottle page and the spray guide import them.) The pool's
@@ -50,9 +52,6 @@ function loadLib(app) {
     repaint(app);
   });
 }
-// The logic knows body mists once src/discover.js FILTERS has the key.
-const hasMists = () => Boolean(lib && 'mists' in lib.FILTERS);
-
 function loadSavedStyles() {
   try {
     const ids = JSON.parse(localStorage.getItem(STYLES_KEY));
@@ -74,15 +73,21 @@ function saveStyles(ids) {
 // Each list on screen is a slot: the question it answers (`key`), the
 // wardrobe it was asked for (`owner`), and its answer. A change of question
 // keeps the old answer on screen, dimmed, until the new one lands; another
-// wardrobe clears it.
-const slot = () => ({ key: null, owner: null, status: 'idle', result: null, error: '', ticket: null });
+// wardrobe clears it. `pins`: cards owned from the list (below).
+const slot = () => ({ key: null, owner: null, status: 'idle', result: null, error: '', ticket: null, pins: [] });
 const slots = { styles: slot(), like: slot(), notes: slot(), report: slot() };
 const ks = { styles: T.PAGE, like: T.PAGE, notes: T.PAGE };
 // "I own it" from a card keeps the lists as they are (the card says In Mine)
 // rather than asking again, while the same list is ranked. When owning it
 // switched lists (David's to Mine), the lists are asked again for the new
-// one, the old cards staying on screen, dimmed, until the answers land.
+// one, the old cards staying on screen, dimmed, until the answers land; the
+// card owned keeps its place in the new answer, which leaves owned bottles
+// out (its slot's `pins`: { id, index, pick }), until the list is asked
+// something else (Show more, `growing`, keeps them). Focus stays on its name
+// (`owning`), else goes to the list's title.
 let adopting = false;
+let growing = null;
+let owning = null; // { id, list }
 // After Show more, focus goes to the first new card.
 let focusAfter = null;
 // A want just taken away from a card or a row: { list: the want list before, id }, for Undo.
@@ -103,6 +108,7 @@ function load(app, name, key, ask) {
     return;
   }
   if (s.owner !== owner && !adopting) s.result = null;
+  if (!adopting && growing !== name) s.pins = [];
   const ticket = {};
   Object.assign(s, { key, owner, status: 'loading', error: '', ticket });
   ask().then(r => {
@@ -123,12 +129,16 @@ function load(app, name, key, ask) {
 // niche bottles there (Dior Homme Parfum, Philosykos, Molecule 01) behind
 // drugstore mists and oils. The gap teaser keeps the gap finder's default.
 const valueOn = () => state.preferValue === true;
+// Unset, and the gap finder's default for this wardrobe is on (the teaser's
+// answer says): the switch reads off here while Insights shows it on, and
+// its note says why.
+const valueDefault = () => state.preferValue == null && slots.report.result?.preferValue === true;
 
 // Discover's state, read from the page's route.
 const discoverRoute = () => (state.base?.dest === 'discover' ? state.base : null);
 const current = () => readQuery(discoverRoute()?.query ?? {});
 const searching = d => d.q.length >= MIN_QUERY;
-const filtersFor = d => poolFilters(d.filters, { mists: hasMists() });
+const filtersFor = d => poolFilters(d.filters);
 
 // What the wardrobe likes, worked out once per wardrobe: the chips it starts
 // on (the styles hearted on Insights, state.likedStyles; else the ones last
@@ -188,6 +198,9 @@ function ensure(app, d) {
     load(app, 'notes', notesKey(d, filters), async () =>
       askPool('notes', { ...(await inputs()), query: d.q, filters, k }, { channel: 'disc-notes' }));
     checkNamed(app, d);
+    // The teaser isn't here, but the report says what "Prefer great value"
+    // defaults to (valueDefault): asked once the notes are in, not ahead of them.
+    if (slots.notes.status !== 'loading') askReport(app);
     return;
   }
   if (d.tab === 'like') {
@@ -204,10 +217,15 @@ function ensure(app, d) {
         askPool('styles', { ...(await inputs()), styles, mode: d.mode, k, filters }, { channel: 'disc-styles' }));
     }
   }
-  if (ownsAny()) {
-    load(app, 'report', reportKey(), async () =>
-      askPool('report', { ...(await poolInputs()), k: 3 }, { channel: 'disc-report' }));
-  }
+  askReport(app);
+}
+
+// "Fill a gap": the gap finder's top three, with the inputs Insights asks
+// with (its value setting as is). None for a wardrobe with nothing in it.
+function askReport(app) {
+  if (!ownsAny()) return;
+  load(app, 'report', reportKey(), async () =>
+    askPool('report', { ...(await poolInputs()), k: 3 }, { channel: 'disc-report' }));
 }
 
 // ---------- Is it a name, or notes? ----------
@@ -286,7 +304,7 @@ function wantedOf() {
 }
 
 // The filters on, "Prefer great value" among them (the Filters button's count).
-const filtersOn = d => filterCount(d.filters, { mists: hasMists(), value: valueOn() });
+const filtersOn = d => filterCount(d.filters, { value: valueOn() });
 
 // The pool's answer when none of a link's seed bottles are in the library
 // (src/pool-tasks.js moreLike): not a failure Try again would fix.
@@ -317,8 +335,23 @@ function emptyHTML(d, what) {
 // "Fill a gap": none for a wardrobe with nothing in it (Insights has nothing to look at either).
 const teaserHTML = () => (ownsAny() ? T.teaserHTML(slots.report, { wantedOf: wantedOf() }) : '');
 
+/**
+ * A list's picks with the cards owned from it (`pins`: { id, index, pick })
+ * back in their places, where the answer left them out.
+ */
+export function withPins(picks, pins) {
+  const away = pins.filter(pin => !picks.some(p => p.id === pin.id)).sort((a, b) => a.index - b.index);
+  if (!away.length) return picks;
+  const out = [...picks];
+  for (const pin of away) out.splice(Math.min(pin.index, out.length), 0, pin.pick);
+  return out;
+}
+// A list's picks as shown.
+const shownPicks = s => withPins(s.result?.picks ?? [], s.pins);
+
 function listHTML(d, name, empty, { teaser = false } = {}) {
-  return T.picksHTML(slots[name], {
+  const s = slots[name];
+  return T.picksHTML(s.result && s.pins.length ? { ...s, result: { ...s.result, picks: shownPicks(s) } } : s, {
     insert: teaser ? teaserHTML() : '',
     name,
     k: ks[name],
@@ -337,7 +370,7 @@ function sideHTML(d) {
   return `<aside class="disc-side" aria-label="Filters">
       <section class="disc-panel" aria-labelledby="disc-filters-head">
         <header class="disc-panel-head"><h2 id="disc-filters-head" tabindex="-1" data-focus="disc-filters-head">Filters</h2>${filtersOn(d) ? '<button class="btn tertiary compact" data-action="disc-filters-reset">Reset</button>' : ''}</header>
-        ${T.filtersHTML(d.filters, { preferValue: valueOn(), mists: hasMists(), prefix: 'dfs' })}
+        ${T.filtersHTML(d.filters, { preferValue: valueOn(), valueDefault: valueDefault(), prefix: 'dfs' })}
       </section>
     </aside>`;
 }
@@ -405,12 +438,13 @@ function browseHTML(d) {
   } else {
     const labels = selected.map(id => lib.STYLES.find(x => x.id === id)?.label ?? id);
     head = `${T.stylePickerHTML({ styles: lib.STYLES, order: chipOrder(d), selected, mode: d.mode, owned: t.owned, all: allStyles })}${selected.length ? listHeadHTML(T.stylesTitle(labels, d.mode)) : ''}`;
-    list = selected.length ? listHTML(d, 'styles', emptyHTML(d, d.mode === 'all' && selected.length > 1 ? 'all' : 'styles'), { teaser: true }) : teaserHTML();
+    // No style chosen: how to start where the cards would be, then the gap teaser.
+    list = selected.length ? listHTML(d, 'styles', emptyHTML(d, d.mode === 'all' && selected.length > 1 ? 'all' : 'styles'), { teaser: true }) : `${T.stylesEmptyHTML()}${teaserHTML()}`;
   }
   return `<div class="disc-layout">
       ${sideHTML(d)}
       <div class="disc-main">
-        <div class="disc-bar">${tabs}${T.filterButtonHTML(d.filters, { mists: hasMists(), value: valueOn() })}</div>
+        <div class="disc-bar">${tabs}${T.filterButtonHTML(d.filters, { value: valueOn() })}</div>
         ${head}
         <div class="disc-list">${list}</div>
       </div>
@@ -459,7 +493,7 @@ function searchHTML(d) {
   return `<div class="disc-layout${notesShown ? '' : ' solo'}">
       ${notesShown ? sideHTML(d) : ''}
       <div class="disc-main">
-        ${toggle || notesShown ? `<div class="disc-bar">${toggle}${notesShown ? T.filterButtonHTML(d.filters, { mists: hasMists(), value: valueOn() }) : ''}</div>` : ''}
+        ${toggle || notesShown ? `<div class="disc-bar">${toggle}${notesShown ? T.filterButtonHTML(d.filters, { value: valueOn() }) : ''}</div>` : ''}
         ${title || '<h2 class="disc-title visually-hidden" tabindex="-1" data-focus="disc-title">Search results</h2>'}
         <div class="disc-list">${results}</div>
       </div>
@@ -481,7 +515,7 @@ function spoken(d) {
   if (like ? (d.seeds ? !d.seeds.length : s.result?.seeds?.length === 0) : !selectedStyles(d).length) return '';
   if (s.status === 'loading') return 'Finding bottles…';
   if (s.status === 'error') return s.error;
-  return s.result ? `${plural(s.result.picks.length, 'bottle')}${valueOn() ? ', great value only' : ''}` : '';
+  return s.result ? `${plural(shownPicks(s).length, 'bottle')}${valueOn() ? ', great value only' : ''}` : '';
 }
 
 function discoverPage(app, route) {
@@ -565,6 +599,19 @@ function after(app) {
   } else if (more?.status === 'error') {
     focusTitle();
     focusAfter = null;
+  }
+  // After I own it, once the list's answer is in: the card's name, which
+  // kept its place, unless focus went somewhere else meanwhile; else (no
+  // card) the list's title, scrolled to.
+  if (owning && slots[owning.list].status !== 'loading') {
+    const { id } = owning;
+    owning = null;
+    const at = document.activeElement;
+    if (at === document.body || at?.dataset?.id === id) {
+      const card = document.querySelector(`#disc-body .disc-grid .bcard-open[data-id="${CSS.escape(id)}"]`);
+      if (card) card.focus();
+      else document.querySelector('#disc-body .disc-title')?.focus();
+    }
   }
 }
 
@@ -777,6 +824,21 @@ export const discover = {
 
 // ---------- Handlers ----------
 
+// Whether an element shows in the bottle page's scrolling panel.
+function inPanel(el) {
+  const panel = el.closest('.bp-panel');
+  if (!panel) return true;
+  const p = panel.getBoundingClientRect(), r = el.getBoundingClientRect();
+  return r.top >= p.top && r.bottom <= p.bottom;
+}
+// Scrolls the bottle page's panel, at once, to put a section a little under
+// its top (as Now's spray line does), its focus ring clear of the edge.
+function toTop(section) {
+  const panel = section.closest('.bp-panel');
+  if (panel) panel.scrollTop += section.getBoundingClientRect().top - panel.getBoundingClientRect().top - 16;
+  else section.scrollIntoView({ block: 'start' });
+}
+
 let typing;
 export const fields = {
   'disc-q'(el, app) {
@@ -862,9 +924,15 @@ export const actions = {
     // (Focusable while the next page loads, so focus has somewhere to stay.)
     if (el.getAttribute('aria-disabled') === 'true') return;
     const list = el.dataset.value;
-    focusAfter = { list, index: slots[list].result?.picks.length ?? 0 };
+    focusAfter = { list, index: shownPicks(slots[list]).length };
     ks[list] = Math.min(T.MAX_PICKS, ks[list] + T.PAGE);
-    repaint(app);
+    // (The cards owned from the list stay where they are.)
+    growing = list;
+    try {
+      repaint(app);
+    } finally {
+      growing = null;
+    }
   },
   // Asks again: this list, and any other that failed beside it (a search's names too).
   'disc-retry'(el, app) {
@@ -916,6 +984,8 @@ export const actions = {
     // Owning it can switch the ranked list (to Mine), whose liked styles and
     // most worn bottles differ: pin the ones on screen, so the list stays.
     const d = current();
+    const list = searching(d) ? 'notes' : d.tab === 'like' ? 'like' : 'styles';
+    const shown = shownPicks(slots[list]), at = shown.findIndex(p => p.id === id);
     update(app, { styles: d.styles ?? selectedStyles(d), seeds: d.seeds ?? (d.tab === 'like' ? seedIds(d) : null) }, { paint: false });
     adopting = true;
     try {
@@ -923,8 +993,13 @@ export const actions = {
     } finally {
       adopting = false;
     }
+    // Its card keeps its place when the list is asked again for Mine (less
+    // what it said about the wardrobe it was asked for).
+    const s = slots[list];
+    if (at >= 0 && !s.pins.some(pin => pin.id === id)) s.pins.push({ id, index: at, pick: { ...shown[at], nearest: null, family: null } });
+    owning = { id, list };
     // The button became a tag; the card's name takes focus.
-    document.querySelector(`#disc-body .bcard-open[data-id="${CSS.escape(id)}"]`)?.focus();
+    document.querySelector(`#disc-body .disc-grid .bcard-open[data-id="${CSS.escape(id)}"]`)?.focus();
   },
   async 'own-result'(el, app) {
     const hit = state.discover.results?.[+el.dataset.value];
@@ -944,22 +1019,27 @@ export const actions = {
   // twins, siblings): scrolled to once it draws (a dataset bottle loads its
   // record first), its heading focused once its answer is in, as Now's spray
   // line opens the spray section. Watches until then, or until the page goes.
+  // The scroll is instant: the page draws again whole as its about data and
+  // full record land, and a smooth scroll stops with the panel it ran in
+  // (the new one keeps where it had got to, often the top).
   'disc-dupes'(el, app) {
     const id = el.dataset.id;
     app.openBottle(id, null, el.closest('.bcard, .row')?.querySelector('.bcard-open, .row-main') ?? el);
     const until = Date.now() + DUPES_WAIT_MS;
-    const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
     let shown = false;
     const find = () => {
       if (state.route?.dest !== 'bottle' || state.route.arg !== id) return;
-      const mark = document.querySelector('#bottle #bp-dupes, #bottle [data-section="dupes"], #bottle #dupes-title');
+      // The section (aria-busy until its answer is in), else its heading, else its slot.
+      const mark = DUPES_MARKS.map(sel => document.querySelector(`#bottle ${sel}`)).find(Boolean);
       const section = mark?.closest('section') ?? mark;
       if (section) {
         const ready = section.getAttribute('aria-busy') !== 'true';
-        if (!shown || ready) section.scrollIntoView({ block: 'start', behavior });
+        const head = mark.matches('h2, h3') ? mark : section.querySelector('h3');
+        // As it first draws (which asks for its answer), and again once the
+        // answer is in if the heading isn't in view.
+        if (!shown || (ready && !inPanel(head ?? section))) toTop(section);
         shown = true;
         if (ready) {
-          const head = mark.matches('h2, h3') ? mark : section.querySelector('h3');
           if (head && !head.hasAttribute('tabindex')) head.setAttribute('tabindex', '-1');
           head?.focus({ preventScroll: true });
           return;
@@ -1068,8 +1148,16 @@ async function seedSearch(app, query) {
   patchSheet(app);
   const { results, error } = await findBottles(query);
   if (state.sheet !== sheet || sheet.query.trim() !== query) return;
-  Object.assign(sheet, { results, busy: false, error: results.length ? '' : error });
+  Object.assign(sheet, { results, busy: false, error: results.length ? '' : error, searched: query });
   patchSheet(app);
+}
+
+// What the seed picker's search found, for its status line: the library's
+// hits it lists and your own that match ("2 bottles from the library").
+function foundLine(library, yours, query) {
+  if (!library && !yours) return `No bottles match “${query}”`;
+  if (library && yours) return `${library} from the library, ${yours} of yours`;
+  return library ? `${plural(library, 'bottle')} from the library` : `${plural(yours, 'bottle')} of yours`;
 }
 
 function seedRow(r, on, { disabled = false } = {}) {
@@ -1092,7 +1180,12 @@ export function seedSheetHTML(sheet, { owned, chosen, picked = [], loading = fal
   const mine = owned.filter(f => !taken.has(f.id) && (!q || normalize(`${f.name} ${f.brand}`).includes(q)));
   const ownedIds = new Set(owned.map(f => f.id));
   const more = (sheet.results ?? []).filter(r => !ownedIds.has(r.id) && !taken.has(r.id));
-  const status = loading ? 'Loading your favorites…' : sheet.busy ? 'Searching…' : sheet.error ? sheet.error : '';
+  // What the last search found, said once it's in (the line is live), and
+  // only for the words it searched: while someone types, it would be about others.
+  const query = (sheet.query ?? '').trim();
+  const found = sheet.results && sheet.searched === query ? foundLine(more.length, mine.length, query) : '';
+  const tally = `${chosen.length} of ${SEED_MAX} picked`;
+  const status = loading ? 'Loading your favorites…' : sheet.busy ? 'Searching…' : sheet.error ? sheet.error : found ? `${found} · ${tally}` : tally;
   const row = (r, on) => seedRow(r, on, { disabled: loading });
   return `<h2 class="sheet-title" id="disc-seeds-title">More like…</h2>
     <p class="lede muted">Pick up to ${SEED_MAX} bottles. The list finds bottles close to all of them.</p>
@@ -1106,7 +1199,7 @@ export function seedSheetHTML(sheet, { owned, chosen, picked = [], loading = fal
       ${mine.length ? `<ul class="rows seed-rows${loading ? ' loading' : ''}">${mine.map(r => row(r, false)).join('')}</ul>` : `<p class="muted small">${q ? 'None of yours match. Search finds any bottle.' : owned.length ? 'Every one of yours is picked.' : 'Your wardrobe is empty. Search for any bottle.'}</p>`}
     </div>
     <div class="sheet-bar spread">
-      <span class="muted" role="status" data-live="seed-status">${esc(status || `${chosen.length} of ${SEED_MAX} picked`)}</span>
+      <span class="muted" role="status" data-live="seed-status">${esc(status)}</span>
       <button class="btn primary" data-action="close-sheet">Done</button>
     </div>`;
 }
@@ -1119,16 +1212,14 @@ function filterStatus() {
   if (s.status === 'loading') return 'Finding bottles…';
   const n = s.result?.picks?.length;
   if (n == null) return '';
-  if (!n) return 'Nothing fits';
-  // A full page is the best of more: say what's shown, not a count it isn't.
-  return n < ks[name] ? `${plural(n, 'bottle')} fit` : `Showing the top ${n}`;
+  return T.fitLine(n, ks[name]);
 }
 
 export const sheets = {
   'disc-filters'() {
     if (!discoverRoute()) return null;
     const d = current();
-    return sheetFrame('disc-filters-title', T.filterSheetHTML(d.filters, { preferValue: valueOn(), mists: hasMists(), status: filterStatus() }));
+    return sheetFrame('disc-filters-title', T.filterSheetHTML(d.filters, { preferValue: valueOn(), valueDefault: valueDefault(), status: filterStatus() }));
   },
   'disc-seeds'(sheet) {
     if (!discoverRoute()) return null;

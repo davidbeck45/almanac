@@ -88,15 +88,16 @@ function marksOf(pick) {
 
 /**
  * Why a pick is here, as sentences (HTML, bottles named in them open their
- * pages), most telling first, at most `max`: what it shares with the seeds,
- * the nearest owned bottle and what they share, what
- * voters say it copies, a cheaper twin, twins folded into it, its link to
- * the wardrobe, and whether fans of the seeds like it.
+ * pages), most telling first, at most `max`: what it shares with the seed
+ * bottles, the nearest owned bottle and what they share, what voters say it
+ * copies, a cheaper twin, twins folded into it, its link to the wardrobe,
+ * and whether fans of the seeds like it. The seeds are "these bottles", not
+ * "your picks": picks are what the app recommends.
  */
 export function whyLines(pick, { max = 4 } = {}) {
   const lines = [];
   // (What a notes search matched shows as its tags.)
-  if (pick.shares?.length) lines.push(`Shares ${esc(listed(pick.shares))} with your picks.`);
+  if (pick.shares?.length) lines.push(`Shares ${esc(listed(pick.shares))} with these bottles.`);
   const near = pick.nearest;
   if (near) {
     const who = near.record ? named(near.record, near.name) : esc(near.name);
@@ -111,7 +112,7 @@ export function whyLines(pick, { max = 4 } = {}) {
   const alike = (pick.alike ?? []).filter(r => r.id !== copy?.id);
   if (alike.length) lines.push(`Twins: ${listedSome(alike.map(r => named(r)))}.`);
   if (pick.family) lines.push(`${esc(cap(pick.family))}.`);
-  if (pick.alsoLiked) lines.push('Fans of your picks like it too.');
+  if (pick.alsoLiked) lines.push('Fans of these bottles like it too.');
   return lines.slice(0, max);
 }
 
@@ -242,9 +243,10 @@ export function stylePickerHTML({ styles, order, selected, mode, owned = {}, all
     ? `<button type="button" class="btn tertiary compact styles-more" data-action="disc-styles-all" aria-expanded="${all}">${all ? 'Fewer styles' : `${hidden} more styles`}</button>`
     : '';
   const tips = order.map(id => `<span id="disc-tip-${esc(id)}">${esc(styleTip(byId.get(id), owned[id]))}</span>`).join('');
-  // One style: what it is. None: how to start. Several: the toggle says how they combine.
+  // One style: what it is. None: how to read one (the message under the
+  // chips says to pick one, stylesEmptyHTML). Several: the toggle says how they combine.
   const line = !selected.length
-    ? 'Pick a style to see more of it. <span class="hint-touch">Press and hold one</span><span class="hint-pointer">Point at one</span> to see what it is.'
+    ? '<span class="hint-touch">Press and hold a style</span><span class="hint-pointer">Point at a style</span> to see what it is.'
     : selected.length === 1 ? esc(byId.get(selected[0])?.blurb ?? '') : '';
   const combine = selected.length >= 2
     ? segHTML([{ value: 'any', label: 'Any of them', on: mode !== 'all' }, { value: 'all', label: 'All at once', on: mode === 'all' }], { action: 'disc-mode', label: 'Combine styles', cls: 'disc-combine' })
@@ -257,6 +259,13 @@ export function stylePickerHTML({ styles, order, selected, mode, owned = {}, all
     </div>`;
 }
 
+/** No style chosen (an empty wardrobe starts this way): how to start, where the cards go. */
+export const stylesEmptyHTML = () => messageHTML({
+  glyph: icon.sparkle,
+  title: 'Pick a style to start',
+  body: 'Choose one or more above to see the best bottles in them.',
+});
+
 // ---------- By bottle ----------
 
 /**
@@ -267,7 +276,7 @@ export function stylePickerHTML({ styles, order, selected, mode, owned = {}, all
  */
 export function likeHead({ from, chosen = false, loading = false, none = false }) {
   if (loading) return { title: 'More like your favorites', line: 'Loading your favorites…' };
-  if (chosen) return { title: 'More like your picks', line: '<button class="link-btn" data-action="disc-seeds-reset">Back to your favorites</button>' };
+  if (chosen) return { title: 'More like the bottles you chose', line: '<button class="link-btn" data-action="disc-seeds-reset">Back to your favorites</button>' };
   if (none || !from) return { title: 'More like bottles you love', line: '' };
   return from === 'worn'
     ? { title: 'More like your most worn', line: 'Your most worn of the last 60 days.' }
@@ -306,28 +315,37 @@ export function seedsHTML({ seeds, max, line = '', addable = true }) {
 
 // ---------- Filters ----------
 
+// An option's label, after the check it shows once chosen (as the style chips do).
+const optLabel = text => `${icon.check}<span>${esc(text)}</span>`;
+
 // A row of options, one chosen (a radio group: arrow keys move through it).
 function radios(labelId, label, action, options, value) {
   const at = options.findIndex(o => o.value === value);
   const chosen = at < 0 ? 0 : at;
   return `<div class="filter-group">
       <p class="filter-label" id="${labelId}">${label}</p>
-      <div class="opts" role="radiogroup" aria-labelledby="${labelId}">${options.map((o, i) => `<button type="button" role="radio" class="opt" aria-checked="${i === chosen}" tabindex="${i === chosen ? 0 : -1}" data-action="${action}" data-value="${esc(o.value ?? '')}">${esc(o.label)}</button>`).join('')}</div>
+      <div class="opts" role="radiogroup" aria-labelledby="${labelId}">${options.map((o, i) => `<button type="button" role="radio" class="opt" aria-checked="${i === chosen}" tabindex="${i === chosen ? 0 : -1}" data-action="${action}" data-value="${esc(o.value ?? '')}">${optLabel(o.label)}</button>`).join('')}</div>
     </div>`;
 }
 
 const switchRow = (title, note, sw) => `<div class="filter-switch"><span><b>${title}</b>${note ? `<small>${note}</small>` : ''}</span>${sw}</div>`;
 
+// What "Prefer great value" does. `byDefault`: it's unset, and the gap
+// finder's default for this wardrobe is on, so Insights and the "Fill a
+// gap" teaser use it while Discover's lists don't (src/views/discover.js valueOn).
+const valueNote = byDefault => `Only bottles voters call great value for money.${byDefault ? ' Insights and Fill a gap use it by default; here it’s off until you turn it on.' : ''}`;
+
 /**
  * The filters, for the side panel and the sheet alike (`prefix` keeps their
  * ids apart). `preferValue`: what the last answer used (the toggle shows
- * that); `mists`: whether the logic knows body mists (else no switch).
+ * that); `valueDefault`: the setting is unset and the gap finder's default
+ * is on (the switch's note says why it reads off here).
  */
-export function filtersHTML(filters, { preferValue = false, mists = true, prefix = 'df' } = {}) {
+export function filtersHTML(filters, { preferValue = false, valueDefault = false, prefix = 'df' } = {}) {
   const f = { ...NO_FILTERS, ...filters };
   const seasons = SEASONS.map(s => {
     const on = f.seasons.includes(s);
-    return `<button type="button" class="opt" aria-pressed="${on}" data-action="disc-season" data-value="${s}">${cap(s)}</button>`;
+    return `<button type="button" class="opt" aria-pressed="${on}" data-action="disc-season" data-value="${s}">${optLabel(cap(s))}</button>`;
   }).join('');
   return `<div class="filters">
       <div class="filter-group">
@@ -339,26 +357,36 @@ export function filtersHTML(filters, { preferValue = false, mists = true, prefix
       ${radios(`${prefix}-longevity`, 'Longevity', 'disc-longevity', LONGEVITY, f.longevity)}
       ${radios(`${prefix}-projection`, 'Projection', 'disc-projection', PROJECTION, f.projection)}
       <div class="filter-switches">
-        ${switchRow('Prefer great value', 'Only bottles voters call great value for money.', switchHTML({ on: Boolean(preferValue), label: 'Prefer great value', action: 'disc-value', id: 'value' }))}
+        ${switchRow('Prefer great value', valueNote(!preferValue && valueDefault), switchHTML({ on: Boolean(preferValue), label: 'Prefer great value', action: 'disc-value', id: 'value' }))}
         ${switchRow('Safe blind buys', 'Safer than most popular bottles.', switchHTML({ on: f.safe, label: 'Safe blind buys only', action: 'disc-switch', id: 'safe' }))}
         ${switchRow('Hide discontinued', '', switchHTML({ on: !f.discontinued, label: 'Hide discontinued', action: 'disc-switch', id: 'discontinued' }))}
-        ${mists ? switchRow('Include body mists', 'Body and hair mists, sprays and splashes.', switchHTML({ on: f.mists, label: 'Include body mists', action: 'disc-switch', id: 'mists' })) : ''}
+        ${switchRow('Include body mists', 'Body and hair mists, sprays and splashes.', switchHTML({ on: f.mists, label: 'Include body mists', action: 'disc-switch', id: 'mists' }))}
       </div>
     </div>`;
 }
 
 /** The phone and tablet way to the filters, with how many are on (`value`: Prefer great value). */
-export function filterButtonHTML(filters, { mists = true, value = false } = {}) {
-  const n = filterCount(filters, { mists, value });
+export function filterButtonHTML(filters, { value = false } = {}) {
+  const n = filterCount(filters, { value });
   return `<button class="btn secondary compact filter-btn" data-action="disc-filters-open" aria-label="Filters${n ? `, ${n} on` : ''}">${icon.filter}<span>Filters</span>${n ? `<b class="count" aria-hidden="true">${n}</b>` : ''}</button>`;
 }
 
+/**
+ * The filters sheet's status: how many bottles the list on screen holds, of
+ * `k` asked for. A full page is the best of more: it says what's shown, not
+ * a count it isn't.
+ */
+export function fitLine(n, k) {
+  if (!n) return 'Nothing fits';
+  return n < k ? `${plural(n, 'bottle')} ${n === 1 ? 'fits' : 'fit'}` : `Showing the top ${n}`;
+}
+
 // (data-part: what a change redraws; data-live: the status line, which keeps its node so it's heard.)
-export function filterSheetHTML(filters, { preferValue, mists, status }) {
-  const n = filterCount(filters, { mists, value: Boolean(preferValue) });
+export function filterSheetHTML(filters, { preferValue, valueDefault = false, status }) {
+  const n = filterCount(filters, { value: Boolean(preferValue) });
   return `<h2 class="sheet-title" id="disc-filters-title">Filters</h2>
     <p class="lede muted">For the bottles by style, by bottle and by notes.</p>
-    <div data-part="filters">${filtersHTML(filters, { preferValue, mists, prefix: 'dfx' })}</div>
+    <div data-part="filters">${filtersHTML(filters, { preferValue, valueDefault, prefix: 'dfx' })}</div>
     <div class="sheet-bar spread">
       <button class="btn tertiary" data-part="filters-reset" data-action="disc-filters-reset"${n ? '' : ' disabled'}>Reset</button>
       <span class="muted" role="status" data-live="filter-status">${esc(status)}</span>
@@ -430,9 +458,12 @@ export function namesHTML({ results }, owned, { wantedOf = () => false } = {}) {
   if (!results?.length) return '';
   return `<ul class="rows results">${results.map((r, i) => {
     const where = owned.get(r.id);
+    // I own it, then whose (names repeat: Creed's Aventus and Nish's), heard
+    // after the words shown, so voice control's "click I own it" finds it.
+    const whose = [r.name, r.brand].filter(Boolean).map(esc).join(' by ');
     const trailing = `${wantButton(r, wantedOf(r.id))}${where
       ? `<span class="owned-tag">${icon.check}<span>${esc(where)}</span></span>`
-      : `<button class="btn secondary compact own-btn" data-action="own-result" data-value="${i}" aria-label="I own ${esc(r.name)}">${icon.plus}<span>I own it</span></button>`}`;
+      : `<button class="btn secondary compact own-btn" data-action="own-result" data-value="${i}">${icon.plus}<span>I own it</span><span class="visually-hidden">: ${whose}</span></button>`}`;
     return rowHTML(r, { meta: metaOf(r), trailing, open: { ctx: '' }, cls: 'wrap' });
   }).join('')}</ul>`;
 }
