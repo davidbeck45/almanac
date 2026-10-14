@@ -6,6 +6,8 @@ Built by `scripts/decant.py` from [Fragrantica Perfumes: Ratings, Notes, Votes &
 
 - `r/<id % 512>.json`: one compact row per bottle, keyed by Fragrantica id (format in `scripts/decant.py`).
 - `i/<xx>.tsv`: the search index, split by the first two letters of each word of a bottle's name and brand.
-- `pool.json`: the suggestion pool, about 9,600 well-voted and rising bottles, one array per key, with everything the app needs to score them and their derived signals (value, blind-buy safety, keeper rate, crowd gender lean, popular now, smells-like, cheaper alternatives, flags). It carries a `license` key.
+- `pool.json`: the suggestion pool, about 9,600 well-voted and rising bottles, one array per key, with everything the app needs to score them and their derived signals (value, blind-buy safety, keeper rate, crowd gender lean, popular now, smells-like, cheaper alternatives, flags). It carries a `license` key, as `pool-notes.json` and `pool-styles.json` do.
 - `pool-notes.json`: the pool bottles' strongest notes, row for row.
+- `pool-styles.json`: each pool bottle's scent-style scores, row for row, worked out from its `r/` row by `scripts/fit-pool-styles.mjs`.
 - `x/<id % 512>.json`: the about data of every bottle with 30 or more rating votes.
+- `meta.json`: the dataset's version, how many bottles it holds and the shard count.
