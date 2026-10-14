@@ -372,6 +372,32 @@ export function compareHTML(m) {
 
 // ---------- Loading ----------
 
+// Draws the page again as something it loads lands, focus kept: on the
+// control's successor, else the element with its id (the heading), else the
+// heading. Never on the body.
+function redraw(app) {
+  if (!onCompare()) return;
+  const focused = document.activeElement;
+  const inMain = Boolean(focused?.closest?.('#main'));
+  app.renderPage();
+  if (!inMain || focused.isConnected || app.refocus(focused, '#main')) return;
+  ((focused.id && document.getElementById(focused.id)) || document.querySelector('#page-title'))?.focus({ preventScroll: true });
+}
+
+// The route the page last arrived on: arriving anew (a link from a bottle
+// page, which closes as the page opens), focus left nowhere on the page goes
+// to its heading, as on any other page.
+let arrived = null;
+function settle(route) {
+  if (route === arrived) return;
+  arrived = route;
+  queueMicrotask(() => {
+    const el = document.activeElement;
+    const lost = !el || el === document.body || !el.isConnected || !el.closest('#page');
+    if (lost && state.from && onCompare() && state.base === route) document.querySelector('#page-title')?.focus({ preventScroll: true });
+  });
+}
+
 // Brings in what the page needs and isn't here: records (r/, or a hand-entered
 // bottle's own link), about data, the pool's signals (value, safety) for
 // dataset bottles that came without them, and a lone bottle's smells-like
@@ -379,8 +405,9 @@ export function compareHTML(m) {
 function load(app, route) {
   listen(app);
   watchHeads();
+  settle(route);
   const ids = compareIds(route.arg);
-  const again = () => queueMicrotask(() => { if (onCompare()) app.renderPage(); });
+  const again = () => queueMicrotask(() => redraw(app));
   const absent = ids.filter(id => !findRecord(id) && !missing.has(id) && !failed.has(id) && !loading.has(id));
   const fetch = absent.filter(id => /^\d+$/.test(id));
   for (const id of absent.filter(id => !/^\d+$/.test(id))) {
@@ -431,7 +458,7 @@ function listen(app) {
   listening = true;
   addEventListener('online', () => {
     failed.clear();
-    if (onCompare()) app.renderPage();
+    redraw(app);
   });
 }
 
@@ -571,14 +598,20 @@ export const actions = {
   'cmp-add'(el, app) {
     app.openSheet({ kind: 'cmp-pick', base: compareIds(state.base?.dest === 'compare' ? state.base.arg : ''), ctx: null, query: '', results: null });
   },
-  // From the picker, or a lone bottle's suggestions on the page.
+  // From the picker, or a lone bottle's suggestions on the page. The page
+  // drawn (and the bottle page under the picker gone), focus on its heading:
+  // the control that asked went with the sheet.
   'cmp-pick'(el, app) {
     const picking = state.sheet?.kind === 'cmp-pick';
     const base = picking ? state.sheet.base ?? [] : compareIds(onCompare() ? state.base.arg : '');
     const ids = [...base, el.dataset.id].slice(0, MAX_COMPARE);
     const replace = onCompare() && state.route?.dest === 'compare';
-    if (picking) app.closeSheet({ then: () => app.navigate(hrefFor(ids), { replace }) });
-    else app.navigate(hrefFor(ids), { replace });
+    const go = () => {
+      app.navigate(hrefFor(ids), { replace });
+      document.querySelector('#page-title')?.focus({ preventScroll: true });
+    };
+    if (picking) app.closeSheet({ then: go });
+    else go();
   },
   'cmp-remove'(el, app) {
     const before = compareIds(state.base?.arg);
@@ -586,14 +619,16 @@ export const actions = {
     const name = findRecord(el.dataset.id)?.name ?? 'Bottle';
     removedFrom = before;
     app.navigate(hrefFor(ids), { replace: true });
-    focusAfterRemove();
+    focusCard(before.indexOf(el.dataset.id));
     app.showToast(`<span class="note">${esc(name)} removed.</span><button class="btn primary compact" data-action="cmp-undo">Undo</button>`);
   },
   'cmp-undo'(el, app) {
     if (!removedFrom) return;
     const ids = removedFrom;
+    const back = ids.findIndex(id => !compareIds(state.base?.arg).includes(id));
     removedFrom = null;
     app.navigate(hrefFor(ids), { replace: true });
+    focusCard(back);
     app.hideToast();
   },
   'cmp-retry'(el, app) {
@@ -607,8 +642,12 @@ export const actions = {
   },
 };
 
-// The page drew again without the card: focus the next card's name, else the page's heading.
-function focusAfterRemove() {
-  const next = document.querySelector('#main .cmp-open, #main [data-action="cmp-add"]') ?? document.querySelector('#page-title');
+// The page drawn again after a removal (or its Undo): focus the card now in
+// column i (the next one along; the last when it was the last), else Add a
+// bottle when no card is left, else the page's heading.
+function focusCard(i) {
+  const cards = [...document.querySelectorAll('#main .cmp-heads > .cmp-head:not(.cmp-add)')];
+  const card = cards[Math.max(0, Math.min(i, cards.length - 1))];
+  const next = card?.querySelector('.cmp-open, button') ?? document.querySelector('#main [data-action="cmp-add"]') ?? document.querySelector('#page-title');
   next?.focus({ preventScroll: true });
 }
