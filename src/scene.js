@@ -160,22 +160,26 @@ const TREE_SPOTS = {
 // Trees keep this far (a fraction of the width) from the hero's bottle, off
 // the hillside under the hero's temperature (its left FOOT_W), so the big
 // numbers sit on open ground, and on wide scenes off the middle hill behind
-// the bottle's name beside it (LABEL_W). On a band with no bottle, trees and
-// the cabin keep off its `clear` share of the width by CLEAR_PAD (about half
-// a tree).
+// the bottle's name beside it (LABEL_W). On narrow scenes the name stands
+// under the bottle, over the near hill: its trees keep UNDER_W from the
+// bottle. Trees and the cabin keep off a `clear` share of the width by
+// CLEAR_PAD (about half a tree).
 const STAGE_CLEAR = 0.07;
 const FOOT_W = 0.45;
 const LABEL_W = 0.32;
+const UNDER_W = 0.25;
 const CLEAR_PAD = 0.03;
 
 function trees(layer, W, season, shade, snowy, P, stage = null, clear = 0) {
   const pal = P.foliage[season].map(c => mix(c, shade.color, shade.t));
   const pine = mix(season === 'winter' ? P.pine.winter : P.pine.other, shade.color, shade.t);
   const label = stage !== null && layer === 'mid' && W / H >= CABIN_ROOM;
+  const under = stage !== null && layer === 'near' && W / H < CABIN_ROOM;
   return TREE_SPOTS[layer].map(([fx, s, kind], i) => {
     if (stage !== null && (Math.abs(fx - stage) < STAGE_CLEAR || fx < FOOT_W)) return '';
     if (fx - CLEAR_PAD < clear) return '';
     if (label && fx > stage && fx < stage + LABEL_W) return '';
+    if (under && Math.abs(fx - stage) < UNDER_W) return '';
     const x = fx * W;
     const bare = season === 'winter' && kind === 'round';
     const color = kind === 'pine' || bare ? pine : pal[i % pal.length];
@@ -213,7 +217,10 @@ const cabinAt = (stage, clear) => [stage === null ? CABIN_X : null, CABIN_STAGED
 // The hero's bottle and the sky's light keep out of each other's way: the
 // moon sits across the sky from the bottle, and a sun that would hang behind
 // it (on its cap, like a bulb) waits beside it instead. In scene units: the
-// bottle is about 2 × STAGE_HALF wide and STAGE_TALL high on the hill.
+// bottle is about 2 × STAGE_HALF wide and STAGE_TALL high on the hill. On
+// wide scenes its name stands on its right (LABEL_W), so a sun behind either
+// waits on the bottle's left, where it rim-lights the bottle and leaves the
+// name on the darker sky.
 const STAGE_HALF = 44;
 const STAGE_TALL = 92;
 const SUN_R = 17;
@@ -229,7 +236,11 @@ function lightAt(phase, sunProgress, W, stage) {
   if (stage !== null) {
     const sx = stage * W;
     const room = STAGE_HALF + SUN_R + LIGHT_GAP;
-    if (Math.abs(x - sx) < room && y + SUN_R + LIGHT_GAP > hill.mid(sx) - STAGE_TALL) {
+    const low = y + SUN_R + LIGHT_GAP > hill.mid(sx) - STAGE_TALL;
+    if (W / H >= CABIN_ROOM) {
+      const right = sx + STAGE_HALF + LABEL_W * W;
+      if (low && x > sx - room && x < right + SUN_R + LIGHT_GAP) x = sx - room;
+    } else if (low && Math.abs(x - sx) < room) {
       // On the side it's on, unless that's off the edge.
       const side = x < sx ? -1 : 1;
       const fits = d => sx + d * room > SUN_R && sx + d * room < W - SUN_R;

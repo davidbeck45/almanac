@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { packTrip, withEvents } from '../src/pack.js';
 import { rank, PLAN_MARGIN } from '../src/engine.js';
-import { occasionById } from '../src/occasions.js';
+import { OCCASIONS, occasionById } from '../src/occasions.js';
 import { sprayGuide } from '../src/spray.js';
 import { setSkin } from '../src/skin.js';
 import { summarize, week } from '../src/weather.js';
@@ -14,6 +14,7 @@ import * as trip from '../src/views/wear/trip.js';
 import * as when from '../src/views/wear/when.js';
 import { placeSheetHTML, datePillHTML } from '../src/views/wear/pickers.js';
 import { wxIconFor } from '../src/ui/components.js';
+import { esc } from '../src/ui.js';
 import * as app from '../src/app/state.js';
 import { syntheticForecast } from './fixtures.js';
 
@@ -310,7 +311,53 @@ test('the compact band keeps trees and the cabin off the ground under its line o
     const xs = props(wear.heroHTML(sky, { aspect, compact: true }));
     assert.ok(xs.length && xs.every(x => x > end + 0.02), `${aspect.toFixed(2)}: ${xs.map(x => x.toFixed(2))}`);
   }
-  assert.ok(props(wear.heroHTML(sky, { aspect: 1.3 })).some(x => x < 0.3), 'Now’s tall hero keeps its own layout');
+  // Now's tall hero with no bottle (no place yet, loading, an error, nothing
+  // to rank) keeps the ground under its temperature open, as it does with one.
+  for (const state of [sky, { loc: null, wx: null, loading: true, error: null }, { loc: null, wx: null, loading: false, error: 'x' }]) {
+    for (const aspect of [1.3, 2.4]) {
+      const svg = wear.heroHTML(state, { aspect });
+      const xs = props(svg);
+      assert.ok(xs.length && xs.every(x => x >= 0.45), `${aspect}: ${xs.map(x => x.toFixed(2))}`);
+      assert.match(svg, /<rect x="-13" y="-18" width="26"/, 'the cabin still stands');
+    }
+  }
+});
+
+test('on phones the hero’s name stands under the bottle: trees keep off it, and a long name takes two lines', () => {
+  const props = svg => {
+    const W = +svg.match(/viewBox="0 0 (\d+)/)[1];
+    return [...svg.matchAll(/translate\(([\d.]+) ([\d.]+)\)/g)].filter(m => +m[2] > 180).map(m => +m[1] / W);
+  };
+  const ranked = rank(fragrances, wx.day, 'day', { history: [], todayISO: today });
+  const sky = { loc: { name: 'New York', lat: 40 }, wx, loading: false, error: null };
+  const hero = (aspect, f) => wear.heroHTML(sky, { aspect, pick: { entry: { ...ranked[0], fragrance: f }, win: wx.day, worn: false } });
+  const short = fragrances.find(f => f.name.length <= 16), long = fragrances.find(f => f.name.length > 30);
+  // The near hill's trees: none behind the name on a phone (from 320 to 430
+  // wide), where they stand on a wide hero.
+  for (const aspect of [320 / 288, 375 / 288, 430 / 320]) {
+    const near = props(hero(aspect, short));
+    assert.ok(near.every(x => x < 0.45), `${aspect.toFixed(2)}: ${near.map(x => x.toFixed(2))}`);
+  }
+  assert.ok(props(hero(2.4, short)).some(x => x > 0.87), 'a wide hero keeps them');
+  assert.match(hero(1.3, long), /class="hero-pick long"/);
+  assert.match(hero(1.3, short), /class="hero-pick"/);
+});
+
+test('on wide heroes the sun keeps clear of the name beside the bottle, waiting on the bottle’s left', async () => {
+  const { stagePoint, skyLight } = await import('../src/scene.js');
+  for (const aspect of [1.8, 2.3, 3.4]) {
+    const stage = stagePoint(aspect, 0.64);
+    const W = 220 * aspect;
+    for (let p = 0; p <= 1; p += 0.01) {
+      const sun = skyLight({ phase: 'day', sunProgress: p, aspect, stage: stage.scene });
+      // The name stands right of the bottle, about a third of the width, no higher than its cap.
+      const x = sun.x * W, sx = stage.scene * W;
+      const behind = x > sx - 44 - 17 && x < sx + 44 + 0.32 * W + 17 && sun.y * 220 + 17 > stage.y * 220 - 92;
+      assert.ok(!behind, `at ${aspect} the sun at ${p.toFixed(2)} hangs behind the bottle or its name`);
+    }
+    // Late in the day it waits on the bottle's left, so the rim light comes from there.
+    assert.ok(skyLight({ phase: 'day', sunProgress: 0.9, aspect, stage: stage.scene }).x < stage.scene);
+  }
 });
 
 test('night windows draw the moon, days the sun', () => {
@@ -446,4 +493,92 @@ test('a wear from the Occasion pane keeps its occasion; from Now, daily', () => 
   const byslot = Object.fromEntries(state.history.filter(h => h.date === today).map(h => [h.slot, h]));
   assert.equal(byslot.night.occasion, 'formal');
   assert.equal(byslot.day.occasion, 'daily');
+});
+
+test('Now’s cards read in the order they’re drawn, and only the window has a heading', () => {
+  const ranked = rank(fragrances, wx.day, 'day', { history: [], todayISO: today });
+  const pick = wear.pickHTML(ranked[0], 'day', null, { spray: sprayGuide(ranked[0].fragrance, wx.day) });
+  assert.ok(pick.indexOf('data-action="spray-open"') < pick.indexOf('data-action="wear"'), 'the spray line, drawn above Wear this, comes first for Tab too');
+  // Beside today's card, tonight's pick is a landmark named "Tonight", not a
+  // heading that would file it (and the shelf after it) under "Today".
+  const next = wear.nextWindowHTML({ win: wx.night, pick: ranked[1] }, null, 12);
+  assert.match(next, /<aside class="next-window" aria-labelledby="next-title"/);
+  assert.ok(!/<h\d/.test(next), 'no heading');
+});
+
+test('an occasion tile is named by its label and described by its blurb, once', () => {
+  const html = wear.occasionPickerHTML('formal');
+  assert.ok(!html.includes('visually-hidden'), 'the blurb isn’t in the name too');
+  for (const o of OCCASIONS) assert.ok(html.includes(`title="${esc(o.blurb)}"`), `${o.id}: its blurb is the title`);
+});
+
+test('an event’s heading keeps the date and place asked for while the weather loads', () => {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  const wxNow = summarize(live);
+  Object.assign(state, { forecast: live, wx: wxNow, loc: { name: 'Here', lat: 40, lon: -74 }, occasionSlot: null });
+  const pane = wear.wear.panes.find(p => p.id === 'occasion');
+  const route = { dest: 'wear', pane: 'occasion', arg: 'formal' };
+  // A date past the forecast and a city: nothing fetched yet.
+  const far = shiftISO(wxNow.todayISO, 40);
+  Object.assign(when.when, { dateISO: far, place: null });
+  try {
+    assert.equal(pane.heading(route), when.occasionTitle(occasionById('formal'), { dateISO: far, slot: 'night' }, { today: wxNow.todayISO }));
+    assert.match(pane.heading(route), /^Formal · \w{3} night, \w{3} \d+$/);
+    when.when.place = { name: 'Chicago', lat: 41.9, lon: -87.6 };
+    assert.match(pane.heading(route), /^Formal · \w{3} night, \w{3} \d+ in Chicago$/);
+    when.when.dateISO = null;
+    assert.equal(pane.heading(route), 'Formal · tonight in Chicago', 'a place alone means today there');
+  } finally {
+    Object.assign(when.when, { dateISO: null, place: null });
+  }
+});
+
+test('a shared link that loads nothing offers the way back to the list under it, by name', () => {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  Object.assign(state, { forecast: live, wx: summarize(live), loc: { name: 'Here', lat: 40, lon: -74 }, demo: { fetched: today, fragrances } });
+  state.shared = { name: 'Sam', ids: ['999999991'], records: [], missing: ['999999991'], loading: false };
+  const now = wear.wear.panes.find(p => p.id === 'now');
+  try {
+    state.active = 'demo';
+    assert.match(now.render({}, { dest: 'wear', pane: 'now' }), /data-action="shared-close"><span>Back to David’s wardrobe<\/span>/);
+    state.active = 'mine';
+    assert.match(now.render({}, { dest: 'wear', pane: 'now' }), /<span>Back to Mine<\/span>/);
+    assert.ok(!now.render({}, { dest: 'wear', pane: 'now' }).includes('my picks'));
+  } finally {
+    Object.assign(state, { shared: null, active: 'demo' });
+  }
+});
+
+test('copying the packing list: when the browser won’t, it offers Share only where there is one, and focus stays on Copy', async () => {
+  trip.saveTrip(saved);
+  const realDoc = globalThis.document, realNav = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  const button = { focused: 0, focus() { this.focused++; } };
+  const field = { select() { doc.activeElement = field; }, remove() { doc.activeElement = null; }, style: {} };
+  const doc = { activeElement: button, body: { append() {} }, createElement: () => field, execCommand: () => false, querySelector: () => null };
+  const toasts = [];
+  const ui = { showToast: html => toasts.push(html) };
+  try {
+    globalThis.document = doc;
+    for (const share of [undefined, async () => {}]) {
+      Object.defineProperty(globalThis, 'navigator', { value: { share, clipboard: { writeText: async () => { throw new Error('denied'); } } }, configurable: true });
+      doc.activeElement = button;
+      await trip.actions['trip-copy'](button, ui);
+      assert.ok(button.focused > 0, 'focus goes back to the button');
+    }
+    assert.match(toasts[0], /won’t let the page copy\. Select the plan and copy it yourself\./);
+    assert.ok(!/Share/.test(toasts[0]), 'no Share button, so no mention of one');
+    assert.match(toasts[1], /Try Share instead\./);
+  } finally {
+    globalThis.document = realDoc;
+    if (realNav) Object.defineProperty(globalThis, 'navigator', realNav);
+  }
+});
+
+test('in forced colors the chosen occasion tile keeps a ring of its own', () => {
+  // Its gold border, tint and glow are colors forced colors replace.
+  const css = readFileSync(new URL('../src/css/wear.css', import.meta.url), 'utf8');
+  const forced = [...css.matchAll(/@media \(forced-colors: active\) \{([\s\S]*?)\n\}/g)].map(m => m[1]).join('');
+  assert.match(forced, /\.occ\[aria-checked='true'\] \{ outline: 2px solid Highlight/);
 });
