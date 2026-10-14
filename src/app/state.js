@@ -9,6 +9,7 @@ import { loadHistory, wornIn, journalStats, journalCalendar } from '../history.j
 import { loadHidden, hiddenFor } from '../hidden.js';
 import { loadMine, saveMine, loadActive, saveActive, localMatches } from '../collections.js';
 import { fragranticaLibrary } from '../fragrantica.js';
+import { onPoolRecords } from './pool.js';
 import { setHidden } from '../hidden.js';
 import { setUnits } from '../ui.js';
 import { setTheme, theme } from '../theme.js';
@@ -55,7 +56,7 @@ export const state = {
   hiding: loadHidden(), // { hidden, shown }: this device's hides and the defaults it switched on (src/hidden.js)
   contexts: {}, // ctx key -> { win, occasion, ranked, entries: Map(id -> ranked entry) }
   today: null, // { day: plan, night: plan } where plan = { win, ranked, pick }
-  bottles: new Map(), // dataset records loaded for bottle pages, by id
+  bottles: new Map(), // dataset records loaded for bottle pages, and every one a pool answer names (keepBottles), by id
   about: new Map(), // id -> loadAbout() result (null: none), for bottle pages
   // Discover's search: `draft` is the field as typed, `query` what was last
   // searched; `offline` the library's error when only local matches came back.
@@ -252,4 +253,29 @@ export async function fullRecords(list) {
   const stubs = list.filter(r => r.stub).map(r => r.id);
   const loaded = stubs.length ? await library.records(stubs) : new Map();
   return list.map(r => (r.stub ? loaded.get(r.id) : r)).filter(Boolean);
+}
+
+// Dataset records the pool client's answers name (src/app/pool.js), kept so
+// findRecord and the bottle page open them at once. A pool record carries
+// its signals (`extras`) but only its 8 strongest notes, an r/ record every
+// note: a bottle seen both ways keeps the r/ record with the pool's extras.
+export function keepBottles(records) {
+  for (const r of records) {
+    const id = String(r.id), old = state.bottles.get(id);
+    if (!old) state.bottles.set(id, r);
+    else if (r.extras && !old.extras) state.bottles.set(id, { ...old, extras: r.extras });
+    else if (!r.extras && old.extras) state.bottles.set(id, { ...r, extras: old.extras });
+  }
+}
+onPoolRecords(keepBottles);
+
+/**
+ * A dataset bottle's r/ record (every note) kept, with its pool extras when
+ * an answer brought those: for a bottle page open on a pool record. -> the
+ * kept record, or null when the dataset has none. Rejects offline.
+ */
+export async function loadFullRecord(id) {
+  const found = (await library.records([String(id)])).get(String(id));
+  if (found) keepBottles([found]);
+  return state.bottles.get(String(id)) ?? null;
 }

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Pool client timings</title>
+<link rel="icon" href="../icons/icon.svg">
+<!--
+  Times every question src/app/pool.js asks the pool worker, on the demo
+  wardrobe: per question a fresh worker's first answer (worker start, pool,
+  context, answer) and the median of later ones, then one session asking
+  them in turn as the screens would, with how long the main thread was held
+  up meanwhile (long tasks). window.__result holds it all for headless runs.
+  Serve the repo (npm run dev) and open /dev/pool.html; ?inline runs the
+  questions on the main thread instead.
+-->
+<style>body { font: 13px/1.45 ui-monospace, monospace; margin: 1.5rem; } pre { white-space: pre-wrap; }</style>
+<pre id="out">Running…</pre>
+<script type="module">
+import { poolClient } from '../src/app/pool.js';
+
+const params = new URLSearchParams(location.search);
+const out = document.getElementById('out');
+const owned = (await (await fetch('../data/collection.json')).json()).fragrances.map(f => ({ ...f, id: String(f.id) }));
+const id = name => owned.find(f => f.name === name).id;
+const options = params.has('inline') ? { worker: () => null } : {};
+const median = xs => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+const round = x => Math.round(x * 10) / 10;
+
+// Each question, and the variations a screen would ask next (a chip, a query).
+const QUESTIONS = [
+  ['report', [{ owned, k: 5 }, { owned, k: 5, preferValue: false }, { owned, k: 8 }]],
+  ['check', [{ owned, id: '76063', liked: ['skin', 'clean', 'intimate'] }, { owned, id: '84109' }, { owned, ids: ['12807', '9828', '31861'] }]],
+  ['liked', [{ owned, stated: ['skin', 'clean', 'intimate'] }, { owned }]],
+  ['styles', [{ owned, styles: ['skin', 'clean', 'intimate'] }, { owned, styles: ['skin'] }, { owned, styles: ['vanilla', 'amber'], mode: 'all' }]],
+  ['moreLike', [{ owned, seeds: [id('Liquid Brun'), id('Amber Empire')] }, { owned, seeds: ['9828'] }, { owned }]],
+  ['notes', [{ owned, query: 'iris leather' }, { owned, query: 'smoky vanilla' }, { owned, query: 'fig' }]],
+  ['dupes', [{ owned, id: '9828' }, { owned, id: id('Liquid Brun') }, { owned, id: '76063' }]],
+  ['records', [{ ids: ['76063', '12807', '9828'] }, { ids: ['48681'] }]],
+];
+
+let blocked = 0, longest = 0;
+new PerformanceObserver(list => {
+  for (const e of list.getEntries()) {
+    blocked += e.duration;
+    longest = Math.max(longest, e.duration);
+  }
+}).observe({ type: 'longtask', buffered: false });
+
+async function timeAsk(client, type, payload) {
+  const t = performance.now();
+  const answer = await client.ask(type, payload);
+  return { ms: performance.now() - t, worker: answer.ms };
+}
+
+const result = { mode: params.has('inline') ? 'inline' : 'worker', cold: {}, warm: {}, session: [] };
+try {
+  // Fetch the files once, so "cold" below is a fresh worker, not the network.
+  const t = performance.now();
+  await poolClient(options).ask('warm');
+  result.firstLoad = round(performance.now() - t);
+
+  for (const [type, payloads] of QUESTIONS) {
+    const client = poolClient(options);
+    result.cold[type] = round((await timeAsk(client, type, payloads[0])).ms);
+    const warm = [];
+    for (let pass = 0; pass < 3; pass++) for (const p of payloads) warm.push((await timeAsk(client, type, p)).ms);
+    result.warm[type] = { median: round(median(warm)), max: round(Math.max(...warm)) };
+  }
+
+  // One session, as the screens ask: Insights, a buy check, Discover's lists, a dupe page.
+  [blocked, longest] = [0, 0];
+  const client = poolClient(options);
+  for (const [type, payloads] of [QUESTIONS[0], QUESTIONS[1], QUESTIONS[2], QUESTIONS[3], QUESTIONS[4], QUESTIONS[5], QUESTIONS[6], QUESTIONS[7]]) {
+    const { ms, worker } = await timeAsk(client, type, payloads[0]);
+    result.session.push({ type, ms: round(ms), worker: Object.fromEntries(Object.entries(worker ?? {}).map(([k, v]) => [k, round(v)])) });
+  }
+  await new Promise(resolve => setTimeout(resolve, 100));
+  result.mainThread = { longTasks: round(blocked), longest: round(longest) };
+  result.heapMB = performance.memory ? round(performance.memory.usedJSHeapSize / 1e6) : null;
+  window.__result = result;
+  out.textContent = [
+    `${result.mode}: files fetched and pool read in ${result.firstLoad} ms`,
+    '',
+    'question   cold (fresh worker)   warm median / max',
+    ...QUESTIONS.map(([type]) => `${type.padEnd(10)} ${String(result.cold[type]).padStart(8)} ms          ${result.warm[type].median} / ${result.warm[type].max} ms`),
+    '',
+    'one session, in turn:',
+    ...result.session.map(s => `  ${s.type.padEnd(9)} ${String(s.ms).padStart(7)} ms   ${JSON.stringify(s.worker)}`),
+    '',
+    `main thread held up by long tasks: ${result.mainThread.longTasks} ms in all, ${result.mainThread.longest} ms the longest`,
+  ].join('\n');
+} catch (err) {
+  window.__result = { error: err.message };
+  out.textContent = `Failed: ${err.message}`;
+}
+</script>
+</html>

@@ -13,7 +13,6 @@ import {
 import { customRecord, predictedShares } from '../src/custom.js';
 import { sharesFrom, parseUses, LEVELS } from '../src/uses.js';
 import { archiveWindows, fetchClimate, climateYears } from '../src/climate.js';
-import { fragranticaLibrary } from '../src/fragrantica.js';
 
 const dir = new URL('../data/fragrantica/', import.meta.url);
 const load = async path => {
@@ -385,46 +384,6 @@ test('a place’s climate comes from one archive call, is kept, and falls back o
   } finally {
     globalThis.fetch = real;
     delete globalThis.window;
-  }
-});
-
-test('the worker answers reports and checks by message', async () => {
-  // The worker fetches the pool next to src/; here fetch reads the files.
-  const real = globalThis.fetch;
-  globalThis.fetch = async url => {
-    const file = fileURLToPath(url);
-    return existsSync(file) ? { ok: true, status: 200, text: async () => readFileSync(file, 'utf8') } : { ok: false, status: 404 };
-  };
-  try {
-    const { handle } = await import('../src/gaps-worker.js');
-    assert.equal((await handle({ id: 0, type: 'check', record: { id: '84109' } })).type, 'error', 'a check needs a wardrobe first');
-    const raw = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url))).fragrances;
-    const answer = await handle({ id: 1, type: 'report', owned: raw, k: 3 });
-    assert.equal(answer.type, 'report', answer.message);
-    assert.equal(answer.id, 1);
-    assert.deepEqual(answer.report.picks.map(p => p.id), report.picks.slice(0, 3).map(p => p.id), 'numeric ids read like string ones');
-    assert.deepEqual(structuredClone(answer).report.gaps, report.gaps);
-    const check = await handle({ id: 2, type: 'check', record: { id: '84109' } });
-    assert.equal(check.check.verdict, 'Redundant');
-    // No local climate yet (null) is the default climate; "How you wear" settings work as shares.
-    const plain = await handle({ id: 5, type: 'report', owned: raw, summary: null, uses: { office: 'never' }, k: 1 });
-    assert.equal(plain.type, 'report', plain.message);
-    assert.ok(plain.report.coverage.filter(c => c.use === 'office').every(c => c.status === 'off'));
-    assert.match((await handle({ id: 6, type: 'report', owned: raw, shares: {} })).message, /sharesFrom/);
-    // A record changed under the same id makes a new context.
-    const before = (await handle({ id: 7, type: 'report', owned: raw, k: 1 })).report.coverage;
-    const changed = raw.map(f => (f.name === 'Cream Velvet' ? { ...f, accords: { citrus: 100, aquatic: 80 } } : f));
-    const after = (await handle({ id: 8, type: 'report', owned: changed, k: 1 })).report.coverage;
-    assert.notDeepEqual(after.find(c => c.cell === 'cozy:night:mild').top, before.find(c => c.cell === 'cozy:night:mild').top);
-    // A visitor's bottle outside the pool reads its about data.
-    const [olympic] = (await fragranticaLibrary(load).records(['12807'])).values();
-    assert.ok(!byId.has('12807') && !olympic.extras);
-    const outside = await handle({ id: 3, type: 'check', record: olympic });
-    assert.equal(outside.type, 'check', outside.message);
-    assert.notEqual(outside.check.risk.level, 'unknown');
-    assert.equal((await handle({ id: 4, type: 'nope' })).message, 'Unknown message type "nope".');
-  } finally {
-    globalThis.fetch = real;
   }
 });
 

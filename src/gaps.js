@@ -1,7 +1,7 @@
 // The wardrobe gap finder and the buy check: which situations a wardrobe
 // covers poorly, the bottles that would fill them, and whether one bottle is
 // worth buying. Pure (no DOM, no fetch), so a module Worker can run it
-// (src/gaps-worker.js); the climate comes in as a summary (src/climate.js),
+// (src/pool-worker.js); the climate comes in as a summary (src/climate.js),
 // how often each use comes up as shares (src/uses.js).
 //
 // A cell is a use (Daily picks or an occasion) × day or night × a feels-like
