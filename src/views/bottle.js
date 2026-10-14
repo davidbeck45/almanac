@@ -216,9 +216,9 @@ export function bottleModel(route) {
   const solo = !entry;
   const win = ctx?.win ?? null;
   if (!entry && win) entry = rank(applySkin([f], loadSkin()), win, win.slot, { occasion: ctx.occasion, history: state.history, todayISO: win.dateISO })[0];
-  const owned = inSource(id);
-  const active = isActive(id);
-  const others = activeFragrances().filter(o => o.id !== id);
+  const owned = inSource(f.id);
+  const active = isActive(f.id);
+  const others = activeFragrances().filter(o => o.id !== f.id);
   return {
     f,
     entry,
@@ -228,17 +228,17 @@ export function bottleModel(route) {
     ctxLabel: win ? (ctx.occasion ? `${ctx.occasion.label} · ${win.label.toLowerCase()}` : win.label) : '',
     occasion: ctx?.occasion ?? null,
     owned,
-    inMine: state.mine.records.some(r => r.id === id),
+    inMine: state.mine.records.some(r => r.id === f.id),
     active,
     worn: win ? wornId(win) : null,
     canWear: Boolean(win) && active && canWear(win),
-    wears: wearInfo(id),
+    wears: wearInfo(f.id),
     todayISO: todayISO(),
     alts: ctx && !solo ? ctx.ranked.filter(r => r.fragrance.id !== id).slice(0, 4) : [],
     partners: others.length ? layerPicks(f, others, 3, win ?? undefined) : null,
     comfort: comfortRange(f),
     about: state.about.get(id),
-    wanted: hasWant(loadWants(), id),
+    wanted: hasWant(loadWants(), f.id),
     skin: loadSkin()[f.id] ?? null,
     aboutFailed: state.aboutFailed.has(id),
     arg: id,
@@ -494,7 +494,7 @@ export const actions = {
     app.keepingFocus(el, '#bottle', app.render);
     if (!on) {
       wantsBefore = before;
-      return app.showToast(`<span>${esc(f.name)} removed from your wishlist</span><button class="btn primary compact" data-action="bp-want-undo">Undo</button>`);
+      return app.showToast(`<span class="note">${esc(f.name)} removed from your wishlist.</span><button class="btn primary compact" data-action="bp-want-undo">Undo</button>`);
     }
     wantsBefore = null;
     const onList = state.base?.dest === 'wardrobe' && state.base.pane === 'wishlist';

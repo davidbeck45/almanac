@@ -285,7 +285,9 @@ const TASKS = {
       const found = await recordFor(cache, x, pool, ctx.owned);
       if (!found) return { id: String(x.id ?? x.record?.id), missing: true };
       const record = await withAbout(cache, found, pool);
-      const check = buyCheck(record, ctx), out = checkJSON(record, check);
+      // The liked styles judge it too (buyCheck's `liked`: a skin scent for
+      // someone who loves them is more than "covered").
+      const check = buyCheck(record, ctx, { liked: liked.length ? liked : null }), out = checkJSON(record, check);
       if (out.overlap) out.overlap.record = bare(check.overlap.bottle);
       if (out.twin) out.twin.record = check.twin.record;
       const scores = scoresOf(found, shown);

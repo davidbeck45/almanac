@@ -231,7 +231,7 @@ function addColumnHTML(family) {
 }
 
 // The strip that sticks to the top once the cards scroll away: a photo and name per column.
-const stripHTML = bottles => `<div class="cmp-strip" aria-hidden="true"><span class="cmp-corner"></span>${bottles.map(b => `<span class="cmp-strip-item">${b.f ? img(b.f) : ''}<span>${esc(b.f?.name ?? '')}</span></span>`).join('')}</div>`;
+const stripHTML = bottles => `<span class="cmp-sentinel" aria-hidden="true"></span><div class="cmp-strip" aria-hidden="true"><span class="cmp-corner"></span>${bottles.map(b => `<span class="cmp-strip-item">${b.f ? img(b.f) : ''}<span>${esc(b.f?.name ?? '')}</span></span>`).join('')}</div>`;
 
 /**
  * One row: a label (HTML) and a cell per bottle. `best`: the id that leads
@@ -241,9 +241,11 @@ const stripHTML = bottles => `<div class="cmp-strip" aria-hidden="true"><span cl
 function cmpRow(label, bottles, cell, { best = null, tag = 'Best', neutral = false, id = '', stack = false } = {}) {
   const cells = bottles.map(b => {
     const lead = best === b.id;
+    // A row with a lead keeps the tag's line in every cell, so the numbers line up.
+    const mark = best ? `<span class="cmp-lead-tag${lead ? '' : ' none'}">${lead ? tag : ''}</span>` : '';
     return `<div class="cmp-cell${lead ? ` lead${neutral ? ' neutral' : ''}` : ''}">
       <span class="cmp-who">${b.f ? img(b.f) : ''}<span>${esc(b.f?.name ?? '')}</span></span>
-      <div class="cmp-val">${b.f ? cell(b.f, b) : ''}${lead ? `<span class="cmp-lead-tag">${tag}</span>` : ''}</div>
+      <div class="cmp-val">${mark}${b.f ? cell(b.f, b) : ''}</div>
     </div>`;
   }).join('');
   return `<section class="cmp-row${stack ? ' stack' : ''}"${id ? ` aria-labelledby="${id}"` : ''}><h2 class="cmp-label"${id ? ` id="${id}"` : ''}>${label}</h2><div class="cmp-cells">${cells}</div></section>`;
@@ -334,7 +336,7 @@ export function compareHTML(m) {
   const heads = `<div class="cmp-heads"><span class="cmp-corner" aria-hidden="true"></span>${bottles.map(b => headHTML(b, ids)).join('')}${alone ? addColumnHTML(m.family) : ''}</div>`;
   const ready = bottles.filter(b => b.f);
   if (alone || !ready.length) {
-    return `<div class="cmp" style="--n:${columns.length}">${bar}${heads}</div>`;
+    return `<div class="cmp alone" style="--n:${columns.length}">${bar}${heads}</div>`;
   }
   const pairs = m.pairs.filter(p => p.text);
   const scoreIn = ctx => shownAs(2, f => (ctx.entries.get(f.id) ? matchPct(ctx.entries.get(f.id)) / 100 : null));
@@ -433,18 +435,18 @@ function listen(app) {
   });
 }
 
-// The strip of photos shows once the cards have scrolled away (under the
-// strip's height from the top), at once on a page drawn again.
-const STRIP = 64;
-let heads = null, seen = null;
-const gone = (el, rect = el.getBoundingClientRect()) => el.closest('.cmp')?.classList.toggle('stuck', rect.bottom < STRIP);
+// The strip of photos shows once it sticks: when the top of the rows (a
+// sentinel there) passes the top of the window, the cards long gone. At
+// once on a page drawn again.
+let sentinel = null, seen = null;
+const stuck = (el, rect = el.getBoundingClientRect()) => el.closest('.cmp')?.classList.toggle('stuck', rect.top < 0);
 function watchHeads() {
-  const el = document.querySelector('#main .cmp-heads');
-  if (el) gone(el);
-  if (typeof IntersectionObserver === 'undefined' || el === heads) return;
-  seen ??= new IntersectionObserver(([e]) => gone(e.target, e.boundingClientRect), { rootMargin: `-${STRIP}px 0px 0px 0px` });
-  if (heads) seen.unobserve(heads);
-  heads = el;
+  const el = document.querySelector('#main .cmp-sentinel');
+  if (el) stuck(el);
+  if (typeof IntersectionObserver === 'undefined' || el === sentinel) return;
+  seen ??= new IntersectionObserver(([e]) => stuck(e.target, e.boundingClientRect));
+  if (sentinel) seen.unobserve(sentinel);
+  sentinel = el;
   if (el) seen.observe(el);
 }
 
@@ -573,7 +575,7 @@ export const actions = {
     removedFrom = before;
     app.navigate(hrefFor(ids), { replace: true });
     focusAfterRemove();
-    app.showToast(`<span>${esc(name)} removed</span><button class="btn primary compact" data-action="cmp-undo">Undo</button>`);
+    app.showToast(`<span class="note">${esc(name)} removed.</span><button class="btn primary compact" data-action="cmp-undo">Undo</button>`);
   },
   'cmp-undo'(el, app) {
     if (!removedFrom) return;

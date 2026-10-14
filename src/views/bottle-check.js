@@ -128,13 +128,17 @@ export function buyCheckHTML(m, answer, { who = 'your collection', wants = [] } 
   const firsts = fills.filter(g => g.first), seconds = fills.filter(g => !g.first);
   const chipGroup = (title, list, extra = '') => (list.length || extra ? `<div class="bc-fills"><p class="bp-sub">${title}</p><ul class="fill-chips">${list.map(chip).join('')}${extra}</ul></div>` : '');
   const moreChip = more > 0 ? `<li class="fill-more">+${more} more</li>` : '';
+  const chips = chipGroup('It would be your best for', firsts, seconds.length ? '' : moreChip)
+    + chipGroup(firsts.length ? 'And a strong second for' : 'It would be a strong second for', seconds, seconds.length ? moreChip : '');
+  // A good fit's fills are why: they lead. A risky one's reasons do.
+  const lead = tone === 'strong' || tone === 'good';
   return `<section class="bp-section" aria-labelledby="bc-title">${head}
     <div class="bc-card${answer.status === 'loading' ? ' bp-refreshing' : ''}" data-tone="${tone}">
       <p class="bc-verdict" data-tone="${tone}">${esc(r.verdict)}</p>
+      ${lead ? chips : ''}
       ${reasons.length ? `<ul class="bc-reasons">${reasons.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
       ${likedLine(r)}
-      ${chipGroup('It would be your best for', firsts, seconds.length ? '' : moreChip)}
-      ${chipGroup(firsts.length ? 'And a strong second for' : 'It would be a strong second for', seconds, seconds.length ? moreChip : '')}
+      ${lead ? '' : chips}
       ${overlap || twin ? `<ul class="rows bc-rows">${overlap}${twin}</ul>` : ''}
     </div>
   </section>`;
