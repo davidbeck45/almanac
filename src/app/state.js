@@ -5,7 +5,7 @@
 import { rank, planWindows } from '../engine.js';
 import { week } from '../weather.js';
 import { loadLocation } from '../location.js';
-import { loadHistory, wornIn, journalStats, journalCalendar } from '../history.js';
+import { loadHistory, wornIn, journalStats, journalCalendar, occasionCounts } from '../history.js';
 import { loadHidden, hiddenFor } from '../hidden.js';
 import { loadMine, saveMine, loadActive, saveActive, localMatches } from '../collections.js';
 import { fragranticaLibrary } from '../fragrantica.js';
@@ -24,7 +24,7 @@ export function loadPrefs() {
 }
 
 export function savePrefs() {
-  try { localStorage.setItem(PREFS_KEY, JSON.stringify({ occasion: state.occasion, units: state.units, theme: theme() })); } catch {}
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify({ occasion: state.occasion, units: state.units, theme: theme(), preferValue: state.preferValue })); } catch {}
 }
 
 function defaultUnits() {
@@ -58,6 +58,9 @@ export const state = {
   today: null, // { day: plan, night: plan } where plan = { win, ranked, pick }
   bottles: new Map(), // dataset records loaded for bottle pages, and every one a pool answer names (keepBottles), by id
   about: new Map(), // id -> loadAbout() result (null: none), for bottle pages
+  // "Prefer great value" as set (true / false; setPreferValue), or null for the
+  // wardrobe's default. Pool questions send it (poolInputs).
+  preferValue: typeof prefs.preferValue === 'boolean' ? prefs.preferValue : null,
   // Discover's search: `draft` is the field as typed, `query` what was last
   // searched; `offline` the library's error when only local matches came back.
   discover: { draft: null, query: '', results: null, busy: false, error: '', offline: '' },
@@ -278,4 +281,53 @@ export async function loadFullRecord(id) {
   const found = (await library.records([String(id)])).get(String(id));
   if (found) keepBottles([found]);
   return state.bottles.get(String(id)) ?? null;
+}
+
+// ---------- Asking the pool ----------
+
+// "Prefer great value" on or off (null: the wardrobe's default, on when its
+// median value is 3.8 or more), saved in prefs. Answers that suggest bottles
+// say which they used (`preferValue`), so the toggle can show it.
+export function setPreferValue(on) {
+  state.preferValue = typeof on === 'boolean' ? on : null;
+  savePrefs();
+}
+
+// The place's climate summary for the gap finder (src/climate.js keeps it
+// on the device per place), or null for the default climate: with no place
+// set, or while the archive can't be reached (asked again next time).
+let climate = null; // { key, summary: promise }
+export function localClimate() {
+  const { lat, lon } = state.loc ?? {};
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return Promise.resolve(null);
+  const key = `${lat},${lon}`;
+  if (climate?.key !== key) {
+    const summary = import('../climate.js')
+      .then(({ fetchClimate }) => fetchClimate(lat, lon))
+      .then(c => (c.local ? c.summary : null), () => null);
+    climate = { key, summary };
+    summary.then(s => { if (!s && climate?.summary === summary) climate = null; });
+  }
+  return climate.summary;
+}
+
+/**
+ * What every question to the pool (src/app/pool.js) says about whoever is
+ * asking; spread it into the payload, so Insights, buy checks and Discover
+ * agree: `owned` (the ranked list, switched on), `exclude` (its bottles
+ * switched off: they cover nothing, but are never suggested back),
+ * `summary` (localClimate), `shares` ("How you wear" with the journal's
+ * occasions, src/uses.js) and `preferValue`. The first time at a place it
+ * waits for the place's climate (one archive call); after that, at once.
+ */
+export async function poolInputs() {
+  const [{ loadUses, sharesFrom }, summary] = await Promise.all([import('../uses.js'), localClimate()]);
+  const hidden = hiddenIn(viewingDemo());
+  return {
+    owned: activeFragrances(),
+    exclude: sourceRecords().filter(f => hidden.has(f.id)),
+    summary,
+    shares: sharesFrom(loadUses(), occasionCounts(state.history)),
+    preferValue: state.preferValue,
+  };
 }

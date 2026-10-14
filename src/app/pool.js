@@ -2,45 +2,79 @@
 // gap finder, buy checks, Discover's lists, dupes, records; src/pool-tasks.js
 // lists them and their answers) without holding up the page. They go to one
 // module Worker (src/pool-worker.js), started on the first ask and shared
-// app-wide; where module Workers don't run, the same code runs on the main
+// app-wide; where module Workers don't run, the same server runs on the main
 // thread instead (imported then, so it costs nothing until then).
 //
-// askPool(type, payload, { channel, timeout }) -> a promise of the answer,
-// with the worker's timings as `ms`. It rejects with an Error whose message
-// can be shown as it is. A newer question on the same channel replaces the
-// older one, which resolves { stale: true } (drop it) and, if it hasn't
-// started, never runs: name a channel per list on screen ('disc-notes') so
-// typing never shows an older answer over a newer one. No channel, nothing
-// replaces it. Past `timeout` ms (TIMEOUT) the question fails, and so does
-// everything waiting with it, on a fresh worker next time.
+// askPool(type, payload, { channel }) -> a promise of the answer, with the
+// worker's timings as `ms`. Spread src/app/state.js poolInputs() into the
+// payload, so every screen asks about the same wardrobe, climate and
+// settings. It rejects with an Error whose message can be shown as it is. A
+// newer question on the same channel replaces the older one, which resolves
+// { stale: true } (drop it) and, if it hasn't started, never runs: name a
+// channel per list on screen ('disc-notes') so typing never shows an older
+// answer over a newer one. No channel, nothing replaces it.
+// Timeouts count from when the worker starts a question: one running longer
+// than TIMEOUT is stuck, so it fails, the worker is replaced and the
+// questions behind it go to the new one. While the pool downloads the clock
+// stops (a slow line isn't a stuck question; a stalled one fails by itself),
+// and a worker that isn't up within TIMEOUT counts as one that can't start.
 // poolStatus() is 'idle' (nothing asked yet), 'loading' (the pool is on its
 // way), 'ready' or 'error'; onPoolStatus(fn) hears each change (fn(status,
-// error)) and returns a function that stops it. warmPool() starts loading
-// early, for a page about to need it.
+// error), the error a sentence) and returns a function that stops it.
+// warmPool() starts loading early, for a page about to need it.
 // onPoolRecords(fn) hears every dataset record an answer names (the wardrobe
-// sent with it aside): src/app/state.js keeps them, so findRecord(id) and the
-// bottle page open any bottle in an answer at once.
+// sent with it, and its switched-off bottles, aside): src/app/state.js keeps
+// them, so findRecord(id) and the bottle page open any bottle in an answer
+// at once.
 // No DOM, no Worker until the first ask: tests make their own client
 // (poolClient) with a fake worker.
 
-// Long enough for a slow phone to fetch and read the pool on a poor line.
+// Long enough for a slow phone to work out a cold gap report many times over.
 export const TIMEOUT = 60_000;
 const SORRY = 'Something went wrong working that out. Try again.';
 const TOO_LONG = 'Working that out took too long. Try again.';
 const UNREACHABLE = 'Can’t reach the fragrance library. Check your connection.';
-// The questions that don't need the pool loaded.
-const POOLLESS = new Set(['liked']);
+// The questions that don't load the pool (src/pool-tasks.js QUICK).
+const QUICK = new Set(['liked', 'records']);
 const WARM = Symbol('warm');
 
 const startWorker = () => (typeof Worker === 'function'
   ? new Worker(new URL('../pool-worker.js', import.meta.url), { type: 'module' })
   : null);
 
-// The main thread's stand-in: handlePool with a cache of its own.
-async function startInline(onStatus) {
-  const { handlePool, newPoolCache } = await import('../pool-tasks.js');
-  const cache = newPoolCache({ onStatus });
-  return msg => handlePool(msg, cache);
+/**
+ * The main thread's stand-in for the Worker, shaped like one (postMessage,
+ * terminate, onmessage, onerror): the same server (poolServer) with a cache
+ * of its own, from `load()` (default: importing src/pool-tasks.js). It posts
+ * { type: 'ready' } once loaded and answers with copies, as a Worker would,
+ * so nothing on screen shares the pool's objects; once terminated it goes
+ * quiet. When the import fails it errs, like a Worker that can't start.
+ */
+export function inlineWorker(load = () => import('../pool-tasks.js')) {
+  let serve = null, dead = false;
+  const early = [];
+  const w = {
+    onmessage: null,
+    onerror: null,
+    postMessage(msg) {
+      if (dead) return;
+      if (serve) serve(structuredClone(msg));
+      else early.push(structuredClone(msg));
+    },
+    terminate() { dead = true; },
+  };
+  const later = fn => setTimeout(() => { if (!dead) fn(); }, 0);
+  const deliver = data => {
+    const copy = structuredClone(data); // throws here, to the server, when it can't be copied
+    later(() => w.onmessage?.({ data: copy }));
+  };
+  Promise.resolve().then(load).then(({ poolServer }) => {
+    if (dead) return;
+    serve = poolServer(deliver);
+    deliver({ type: 'ready' });
+    for (const msg of early.splice(0)) serve(msg);
+  }, err => later(() => w.onerror?.({ message: err?.message ?? String(err) })));
+  return w;
 }
 
 // Every dataset record in an answer (objects with an id, accords and
@@ -59,13 +93,12 @@ function recordsIn(value, skip, out = new Map(), depth = 0) {
 
 /**
  * A client of its own: `worker()` makes the Worker (null where there's none),
- * `inline(onStatus)` resolves a function that answers a message on the main
- * thread, `timeout` the default in ms.
+ * `inline()` its main-thread stand-in (inlineWorker), `timeout` TIMEOUT in ms.
  */
-export function poolClient({ worker: makeWorker = startWorker, inline: makeInline = startInline, timeout: defaultTimeout = TIMEOUT } = {}) {
-  let worker = null, ready = false, runner = null, line = Promise.resolve();
+export function poolClient({ worker: makeWorker = startWorker, inline: makeInline = inlineWorker, timeout = TIMEOUT } = {}) {
+  let worker = null, ready = false, onMain = false, downloading = false, boot = null;
   let next = 0, status = 'idle', error = null;
-  const pending = new Map(); // id -> { msg, resolve, reject, timer, channel }
+  const pending = new Map(); // id -> { msg, resolve, reject, channel, timer (once started) }
   const channels = new Map(); // channel -> id of its latest question
   const statusFns = new Set(), recordFns = new Set();
 
@@ -85,6 +118,20 @@ export function poolClient({ worker: makeWorker = startWorker, inline: makeInlin
     return entry;
   }
 
+  // A clock from now; unref'd, so in Node (tests) a question left waiting doesn't keep the process up.
+  function clock(fn) {
+    const timer = setTimeout(fn, timeout);
+    timer.unref?.();
+    return timer;
+  }
+
+  // The clock on a question the worker has started.
+  function arm(id) {
+    const entry = pending.get(id);
+    clearTimeout(entry.timer);
+    entry.timer = clock(() => late(id));
+  }
+
   function answer(data) {
     const entry = settle(data.id);
     if (!entry) return; // replaced, or timed out
@@ -97,8 +144,8 @@ export function poolClient({ worker: makeWorker = startWorker, inline: makeInlin
     const result = data.result;
     if (data.ms) result.ms = data.ms;
     if (recordFns.size) {
-      const owned = entry.msg.payload?.owned;
-      const skip = new Set((Array.isArray(owned) ? owned : []).map(f => String(f.id)));
+      const { owned, exclude } = entry.msg.payload ?? {};
+      const skip = new Set([owned, exclude].flatMap(list => (Array.isArray(list) ? list : [])).map(f => String(f?.id ?? f)));
       const found = [...recordsIn(result, skip).values()];
       if (found.length) for (const fn of recordFns) fn(found);
     }
@@ -106,87 +153,73 @@ export function poolClient({ worker: makeWorker = startWorker, inline: makeInlin
   }
 
   function hear({ data }) {
-    if (data?.type === 'ready') ready = true;
-    else if (data?.type === 'status') setStatus(data.status, data.error ?? null);
-    else if (data?.id != null) answer(data);
-  }
-
-  // Every question waiting fails with `err`; the pool's status says so.
-  function abandon(err) {
-    for (const id of [...pending.keys()]) settle(id).reject(err);
-    setStatus('error', err.message);
+    if (data?.type === 'ready') {
+      ready = true;
+      clearTimeout(boot);
+    } else if (data?.type === 'status') {
+      downloading = data.status === 'loading';
+      setStatus(data.status, data.error ?? null);
+    } else if (data?.type === 'start') {
+      if (pending.has(data.id)) arm(data.id);
+    } else if (data?.id != null) answer(data);
   }
 
   function stop() {
     worker?.terminate();
-    [worker, ready] = [null, false];
+    clearTimeout(boot);
+    [worker, ready, downloading] = [null, false, false];
+  }
+
+  // Every question waiting, sent again (to a fresh worker).
+  function resend() {
+    for (const entry of pending.values()) {
+      clearTimeout(entry.timer);
+      send(entry.msg);
+    }
   }
 
   // A Worker that errs before it's ready can't run modules here: the main
   // thread takes over, with the questions waiting. One that errs later (it
-  // shouldn't: handlePool never throws) fails what's waiting, and the next
-  // ask starts a fresh one.
+  // shouldn't: the server never throws) fails what's waiting, and the next
+  // ask starts a fresh one. The main thread's stand-in errs only when its
+  // code can't load: what's waiting fails, and the next ask tries again.
   function broke(event) {
     event?.preventDefault?.();
-    if (ready) {
-      stop();
-      abandon(new Error(SORRY));
+    const [wasReady, wasMain] = [ready, onMain];
+    stop();
+    if (!wasReady && !wasMain) {
+      onMain = true; // no more Workers
+      resend();
       return;
     }
-    stop();
-    runner ??= true; // no more Workers
-    for (const entry of pending.values()) runInline(entry.msg);
+    const err = new Error(wasReady ? SORRY : UNREACHABLE);
+    for (const id of [...pending.keys()]) settle(id).reject(err);
+    setStatus('error', err.message);
   }
 
   function workerFor() {
-    if (worker || runner) return worker;
-    try {
-      worker = makeWorker();
-    } catch {
-      worker = null;
+    if (worker) return worker;
+    let w = null;
+    if (!onMain) {
+      try {
+        w = makeWorker();
+      } catch {
+        w = null;
+      }
+      if (!w) onMain = true;
     }
-    if (!worker) {
-      runner = true;
-      return null;
-    }
-    worker.onmessage = hear;
-    worker.onerror = broke;
-    worker.onmessageerror = broke;
-    return worker;
-  }
-
-  // On the main thread, one question at a time like the worker; one replaced
-  // or timed out before its turn doesn't run.
-  function runInline(msg) {
-    line = line.then(() => runOne(msg)).catch(() => {});
-  }
-
-  async function runOne(msg) {
-    if (!pending.has(msg.id)) return;
-    let run;
-    try {
-      if (runner === true) runner = makeInline((to, err = null) => setStatus(to, err));
-      run = await runner;
-    } catch {
-      runner = true; // try the import again next time
-      setStatus('error', UNREACHABLE);
-      answer({ id: msg.id, error: UNREACHABLE });
-      return;
-    }
-    let data;
-    try {
-      // A copy, as a Worker's answer would be: nothing on screen shares the pool's objects.
-      data = structuredClone(await run(msg));
-    } catch {
-      data = { id: msg.id, error: SORRY };
-    }
-    answer(data);
+    w ??= makeInline();
+    // Only the current worker is heard: one replaced may still be talking.
+    w.onmessage = event => { if (worker === w) hear(event); };
+    w.onerror = event => { if (worker === w) broke(event); };
+    w.onmessageerror = w.onerror;
+    boot = clock(() => { if (worker === w && !ready) broke(); });
+    return (worker = w);
   }
 
   function send(msg) {
-    const w = workerFor();
-    if (w) w.postMessage(msg);
-    else runInline(msg);
+    if (!QUICK.has(msg.type) && status !== 'ready') setStatus('loading');
+    workerFor().postMessage(msg);
   }
 
   // The older question on a channel: answered stale, and dropped if it hasn't started.
@@ -197,22 +230,24 @@ export function poolClient({ worker: makeWorker = startWorker, inline: makeInlin
     worker?.postMessage({ type: 'cancel', id });
   }
 
-  // A question this late is stuck behind (or in) one that won't finish: start over.
+  // A question running past the timeout. While the pool downloads, the
+  // clock starts over; otherwise it's stuck: it fails, and the rest go to a
+  // fresh worker.
   function late(id) {
     if (!pending.has(id)) return;
+    if (downloading) return arm(id);
+    settle(id).reject(new Error(TOO_LONG));
     stop();
-    abandon(new Error(TOO_LONG));
+    if (status === 'ready') setStatus('idle');
+    resend();
   }
 
-  function ask(type, payload = {}, { channel = null, timeout = defaultTimeout } = {}) {
+  function ask(type, payload = {}, { channel = null } = {}) {
     const id = ++next, msg = { id, type, payload };
     return new Promise((resolve, reject) => {
       if (channel != null && channels.has(channel)) replace(channels.get(channel));
-      const timer = setTimeout(() => late(id), timeout);
-      timer.unref?.(); // in Node (tests), a question left waiting doesn't keep the process up
-      pending.set(id, { msg, resolve, reject, channel, timer });
+      pending.set(id, { msg, resolve, reject, channel, timer: null });
       if (channel != null) channels.set(channel, id);
-      if (!POOLLESS.has(type) && status !== 'ready') setStatus('loading');
       send(msg);
     });
   }

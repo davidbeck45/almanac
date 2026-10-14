@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { handlePool, newPoolCache, POOL_TASKS } from '../src/pool-tasks.js';
-import { poolClient, TIMEOUT } from '../src/app/pool.js';
+import { handlePool, newPoolCache, poolServer, POOL_TASKS, QUICK } from '../src/pool-tasks.js';
+import { poolClient, inlineWorker } from '../src/app/pool.js';
 import { loadPool, fromPool } from '../src/fragrantica.js';
 import { gapContext, gapReport } from '../src/gaps.js';
 import { signalsOf, PREFER_VALUE } from '../src/candidates.js';
@@ -182,12 +182,152 @@ test('errors come back as sentences, never thrown', async () => {
   assert.match((await handlePool({ id: 2, type: 'styles', payload: { owned, styles: ['skin'] } }, offline)).error, /Can’t reach/);
 });
 
+
+test('bottles switched off cover nothing, but are never suggested back, nor their originals', async () => {
+  // Each of David's bottles in the pool, switched off in turn as Manage does.
+  const pool = await loadPool(load);
+  for (const off of owned.filter(f => pool.index.has(f.id))) {
+    const on = owned.filter(f => f !== off);
+    const report = await ask('report', { owned: on, exclude: [off], k: 5, preferValue: false });
+    const like = await ask('moreLike', { owned: on, exclude: [off.id], seeds: [on[0].id], k: 10, preferValue: false });
+    for (const p of [...report.picks, ...like.picks]) {
+      assert.ok(![off.id, String(off.original?.id)].includes(p.id), `${off.name} switched off comes back as ${p.record.name}`);
+    }
+  }
+  const velvet = named('Cream Velvet'), on = owned.filter(f => f !== velvet);
+  // It covers nothing: the grid is the one without it.
+  const without = await ask('report', { owned: on, k: 1 });
+  const off = await ask('report', { owned: on, exclude: [velvet], k: 1 });
+  assert.deepEqual(off.coverage, without.coverage);
+  // Checks and dupes call it owned (without `exclude` it checks as a strong fit).
+  const self = await ask('check', { owned: on, exclude: [velvet.id], id: velvet.id });
+  assert.deepEqual([self.verdict, self.reasons[0]], ['Redundant', 'You own it.']);
+  const original = await ask('check', { owned: on, exclude: [velvet], id: String(velvet.original.id) });
+  assert.deepEqual([original.verdict, original.reasons[0]], ['Redundant', 'The original of your Cream Velvet.']);
+  const family = await ask('dupes', { owned: on, exclude: [velvet], id: String(velvet.original.id) });
+  const entries = [family.original, ...family.cheaper, ...family.siblings].filter(Boolean);
+  assert.ok(entries.every(e => e.owned === owned.some(f => f.id === e.id)), 'owned marks follow the whole list');
+  // Ids the dataset doesn't have are only left out.
+  assert.equal((await ask('styles', { owned, exclude: ['my:gone', null], styles: ['skin'], k: 1 })).picks.length, 1);
+});
+
+test('a pool file that doesn’t read fails as a sentence, to the asker and to the status', async () => {
+  const heard = [];
+  const cut = newPoolCache({ load: async path => (path === 'pool.json' ? '{"count": 3, "na' : load(path)), onStatus: (s, e) => heard.push(e ? `${s}: ${e}` : s) });
+  const answer = await handlePool({ id: 1, type: 'warm' }, cut);
+  assert.equal(answer.error, 'The fragrance library didn’t load. Try again.');
+  assert.match(answer.detail, /JSON/);
+  assert.deepEqual(heard, ['loading', 'error: The fragrance library didn’t load. Try again.']);
+});
+
+test('a download that stalls fails as out of reach, and a refused one says so', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const real = globalThis.fetch;
+  let aborted = 0, status = 200;
+  // Files that send a few bytes, then nothing, until their signal aborts.
+  globalThis.fetch = async (url, { signal }) => (status !== 200 ? new Response('', { status }) : new Response(new ReadableStream({
+    start(c) {
+      c.enqueue(new TextEncoder().encode('{"cou'));
+      signal.addEventListener('abort', () => { aborted++; c.error(new Error('aborted')); });
+    },
+  })));
+  try {
+    const answer = handlePool({ id: 1, type: 'warm' }, newPoolCache());
+    for (let i = 0; i < 5; i++) await new Promise(setImmediate);
+    t.mock.timers.tick(29_000);
+    assert.equal(aborted, 0, 'a slow line is left alone');
+    t.mock.timers.tick(1_000);
+    assert.equal((await answer).error, 'Can’t reach the fragrance library. Check your connection.');
+    assert.ok(aborted > 0);
+    status = 503;
+    assert.equal((await handlePool({ id: 2, type: 'warm' }, newPoolCache())).error, 'The fragrance library didn’t load (503).');
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test('records never waits for the pool: r/ records before it’s in, its rows after', async () => {
+  const heard = [];
+  const fresh = newPoolCache({ load, onStatus: s => heard.push(s) });
+  const before = (await handlePool({ id: 1, type: 'records', payload: { ids: ['76063'] } }, fresh)).result;
+  assert.equal(before.records[0].name, 'Shalimar Millésime Tonka');
+  assert.ok(!before.records[0].extras);
+  assert.deepEqual(heard, [], 'it doesn’t start the pool either');
+  await handlePool({ id: 2, type: 'warm' }, fresh);
+  assert.ok((await handlePool({ id: 3, type: 'records', payload: { ids: ['76063'] } }, fresh)).result.records[0].extras);
+});
+
+// ---------------------------------------------------------------- the server
+
+// Waits (real time) until `fn()` holds.
+async function until(fn, ms = 10_000) {
+  const end = Date.now() + ms;
+  while (!fn()) {
+    if (Date.now() > end) throw new Error('timed out waiting');
+    await new Promise(resolve => setTimeout(resolve, 2));
+  }
+}
+const said = posted => posted.map(m => (m.type === 'start' ? `start ${m.id}` : ['status', 'ready'].includes(m.type) ? m.status ?? m.type : `${m.error ? 'error' : 'answer'} ${m.id}`));
+
+test('the server answers quick questions at once, the rest in turn, and drops one cancelled before it starts', async () => {
+  assert.deepEqual([...QUICK].sort(), ['liked', 'records']);
+  let open;
+  const gate = new Promise(resolve => { open = resolve; });
+  const posted = [];
+  const serve = poolServer(data => posted.push(structuredClone(data)), { load: async path => (path.startsWith('pool') ? gate.then(() => load(path)) : load(path)) });
+  serve({ id: 1, type: 'warm', payload: {} });
+  serve({ id: 2, type: 'styles', payload: { owned, styles: ['skin'], k: 2 } });
+  serve({ id: 3, type: 'notes', payload: { owned, query: 'iris', k: 2 } });
+  serve({ type: 'cancel', id: 3 });
+  serve({ id: 4, type: 'liked', payload: { owned } });
+  await until(() => posted.some(m => m.id === 4 && m.result));
+  assert.deepEqual(said(posted), ['start 1', 'loading', 'start 4', 'answer 4'], 'liked doesn’t wait for the pool’s download');
+  open();
+  await until(() => posted.some(m => m.id === 2 && m.result));
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.deepEqual(said(posted).slice(4), ['ready', 'answer 1', 'start 2', 'answer 2'], 'the cancelled one never starts');
+});
+
+test('an answer that can’t be posted comes back as an apology, and the next question still runs', async () => {
+  const posted = [];
+  let thrown = false;
+  const serve = poolServer(data => {
+    if (data.id === 1 && data.type === 'nope' && !thrown) {
+      thrown = true;
+      throw new DOMException('#<Object> could not be cloned.', 'DataCloneError');
+    }
+    posted.push(data);
+  });
+  serve({ id: 1, type: 'nope' });
+  serve({ id: 2, type: 'nope' });
+  await until(() => posted.some(m => m.id === 2 && m.error));
+  const one = posted.find(m => m.id === 1 && m.error);
+  assert.equal(one.error, 'Something went wrong working that out. Try again.');
+  assert.match(one.detail, /could not be cloned/);
+});
+
+test('the worker script says it’s ready and serves questions', async () => {
+  const posted = [];
+  globalThis.self = { postMessage: data => posted.push(structuredClone(data)) };
+  try {
+    await import('../src/pool-worker.js');
+    assert.deepEqual(posted[0], { type: 'ready' });
+    self.onmessage({ data: { id: 7, type: 'liked', payload: { owned } } });
+    await until(() => posted.some(m => m.id === 7 && m.result));
+    assert.deepEqual(said(posted), ['ready', 'start 7', 'answer 7']);
+    assert.equal(posted.at(-1).result.from, 'wardrobe');
+  } finally {
+    delete globalThis.self;
+  }
+});
+
 // ---------------------------------------------------------------- the client
 
 // A Worker stand-in: what's posted, and answers sent back by hand.
 class FakeWorker {
   static made = [];
-  constructor() {
+  constructor(kind = 'worker') {
+    this.kind = kind;
     this.posted = [];
     this.terminated = false;
     FakeWorker.made.push(this);
@@ -195,15 +335,23 @@ class FakeWorker {
   postMessage(msg) { this.posted.push(structuredClone(msg)); }
   terminate() { this.terminated = true; }
   reply(data) { this.onmessage({ data: structuredClone(data) }); }
+  start(q) { this.reply({ type: 'start', id: q.id }); }
   questions() { return this.posted.filter(m => m.type !== 'cancel'); }
+  cancels() { return this.posted.filter(m => m.type === 'cancel').map(m => m.id); }
 }
 const fakeClient = (options = {}) => {
   FakeWorker.made = [];
-  return poolClient({ worker: () => new FakeWorker(), inline: () => { throw new Error('no inline here'); }, ...options });
+  return poolClient({ worker: () => new FakeWorker(), inline: () => new FakeWorker('inline'), ...options });
 };
 const lastWorker = () => FakeWorker.made.at(-1);
-const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 const poolRecord = (id, extra = {}) => ({ id, source: 'fragrantica', name: `Bottle ${id}`, accords: { musky: 100 }, extras: { value: 4 }, ...extra });
+// Whether a promise has settled, without waiting for it.
+const watch = promise => {
+  const w = { done: false, value: undefined, error: undefined };
+  promise.then(v => Object.assign(w, { done: true, value: v }), e => Object.assign(w, { done: true, error: e }));
+  return w;
+};
+const settle = () => new Promise(setImmediate);
 
 test('the client answers by id, and hands on the records an answer names', async () => {
   const client = fakeClient();
@@ -234,7 +382,7 @@ test('a newer question on a channel replaces the older, which answers stale and 
   assert.deepEqual(await first, { stale: true });
   const w = lastWorker();
   const [q1, q2, q3, q4] = w.questions();
-  assert.deepEqual(w.posted.filter(m => m.type === 'cancel'), [{ type: 'cancel', id: q1.id }], 'the worker drops it if it hasn’t started');
+  assert.deepEqual(w.cancels(), [q1.id], 'the worker drops it if it hasn’t started');
   // An answer to the replaced question, arriving anyway, is ignored.
   w.reply({ id: q1.id, type: 'notes', result: { query: 'ir' } });
   w.reply({ id: q4.id, type: 'notes', result: { query: 'iris' } });
@@ -245,7 +393,7 @@ test('a newer question on a channel replaces the older, which answers stale and 
   await assert.rejects(loose, err => err.message === 'Nope.' && err.detail === 'raw');
   // A channel is free again once answered.
   const third = client.ask('notes', { query: 'iris leather' }, { channel: 'disc-notes' });
-  assert.equal(w.posted.filter(m => m.type === 'cancel').length, 1);
+  assert.equal(w.cancels().length, 1);
   w.reply({ id: w.questions().at(-1).id, type: 'notes', result: { query: 'iris leather' } });
   assert.equal((await third).query, 'iris leather');
 });
@@ -256,13 +404,14 @@ test('the pool’s status follows the worker, for skeletons', async () => {
   const stop = client.onStatus((status, error) => heard.push(error ? `${status}: ${error}` : status));
   assert.equal(client.status(), 'idle');
   client.ask('liked', { owned: [] }).catch(() => {});
-  assert.equal(client.status(), 'idle', 'liked needs no pool');
+  client.ask('records', { ids: [] }).catch(() => {});
+  assert.equal(client.status(), 'idle', 'liked and records don’t load the pool');
   client.warm();
   assert.equal(client.status(), 'loading');
   const w = lastWorker();
-  assert.deepEqual(w.questions().map(q => q.type), ['liked', 'warm']);
+  assert.deepEqual(w.questions().map(q => q.type), ['liked', 'records', 'warm']);
   client.warm();
-  assert.equal(w.questions().length, 2, 'warming twice asks once');
+  assert.equal(w.questions().length, 3, 'warming twice asks once');
   w.reply({ type: 'status', status: 'loading' });
   w.reply({ type: 'status', status: 'ready' });
   assert.equal(client.status(), 'ready');
@@ -274,60 +423,85 @@ test('the pool’s status follows the worker, for skeletons', async () => {
   assert.deepEqual(heard, ['loading', 'ready', 'error: Can’t reach the fragrance library.']);
 });
 
-test('a question that takes too long fails, with everything waiting, and the next starts a fresh worker', async () => {
-  const client = fakeClient({ timeout: 20 });
-  const slow = client.ask('report', { owned: [] });
-  const queued = client.ask('check', { owned: [], id: '1' }, { timeout: TIMEOUT });
+test('the clock runs from when a question starts, and stops while the pool downloads', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const client = fakeClient({ timeout: 1000 });
+  const report = watch(client.ask('report', { owned: [] }, { channel: 'ins-report' }));
+  const check = watch(client.ask('check', { owned: [], id: '1' }, { channel: 'bp-check' }));
   const w = lastWorker();
-  await assert.rejects(slow, /took too long/);
-  await assert.rejects(queued, /took too long/);
-  assert.ok(w.terminated);
-  assert.equal(client.status(), 'error');
-  const again = client.ask('records', { ids: ['1'] });
-  assert.equal(client.status(), 'loading');
-  assert.equal(FakeWorker.made.length, 2);
-  const w2 = lastWorker();
-  w2.reply({ id: w2.questions()[0].id, type: 'records', result: { records: [], missing: ['1'] } });
-  assert.deepEqual((await again).missing, ['1']);
+  w.reply({ type: 'ready' });
+  const [q1, q2] = w.questions();
+  w.start(q1);
+  w.reply({ type: 'status', status: 'loading' });
+  // A slow line: the download takes ten timeouts, and nothing fails.
+  for (let i = 0; i < 10; i++) t.mock.timers.tick(1000);
+  await settle();
+  assert.ok(!report.done && !check.done && !w.terminated);
+  w.reply({ type: 'status', status: 'ready' });
+  t.mock.timers.tick(900);
+  w.reply({ id: q1.id, type: 'report', result: { picks: [] } });
+  w.start(q2);
+  t.mock.timers.tick(900);
+  w.reply({ id: q2.id, type: 'check', result: { verdict: 'Good' } });
+  await settle();
+  assert.deepEqual([report.value.picks, check.value.verdict, w.terminated], [[], 'Good', false]);
 });
 
-test('without module Workers the questions run on the main thread, one at a time', async () => {
-  // A Worker that fails before it's ready: its questions move to the main thread.
-  const ran = [];
-  const inline = async onStatus => {
-    onStatus('loading');
-    return async msg => {
-      ran.push(msg.payload.query ?? msg.type);
-      await tick();
-      onStatus('ready');
-      return { id: msg.id, type: msg.type, result: { query: msg.payload.query, record: poolRecord('9') } };
-    };
-  };
-  const client = fakeClient({ inline });
-  const kept = [];
-  client.onRecords(list => kept.push(...list.map(r => r.id)));
-  const a = client.ask('notes', { query: 'a' }, { channel: 'c' });
-  const b = client.ask('notes', { query: 'b' });
-  lastWorker().onerror({ preventDefault() {} });
-  const c = client.ask('notes', { query: 'c' }, { channel: 'c' });
-  assert.equal(FakeWorker.made.length, 1, 'no more Workers');
-  assert.deepEqual(await a, { stale: true });
-  assert.equal((await b).query, 'b');
-  assert.equal((await c).query, 'c');
-  assert.deepEqual(ran, ['b', 'c'], 'a question replaced before its turn never runs');
-  assert.equal(client.status(), 'ready');
-  assert.deepEqual(kept, ['9', '9']);
+test('a question stuck running fails alone; the worker is replaced and the rest go to the new one', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const client = fakeClient({ timeout: 1000 });
+  const stuck = watch(client.ask('report', { owned: [] }));
+  const next = watch(client.ask('check', { owned: [], id: '1' }));
+  const w = lastWorker();
+  w.reply({ type: 'ready' });
+  w.reply({ type: 'status', status: 'ready' });
+  const [q1, q2] = w.questions();
+  // Questions waiting their turn have no clock of their own: the one running does.
+  t.mock.timers.tick(5000);
+  w.start(q1);
+  t.mock.timers.tick(999);
+  await settle();
+  assert.ok(!stuck.done && !next.done);
+  t.mock.timers.tick(1);
+  await settle();
+  assert.match(stuck.error?.message, /took too long/);
+  assert.ok(w.terminated && !next.done);
+  assert.equal(client.status(), 'loading', 'the new worker loads the pool again');
+  const w2 = lastWorker();
+  assert.notEqual(w2, w);
+  assert.deepEqual(w2.questions().map(q => q.id), [q2.id]);
+  w.reply({ id: q2.id, type: 'check', result: { verdict: 'Old' } });
+  w2.reply({ type: 'ready' });
+  w2.start(q2);
+  w2.reply({ id: q2.id, type: 'check', result: { verdict: 'Good' } });
+  await settle();
+  assert.equal(next.value.verdict, 'Good', 'only the current worker is heard');
+});
 
-  // No Worker at all, and the code can't load: a plain error, and the next ask tries again.
-  let tries = 0;
-  const offline = poolClient({ worker: () => null, inline: async () => { tries++; throw new Error('import failed'); } });
-  await assert.rejects(offline.ask('records', { ids: [] }), /Can’t reach the fragrance library/);
-  await assert.rejects(offline.ask('records', { ids: [] }), /Can’t reach/);
-  assert.equal(tries, 2);
-  assert.equal(offline.status(), 'error');
-  const broken = poolClient({ worker: () => { throw new Error('blocked'); }, inline: () => { throw new Error('no'); } });
-  await assert.rejects(broken.ask('records', { ids: [] }), /Can’t reach/);
-  await assert.rejects(broken.ask('records', { ids: [] }), /Can’t reach/, 'a failed question doesn’t stall the next');
+test('a Worker that isn’t up in time, or errs before, hands its questions to the main thread', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const client = fakeClient({ timeout: 1000 });
+  const a = watch(client.ask('styles', { owned: [] }));
+  t.mock.timers.tick(999);
+  assert.equal(FakeWorker.made.length, 1);
+  t.mock.timers.tick(1);
+  const main = lastWorker();
+  assert.deepEqual([FakeWorker.made[0].terminated, main.kind], [true, 'inline']);
+  assert.equal(main.questions().length, 1);
+  main.reply({ type: 'ready' });
+  main.reply({ id: main.questions()[0].id, type: 'styles', result: { picks: [] } });
+  client.ask('records', { ids: [] }).catch(() => {});
+  assert.equal(FakeWorker.made.length, 2, 'no more Workers');
+  await settle();
+  assert.deepEqual(a.value.picks, []);
+
+  const other = fakeClient();
+  const b = watch(other.ask('notes', { query: 'fig' }));
+  lastWorker().onerror({ preventDefault() {} });
+  assert.equal(lastWorker().kind, 'inline');
+  lastWorker().reply({ id: lastWorker().questions()[0].id, type: 'notes', result: { query: 'fig' } });
+  await settle();
+  assert.equal(b.value.query, 'fig');
 });
 
 test('a worker that breaks after it’s ready fails what’s waiting, and the next ask starts another', async () => {
@@ -340,11 +514,50 @@ test('a worker that breaks after it’s ready fails what’s waiting, and the ne
   assert.ok(w.terminated);
   client.ask('styles', { owned: [] }).catch(() => {});
   assert.equal(FakeWorker.made.length, 2);
+  assert.equal(lastWorker().kind, 'worker');
 });
 
-test('the app’s client runs the real questions and keeps their bottles for findRecord', async () => {
-  // In Node there's no Worker: the app's client runs pool-tasks on this thread,
-  // fetching data/fragrantica/ next to src/ (read from disk here).
+test('on the main thread the same server answers, quick ones first, one replaced before its turn never runs', async () => {
+  let open;
+  const gate = new Promise(resolve => { open = resolve; });
+  const log = [];
+  // The server with a pool that can't be reached, once let through.
+  const module = async () => ({
+    poolServer: post => poolServer(data => { log.push(data); post(data); }, {
+      load: () => gate.then(() => { throw new Error('Can’t reach the fragrance library. Check your connection.'); }),
+    }),
+  });
+  const client = poolClient({ worker: () => null, inline: () => inlineWorker(module) });
+  const warm = watch(client.ask('warm'));
+  const replaced = client.ask('nope', {}, { channel: 'c' });
+  const kept = watch(client.ask('nope', {}, { channel: 'c' }));
+  const liked = await client.ask('liked', { owned });
+  assert.equal(liked.from, 'wardrobe');
+  assert.deepEqual(await replaced, { stale: true });
+  assert.ok(!warm.done, 'liked didn’t wait for the pool');
+  open();
+  await until(() => warm.done && kept.done);
+  assert.equal(warm.error.message, 'Can’t reach the fragrance library. Check your connection.');
+  assert.equal(kept.error.message, 'Unknown question "nope".');
+  assert.deepEqual(log.filter(m => m.type === 'start').map(m => m.id), [1, 4, 3], 'the replaced question never started');
+  assert.equal(client.status(), 'error');
+
+  // The code can't load: a plain error, and the next ask tries again.
+  let tries = 0;
+  const failing = async () => { tries++; throw new Error('import failed'); };
+  const offline = poolClient({ worker: () => null, inline: () => inlineWorker(failing) });
+  await assert.rejects(offline.ask('records', { ids: [] }), /Can’t reach the fragrance library/);
+  await assert.rejects(offline.ask('records', { ids: [] }), /Can’t reach/);
+  assert.equal(tries, 2);
+  assert.equal(offline.status(), 'error');
+  const blocked = poolClient({ worker: () => { throw new Error('blocked'); }, inline: () => inlineWorker(failing) });
+  await assert.rejects(blocked.ask('records', { ids: [] }), /Can’t reach/);
+  await assert.rejects(blocked.ask('records', { ids: [] }), /Can’t reach/, 'a failed question doesn’t stall the next');
+});
+
+test('the app’s client runs the real questions, with poolInputs, and keeps their bottles for findRecord', async () => {
+  // In Node there's no Worker: the app's client runs the server on this
+  // thread, fetching data/fragrantica/ next to src/ (read from disk here).
   const real = globalThis.fetch;
   globalThis.fetch = async url => {
     const file = fileURLToPath(url);
@@ -352,7 +565,7 @@ test('the app’s client runs the real questions and keeps their bottles for fin
   };
   try {
     const { askPool, poolStatus } = await import('../src/app/pool.js');
-    const { state, findRecord, keepBottles } = await import('../src/app/state.js');
+    const { state, findRecord, keepBottles, poolInputs, setPreferValue } = await import('../src/app/state.js');
     const answer = await askPool('styles', { owned, styles: ['clean'], k: 3 }, { channel: 'test' });
     assert.equal(poolStatus(), 'ready');
     for (const p of answer.picks) assert.equal(findRecord(p.id)?.name, p.record.name);
@@ -366,6 +579,22 @@ test('the app’s client runs the real questions and keeps their bottles for fin
     assert.deepEqual(state.bottles.get(pick.id).extras, pick.record.extras);
     keepBottles([pick.record]);
     assert.deepEqual(state.bottles.get(pick.id).notes, full.notes, 'a pool record doesn’t replace it');
+
+    // David's wardrobe with Legacy switched off (Jake is off by default).
+    state.demo = { fragrances: owned };
+    state.hiding.hidden.add(named('Legacy').id);
+    const inputs = await poolInputs();
+    assert.deepEqual(inputs.exclude.map(f => f.name).sort(), ['Jake', 'Legacy']);
+    assert.equal(inputs.owned.length, owned.length - 2);
+    assert.deepEqual([inputs.summary, inputs.preferValue], [null, null], 'no place, no setting: the defaults');
+    assert.ok(Math.abs(Object.values(inputs.shares).reduce((a, b) => a + b, 0) - 1) < 1e-9);
+    const report = await askPool('report', { ...inputs, k: 5 }, { channel: 'ins-report' });
+    assert.ok(report.picks.length && report.picks.every(p => !['Jake', 'Legacy'].includes(p.record.name)));
+    assert.equal(report.preferValue, true);
+    const legacy = await askPool('check', { ...inputs, id: named('Legacy').id }, { channel: 'bp-check' });
+    assert.deepEqual([legacy.verdict, legacy.reasons[0]], ['Redundant', 'You own it.']);
+    setPreferValue(false);
+    assert.equal((await askPool('report', { ...(await poolInputs()), k: 1 })).preferValue, false);
   } finally {
     globalThis.fetch = real;
   }
