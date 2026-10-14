@@ -340,6 +340,38 @@ test('a climate archive that fails isn’t asked again by every pool question', 
   }
 });
 
+test('Wear this is for windows dated today: at night, tomorrow’s daytime can’t be logged yet', async () => {
+  const { state, canWear } = await import('../src/app/state.js');
+  const tonight = { dateISO: '2026-10-14', slot: 'night' }, tomorrow = { dateISO: '2026-10-15', slot: 'day' };
+  try {
+    // 22:49: the day window has rolled over to tomorrow's.
+    state.wx = { todayISO: '2026-10-14', day: tomorrow, night: tonight };
+    assert.equal(canWear(tonight), true);
+    assert.equal(canWear(tomorrow), false, 'Now’s Day toggle and Week’s tomorrow offer no Wear this');
+    assert.equal(canWear({ dateISO: '2026-10-16', slot: 'day' }), false);
+    state.wx = { todayISO: '2026-10-14', day: { dateISO: '2026-10-14', slot: 'day' }, night: tonight };
+    assert.equal(canWear({ dateISO: '2026-10-14', slot: 'day' }), true);
+  } finally {
+    state.wx = null;
+  }
+});
+
+test('a link’s ?ctx= can’t name a property every object has', async () => {
+  const { state } = await import('../src/app/state.js');
+  const { bottleModel } = await import('../src/views/bottle.js');
+  const [f] = JSON.parse(read('data/collection.json')).fragrances;
+  const id = String(f.id);
+  state.bottles.set(id, { ...f, id });
+  try {
+    for (const ctx of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+      assert.equal(state.contexts[ctx], undefined, ctx);
+      assert.equal(bottleModel({ dest: 'bottle', arg: id, query: { ctx } }).f.id, id, `?ctx=${ctx} opens the page`);
+    }
+  } finally {
+    state.bottles.delete(id);
+  }
+});
+
 test('a link’s ?theme= shows for the visit, and only Settings saves a theme', async () => {
   const { savePrefs, chooseTheme } = await import('../src/app/state.js');
   const { setTheme } = await import('../src/theme.js');
