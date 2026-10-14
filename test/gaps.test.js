@@ -11,6 +11,7 @@ import {
   coverage, gapSummary, strengths, suggest, buyCheck, gapReport, checkJSON, cellTitle, explainCell, SAME_SIM,
 } from '../src/gaps.js';
 import { customRecord, predictedShares } from '../src/custom.js';
+import { applySkin } from '../src/skin.js';
 import { sharesFrom, parseUses, LEVELS } from '../src/uses.js';
 import { archiveWindows, fetchClimate, climateYears } from '../src/climate.js';
 import { fragranticaLibrary } from '../src/fragrantica.js';
@@ -91,6 +92,13 @@ test('flat season votes read as unvoted, so they don’t make an all-rounder', (
   const picks = [ctx, gapContext({ owned: wardrobe, records, byId, preferValue: false })].flatMap(c => suggest(c, { k: 5 }));
   assert.ok(!picks.some(p => [elyon.id, au.id].includes(p.record.id)));
   for (const r of [elyon, au]) assert.notEqual(buyCheck(r, ctx).verdict, 'Strong fit', r.name);
+});
+
+test('your stars don’t move the pool reference', () => {
+  const rated = applySkin(wardrobe, { [owned('Cream Velvet').id]: { rating: 1 }, [owned('Terra').id]: { rating: 5 } });
+  const again = gapContext({ owned: rated, records, byId });
+  assert.equal(again.table, ctx.table, 'the pool table is reused as is');
+  assert.deepEqual(again.ref.map(q => [...q]), ctx.ref.map(q => [...q]));
 });
 
 test('the default climate is small and has real windows in every slot and band', () => {

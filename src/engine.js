@@ -293,12 +293,15 @@ export function comfortRange(frag, { dewF = 55 } = {}) {
 // crowd's, and each nudge moves a performance level by PERSONAL_SHIFT.
 const PERSONAL_RATING_WEIGHT = 0.8;
 const PERSONAL_SHIFT = 0.5;
-// What your stars add to a score on top of quality(), which is only 5% of it:
-// a bottle you rate 1★ falls out of the S and A tiers, one at 2★ gives way to
-// any bottle that suits the window nearly as well, and a 5★ one wins near
-// ties (half the time it sits second to fourth). 4★ is what most bottles you
-// keep would get, so it moves a bottle only through quality(). By stars, 1 to 5.
-const PERSONAL_PICK = [-0.3, -0.12, 0, 0, 0.02];
+// What your stars add to a score on top of quality(), which is only 5% of it
+// (with quality's own change, about -0.13, -0.08, -0.02, 0 and +0.03): a
+// bottle you rate 1★ or 2★ drops out of the top 3 unless it's clearly the
+// only fit (it led the 4th by about 0.13 or 0.08; in David's wardrobe the
+// lead is under 0.05 half the time and over 0.09 a tenth), and a 5★ one wins
+// near ties (half the time it sits second to fourth) without taking every
+// window. 4★ is what most bottles you keep would get, so it moves a bottle
+// only through quality(). By stars, 1 to 5.
+const PERSONAL_PICK = [-0.1, -0.06, -0.01, 0, 0.02];
 // Ratings at or below this mean you'd rather not wear it: no nudges, no packing.
 export const DISLIKED = 2;
 
