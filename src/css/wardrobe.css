@@ -5,9 +5,25 @@
 
 .owned .seg.wide { margin-bottom: var(--s-1); }
 .owned .action-row { margin-top: var(--s-4); }
-.list-head { display: grid; gap: var(--s-3); margin: var(--s-5) 0 var(--s-2); }
-.list-head .muted { font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.list-note { margin: var(--s-5) 0 var(--s-3); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+/* The filter sticks under the sub-navigation while the list scrolls by. */
+.owned-filter {
+  position: sticky;
+  top: calc(var(--s-2) + var(--head-bar) + env(safe-area-inset-top));
+  z-index: 5;
+  margin: calc(-1 * var(--s-2)) calc(-1 * var(--s-1)) var(--s-2);
+  padding: var(--s-2) var(--s-1) var(--s-1);
+  border-radius: 0 0 calc(var(--r-control) + var(--s-1)) calc(var(--r-control) + var(--s-1));
+  background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+@media (prefers-reduced-transparency: reduce) { .owned-filter { background: var(--surface-1); } }
 .owned-list { margin: 0 calc(-1 * var(--s-2)); }
+/* Two columns of rows once there's room, switches close to their names. */
+@container page (min-width: 700px) {
+  .owned-list { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--s-4); }
+}
 .rows.results, .rows.import-rows { margin-top: var(--s-3); }
 .owned-tag { display: inline-flex; flex: none; align-items: center; gap: var(--s-1); padding: 0 var(--s-3); color: var(--positive); font-size: var(--fs-footnote); font-weight: 600; }
 .owned-tag svg { width: 14px; height: 14px; }

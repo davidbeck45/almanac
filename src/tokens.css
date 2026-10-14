@@ -66,6 +66,7 @@
   --rail: 232px;      /* the left rail from 1280px; 88px from 1100px */
   --inspector: 420px; /* the bottle page docked beside the page */
   --tabbar: 64px;     /* the phone and tablet tab bar, without the safe area */
+  --head-bar: 46px;   /* the sticky sub-navigation under the page's heading */
 
   /* Radii, concentric: an inner radius is the outer one minus the padding. */
   --r-pill: 999px;

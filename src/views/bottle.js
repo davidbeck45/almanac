@@ -7,7 +7,7 @@ import { rank, comfortRange, SEASONS } from '../engine.js';
 import { layerPicks } from '../layering.js';
 import { setHidden } from '../hidden.js';
 import { esc, deg, temp, matchPct, relativeDay } from '../ui.js';
-import { icon, img, bar, reasonsList, accordColor, wearButton, magDot, messageHTML } from '../ui/components.js';
+import { icon, img, bar, reasonsList, accordColor, wearButton, magDot, messageHTML, shelfHTML } from '../ui/components.js';
 import {
   state, findRecord, inSource, isActive, activeFragrances, viewingDemo, nowSlot, canWear, wornId,
   wearInfo, todayISO,
@@ -15,7 +15,12 @@ import {
 
 // ---------- The registry ----------
 
-/** Sections in page order: { id, order, render(model) -> HTML or '' }. */
+/**
+ * Sections in page order: { id, order, render(model) -> HTML or '' }, and
+ * optionally the handlers its markup names, as a view module exports them:
+ * actions, forms, fields, changes, sheets. The shell merges those with the
+ * views' (names are global: prefix them, e.g. 'skin-rate').
+ */
 export const SECTIONS = [];
 
 export function addSection(section) {
@@ -55,6 +60,7 @@ export function bottleModel(route) {
     ctx: key,
     ctxLabel: win ? (ctx.occasion ? `${ctx.occasion.label} · ${win.label.toLowerCase()}` : win.label) : '',
     owned,
+    inMine: state.mine.records.some(r => r.id === id),
     active,
     worn: win ? wornId(win) : null,
     canWear: Boolean(win) && active && canWear(win),
@@ -68,6 +74,8 @@ export function bottleModel(route) {
 }
 
 // The whole page. `modal`: a dialog over the page (phones and tablets).
+// model: undefined while its record loads, null for a bottle no source has,
+// false when it couldn't load (offline).
 export function bottlePageHTML(model, { modal = true } = {}) {
   const frame = inner => `
     ${modal ? '<div class="bp-backdrop" data-action="close-bottle"></div>' : ''}
@@ -76,11 +84,17 @@ export function bottlePageHTML(model, { modal = true } = {}) {
       <button class="icon-btn bp-close" data-action="close-bottle" aria-label="Close">${icon.close}</button>
       ${inner}
     </article>`;
+  // The page's h2 is the tab's title too (the shell reads it).
+  const notice = (title, message) => frame(`<h2 id="bottle-title" class="visually-hidden">${title}</h2><div class="bp-notice">${messageHTML(message)}</div>`);
   if (model === undefined) {
     return frame(`<h2 id="bottle-title" class="visually-hidden">Loading</h2><div class="bp-loading" aria-busy="true"><span class="sk bp-sk-photo"></span><span class="sk bp-sk-line"></span><span class="sk bp-sk-line short"></span></div>`);
   }
   if (model === null) {
-    return frame(`<h2 id="bottle-title" class="visually-hidden">Not found</h2>${messageHTML({ glyph: icon.bottle, title: 'Bottle not found', body: 'This link names a bottle the library doesn’t have.' })}`);
+    return notice('Bottle not found', { glyph: icon.bottle, title: 'Bottle not found', body: 'This link names a bottle the library doesn’t have.' });
+  }
+  if (model === false) {
+    return notice('Couldn’t load', { glyph: icon.cloud, title: 'Couldn’t load this bottle', body: 'The fragrance library needs a connection. It tries again when you’re back online.',
+      action: `<button class="btn primary" data-action="bottle-retry">${icon.refresh}<span>Try again</span></button>` });
   }
   return frame(SECTIONS.map(s => s.render(model)).join(''));
 }
@@ -96,6 +110,8 @@ const FACTORS = [
   ['time', 'Time of day', '#f5c451'],
   ['quality', 'Crowd rating', '#f2b264'],
 ];
+// Names longer than this step down a size, so they don't run to four lines.
+const LONG_NAME = 28;
 // Accord bars are Fragrantica's widths (30–100), read out as words.
 const strength = width => (width >= 85 ? 'dominant' : width >= 65 ? 'strong' : width >= 45 ? 'moderate' : 'light');
 
@@ -119,7 +135,7 @@ function headSection({ f, entry, ctxLabel, solo }) {
     <div class="bp-bottle">${img(f, { lazy: false })}</div>
     <div class="bp-title">
       ${kicker}
-      <h2 id="bottle-title">${esc(f.name)}</h2>
+      <h2 id="bottle-title"${f.name.length > LONG_NAME ? ' class="long"' : ''}>${esc(f.name)}</h2>
       <p class="brand">${meta}</p>
       ${inspired}
       <p class="rating">${ratingLine}</p>
@@ -154,8 +170,11 @@ function summarySection({ entry, comfort, wears, todayISO: today, owned }) {
   </div>`;
 }
 
-function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned, active }) {
-  const own = `<button class="btn primary" data-action="own" data-id="${esc(f.id)}">${icon.plus}<span>I own it</span></button>`;
+function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned, inMine, active }) {
+  // In Mine while another list is ranked: nothing to add.
+  const own = inMine
+    ? `<span class="owned-tag">${icon.check}In Mine</span>`
+    : `<button class="btn primary" data-action="own" data-id="${esc(f.id)}">${icon.plus}<span>I own it</span></button>`;
   // Switched off in Wardrobe: it can come back from here.
   const rotation = active
     ? `<button class="btn tertiary" data-action="hide" data-id="${esc(f.id)}">${icon.hide}Hide from picks</button>`
@@ -179,12 +198,10 @@ function whySection({ entry, solo, win }) {
   return `<section class="bp-section"><h3>${title} <span class="h3-aside">${matchPct(entry)}% match</span></h3><div class="bars why">${bars}</div>${rotation}</section>`;
 }
 
-function altsSection({ alts, ctx, ctxLabel }) {
+// The next few from the same list, on the same shelf the list draws.
+function altsSection({ alts, ctx, ctxLabel, worn }) {
   if (!alts.length) return '';
-  return `<section class="bp-section"><h3>Also good for ${esc(ctxLabel.toLowerCase())}</h3><div class="alts">${alts.map(a => `
-    <button class="alt" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(a.fragrance.id)}">
-      ${img(a.fragrance)}<span><b>${esc(a.fragrance.name)}</b><small>${magDot(a.tier)}${matchPct(a)}%</small></span>
-    </button>`).join('')}</div></section>`;
+  return `<section class="bp-section"><h3>Also good for ${esc(ctxLabel.toLowerCase())}</h3>${shelfHTML(alts, ctx, { wornId: worn })}</section>`;
 }
 
 // Partners from the same collection (src/layering.js), heavier one sprayed first.
@@ -268,8 +285,11 @@ export const actions = {
   own(el, app) {
     const f = findRecord(el.dataset.id);
     if (!f) return;
-    app.addToMine(f);
-    app.render();
-    app.showToast(`<span>${esc(f.name)} added to your collection</span>`);
+    app.own(f);
+    // The button made way for Wear this (or the In Mine tag).
+    document.querySelector('#bottle .bp-actions .btn')?.focus();
+  },
+  'bottle-retry'(el, app) {
+    app.retryBottle();
   },
 };

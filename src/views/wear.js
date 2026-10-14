@@ -9,7 +9,7 @@ import { toggleWear, wornIn, journalStats, shiftISO } from '../history.js';
 import { routeHash } from '../app/router.js';
 import { esc, temp, deg, plural, shortDate, weekdayShort, windowRange, feelWords, displayReasons } from '../ui.js';
 import {
-  icon, img, slotIcon, wxIcon, messageHTML, skeletonHTML, reasonsList, chips, matchBadge, magDot, shelfHTML,
+  icon, img, slotIcon, wxIcon, messageHTML, skeletonHTML, reasonsList, chips, matchBadge, shelfHTML,
   wearButton, segHTML, sharedBannerHTML, accordColor, sectionHead,
 } from '../ui/components.js';
 import {
@@ -75,7 +75,7 @@ export function heroHTML({ loc, wx, loading, error, updating }, { aspect, compac
   let bottle = '';
   if (stage) {
     const f = pick.entry.fragrance;
-    const light = skyLight({ ...sky, aspect, theme: theme() });
+    const light = skyLight({ ...sky, aspect, theme: theme(), stage: stage.scene });
     // The rim catches the light on the side it comes from.
     const side = light.x >= stage.x ? 1 : -1;
     bottle = `<button class="hero-pick" data-action="open" data-ctx="${esc(pick.win.slot)}" data-id="${esc(f.id)}"
@@ -134,13 +134,34 @@ export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicke
     ${open('pick-bottle', img(f, { lazy: false }), `Details for ${f.name}`)}
     <div class="pick-info">
       ${kicker ? `<p class="kicker">${worn === f.id ? 'Wearing' : esc(kicker)}</p>` : ''}
-      <h3 class="pick-name">${open('pick-name-btn', esc(f.name))}</h3>
+      <h3 class="pick-name">${open('pick-name-btn', `<span class="clamp">${esc(f.name)}</span>`)}</h3>
       <p class="brand">${esc(f.brand)}</p>
       ${reasonsList(displayReasons(entry, 2), 'lead')}
       ${chips(f.accords)}
     </div>
     <div class="pick-actions">${canWear ? wearButton(entry, ctx, worn) : ''}${matchBadge(entry)}</div>
   </div>`;
+}
+
+// The other window of today, beside the first on a wide column (the hero's
+// Day/Night toggle does this on phones): its pick with photo and name, and a
+// button that brings its shelf up.
+export function nextWindowHTML({ win, pick }, worn, hour) {
+  const f = pick.fragrance;
+  const open = (cls, inner, label = '') => `<button class="${cls}" data-action="open" data-ctx="${esc(win.slot)}" data-id="${esc(f.id)}"${label ? ` aria-label="${esc(label)}"` : ''}>${inner}</button>`;
+  return `<aside class="next-window" aria-labelledby="next-title" style="--accord:${accordColor(Object.keys(f.accords)[0])}">
+    <p class="kicker">${slotIcon(win.slot)}<span id="next-title">${esc(win.label)}</span><span class="next-time">${esc(windowRange(win, hour))}</span></p>
+    <div class="next-pick">
+      ${open('pick-bottle', img(f), `Details for ${f.name}`)}
+      <div class="pick-info">
+        <h3 class="pick-name">${open('pick-name-btn', `<span class="clamp">${esc(f.name)}</span>`)}</h3>
+        <p class="brand">${worn === f.id ? 'Wearing · ' : ''}${esc(f.brand)}</p>
+        ${matchBadge(pick)}
+      </div>
+    </div>
+    ${reasonsList(displayReasons(pick, 2), 'compact')}
+    <button class="btn tertiary compact next-more" data-action="slot" data-value="${esc(win.slot)}">${esc(`All picks for ${win.label.toLowerCase()}`)}${icon.chevron}</button>
+  </aside>`;
 }
 
 // The rest of a window's ranking on the magnitude shelf.
@@ -161,7 +182,6 @@ function weekPick(p, slot, dayName) {
   return `<button class="wk-pick${p.worn ? ' worn' : ''}" data-action="open" data-ctx="${esc(p.ctx)}" data-id="${esc(f.id)}" aria-label="${esc(`${dayName} ${slot === 'day' ? 'daytime' : 'night'}: ${f.name}`)}">
     ${img(f)}
     <span class="wk-text"><small>${slotIcon(slot)}${slot === 'day' ? 'Day' : 'Night'}${p.worn ? ' · wearing' : ''}</small><b>${esc(f.name)}</b></span>
-    ${magDot(p.pick.tier)}
   </button>`;
 }
 
@@ -234,7 +254,7 @@ function journalTeaser() {
 
 // ---------- Panes ----------
 
-const banner = () => (state.shared ? sharedBannerHTML(state.shared, state.mine.records.length, { slim: true }) : '');
+const banner = () => (state.shared ? sharedBannerHTML(state.shared, state.mine.records.length, { slim: true, confirm: state.armed === 'shared-save' }) : '');
 
 function emptyState() {
   if (state.shared) {
@@ -278,10 +298,14 @@ function nowPane() {
   if (!nowSlot()) return skeletonHTML(1);
   const { win, ranked, pick } = nowSlot();
   const worn = wornId(win);
+  const other = todaySlots().find(p => p.win.slot !== win.slot);
   return `${banner()}
     <section class="card slot" aria-labelledby="slot-title">
       ${slotHeadHTML(win, nowHour(), { id: 'slot-title' })}
-      ${pickHTML(pick, win.slot, worn, { canWear: canWear(win) })}
+      <div class="now-picks">
+        ${pickHTML(pick, win.slot, worn, { canWear: canWear(win) })}
+        ${other ? nextWindowHTML(other, wornId(other.win), nowHour()) : ''}
+      </div>
       ${alsoHTML(ranked, pick, win.slot, worn, win.slot === 'day' ? 'by day' : 'tonight')}
     </section>
     ${journalTeaser()}`;
@@ -323,7 +347,8 @@ function weekPane() {
 
 // Wave 4 builds trip packing here (PLAN.md decision 8).
 function tripPane() {
-  return messageHTML({ glyph: icon.suitcase, title: 'Pack for a trip', body: 'Pick a city and dates, and get the two to four bottles that cover every day and night there.' });
+  return messageHTML({ glyph: icon.suitcase, title: 'Pack for a trip', body: 'Pick a city and dates, and get the two to four bottles that cover every day and night there.',
+    action: `<a class="btn secondary" href="#/wear/week">${icon.calendar}<span>Plan the week here</span></a>` });
 }
 
 const place = () => state.loc?.name ?? 'your area';

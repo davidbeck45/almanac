@@ -157,14 +157,21 @@ const TREE_SPOTS = {
   near: [[0.065, 1, 'pine'], [0.12, 0.85, 'round'], [0.175, 1.1, 'round'], [0.88, 0.9, 'round'], [0.94, 1.05, 'pine']],
 };
 
-// Trees keep this far (a fraction of the width) from the hero's bottle.
+// Trees keep this far (a fraction of the width) from the hero's bottle, off
+// the hillside under the hero's temperature (its left FOOT_W), so the big
+// numbers sit on open ground, and on wide scenes off the middle hill behind
+// the bottle's name beside it (LABEL_W).
 const STAGE_CLEAR = 0.07;
+const FOOT_W = 0.45;
+const LABEL_W = 0.32;
 
 function trees(layer, W, season, shade, snowy, P, stage = null) {
   const pal = P.foliage[season].map(c => mix(c, shade.color, shade.t));
   const pine = mix(season === 'winter' ? P.pine.winter : P.pine.other, shade.color, shade.t);
+  const label = stage !== null && layer === 'mid' && W / H >= CABIN_ROOM;
   return TREE_SPOTS[layer].map(([fx, s, kind], i) => {
-    if (stage !== null && Math.abs(fx - stage) < STAGE_CLEAR) return '';
+    if (stage !== null && (Math.abs(fx - stage) < STAGE_CLEAR || fx < FOOT_W)) return '';
+    if (label && fx > stage && fx < stage + LABEL_W) return '';
     const x = fx * W;
     const bare = season === 'winter' && kind === 'round';
     const color = kind === 'pine' || bare ? pine : pal[i % pal.length];
@@ -195,6 +202,35 @@ function cabin(x, phase, weatherDark, cold, shade, glowId, P) {
 // only when the scene is wide enough to leave room for it.
 const CABIN_STAGED = 0.86;
 const CABIN_ROOM = 1.6;
+
+// The hero's bottle and the sky's light keep out of each other's way: the
+// moon sits across the sky from the bottle, and a sun that would hang behind
+// it (on its cap, like a bulb) waits beside it instead. In scene units: the
+// bottle is about 2 × STAGE_HALF wide and STAGE_TALL high on the hill.
+const STAGE_HALF = 44;
+const STAGE_TALL = 92;
+const SUN_R = 17;
+const LIGHT_GAP = 10;
+
+function lightAt(phase, sunProgress, W, stage) {
+  if (phase === 'night') {
+    const fx = stage === null ? 0.8 : stage > 0.5 ? stage - 0.3 : stage + 0.3;
+    return { x: W * fx, y: 52 };
+  }
+  const y = 176 - Math.sin(sunProgress * Math.PI) * 142;
+  let x = 30 + sunProgress * (W - 60);
+  if (stage !== null) {
+    const sx = stage * W;
+    const room = STAGE_HALF + SUN_R + LIGHT_GAP;
+    if (Math.abs(x - sx) < room && y + SUN_R + LIGHT_GAP > hill.mid(sx) - STAGE_TALL) {
+      // On the side it's on, unless that's off the edge.
+      const side = x < sx ? -1 : 1;
+      const fits = d => sx + d * room > SUN_R && sx + d * room < W - SUN_R;
+      x = sx + (fits(side) ? side : -side) * room;
+    }
+  }
+  return { x, y };
+}
 
 // Labels can carry place names; keep them inside the attribute.
 const attr = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -234,8 +270,9 @@ export function renderScene({ phase = 'day', category = 'clear', sunProgress = 0
       parts.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(2)}" fill="${P.star}" class="${i % 4 === 0 ? 'twinkle' : ''}" style="animation-delay:${(-rand() * 4).toFixed(2)}s" opacity="${(0.5 + rand() * 0.5).toFixed(2)}"/>`);
     }
   }
+  const light = lightAt(phase, sunProgress, W, stage);
   if (night) {
-    const mx = W * 0.8, my = 52;
+    const { x: mx, y: my } = light;
     const moonDim = category === 'clear' || category === 'partly' ? 1 : 0.3;
     parts.push(`<g opacity="${moonDim}">
       <circle cx="${mx}" cy="${my}" r="30" fill="url(#${id}-moonglow)"/>
@@ -243,9 +280,7 @@ export function renderScene({ phase = 'day', category = 'clear', sunProgress = 0
       <circle cx="${mx}" cy="${my}" r="16" fill="${P.moon}" mask="url(#${id}-crescent)"/>
     </g>`);
   } else {
-    const p = sunProgress;
-    const sunX = 30 + p * (W - 60);
-    const sunY = 176 - Math.sin(p * Math.PI) * 142;
+    const { x: sunX, y: sunY } = light;
     const warm = phase !== 'day';
     const dim = { clear: 1, partly: 0.95, fog: 0.4 }[category] ?? 0.22;
     parts.push(`<g opacity="${dim}">
@@ -382,15 +417,17 @@ export function skyAccent(phase, category, theme = 'default') {
 // Where the scene's light is (fractions of its width and height) and its
 // color: the moon at night, the sun by day, weaker under cloud. The hero
 // rim-lights its bottle from there.
-export function skyLight({ phase = 'day', category = 'clear', sunProgress = 0.5, aspect = BASE_W / H, theme = 'default' }) {
+// `stage` as renderScene's.
+export function skyLight({ phase = 'day', category = 'clear', sunProgress = 0.5, aspect = BASE_W / H, theme = 'default', stage = null }) {
   const P = palette(theme);
   const W = Math.round(H * Math.min(4, Math.max(1.2, aspect)));
+  const { x, y } = lightAt(phase, sunProgress, W, stage);
   if (phase === 'night') {
-    return { x: 0.8, y: 52 / H, color: P.moon, strength: category === 'clear' || category === 'partly' ? 1 : 0.35 };
+    return { x: x / W, y: y / H, color: P.moon, strength: category === 'clear' || category === 'partly' ? 1 : 0.35 };
   }
   return {
-    x: (30 + sunProgress * (W - 60)) / W,
-    y: (176 - Math.sin(sunProgress * Math.PI) * 142) / H,
+    x: x / W,
+    y: y / H,
     color: phase === 'day' ? P.sun.day : P.sun.warm,
     strength: { clear: 1, partly: 0.9, fog: 0.45 }[category] ?? 0.3,
   };

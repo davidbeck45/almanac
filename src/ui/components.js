@@ -173,11 +173,13 @@ export function shelfHTML(ranked, ctx, { wornId = null } = {}) {
 
 // ---------- Buttons and controls ----------
 
-// Logs or clears a wear for the window in context `ctx`.
+// Logs or clears a wear for the window in context `ctx`. Screen readers hear
+// which bottle ("Wear this: Aristo"), since the card may not name it.
 export function wearButton(entry, ctx, wornId) {
-  const on = wornId === entry.fragrance.id;
-  return `<button class="btn primary wear-btn${on ? ' on' : ''}" data-action="wear" data-ctx="${esc(ctx)}" data-id="${esc(entry.fragrance.id)}" aria-pressed="${on}">
-    ${on ? icon.check : icon.spray}<span>${on ? 'Wearing' : 'Wear this'}</span></button>`;
+  const f = entry.fragrance;
+  const on = wornId === f.id;
+  return `<button class="btn primary wear-btn${on ? ' on' : ''}" data-action="wear" data-ctx="${esc(ctx)}" data-id="${esc(f.id)}" aria-pressed="${on}">
+    ${on ? icon.check : icon.spray}<span>${on ? 'Wearing' : 'Wear this'}<span class="visually-hidden">: ${esc(f.name)}</span></span></button>`;
 }
 
 // A segmented control of toggle buttons. items: [{ value, label, icon?, on }];
@@ -209,10 +211,11 @@ export function rowHTML(f, { meta = '', trailing = '', open = null, cls = '', at
 
 // ---------- Shared link ----------
 
-export function sharedBannerHTML(shared, mineCount, { slim = false } = {}) {
+// `confirm`: Save as mine was tapped once and would replace Mine.
+export function sharedBannerHTML(shared, mineCount, { slim = false, confirm = false } = {}) {
   const who = shared.name ? `${esc(shared.name)}’s` : 'A shared';
   const status = shared.loading ? 'Loading…' : `${plural(shared.records.length, 'bottle')}${shared.missing.length ? ` · ${shared.missing.length} couldn’t load` : ''}`;
-  const save = shared.confirmReplace ? `Replace my ${mineCount}?` : 'Save as mine';
+  const save = confirm ? `Replace my ${mineCount}?` : 'Save as mine';
   return `<div class="banner${slim ? ' slim' : ''}" role="status">
     <span class="banner-icon">${icon.share}</span>
     <span class="banner-text"><b>${who} collection</b><small>${status}</small></span>

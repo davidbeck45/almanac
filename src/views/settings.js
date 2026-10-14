@@ -8,10 +8,12 @@ import { icon, segHTML, sheetFrame } from '../ui/components.js';
 import { state, savePrefs, activeFragrances, sourceRecords } from '../app/state.js';
 
 // The credits every page carries in its footer, and Settings in full.
+// `scraped`: the list on screen has bottles synced from Fragrantica itself
+// (on `fetched`), not only from the dataset.
 export function creditsHTML({ fetched = null, scraped = false, fragella = false }) {
+  const dataset = '<a href="https://www.kaggle.com/datasets/ledecanteur/fragrantica-perfumes" target="_blank" rel="noopener">Le Decanteur’s dataset</a> (<a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noopener">CC BY-NC-SA</a>)';
   const sources = [
-    scraped && `Fragrantica (synced ${esc(fetched)})`,
-    'Fragrantica via <a href="https://www.kaggle.com/datasets/ledecanteur/fragrantica-perfumes" target="_blank" rel="noopener">Le Decanteur’s dataset</a> (<a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noopener">CC BY-NC-SA</a>)',
+    scraped ? `Fragrantica, synced ${esc(fetched)}, and ${dataset}` : `Fragrantica via ${dataset}`,
     fragella && '<a href="https://api.fragella.com" target="_blank" rel="noopener">Fragella</a>',
   ].filter(Boolean).join(' · ');
   return `<span>Fragrance data: ${sources}</span><span>Forecast by <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a></span>`;

@@ -90,6 +90,7 @@ test('every template renders clean: no undefined or NaN, names escaped', () => {
     bottleDocked: bottlePageHTML({ ...model, owned: false, solo: true, alts: [] }, { modal: false }),
     bottleLoading: bottlePageHTML(undefined),
     bottleMissing: bottlePageHTML(null),
+    bottleFailed: bottlePageHTML(false),
     owned: wardrobe.ownedHTML({ tab: 'mine', demo: bottles, mine: { name: EVIL, records: bottles }, shared: null, hidden: new Set([evil.id]), filter: EVIL }),
     ownedShared: wardrobe.ownedHTML({ tab: null, demo: bottles, mine: { name: '', records: [] }, shared: { name: EVIL, records: bottles, missing: ['1'], loading: false }, hidden: new Set() }),
     worn: wardrobe.wornHTML(journal, resolve, { confirmClear: true }),
@@ -99,9 +100,12 @@ test('every template renders clean: no undefined or NaN, names escaped', () => {
     import: wardrobe.importSheetHTML({ text: EVIL, rows, busy: true, error: EVIL }, 15),
     importForm: wardrobe.importSheetHTML({ text: EVIL }, 15),
     custom: wardrobe.customSheetHTML({ name: EVIL, brand: EVIL, accords: ['vanilla'], seasons: ['fall'], time: 'night', error: EVIL, back: { kind: 'import' } }, 6),
-    shared: sharedBannerHTML({ name: EVIL, records: bottles, missing: ['1'], loading: false, confirmReplace: true }, 3),
-    discover: discover.discoverHTML({ query: EVIL, results: [evil, { ...evil, id: '2', year: null }], busy: false, error: '' }, new Set(['2'])),
-    discoverNone: discover.resultsHTML({ query: EVIL, results: [], busy: false, error: '' }, new Set()),
+    shared: sharedBannerHTML({ name: EVIL, records: bottles, missing: ['1'], loading: false }, 3, { confirm: true }),
+    discover: discover.discoverHTML({ draft: EVIL, query: EVIL, results: [evil, { ...evil, id: '2', year: null }], busy: false, error: '', offline: '' }, new Map([['2', `In ${EVIL}’s`]])),
+    discoverNone: discover.discoverHTML({ query: EVIL, results: [], busy: false, error: '' }, new Map()),
+    discoverOffline: discover.discoverHTML({ query: EVIL, results: [evil], busy: false, error: '', offline: EVIL }, new Map()),
+    discoverError: discover.discoverHTML({ query: EVIL, results: null, busy: false, error: EVIL }, new Map()),
+    nextWindow: wear.nextWindowHTML({ win: wx.night, pick: entry }, evil.id, 12),
     location: settings.locationSheetHTML({ query: EVIL, error: EVIL, results: [{ name: EVIL, region: EVIL }] }, [{ name: EVIL, region: EVIL }]),
     settings: settings.settingsHTML({ loc: { name: EVIL, region: EVIL }, units: 'C', themeName: 'gruvbox', active: 'mine', mineCount: 2, shared: { name: EVIL }, on: 3, total: 4, wears: 5, updated: '9:00 AM', stale: true, credits: settings.creditsHTML({ fetched: EVIL, scraped: true, fragella: true }) }),
     row: `<ul>${rowHTML(evil, { meta: ui.esc(EVIL), open: { ctx: EVIL } })}</ul>`,
@@ -176,4 +180,38 @@ test('bottle-page sections register in order, and a name is used once', () => {
   } finally {
     SECTIONS.splice(SECTIONS.indexOf(probe), 1);
   }
+});
+
+test('the sun and moon keep clear of the hero’s bottle', async () => {
+  const { stagePoint, skyLight } = await import('../src/scene.js');
+  for (const aspect of [1.3, 2.4, 3.3]) {
+    const stage = stagePoint(aspect, aspect < 1.6 ? 0.73 : 0.64);
+    const W = 220 * aspect;
+    for (let p = 0; p <= 1; p += 0.02) {
+      const sun = skyLight({ phase: 'day', sunProgress: p, aspect, stage: stage.scene });
+      // The bottle stands about 92 scene units tall on the ridge, 88 wide.
+      const behind = Math.abs(sun.x - stage.scene) * W < 44 + 17 && sun.y * 220 + 17 > stage.y * 220 - 92;
+      assert.ok(!behind, `at ${aspect} the sun at ${p.toFixed(2)} hangs behind the bottle`);
+      assert.ok(sun.x > 0 && sun.x < 1, 'and stays in the sky');
+    }
+    const moon = skyLight({ phase: 'night', aspect, stage: stage.scene });
+    assert.ok(Math.abs(moon.x - stage.scene) >= 0.25, `the moon sits across the sky from it (${moon.x})`);
+  }
+  assert.equal(skyLight({ phase: 'night', aspect: 1.3 }).x, 0.8, 'without a bottle the moon is where it always was');
+});
+
+test('Discover announces a line, not the list', () => {
+  const html = discover.discoverHTML({ query: 'dior', results: fragrances.slice(0, 3), busy: false, error: '' }, new Map([[fragrances[0].id, 'In David’s']]));
+  const status = html.match(/<p[^>]*role="status"[^>]*>([\s\S]*?)<\/p>/);
+  assert.equal(status[1], '3 matches');
+  assert.ok(!/aria-live/.test(html.replace(/<p[^>]*role="status"[\s\S]*?<\/p>/, '')), 'the results sit outside the live region');
+  assert.match(html, /In David’s/, 'a bottle in the ranked list says so instead of offering I own it');
+  assert.equal((html.match(/data-action="own-result"/g) ?? []).length, 2);
+  assert.match(discover.statusHTML({ query: 'x', results: [fragrances[0]], offline: 'Can’t reach' }), /saved on this device/);
+});
+
+test('each Wardrobe pane has its own heading, and Wear this names its bottle', () => {
+  const headings = wardrobe.wardrobe.panes.map(p => p.heading({}));
+  assert.equal(new Set(headings).size, headings.length, headings.join(', '));
+  assert.match(wear.pickHTML(entry, 'day', null), /Wear this<span class="visually-hidden">: [^<]+<\/span>/);
 });

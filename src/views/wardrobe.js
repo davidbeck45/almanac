@@ -13,8 +13,8 @@ import {
   icon, img, messageHTML, rowHTML, switchHTML, segHTML, sheetFrame, sharedBannerHTML, accordColor, sectionHead,
 } from '../ui/components.js';
 import {
-  state, activeFragrances, hiddenIn, viewingDemo, knownBottles, findRecord, journalData, library,
-  findBottles, fullRecords,
+  state, activeFragrances, hiddenIn, viewingDemo, knownBottles, findRecord, journalData, library, findBottles,
+  fullRecords, collectionLabel,
 } from '../app/state.js';
 
 // ---------- Owned ----------
@@ -28,9 +28,10 @@ function ownedRow(f, { hidden, removable }) {
 
 /**
  * The owned list. tab: 'demo' | 'mine' | null (a shared link is open, and
- * its list shows). hidden: the ids switched off in that list.
+ * its list shows). hidden: the ids switched off in that list. confirm: Save
+ * as mine is waiting for its second tap.
  */
-export function ownedHTML({ tab, demo, mine, shared, hidden, filter = '' }) {
+export function ownedHTML({ tab, demo, mine, shared, hidden, filter = '', confirm = false }) {
   const list = shared ? shared.records : tab === 'mine' ? mine.records : demo;
   const on = list.filter(f => !hidden.has(f.id)).length;
   const switcher = segHTML([
@@ -53,15 +54,16 @@ export function ownedHTML({ tab, demo, mine, shared, hidden, filter = '' }) {
         <input type="text" data-field="mine-name" value="${esc(mine.name)}" placeholder="e.g. Alex" maxlength="40" autocomplete="off">
       </label>`
     : '';
+  // The filter sticks under the sub-navigation while the list scrolls.
   const search = list.length > 8
-    ? `<label class="filter">${icon.search}<input type="search" data-field="collection-filter" placeholder="Filter ${list.length} bottles" value="${esc(filter)}" autocomplete="off" aria-label="Filter bottles"></label>`
+    ? `<div class="owned-filter"><label class="filter">${icon.search}<input type="search" data-field="collection-filter" placeholder="Filter ${list.length} bottles" value="${esc(filter)}" autocomplete="off" aria-label="Filter bottles"></label></div>`
     : '';
   const body = list.length
-    ? `<div class="list-head"><p class="muted">${on} of ${list.length} in rotation. Switch a bottle off to leave it out of picks on this device.</p>${search}</div>
+    ? `<p class="muted list-note">${on} of ${list.length} in rotation. Switch a bottle off to leave it out of picks on this device.</p>${search}
        <ul class="rows owned-list">${list.map(f => ownedRow(f, { hidden, removable: tab === 'mine' && !shared })).join('')}</ul>
        <p class="muted small filter-empty" hidden>No bottles match.</p>`
     : messageHTML({ glyph: icon.bottle, title: 'No bottles yet', body: 'Search for what you own, or paste a list.' });
-  return `${shared ? sharedBannerHTML(shared, mine.records.length) : ''}
+  return `${shared ? sharedBannerHTML(shared, mine.records.length, { confirm }) : ''}
     <section class="card owned" aria-labelledby="owned-title">
       ${sectionHead(shared ? 'In this link' : 'Ranking from', share, { id: 'owned-title' })}
       ${shared ? '<p class="notice">Picking a list below closes the shared one you’re viewing.</p>' : ''}
@@ -80,6 +82,7 @@ function ownedPane() {
     shared: state.shared,
     hidden: hiddenIn(viewingDemo()),
     filter: state.ownedFilter ?? '',
+    confirm: state.armed === 'shared-save',
   });
 }
 
@@ -116,9 +119,11 @@ export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confir
   const cells = calendar.flat().map(c => {
     const worn = [c.day, c.night].map(h => h && resolve(h.id)).filter(Boolean);
     const day = +c.dateISO.slice(8, 10);
+    // The day and what was worn, said in full for screen readers (the grid
+    // shows a number and photos).
     const label = worn.length ? `${shortDate(c.dateISO)}: ${worn.map(f => f.name).join(', ')}` : shortDate(c.dateISO);
     return `<span class="cal-cell${c.future ? ' future' : ''}${c.dateISO === todayISO ? ' today' : ''}${worn.length ? ' has' : ''}" title="${esc(label)}">
-      <small>${day === 1 ? esc(shortDate(c.dateISO)) : day}</small>
+      <small aria-hidden="true">${day === 1 ? esc(shortDate(c.dateISO)) : day}</small><span class="visually-hidden">${esc(label)}</span>
       <span class="cal-bottles">${worn.map(f => img(f)).join('')}</span>
     </span>`;
   }).join('');
@@ -145,28 +150,31 @@ export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confir
 
 // ---------- Stubs for wave 4 ----------
 
-const stub = (glyph, title, body) => () => messageHTML({ glyph, title, body });
+const stub = (glyph, title, body, action) => () => messageHTML({ glyph, title, body, action });
 
+// Each pane has its own heading, so a screen reader landing on it hears where it is.
 export const wardrobe = {
   id: 'wardrobe',
   label: 'Wardrobe',
   icon: 'wardrobe',
   panes: [
-    { id: 'owned', label: 'Owned', title: () => 'Owned', heading: () => 'Wardrobe', render: ownedPane, after: applyFilter },
+    { id: 'owned', label: 'Owned', title: () => 'Owned', heading: () => collectionLabel(), render: ownedPane, after: applyFilter },
     {
       id: 'wishlist',
       label: 'Wishlist',
       title: () => 'Wishlist',
-      heading: () => 'Wardrobe',
-      render: stub(icon.heart, 'Your wishlist', 'Bottles you want, ranked by what they’d add to your shelf.'),
+      heading: () => 'Wishlist',
+      render: stub(icon.heart, 'Your wishlist', 'Bottles you want, ranked by what they’d add to your shelf.',
+        `<a class="btn primary" href="#/discover">${icon.search}<span>Find bottles</span></a>`),
     },
-    { id: 'worn', label: 'Worn', title: () => 'Worn', heading: () => 'Wardrobe', render: () => wornHTML(journalData(), findRecord, { confirmClear: state.journalConfirm }) },
+    { id: 'worn', label: 'Worn', title: () => 'Worn', heading: () => 'Wear journal', render: () => wornHTML(journalData(), findRecord, { confirmClear: state.armed === 'journal-clear' }) },
     {
       id: 'insights',
       label: 'Insights',
       title: () => 'Insights',
-      heading: () => 'Wardrobe',
-      render: stub(icon.chart, 'What your shelf covers', 'The weather and occasions your bottles cover well, and the gaps worth filling.'),
+      heading: () => 'Insights',
+      render: stub(icon.chart, 'What your shelf covers', 'The weather and occasions your bottles cover well, and the gaps worth filling.',
+        `<a class="btn secondary" href="#/wardrobe/worn">${icon.journal}<span>See what you wear</span></a>`),
     },
   ],
 };
@@ -283,12 +291,11 @@ async function runSearch(app, query) {
   app.updateSheet({ query, busy: true, error: '' });
   const current = () => state.sheet?.kind === 'add' && state.sheet.query === query;
   try {
-    const results = await findBottles(query);
-    if (current()) app.updateSheet({ results, busy: false });
+    // Offline, the bottles on this device still answer, with the error.
+    const { results, error } = await findBottles(query);
+    if (current()) app.updateSheet({ results: results.length || !error ? results : null, busy: false, error });
   } catch (err) {
-    if (!current()) return;
-    const local = localMatches(query, knownBottles());
-    app.updateSheet({ results: local.length ? local : null, busy: false, error: err.message });
+    if (current()) app.updateSheet({ busy: false, error: err.message });
   }
 }
 
@@ -445,8 +452,8 @@ export const actions = {
       return app.updateSheet({ error: err.message });
     }
     picked.forEach(app.addToMine);
-    app.closeSheet();
-    app.navigate('#/wardrobe/owned');
+    // Navigating waits for the sheet's history entry to go (src/app/sheets.js).
+    app.closeSheet({ then: () => app.navigate('#/wardrobe/owned') });
     app.render();
     app.showToast(`<span>Added ${plural(picked.length, 'bottle')}</span>`);
   },
@@ -478,11 +485,12 @@ export const actions = {
   'shared-save'(el, app) {
     const s = state.shared;
     if (!s || s.loading) return;
-    if (state.mine.records.length && !s.confirmReplace) {
-      s.confirmReplace = true;
+    if (state.mine.records.length && state.armed !== 'shared-save') {
+      state.armed = 'shared-save';
       app.keepingFocus(el, '#app', app.renderPage);
       return;
     }
+    state.armed = null;
     state.mine = { name: state.mine.name, records: s.records };
     saveMine(state.mine);
     app.setActive('mine');
@@ -502,11 +510,11 @@ export const actions = {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   },
   'journal-clear'(el, app) {
-    if (!state.journalConfirm) {
-      state.journalConfirm = true;
+    if (state.armed !== 'journal-clear') {
+      state.armed = 'journal-clear';
       return app.keepingFocus(el, '#app', app.renderPage);
     }
-    state.journalConfirm = false;
+    state.armed = null;
     state.history = clearHistory();
     app.render();
     app.showToast('<span>Wear history cleared</span>');

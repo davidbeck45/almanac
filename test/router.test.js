@@ -7,11 +7,19 @@ import * as wardrobe from '../src/views/wardrobe.js';
 import * as discover from '../src/views/discover.js';
 import * as bottle from '../src/views/bottle.js';
 import * as settings from '../src/views/settings.js';
+import '../src/views/sections.js';
 
-const VIEWS = [wear, wardrobe, discover, bottle, settings];
+// As src/app/shell.js merges them: the views' handlers and the bottle-page
+// sections' own.
+const VIEWS = [wear, wardrobe, discover, bottle, settings, ...bottle.SECTIONS];
 // As src/app/shell.js builds it from the destinations.
 const PANES = Object.fromEntries([wear.wear, wardrobe.wardrobe, discover.discover].map(d => [d.id, (d.panes ?? []).map(p => p.id)]));
 const parse = hash => parseRoute(hash, PANES);
+
+// Every .js file under a folder, subfolders included (a view may split its
+// panes into src/views/<view>/).
+const jsFiles = dir => readdirSync(new URL(`../${dir}/`, import.meta.url), { withFileTypes: true })
+  .flatMap(e => (e.isDirectory() ? jsFiles(`${dir}/${e.name}`) : e.name.endsWith('.js') ? [`${dir}/${e.name}`] : []));
 
 test('routes parse into a destination, a pane and an argument', () => {
   assert.deepEqual(parse('#/wear/now'), { dest: 'wear', pane: 'now', arg: null, query: {} });
@@ -57,14 +65,14 @@ test('the old ?view= shortcuts open the same panes', () => {
 
 test('every action a template names has one handler', () => {
   // Handled by the shell itself (src/app/shell.js).
-  const handled = new Set(['close-sheet', 'skip']);
+  const handled = new Set(['close-sheet', 'skip', 'list-back']);
   for (const view of VIEWS) {
     for (const name of Object.keys(view.actions ?? {})) {
       assert.ok(!handled.has(name), `two handlers for "${name}"`);
       handled.add(name);
     }
   }
-  const files = ['src/ui/components.js', ...readdirSync(new URL('../src/views/', import.meta.url)).map(f => `src/views/${f}`), 'src/app/shell.js', 'index.html'];
+  const files = ['src/ui/components.js', ...jsFiles('src/views'), 'src/app/shell.js', 'index.html'];
   for (const file of files) {
     const text = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
     for (const [, name] of text.matchAll(/data-action="([\w-]+)"/g)) assert.ok(handled.has(name), `${file} names data-action="${name}", which nothing handles`);

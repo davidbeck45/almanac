@@ -33,14 +33,18 @@ export function renderSheet({ keepScroll = false, fresh = false } = {}) {
 }
 
 // Put focus back on an element a re-render replaced: itself if it survived,
-// else the element in `scope` with the same tag and data attributes. False
-// when neither is there (a hidden bottle's card, say).
+// else the element in `scope` with the same tag and data attributes. A text
+// field's successor gets the caret where it was. False when neither is
+// there (a hidden bottle's card, say).
 export function refocus(el, scope = '#app') {
   if (!el || el === document.body) return false;
   const attrs = Object.entries(el.dataset ?? {})
     .map(([k, v]) => `[data-${k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)}="${CSS.escape(v)}"]`).join('');
   const target = el.isConnected ? el : attrs ? document.querySelector(`${scope} ${el.tagName.toLowerCase()}${attrs}`) : null;
   target?.focus({ preventScroll: true });
+  if (target && target !== el && 'selectionStart' in el) {
+    try { target.setSelectionRange(el.selectionStart, el.selectionEnd); } catch {} // not every input type has a caret
+  }
   return Boolean(target);
 }
 
@@ -63,15 +67,18 @@ const SHEET_ENTRY = 'scentcastSheet';
 export const sheetEntry = () => history.state?.[SHEET_ENTRY] === true;
 let leavingEntry = false; // closeSheet went back itself; that popstate is ours
 let afterSheetEntry = null; // a URL for the page's entry, once back on it
+let afterLeaving = null; // closeSheet's `then`, once back on the page's entry
 
 function pushSheetEntry() {
   if (!sheetEntry()) history.pushState({ [SHEET_ENTRY]: true }, '');
 }
 
+// False when there was no entry to leave.
 function dropSheetEntry() {
-  if (!sheetEntry()) return;
+  if (!sheetEntry()) return false;
   leavingEntry = true;
   history.back();
+  return true;
 }
 
 // A URL change for the page's own entry made while a sheet's entry is on top.
@@ -90,6 +97,9 @@ export function sheetPopped() {
     leavingEntry = false;
     // A sheet opened again before the browser got back: it needs an entry.
     if (state.sheet) pushSheetEntry();
+    const then = afterLeaving;
+    afterLeaving = null;
+    then?.();
     return true;
   }
   if (!state.sheet) return false;
@@ -132,11 +142,15 @@ export function updateSheet(patch) {
 // The phone slide-out takes --dur-4 (src/tokens.css).
 export const SHEET_OUT_MS = 480;
 
-// `fromHistory`: Back already took the sheet's history entry away.
-export function closeSheet({ instant = false, fromHistory = false } = {}) {
+// `fromHistory`: Back already took the sheet's history entry away. `then`
+// runs once the page's own entry is current again: going Back is async, so a
+// navigation made right after closeSheet() would land on the sheet's entry
+// and be lost (closeSheet({ then: () => app.navigate(…) })).
+export function closeSheet({ instant = false, fromHistory = false, then = null } = {}) {
   const el = $('#sheet');
   state.sheet = null;
-  if (!fromHistory) dropSheetEntry();
+  const left = fromHistory || !dropSheetEntry();
+  if (!left) afterLeaving = then;
   el.classList.remove('open');
   if (!document.querySelector('#bottle.modal')) document.body.classList.remove('sheet-open');
   $('#app').inert = false;
@@ -146,6 +160,7 @@ export function closeSheet({ instant = false, fromHistory = false } = {}) {
   const hide = () => { if (!state.sheet) { el.hidden = true; el.innerHTML = ''; } };
   if (instant) hide();
   else setTimeout(hide, SHEET_OUT_MS);
+  if (left) then?.();
 }
 
 // ---------- Toast ----------

@@ -13,12 +13,12 @@ import { isCustomId, fromShareToken } from '../custom.js';
 import { loadAbout } from '../fragrantica.js';
 import { sceneTint, skyAccent } from '../scene.js';
 import { setTheme, theme, paint } from '../theme.js';
-import { esc, deg } from '../ui.js';
+import { esc, deg, plural } from '../ui.js';
 import { icon, segLinksHTML, messageHTML } from '../ui/components.js';
 import { parseRoute, routeHash, sameRoute, legacyHash, go, HOME } from './router.js';
 import {
   state, computeToday, sourceRecords, knownBottles, library, setActive as chooseList,
-  addToMine as addRecord,
+  addToMine as addRecord, markBottlesLoaded,
 } from './state.js';
 import {
   registerSheets, renderSheet, openSheet, updateSheet, closeSheet, sheetPopped, sheetEntry, replacePageURL, refocus,
@@ -42,10 +42,12 @@ const DESTINATIONS = [wearView.wear, wardrobeView.wardrobe, discoverView.discove
 const PAGES = Object.fromEntries([...DESTINATIONS, settingsView.settings].map(p => [p.id, p]));
 const PANES = Object.fromEntries(DESTINATIONS.map(d => [d.id, (d.panes ?? []).map(p => p.id)]));
 
-// One map per kind of handler, from every view; a name used twice throws.
+// One map per kind of handler, from every view and from bottle-page sections
+// that bring their own (addSection({ …, actions })); a name used twice throws.
+// src/views/sections.js has run by now, so SECTIONS is complete.
 function merged(kind) {
   const out = {};
-  for (const view of VIEWS) {
+  for (const view of [...VIEWS, ...bottleView.SECTIONS]) {
     for (const [name, fn] of Object.entries(view[kind] ?? {})) {
       if (out[name]) throw new Error(`Two ${kind} called "${name}"`);
       out[name] = fn;
@@ -57,6 +59,7 @@ const ACTIONS = {
   'close-sheet': () => closeSheet(),
   // The skip link: past the nav to the page's heading.
   skip: () => $('#page-title')?.focus(),
+  'list-back': () => listBack(),
   ...merged('actions'),
 };
 const FORMS = merged('forms');
@@ -66,11 +69,11 @@ registerSheets(merged('sheets'));
 
 // What every action, form and field handler gets as `app`.
 const app = {
-  render, renderPage, renderBottle,
+  render, renderPage, renderBottle, retryBottle,
   navigate, openBottle, closeBottle,
   openSheet, updateSheet, closeSheet, renderSheet,
   showToast, hideToast, keepingFocus, refocus,
-  refreshWeather, setLocation, setActive, addToMine, closeShared,
+  refreshWeather, setLocation, setActive, addToMine, own, closeShared,
 };
 
 // From 1100px the bottle page docks beside the page as an inspector; under
@@ -103,19 +106,72 @@ function addToMine(record) {
   if (state.shared) closeShared();
 }
 
+// The list "I own it" moved away from, for the toast's way back.
+let listBefore = null;
+
+// "I own it": the bottle goes into Mine, and picks come from Mine. When that
+// switches lists (from David's wardrobe or a shared link), the toast says so
+// and offers the way back.
+function own(record) {
+  const switching = Boolean(state.shared) || state.active !== 'mine';
+  const label = state.shared ? (state.shared.name ? `${state.shared.name}’s` : 'the shared list') : 'David’s';
+  const before = { active: state.active, shared: state.shared, search: location.search };
+  addToMine(record);
+  render();
+  if (!switching) return showToast(`<span>${esc(record.name)} added to your collection</span>`);
+  listBefore = before;
+  showToast(`<span class="note">${esc(record.name)} added to Mine. Picks now come from your ${plural(state.mine.records.length, 'bottle')}.</span>
+    <button class="btn secondary compact" data-action="list-back">Back to ${esc(label)}</button>`);
+}
+
+function listBack() {
+  if (!listBefore) return;
+  const { active, shared, search } = listBefore;
+  listBefore = null;
+  chooseList(active);
+  if (shared) {
+    state.shared = shared;
+    const url = new URL(location.href);
+    url.search = search;
+    replacePageURL(url.href);
+  }
+  render();
+  hideToast();
+}
+
 // ---------- Rendering ----------
 
 // Everything on screen, again (data, weather, units or theme changed). The
-// focused control, replaced, hands focus to its successor.
+// focused control, replaced, hands focus to its successor; with none (a
+// button that became a tag, a banner that went), focus goes to the top of
+// the region it was in, never to the page's body.
 function render() {
   const focused = document.activeElement;
+  const region = focused?.closest?.('#sheet, #bottle, #app');
+  const scope = region ? `#${region.id}` : '#app';
   computeToday();
   renderTint();
   renderNav();
   renderPage();
   renderBottle();
   if (state.sheet) renderSheet({ keepScroll: true });
-  if (focused && focused !== document.body && !focused.isConnected) refocus(focused);
+  if (focused && focused !== document.body && !focused.isConnected && !refocus(focused, scope)) {
+    const fallback = { '#sheet': '#sheet .sheet-close', '#bottle': '#bottle .bp-close' }[scope] ?? '#page-title';
+    $(fallback)?.focus({ preventScroll: true });
+  }
+}
+
+// The tab's title follows the route: the bottle's name on its page (or
+// "Loading", "Bottle not found"), else the pane's title.
+function syncTitle() {
+  const r = state.route;
+  let title = null;
+  if (r?.dest === 'bottle') title = $('#bottle-title')?.textContent;
+  else if (state.base) {
+    const { page, pane } = currentPage();
+    title = pane.title?.(state.base) ?? page.label;
+  }
+  if (title) document.title = `${title} · Scentcast`;
 }
 
 // The page takes its tint from the sky: --tint-* behind the hero and in the
@@ -206,8 +262,7 @@ function renderPage() {
   main.setAttribute('aria-busy', String(state.updating));
   pane.after?.(app, r);
   document.body.dataset.route = r.dest;
-  const title = pane.title?.(r) ?? page.label;
-  document.title = state.route?.dest === 'bottle' ? document.title : `${title} · Scentcast`;
+  syncTitle();
   renderFoot();
 }
 
@@ -222,27 +277,31 @@ function renderFoot() {
 
 // ---------- The bottle page ----------
 
-const missing = new Set(); // ids no source has
+const missing = new Set(); // ids the library answered for without them
+const failed = new Set(); // ids whose record didn't load (offline); retried on demand
 const loadingBottles = new Set();
 const askedAbout = new Set();
 
 // The page's data, loading the record (dataset bottles opened from a link or
 // a search) and its about data (for wave 4's sections) when they're not here.
-// undefined while loading, null when there's no such bottle.
+// undefined while loading, null when there's no such bottle, false when it
+// couldn't load (the page offers to try again). About data that couldn't
+// load stays undefined and is asked for again on the next render.
 function bottleModelFor(r) {
   const id = r.arg;
   const model = bottleView.bottleModel(r);
   if (model) {
     if (/^\d+$/.test(id) && !askedAbout.has(id)) {
       askedAbout.add(id);
-      loadAbout(id).catch(() => null).then(about => {
+      loadAbout(id).then(about => {
         state.about.set(id, about);
         if (state.route?.dest === 'bottle' && state.route.arg === id) renderBottle();
-      });
+      }, () => askedAbout.delete(id));
     }
     return model;
   }
   if (missing.has(id)) return null;
+  if (failed.has(id)) return false;
   if (!/^\d+$/.test(id) && !isCustomId(id)) return null;
   if (isCustomId(id)) {
     const f = fromShareToken(id);
@@ -255,7 +314,7 @@ function bottleModelFor(r) {
     library.records([id]).then(found => {
       if (found.get(id)) state.bottles.set(id, found.get(id));
       else missing.add(id);
-    }).catch(() => missing.add(id)).finally(() => {
+    }, () => failed.add(id)).finally(() => {
       loadingBottles.delete(id);
       if (state.route?.dest === 'bottle' && state.route.arg === id) renderBottle();
     });
@@ -269,6 +328,11 @@ function setModal(on) {
   document.body.classList.toggle('sheet-open', on || Boolean(state.sheet));
 }
 
+function retryBottle() {
+  failed.clear();
+  renderBottle();
+}
+
 // `fresh`: a newly opened bottle (its bars grow in); `instant`: no slide, a
 // view transition animates it.
 function renderBottle({ fresh = false, instant = false } = {}) {
@@ -277,7 +341,7 @@ function renderBottle({ fresh = false, instant = false } = {}) {
   const modal = !docked();
   if (r?.dest !== 'bottle') {
     if (el.hidden) return;
-    el.classList.remove('open');
+    el.classList.remove('open', 'entering');
     $('#app').classList.remove('has-bottle');
     setModal(false);
     delete el.dataset.id;
@@ -291,18 +355,23 @@ function renderBottle({ fresh = false, instant = false } = {}) {
   const scroll = sameBottle ? panel?.scrollTop ?? 0 : 0;
   const focused = sameBottle && el.contains(document.activeElement) ? document.activeElement : null;
   const model = bottleModelFor(r);
+  const opening = el.hidden;
   el.innerHTML = bottleView.bottlePageHTML(model, { modal });
   if (focused) refocus(focused, '#bottle');
   el.dataset.id = r.arg;
   const next = el.querySelector('.bp-panel');
   if (fresh && !sameBottle) next.classList.add('fresh');
+  // Docked, it slides in once when it opens; a re-render doesn't move it,
+  // and another bottle in its place fades in.
+  if (!modal && !sameBottle && !opening) next.classList.add('swap');
   next.scrollTop = scroll;
   el.classList.toggle('modal', modal);
   $('#app').classList.toggle('has-bottle', !modal);
   setModal(modal);
-  if (model) document.title = `${model.f.name} · Scentcast`;
-  if (el.hidden) {
+  syncTitle();
+  if (opening) {
     el.hidden = false;
+    if (!modal) el.classList.add('entering');
     if (instant || !modal) el.classList.add('open');
     else requestAnimationFrame(() => el.classList.add('open'));
   }
@@ -370,28 +439,41 @@ function transition(next, { quiet = false, instant = false } = {}) {
   applyRoute(next, { quiet, instant });
 }
 
+// The page a bottle page opened straight from a link sits over: the list its
+// context names (a Week window, Occasion), so its ranking is there to read.
+function baseFor({ query }) {
+  const ctx = query.ctx ?? '';
+  return ctx.startsWith('w:') ? '#/wear/week' : ctx === 'occ' ? '#/wear/occasion' : HOME;
+}
+
 function applyRoute(next, { quiet = false, instant = false } = {}) {
   const prev = state.route;
   state.route = next;
   if (next.dest === 'bottle') {
-    if (!state.base) setBase(parseRoute(HOME, PANES), { quiet: true });
+    if (!state.base) setBase(parseRoute(baseFor(next), PANES), { quiet: true });
     if (prev?.dest !== 'bottle') bottleOpener = document.activeElement;
     renderBottle({ fresh: true, instant });
     if (!quiet) $('#bottle .bp-close')?.focus({ preventScroll: true });
     return;
   }
   pushedBottle = false;
+  // Closing a bottle page leaves the page under it as it was, focus back on
+  // what opened it; a new page (the rail, with the inspector open) is a
+  // navigation like any other.
   const changed = !sameRoute(state.base, next);
-  if (changed) setBase(next, { quiet: quiet || prev?.dest === 'bottle' });
+  if (changed) setBase(next, { quiet });
   renderBottle({ instant });
   if (prev?.dest === 'bottle' && !changed && !refocus(bottleOpener)) $('#page-title')?.focus({ preventScroll: true });
   if (prev?.dest === 'bottle') bottleOpener = null;
+  syncTitle();
 }
 
 function setBase(next, { quiet = false } = {}) {
   const prev = state.base;
+  const from = document.activeElement;
   if (prev) scrolls.set(scrollKey(prev), scrollY);
   state.base = next;
+  state.armed = null; // a "Tap again to…" doesn't survive leaving its page
   lastRoute[next.dest] = next;
   const newPane = !prev || scrollKey(prev) !== scrollKey(next);
   renderNav();
@@ -405,7 +487,10 @@ function setBase(next, { quiet = false } = {}) {
       main.classList.add('enter');
     }
   }
-  if (!quiet && prev) $('#page-title')?.focus({ preventScroll: true });
+  // A new page puts focus on its heading. Within a destination, picking a
+  // pane from the sub-navigation keeps focus there, on the pane just picked.
+  const stay = prev?.dest === next.dest && from?.closest?.('.subnav') && refocus(from, '#main');
+  if (!quiet && prev && !stay) $('#page-title')?.focus({ preventScroll: true });
 }
 
 // Back, forward, or a typed URL.
@@ -469,7 +554,7 @@ async function setLocation(loc) {
 // ---------- Shared links ----------
 
 async function openSharedLink(link) {
-  state.shared = { ...link, records: [], missing: [], loading: true, confirmReplace: false };
+  state.shared = { ...link, records: [], missing: [], loading: true };
   // Bottles entered by hand travel whole inside the link.
   const known = new Map(knownBottles().map(f => [f.id, f]));
   const local = link.ids.map(id => known.get(id) ?? (isCustomId(id) ? fromShareToken(id) : null));
@@ -523,7 +608,8 @@ function listen() {
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       if (state.sheet) closeSheet();
-      else if (state.route?.dest === 'bottle') closeBottle();
+      // In a field with text, Escape is the field's (it clears a search).
+      else if (state.route?.dest === 'bottle' && !(e.target.matches?.('input, textarea') && e.target.value)) closeBottle();
       return;
     }
     const radio = e.target.closest?.('[role="radiogroup"] [role="radio"]');
@@ -542,7 +628,7 @@ function listen() {
   let drag = null;
   document.addEventListener('touchstart', e => {
     const panel = e.target.closest?.('.sheet-panel, #bottle.modal .bp-panel');
-    if (!panel || innerWidth >= 720 || panel.scrollTop > 0 || e.target.closest('input, textarea, .alts, .calendar, .shelf')) return;
+    if (!panel || innerWidth >= 720 || panel.scrollTop > 0 || e.target.closest('input, textarea, .calendar, .shelf')) return;
     drag = { panel, y0: e.touches[0].clientY, t0: e.timeStamp, dy: 0 };
   }, { passive: true });
   document.addEventListener('touchmove', e => {
@@ -584,6 +670,11 @@ function listen() {
   if ('IntersectionObserver' in window) {
     new IntersectionObserver(([e]) => $('#hero').classList.toggle('offscreen', !e.isIntersecting)).observe($('#hero'));
   }
+
+  // Back online: a bottle page that couldn't load tries again.
+  window.addEventListener('online', () => {
+    if (state.route?.dest === 'bottle') retryBottle();
+  });
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible' || !state.loc) return;
@@ -634,9 +725,11 @@ export async function boot() {
     state.demo = demo;
     state.catalog = catalog.fragrances;
   } catch {
+    markBottlesLoaded();
     $('#main').innerHTML = messageHTML({ glyph: icon.bottle, title: 'Collection missing', body: 'Couldn’t load data/collection.json.' });
     return;
   }
+  markBottlesLoaded();
   const link = parseShare(params);
   if (link) openSharedLink(link);
   if (state.loc) await refreshWeather();

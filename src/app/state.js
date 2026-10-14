@@ -38,7 +38,7 @@ export const state = {
   catalog: [], // data/catalog.json: other people's bottles, scraped with Parfumo's ratings
   mine: loadMine(), // { name, records }
   active: loadActive(), // 'demo' | 'mine'
-  shared: null, // { name, ids, records, missing, loading, confirmReplace } from a ?c= link
+  shared: null, // { name, ids, records, missing, loading } from a ?c= link
   loc: loadLocation(),
   forecast: null,
   wx: null,
@@ -57,7 +57,12 @@ export const state = {
   today: null, // { day: plan, night: plan } where plan = { win, ranked, pick }
   bottles: new Map(), // dataset records loaded for bottle pages, by id
   about: new Map(), // id -> loadAbout() result (null: none), for bottle pages
-  discover: { query: '', results: null, busy: false, error: '' },
+  // Discover's search: `draft` is the field as typed, `query` what was last
+  // searched; `offline` the library's error when only local matches came back.
+  discover: { draft: null, query: '', results: null, busy: false, error: '', offline: '' },
+  // A destructive button waiting for its second tap ('journal-clear',
+  // 'shared-save'); the shell disarms it whenever the page changes.
+  armed: null,
   sheet: null, // an open overlay sheet: { kind: a key of the shell's SHEETS, ...sheet state }
   lastRemoved: null, // { record, index } for undo
 };
@@ -93,6 +98,13 @@ export function collectionLabel() {
 // Bottles we scraped ourselves, searched before the rest of Fragrantica.
 export function knownBottles() {
   return [...(state.demo?.fragrances ?? []), ...state.catalog];
+}
+
+// Which list already has a bottle: the one being ranked ('demo', 'mine' or
+// 'shared'), else 'mine' when it's in Mine, else null.
+export function ownedIn(id) {
+  if (inSource(id)) return state.shared ? 'shared' : state.active;
+  return state.mine.records.some(f => f.id === id) ? 'mine' : null;
 }
 
 export function findRecord(id) {
@@ -212,14 +224,28 @@ export function journalData() {
 export const library = fragranticaLibrary();
 const MAX_RESULTS = 10;
 
+// Boot resolves this once the wardrobe and catalog are in (or failed), so a
+// search that starts first (a #/discover?q= link) still finds them.
+let bottlesIn;
+const bottlesLoaded = new Promise(resolve => { bottlesIn = resolve; });
+export const markBottlesLoaded = () => bottlesIn();
+
 // Matches from the demo and the catalog come first (scraped with Parfumo's
 // ratings), then the rest of Fragrantica as light records ({ stub: true });
-// `fullRecords` loads the ones that get added.
+// `fullRecords` loads the ones that get added. When the library can't be
+// reached (offline), the local matches still come back, with its error:
+// { results, error }.
 export async function findBottles(query, limit = MAX_RESULTS) {
+  await bottlesLoaded;
   const local = localMatches(query, knownBottles());
   const ids = new Set(local.map(r => r.id));
-  const rest = (await library.search(query, limit)).filter(r => !ids.has(r.id));
-  return [...local, ...rest].slice(0, limit);
+  let rest = [], error = '';
+  try {
+    rest = (await library.search(query, limit)).filter(r => !ids.has(r.id));
+  } catch (err) {
+    error = err.message;
+  }
+  return { results: [...local, ...rest].slice(0, limit), error };
 }
 
 export async function fullRecords(list) {

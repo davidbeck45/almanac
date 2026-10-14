@@ -13,8 +13,8 @@
 /* Tap targets: a control drawn smaller than 44px gets an invisible ::before
    that grows its hit area to 44px around its center (the inset is negative
    only on an axis under 44px). The look doesn't change. */
-.btn, .icon-btn, .loc-btn, .switch, .check, .seg button, .seg a, .link-btn, .pick-chip { position: relative; }
-:is(.btn, .icon-btn, .loc-btn, .switch, .check, .seg button, .seg a, .link-btn, .pick-chip)::before {
+.btn, .icon-btn, .loc-btn, .switch, .check, .seg button, .seg a, .link-btn, .pick-chip, .pick-name-btn, .set-link { position: relative; }
+:is(.btn, .icon-btn, .loc-btn, .switch, .check, .seg button, .seg a, .link-btn, .pick-chip, .pick-name-btn, .set-link)::before {
   content: '';
   position: absolute;
   inset: min(0px, calc(50% - var(--hit) / 2));
@@ -311,8 +311,9 @@
    once there's room. B and C stand back, dimmed. */
 .shelf {
   display: flex;
-  margin: 0 calc(-1 * var(--s-4));
-  padding: 0 var(--s-4) var(--s-1);
+  /* Room above for a focus ring, which the sideways scroll would clip. */
+  margin: calc(-1 * var(--s-1)) calc(-1 * var(--s-4)) 0;
+  padding: var(--s-1) var(--s-4);
   overflow-x: auto;
   scroll-snap-type: x proximity;
   scroll-padding: 0 var(--s-4);
@@ -591,6 +592,9 @@
 .toast > svg { width: 16px; height: 16px; flex: none; color: var(--positive); }
 .toast span { overflow: hidden; padding-right: var(--s-1); text-overflow: ellipsis; white-space: nowrap; }
 .toast:not(:has(button)) { padding-right: var(--s-5); }
+/* A longer note (what changed, and the way back) wraps instead. */
+.toast:has(.note) { width: min(100vw - 2 * var(--s-4), 460px); padding-block: var(--s-2); border-radius: var(--r-surface); }
+.toast .note { white-space: normal; font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 
 /* ---------- Shared-link banner ---------- */
 
