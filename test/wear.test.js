@@ -7,6 +7,7 @@ import { occasionById } from '../src/occasions.js';
 import { sprayGuide } from '../src/spray.js';
 import { setSkin } from '../src/skin.js';
 import { summarize, week } from '../src/weather.js';
+import { renderScene } from '../src/scene.js';
 import { shiftISO } from '../src/history.js';
 import * as wear from '../src/views/wear.js';
 import * as trip from '../src/views/wear/trip.js';
@@ -289,6 +290,27 @@ test('the week board promises no repeats only when there are none, and says rain
   const wet = wear.weekHTML(varied.map((d, n) => ({ ...d, pop: n === 1 ? 87 : 10 })));
   assert.match(wet, /<span class="wk-pop">87%<span class="visually-hidden"> chance of<\/span> rain<\/span>/);
   assert.equal((wet.match(/% rain|chance of/g) ?? []).length, 1, 'only on the rainy day');
+});
+
+test('the compact band keeps trees and the cabin off the ground under its line of text', () => {
+  // Where the scene stands its trees and cabin, as shares of its width.
+  const props = svg => {
+    const W = +svg.match(/viewBox="0 0 (\d+)/)[1];
+    return [...svg.matchAll(/translate\(([\d.]+) ([\d.]+)\)/g)].filter(m => +m[2] > 130).map(m => +m[1] / W);
+  };
+  assert.ok(props(renderScene({ aspect: 2.6 })).some(x => x < 0.3), 'without it, trees stand on the left');
+  for (const clear of [0.35, 0.6, 0.8]) {
+    const xs = props(renderScene({ aspect: 2.6, clear }));
+    assert.ok(xs.length && xs.every(x => x >= clear), `${clear}: ${xs.map(x => x.toFixed(2))}`);
+  }
+  // The line ends about two thirds of the way across a phone's band, a third
+  // of the way across a desktop's (measured at 390 and 1440 wide).
+  const sky = { loc: { name: 'New York', lat: 40 }, wx, loading: false, error: null };
+  for (const [aspect, end] of [[390 / 148, 0.67], [760 / 156, 0.35]]) {
+    const xs = props(wear.heroHTML(sky, { aspect, compact: true }));
+    assert.ok(xs.length && xs.every(x => x > end + 0.02), `${aspect.toFixed(2)}: ${xs.map(x => x.toFixed(2))}`);
+  }
+  assert.ok(props(wear.heroHTML(sky, { aspect: 1.3 })).some(x => x < 0.3), 'Now’s tall hero keeps its own layout');
 });
 
 test('night windows draw the moon, days the sun', () => {

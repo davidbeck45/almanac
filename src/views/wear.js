@@ -40,6 +40,17 @@ export function sceneNow(wx, { error = false, date = new Date() } = {}) {
 // hill (src/scene.js stagePoint), a little nearer the middle on wide heroes.
 const stageX = aspect => (aspect < 1.6 ? 0.73 : 0.64);
 
+// The compact band's line (temperature, condition, the rest) runs from its
+// left edge: about what share of the band's width, so the scene keeps its
+// trees and cabin off that ground (src/scene.js `clear`). Px per character
+// as measured in the band's fonts, over the 148px it stands on phones
+// (wear.css), the shorter height, so the share errs wide.
+const BAND_H = 148;
+function bandClear(aspect, [temp, cond, ...rest]) {
+  const px = 20 + 14.5 * temp.length + 12 + 8.2 * cond.length + rest.filter(Boolean).reduce((sum, t) => sum + 8 + 6.3 * t.length, 0);
+  return Math.min(1, px / (aspect * BAND_H));
+}
+
 /**
  * The hero: the weather scene with the place, the temperature and, on Now,
  * the pick standing on the hill, rim-lit by the sun or moon (tap it for its
@@ -50,6 +61,11 @@ export function heroHTML({ loc, wx, loading, error, updating }, { aspect, compac
   const now = wx?.now;
   const sky = sceneNow(wx, { error: Boolean(error) });
   const stage = pick && !compact ? stagePoint(aspect, stageX(aspect)) : null;
+  // The words over the scene: the temperature, the condition, a line under it.
+  const [big, cond, sub, status] = now
+    ? [`${temp(now.tempF)}°`, now.label, `Feels ${deg(now.feelsF)} · H ${deg(now.hiF)} L ${deg(now.loF)}`, updating ? 'Updating…' : wx.stale ? 'Offline' : '']
+    : error ? ['', 'Weather unavailable', loc?.name ?? '', '']
+      : ['', loading ? 'Checking the sky…' : 'Where are you?', loading ? '' : 'Set a location to get picks.', ''];
   const scene = renderScene({
     ...sky,
     season: calendarSeason(new Date(), loc?.lat ?? 1),
@@ -58,27 +74,20 @@ export function heroHTML({ loc, wx, loading, error, updating }, { aspect, compac
     label: now ? `${now.label}, ${deg(now.tempF)}` : 'Weather scene',
     theme: theme(),
     stage: stage?.scene ?? null,
+    clear: compact ? bandClear(aspect, [big, cond, sub, status]) : 0,
   });
   const locBtn = `<button class="loc-btn glass" data-action="location" aria-label="Change location: ${esc(loc?.name ?? 'not set')}">${icon.pin}<span>${esc(loc?.name ?? 'Set location')}</span></button>`;
   const toggle = !compact && slots.length > 1
     ? segHTML(slots.map(p => ({ value: p.win.slot, label: p.win.slot === 'day' ? 'Day' : 'Night', icon: slotIcon(p.win.slot), on: p.win.slot === slotOn })), { action: 'slot', label: 'Time of day', cls: 'glass' })
     : '';
-  let body;
-  if (now) {
-    const status = updating ? '<span class="hero-status updating">Updating…</span>' : wx.stale ? '<span class="hero-status">Offline</span>' : '';
-    body = `<div class="hero-wx">
-      <div class="hero-temp">${temp(now.tempF)}<span class="deg">°</span></div>
+  const body = `<div class="hero-wx">
+      ${now ? `<div class="hero-temp">${temp(now.tempF)}<span class="deg">°</span></div>` : ''}
       <div class="hero-meta">
-        <div class="hero-cond">${esc(now.label)}</div>
-        <div class="hero-sub">Feels ${deg(now.feelsF)} · H ${deg(now.hiF)} L ${deg(now.loF)}</div>
-        ${status}
+        <div class="hero-cond">${esc(cond)}</div>
+        <div class="hero-sub">${sub ? esc(sub) : '&nbsp;'}</div>
+        ${status ? `<span class="hero-status${updating ? ' updating' : ''}">${esc(status)}</span>` : ''}
       </div>
     </div>`;
-  } else if (error) {
-    body = `<div class="hero-wx"><div class="hero-meta"><div class="hero-cond">Weather unavailable</div><div class="hero-sub">${esc(loc?.name ?? '')}</div></div></div>`;
-  } else {
-    body = `<div class="hero-wx"><div class="hero-meta"><div class="hero-cond">${loading ? 'Checking the sky…' : 'Where are you?'}</div><div class="hero-sub">${loading ? '&nbsp;' : 'Set a location to get picks.'}</div></div></div>`;
-  }
   let bottle = '';
   if (stage) {
     const f = pick.entry.fragrance;

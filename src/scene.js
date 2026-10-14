@@ -160,17 +160,21 @@ const TREE_SPOTS = {
 // Trees keep this far (a fraction of the width) from the hero's bottle, off
 // the hillside under the hero's temperature (its left FOOT_W), so the big
 // numbers sit on open ground, and on wide scenes off the middle hill behind
-// the bottle's name beside it (LABEL_W).
+// the bottle's name beside it (LABEL_W). On a band with no bottle, trees and
+// the cabin keep off its `clear` share of the width by CLEAR_PAD (about half
+// a tree).
 const STAGE_CLEAR = 0.07;
 const FOOT_W = 0.45;
 const LABEL_W = 0.32;
+const CLEAR_PAD = 0.03;
 
-function trees(layer, W, season, shade, snowy, P, stage = null) {
+function trees(layer, W, season, shade, snowy, P, stage = null, clear = 0) {
   const pal = P.foliage[season].map(c => mix(c, shade.color, shade.t));
   const pine = mix(season === 'winter' ? P.pine.winter : P.pine.other, shade.color, shade.t);
   const label = stage !== null && layer === 'mid' && W / H >= CABIN_ROOM;
   return TREE_SPOTS[layer].map(([fx, s, kind], i) => {
     if (stage !== null && (Math.abs(fx - stage) < STAGE_CLEAR || fx < FOOT_W)) return '';
+    if (fx - CLEAR_PAD < clear) return '';
     if (label && fx > stage && fx < stage + LABEL_W) return '';
     const x = fx * W;
     const bare = season === 'winter' && kind === 'round';
@@ -199,9 +203,12 @@ function cabin(x, phase, weatherDark, cold, shade, glowId, P) {
 }
 
 // With a bottle on stage the cabin moves down the hill, out of its way, and
-// only when the scene is wide enough to leave room for it.
+// only when the scene is wide enough to leave room for it. Under a band's
+// text it moves down the hill too, or leaves.
+const CABIN_X = 0.715;
 const CABIN_STAGED = 0.86;
 const CABIN_ROOM = 1.6;
+const cabinAt = (stage, clear) => [stage === null ? CABIN_X : null, CABIN_STAGED].find(x => x !== null && x - CLEAR_PAD >= clear) ?? null;
 
 // The hero's bottle and the sky's light keep out of each other's way: the
 // moon sits across the sky from the bottle, and a sun that would hang behind
@@ -244,8 +251,11 @@ const attr = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;'
  * aspect: container width / height
  * stage: where the hero's bottle stands on the middle hill (a fraction of the
  *   width, see stagePoint); the cabin and trees make room for it
+ * clear: the share of the width, from the left, that a line of text runs
+ *   along the foot of the scene (the Wear panes' compact hero); trees and the
+ *   cabin keep off it, so the words sit on open ground
  */
-export function renderScene({ phase = 'day', category = 'clear', sunProgress = 0.5, season = 'summer', cold = false, aspect = BASE_W / H, label = '', theme = 'default', stage = null }) {
+export function renderScene({ phase = 'day', category = 'clear', sunProgress = 0.5, season = 'summer', cold = false, aspect = BASE_W / H, label = '', theme = 'default', stage = null, clear = 0 }) {
   const P = palette(theme);
   const id = `sc${++uid}`;
   const W = Math.round(H * Math.min(4, Math.max(1.2, aspect)));
@@ -292,11 +302,12 @@ export function renderScene({ phase = 'day', category = 'clear', sunProgress = 0
   // Hills, trees, cabin
   parts.push(`<path d="${hillPath(hill.far, W)}" fill="${hills[0]}"/>`);
   parts.push(`<path d="${hillPath(hill.mid, W)}" fill="${hills[1]}"/>`);
-  parts.push(trees('mid', W, season, { color: shade.color, t: Math.min(0.9, shade.t + 0.15) }, snowy, P, stage));
+  parts.push(trees('mid', W, season, { color: shade.color, t: Math.min(0.9, shade.t + 0.15) }, snowy, P, stage, clear));
   parts.push(`<path d="${hillPath(hill.near, W)}" fill="${hills[2]}"/>`);
   // On a narrow stage the bottle's name sits where the cabin would.
-  if (stage === null || W / H >= CABIN_ROOM) parts.push(cabin(W * (stage === null ? 0.715 : CABIN_STAGED), phase, category === 'storm' || category === 'rain', cold, shade, `${id}-window`, P));
-  parts.push(trees('near', W, season, shade, snowy, P, stage));
+  const home = cabinAt(stage, clear);
+  if ((stage === null || W / H >= CABIN_ROOM) && home !== null) parts.push(cabin(W * home, phase, category === 'storm' || category === 'rain', cold, shade, `${id}-window`, P));
+  parts.push(trees('near', W, season, shade, snowy, P, stage, clear));
 
   // Clouds: spread evenly across the width; heavier weather sits lower and bigger.
   const n = Math.round((CLOUDS[category] ?? 3) * Math.max(1, sx * 0.8));
