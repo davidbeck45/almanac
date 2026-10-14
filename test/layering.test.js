@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { noteFamily, noteFamilies, layerPair, layerPicks, layerProfile, complementOf, commonNotes } from '../src/layering.js';
+import { noteFamily, noteFamilies, layerPair, layerPicks, layerProfile, complementOf, commonNotes, pairingMeans } from '../src/layering.js';
 import { heaviness } from '../src/accords.js';
 import { DEFAULT_HIDDEN } from '../src/hidden.js';
 
@@ -217,4 +217,29 @@ test('a note most of the collection shares doesn\'t tie a pair together', () => 
   const plain = bottle('plain', { vanilla: 100 }, { top: ['Bergamot'], base: ['Vanilla', 'Cedar'] });
   assert.equal(layerPair(plain, partner).reasons.find(r => r.text.startsWith('Shared')).text, 'Shared cedar and bergamot tie them together');
   assert.equal(layerPair(plain, partner, null, { common: new Set(['bergamot']) }).reasons.find(r => r.text.startsWith('Shared')).text, 'Shared cedar ties them together');
+});
+
+test('the bottle page\'s partner averages match a fresh pass, whichever bottle opens', () => {
+  // Each partner's average model score over the rest of the list it's given.
+  const fresh = list => new Map(list.map(f => [f.id,
+    list.filter(g => g !== f).reduce((s, g) => s + layerPair(f, g).model, 0) / Math.max(1, list.length - 1)]));
+  const all = [...demo, ...catalog];
+  const outside = load('originals')[0];
+  // Owned bottles open with the rest of the list, one from outside with all of it,
+  // then a smaller list (bottles switched off) and a fresh one.
+  const opens = [
+    [all[0], all.slice(1)], [all[5], all.filter(f => f !== all[5])], [outside, all],
+    [all[3], all.filter(f => f !== all[3])], [all[2], all.slice(4)], [all[0], all.slice(0, 6)], [all[1], all.slice(0, 6)],
+  ];
+  for (const [frag, list] of opens) {
+    const { means, overall, common } = pairingMeans(list, frag);
+    const want = fresh(list);
+    assert.equal(means.size, want.size);
+    for (const [id, m] of want) assert.ok(Math.abs(means.get(id) - m) < 1e-12, `${frag.name}: ${id} ${means.get(id)} vs ${m}`);
+    assert.ok(Math.abs(overall - [...want.values()].reduce((a, b) => a + b, 0) / want.size) < 1e-12);
+    assert.deepEqual([...common].sort(), [...commonNotes(list)].sort());
+  }
+  // The page draws twice: the second draw gets the same picks.
+  const others = demo.slice(1);
+  assert.deepEqual(layerPicks(demo[0], [...others], 3, coldNight), layerPicks(demo[0], [...others], 3, coldNight));
 });
