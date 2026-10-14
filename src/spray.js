@@ -8,10 +8,13 @@
 // - the strength the name claims (Extrait, Elixir, EDT, Cologne…), half as
 //   much when voters have rated its performance,
 // - the weather: heat and sticky air carry scent (fewer, lower on the body),
-//   cold mutes it (more, and on fabric, which holds it),
+//   and take more off a rich, heavy bottle, which turns cloying, than off a
+//   fresh one, which burns off; cold mutes it (more, and on fabric, which
+//   holds it),
 // - the occasion: the office quiet, a date close, a night out louder.
 // Text never names a temperature.
 import { performanceLevel, performanceRating, isSticky } from './engine.js';
+import { heaviness } from './accords.js';
 import { wearsClose } from './scent-styles.js';
 
 const BASE = 3;
@@ -24,6 +27,12 @@ const RATED_VOTES = 50;
 // where cold starts adding them and where it adds COLD_STEP.
 const HEAT = [72, 90], HEAT_STEP = 1, STICKY_STEP = 0.5;
 const COLD = [50, 20], COLD_STEP = 1;
+// The heat steps times this, by the bottle's heaviness (-0.5 fresh .. 0.6
+// rich): about a quarter for a fresh citrus, an even step for a middling
+// bottle, nearly double for a gourmand. Heavier than RICH reads as rich.
+const heatLoad = h => clamp(0.8 + 1.5 * h, 0.2, 1.8);
+const RICH = 0.25;
+const FRESH = -0.1;
 // Levels past which a bottle reads as loud or quiet, lasting or fleeting,
 // and as a little louder or quieter than most.
 const LEVEL_REASON = 0.35;
@@ -110,8 +119,11 @@ export function sprayGuide(record, conditions, occasion = null, skin = null) {
   const feels = conditions?.feelsF ?? 65;
   const heat = clamp((feels - HEAT[0]) / (HEAT[1] - HEAT[0]), 0, 1);
   const sticky = conditions ? isSticky(conditions) : false;
-  if (sticky) add(-HEAT_STEP * heat - STICKY_STEP, 'Sticky air carries it');
-  else if (heat > 0) add(-HEAT_STEP * heat, 'Heat makes it bloom');
+  const h = heaviness(frag.accords ?? {});
+  const load = heatLoad(h);
+  const rich = h >= RICH;
+  if (sticky) add(-(HEAT_STEP * heat + STICKY_STEP) * load, rich ? 'Sticky heat makes rich notes cloying' : 'Sticky air carries it');
+  else if (heat > 0) add(-HEAT_STEP * heat * load, rich ? 'Heat makes rich notes cloying' : 'Heat makes it bloom');
   const cold = clamp((feels - COLD[0]) / (COLD[1] - COLD[0]), 0, 1);
   if (cold > 0) add(COLD_STEP * cold, 'Cold air mutes it');
 
@@ -123,9 +135,10 @@ export function sprayGuide(record, conditions, occasion = null, skin = null) {
   hi = Math.min(hi, occ.max ?? SPRAYS[1]);
   lo = Math.min(lo, hi);
 
-  // The office and heat keep it low and under a shirt; a date by the neck.
+  // The office and heat keep it low and under a shirt (not a quiet, fresh
+  // bottle, which heat won't make loud); a date by the neck.
   const spots = key === 'office' ? SPOTS.office
-    : heat >= 0.5 || sticky ? SPOTS.heat
+    : (heat >= 0.5 || sticky) && !(h <= FRESH && sillage < MILD_REASON) ? SPOTS.heat
     : key === 'date' ? SPOTS.date
     : cold >= 0.5 ? SPOTS.cold
     : SPOTS[key] ?? SPOTS.any;
@@ -137,10 +150,16 @@ export function sprayGuide(record, conditions, occasion = null, skin = null) {
   const text = [`${count}, on ${listOf(where.map(spotText))}${under}.`];
   if (ranked.length) text.push(`${cap(listOf(ranked.slice(0, 2).map(t => t.clause)))}.`);
 
+  // One note, most useful first: don't chase a loud bottle, top up one that
+  // fades (by the crowd's votes or your skin) or burns off in heat, and a
+  // close-wearing one won't crowd anyone (unless it projects more on you).
+  const said = text.join(' ');
   let note = null;
   if (hi <= 2 && sillage >= LEVEL_REASON) note = 'You’ll stop smelling it long before others do; don’t add more.';
-  else if (wearsClose(record)) note = 'It wears close, so more sprays won’t make it carry.';
-  else if (mine.longevity < 0) note = 'It fades early on you, so take it along to top up.';
+  else if (mine.longevity < 0 || (!mine.longevity && longevity <= -LEVEL_REASON)) {
+    note = /fades/.test(said) ? 'Take it along to top up.' : `It fades early${mine.longevity < 0 ? ' on you' : ''}, so take it along to top up.`;
+  } else if (heat >= 0.5 && h <= FRESH) note = 'Fresh notes burn off fast in heat; take it along to top up.';
+  else if (wearsClose(record) && !(mine.sillage > 0)) note = 'It wears close, so this many won’t crowd anyone.';
 
   return { sprays: [lo, hi], where, text: text.join(' '), why: ranked.map(t => t.why), note };
 }

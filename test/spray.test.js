@@ -36,7 +36,13 @@ const CASES = [
   ['a skin scent at the office', SKIN, MILD, 'office', 2, 2],
   ['a skin scent on a mild day', SKIN, MILD, null, 4, 5],
   ['a skin scent at home', SKIN, COOL, 'cozy', 2, 3],
-  ['a light cologne on a hot sticky day', BREEZE, HOT_STICKY, null, 2, 4],
+  // Heat takes little off fresh notes, which burn off (spray as usual and top
+  // up), and a lot off rich ones, which turn cloying.
+  ['a light cologne on a hot sticky day', BREEZE, HOT_STICKY, null, 4, 6],
+  ['a room filler on a hot sticky day', LOUD, HOT_STICKY, null, 1, 1],
+  ['Essence de Blanc, a fresh citrus, on a hot sticky day', byName('Essence de Blanc'), HOT_STICKY, null, 2, 3],
+  ['CH Men Prive, quiet whisky and leather, on a hot sticky day', byName('CH Men Prive'), HOT_STICKY, null, 1, 2],
+  ['Cream Velvet, a vanilla gourmand, in dry heat', byName('Cream Velvet'), HOT_DRY, null, 1, 2],
   ['Terra, a beast, on a hot sticky day', byName('Terra'), HOT_STICKY, null, 1, 1],
   ['Terra on a date', byName('Terra'), COOL, 'date', 1, 1],
   ['Liquid Brun on a cold night out', byName('Liquid Brun'), COLD, 'nightout', 3, 4],
@@ -57,6 +63,9 @@ test('heat and the office keep it low and under a shirt; a date by the neck; col
   const hot = sprayGuide(MIDDLE, HOT_STICKY);
   assert.ok(!hot.where.includes('neck'), hot.where.join(', '));
   assert.match(hot.text, /under your shirt/);
+  const breeze = sprayGuide(BREEZE, HOT_STICKY);
+  assert.equal(breeze.where[0], 'neck', 'heat won’t make a quiet cologne loud');
+  assert.doesNotMatch(breeze.text, /under your shirt/);
   const office = sprayGuide(SKIN, MILD, 'office');
   assert.deepEqual(office.where, ['chest', 'stomach']);
   assert.equal(sprayGuide(MIDDLE, COOL, 'date').where[0], 'neck');
@@ -92,6 +101,32 @@ test('your skin nudges move the count', () => {
   const fades = sprayGuide(MIDDLE, MILD, null, { longevity: -1 });
   assert.ok(fades.why.includes('Fades faster on you'));
   assert.match(fades.note, /top up/);
+});
+
+test('heat takes more off a rich bottle than a fresh one, and says why', () => {
+  const drop = (f, c) => sprayGuide(f, MILD).sprays[0] - sprayGuide(f, c).sprays[0];
+  assert.ok(drop(LOUD, HOT_DRY) >= 0 && drop(MIDDLE, HOT_STICKY) > drop(BREEZE, HOT_STICKY), 'a middling bottle loses more than a cologne');
+  const rich = sprayGuide(byName('CH Men Prive'), HOT_STICKY);
+  const fresh = sprayGuide(byName('Essence de Blanc'), HOT_STICKY);
+  assert.ok(rich.sprays[1] <= fresh.sprays[0], `${rich.sprays} vs ${fresh.sprays}`);
+  assert.ok(rich.why.includes('Sticky heat makes rich notes cloying'), rich.why.join(' | '));
+  assert.equal(fresh.note, 'Fresh notes burn off fast in heat; take it along to top up.');
+});
+
+test('notes: top up what fades, by the crowd or on you; close-wearing only when it is', () => {
+  // Jake fades early by the crowd's votes: top up beats "wears close", in any weather.
+  for (const c of [HOT_STICKY, MILD, COLD]) {
+    const jake = sprayGuide(byName('Jake'), c, 'nightout');
+    assert.match(jake.note, /top up/, jake.text);
+    assert.doesNotMatch(`${jake.text} ${jake.note}`, /fades early.*fades early/, 'says it once');
+  }
+  // A close-wearing bottle that projects more on you says neither "wears close" nor contradicts you.
+  const sky = sprayGuide(byName('Shiyaaka Sky'), MILD, null, { sillage: 1, longevity: 1 });
+  assert.ok(sky.why.includes('Projects more on you'));
+  assert.doesNotMatch(sky.note ?? '', /wears close/);
+  // When it does wear close and lasts, the note says the count won't crowd anyone.
+  const close = sprayGuide({ ...SKIN, parfumo: { ...SKIN.parfumo, longevity: 8.6, sillage: 5.6 } }, MILD);
+  assert.equal(close.note, 'It wears close, so this many won’t crowd anyone.', close.text);
 });
 
 test('plain sentences, never a temperature', () => {
