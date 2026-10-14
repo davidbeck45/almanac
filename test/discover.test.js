@@ -112,10 +112,14 @@ test('nothing Discover suggests to David is a near dupe of what he owns', () => 
   assert.ok(!names(lists[3]).some(n => /Althaïr|Island Vanilla Dunes|Liquid Brun/.test(n)), names(lists[3]).join());
 });
 
-test('any of several styles takes turns; all of them wants each', () => {
+test('any of several styles takes turns, Intimate shapes them, and all of them wants each', () => {
   const any = moreOfStyles(['skin', 'clean', 'intimate'], ctx, { k: 12 });
   const via = id => any.filter(p => p.via === id).length;
-  assert.ok(via('skin') >= 3 && via('clean') >= 3 && via('intimate') >= 3, any.map(p => p.via).join());
+  assert.ok(via('skin') >= 4 && via('clean') >= 4, any.map(p => p.via).join());
+  assert.ok(any.every(p => p.styles.some(s => s.id === p.via)), 'each shows the style it’s here for');
+  assert.ok(any.filter(p => p.close).length >= 10, 'and most wear close');
+  // Intimate alone is every quiet bottle.
+  assert.ok(moreOfStyles(['intimate'], ctx, { k: 10 }).every(p => p.close && p.via === 'intimate'));
   const all = moreOfStyles(['skin', 'clean', 'intimate'], ctx, { mode: 'all', k: 12 });
   for (const p of all) {
     const s = scoresOf(p.record, ctx);

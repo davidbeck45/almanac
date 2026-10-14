@@ -30,6 +30,9 @@ const SMALL_WARDROBE = 8;
 // "Any" of several styles takes turns: each pick for a style already picked
 // for counts SPREAD less per earlier pick, so one style can't fill the list.
 const SPREAD = 0.9;
+// Beside scent styles, Intimate shapes them: a bottle that doesn't wear close
+// keeps WEAR_FLOOR of its match, one that does all of it.
+const WEAR_FLOOR = 0.6;
 // "All" blends the chosen styles' scores by a power mean this far below 0
 // (a soft minimum: 0.9 and 0.6 make 0.68), and wants each at least STYLE_LEAN.
 const SOFT_MIN_POWER = -4;
@@ -381,27 +384,29 @@ export function likedStyles(owned, { stated = null, scores = styleScores, k = LI
 
 /**
  * "If you want more of these, get these": pool bottles that are the chosen
- * styles, best first. mode 'any': a bottle shows at least one of them (its
- * best counts); 'all': each at least STYLE_LEAN, blended by a soft minimum.
- * Score = style match × √quality × novelty (nothing owned, no twin of an owned
- * bottle, nothing over MAX_OWNED_SIM alike to one). -> picks as describe()
- * makes them, plus `match` and `via` (the chosen style it's here for).
+ * styles, best first. mode 'any': a bottle shows at least one of them, the
+ * styles taking turns; Intimate (a wear style) chosen beside scent styles
+ * shapes them rather than competing, so skin scents that wear close lead and
+ * a quiet cologne of another kind doesn't come in on quietness alone. 'all':
+ * each at least STYLE_LEAN, blended by a soft minimum. Score = style match ×
+ * √quality × novelty (nothing owned, no twin of an owned bottle, nothing over
+ * MAX_OWNED_SIM alike to one). -> picks as describe() makes them, plus
+ * `match` and `via` (the chosen style it's here for).
  */
 export function moreOfStyles(styleIds, ctx, { mode = 'any', k = 10, filters = {} } = {}) {
-  const ids = styleIds.filter(id => STYLE_IDS.includes(id));
+  const ids = [...new Set(styleIds.filter(id => STYLE_IDS.includes(id)))];
   if (!ids.length) return [];
   if (mode !== 'any' && mode !== 'all') throw new Error(`Mode is any or all, not "${mode}".`);
-  if (mode === 'any' && ids.length > 1) return takeTurns(ids.map(id => moreOfStyles([id], ctx, { k, filters })), k);
+  const scents = ids.filter(id => !isWear(id)), wear = ids.filter(isWear);
+  if (mode === 'any' && scents.length > 1) return takeTurns(scents.map(id => moreOfStyles([id, ...wear], ctx, { k, filters })), k);
   const cols = styleColumns(ctx), admits = admitter(ctx, filters);
+  const via = scents[0] ?? wear[0];
   const scored = [];
   ctx.records.forEach((record, i) => {
-    let match, via = ids[0];
+    let match;
     if (mode === 'any') {
-      match = 0;
-      for (const id of ids) {
-        const x = cols[id][i];
-        if (x >= showsFrom(id) && x > match) [match, via] = [x, id];
-      }
+      match = cols[via][i] >= showsFrom(via) ? cols[via][i] : 0;
+      if (match && scents.length && wear.length) match *= WEAR_FLOOR + (1 - WEAR_FLOOR) * Math.max(...wear.map(id => cols[id][i]));
     } else {
       let sum = 0, min = 1;
       for (const id of ids) {
@@ -411,14 +416,13 @@ export function moreOfStyles(styleIds, ctx, { mode = 'any', k = 10, filters = {}
       }
       match = min >= STYLE_LEAN ? (sum / ids.length) ** (1 / SOFT_MIN_POWER) : 0;
     }
-    if (match > 0 && admits(record)) scored.push({ record, bound: match * qualityOf(ctx, record), match, via });
+    if (match > 0 && admits(record)) scored.push({ record, bound: match * qualityOf(ctx, record), match });
   });
-  const byRecord = new Map(scored.map(s => [s.record, s]));
+  const matchOf = new Map(scored.map(s => [s.record, s.match]));
   return lazyTop(scored, k, (record, bound) => {
     const nov = novelty(record, ctx.vecs, ctx.family);
     if ((nov.dupe?.mult ?? 1) < FAMILY_FLOOR || nov.sim > MAX_OWNED_SIM) return null;
-    const { match, via } = byRecord.get(record);
-    return describe(ctx, record, { score: bound * nov.mult, nov, extra: { match, via } });
+    return describe(ctx, record, { score: bound * nov.mult, nov, extra: { match: matchOf.get(record), via: mode === 'any' ? via : null } });
   });
 }
 
