@@ -19,6 +19,7 @@ test('occasions resolve by id or label, any case or spacing', () => {
   assert.equal(findOccasion('Date Night').id, 'date');
   assert.equal(findOccasion('night out').id, 'nightout');
   assert.equal(findOccasion('CASUAL').id, 'casual');
+  assert.equal(findOccasion('Everyday').id, 'casual', 'its old name');
   assert.equal(findOccasion('evening'), null);
 });
 

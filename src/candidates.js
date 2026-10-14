@@ -404,6 +404,12 @@ export function cheaperTwin(record, byId, ctx = null) {
   return twin ? { record: twin, value: signalsOf(twin).value, owned: false, text: `${twin.name} by ${twin.brand} smells like it, for far less.` } : null;
 }
 
+/** Whether voters say a bottle fades fast: longevity under WEAK_LONGEVITY from WEAK_VOTES votes. */
+export function weakLongevity(record) {
+  const p = performanceRating(record);
+  return p?.longevity != null && p.votes >= WEAK_VOTES && p.longevity < WEAK_LONGEVITY;
+}
+
 /**
  * How risky a blind buy it is: { level: 'low' | 'medium' | 'high' |
  * 'unknown', reasons }, reasons short plain sentences, the weightiest first.
@@ -420,8 +426,7 @@ export function riskOf(record, byId = null) {
   if (s.flags.includes('discontinued')) add(1, 'Reviewers say it’s discontinued.');
   if (s.flags.includes('reformulated')) add(1, 'Reviewers say it was reformulated.');
   if (s.flags.includes('hardToFind')) add(1, 'It’s hard to find in stock.');
-  const p = performanceRating(record);
-  if (p?.longevity != null && p.votes >= WEAK_VOTES && p.longevity < WEAK_LONGEVITY) add(1, 'It doesn’t last long.');
+  if (weakLongevity(record)) add(1, 'It doesn’t last long.');
   const points = found.reduce((sum, r) => sum + r.points, 0);
   const reasons = found.sort((a, b) => b.points - a.points).map(r => r.text);
   if (!s.known) return { level: 'unknown', reasons: [...reasons, 'There’s no crowd data on it yet.'] };

@@ -2,20 +2,24 @@
 // URL('./gaps-worker.js', import.meta.url), { type: 'module' })). It loads the
 // suggestion pool once, keeps its records and drops the parsed file, and
 // answers two messages, each echoing the request's `id`:
-//   { type: 'report', owned, summary, shares, preferValue, k }
-//     -> { type: 'report', report } (gapReport in src/gaps.js: gaps, strengths,
-//        the coverage grid, picks with fills, twins and risk), plus `ms` timings
-//   { type: 'check', record, owned?, summary?, shares?, preferValue? }
+//   { type: 'report', owned, summary, shares | uses, preferValue, k }
+//     -> { type: 'report', report } (gapReport in src/gaps.js: overview, gaps,
+//        strengths, the coverage grid, picks with fills, twins and risk), plus
+//        `ms` timings
+//   { type: 'check', record, owned?, summary?, shares? | uses?, preferValue? }
 //     -> { type: 'check', check } (checkJSON: the buy check's verdict and reasons)
 // A check without a wardrobe uses the last report's. Errors come back as
 // { type: 'error', message }. owned are the wardrobe's engine records;
-// summary a climate summary (src/climate.js, DEFAULT_CLIMATE without);
-// shares from src/uses.js; preferValue null for the wardrobe's default.
+// summary a climate summary (src/climate.js; DEFAULT_CLIMATE when null or
+// missing); shares from sharesFrom, or `uses`, the "How you wear" settings
+// (loadUses), turned into shares here; preferValue null for the wardrobe's
+// default.
 // handle() answers one message, for running it elsewhere (dev/gaps.html
 // times it on the main thread, where DevTools can throttle the CPU).
 import { loadPool, fromPool, loadAbout } from './fragrantica.js';
 import { poolRowOf } from './candidates.js';
 import { gapContext, gapReport, buyCheck, checkJSON, DEFAULT_CLIMATE } from './gaps.js';
+import { sharesFrom } from './uses.js';
 
 const DATA = new URL('../data/fragrantica/', import.meta.url);
 
@@ -59,9 +63,17 @@ async function withAbout(records, byId) {
   }));
 }
 
+// What a context is cached on: the wardrobe's records as they score (a record
+// changed under the same id, by skin nudges or a re-import, makes a new one),
+// leaving out what no score reads.
+const UNSCORED = new Set(['layeredWith', 'sentiment', 'description', 'url', 'thumb']);
+const ownedKey = owned => JSON.stringify(owned, (k, v) => (UNSCORED.has(k) ? undefined : v));
+
 let last = null; // { key, ctx }
-async function contextFor({ owned, summary = DEFAULT_CLIMATE, shares = null, preferValue = null }, timings) {
-  const key = JSON.stringify([owned.map(f => f.id), summary, shares, preferValue]);
+async function contextFor({ owned, summary, shares = null, uses = null, preferValue = null }, timings) {
+  summary ??= DEFAULT_CLIMATE;
+  shares ??= uses ? sharesFrom(uses) : null;
+  const key = JSON.stringify([ownedKey(owned), summary, shares, preferValue]);
   if (last?.key === key) return last.ctx;
   const t0 = performance.now();
   const { records, byId } = await poolRecords();

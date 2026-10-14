@@ -3,6 +3,7 @@
 // Often against USES' default share; Daily picks always count. Saved on the
 // device; the journal's occasion counts can refine it once wears record one.
 import { USES, useLabel } from './gaps.js';
+import { occasionById } from './occasions.js';
 
 const KEY = 'scentcast.uses';
 // A setting's multiple of the use's default share, before renormalizing.
@@ -26,7 +27,7 @@ export function saveUses(settings) {
 function cleanUses(settings) {
   return Object.fromEntries(USES.map(u => {
     const level = settings?.[u.id];
-    return [u.id, u.id !== 'daily' && level in LEVELS ? level : DEFAULT_LEVEL];
+    return [u.id, u.id !== 'daily' && Object.hasOwn(LEVELS, level) ? level : DEFAULT_LEVEL];
   }));
 }
 
@@ -48,14 +49,23 @@ export function sharesFrom(settings = {}, counts = null) {
 
 const squash = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '');
 
-/** "office=often,formal=never" (the CLI's --uses) -> settings; unknown names or levels throw. */
+// A use by its id, its name, or a name its occasion had before ("everyday").
+const useNamed = name => USES.find(u => [u.id, useLabel(u), ...(u.occasion ? occasionById(u.occasion).aliases ?? [] : [])]
+  .some(n => squash(n) === squash(name)));
+
+/**
+ * "office=often,formal=never" (the CLI's --uses) -> settings; unknown names
+ * or levels throw, and so does Daily, which always counts.
+ */
 export function parseUses(text) {
   const out = {};
+  const occasions = USES.filter(u => u.id !== 'daily').map(u => u.id).join(', ');
   for (const part of text.split(',').map(s => s.trim()).filter(Boolean)) {
     const [name = '', level] = part.split('=').map(s => s.trim().toLowerCase());
-    const use = USES.find(u => squash(u.id) === squash(name) || squash(useLabel(u)) === squash(name));
-    if (!use) throw new Error(`Unknown use "${name}". Pick from: ${USES.filter(u => u.id !== 'daily').map(u => u.id).join(', ')}`);
-    if (!(level in LEVELS)) throw new Error(`"${part}": the level is never, sometimes or often`);
+    const use = useNamed(name);
+    if (!use) throw new Error(`Unknown use "${name}". Pick from: ${occasions}`);
+    if (use.id === 'daily') throw new Error(`Daily picks always count; set the occasions (${occasions})`);
+    if (!Object.hasOwn(LEVELS, level)) throw new Error(`"${part}": the level is never, sometimes or often`);
     out[use.id] = level;
   }
   return out;

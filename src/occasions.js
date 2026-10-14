@@ -3,12 +3,13 @@
 // says how loud and lasting it wants a bottle (sillage, longevity: -1 quiet or
 // fleeting .. +1 loud or lasting; Parfumo ratings, see src/engine.js).
 // `slot` is the default time of day, `phrase` names the occasion in reason
-// text ("Woods & aromatics suit casual wear"), and `icon` names a stroke
-// icon in src/ui.js.
+// text ("Woods & aromatics suit casual wear"), `icon` names a stroke icon in
+// src/ui.js, and `aliases` are names it went by, which typed names still find.
 export const OCCASIONS = [
   {
     id: 'casual',
     label: 'Casual',
+    aliases: ['everyday'],
     icon: 'cup',
     blurb: 'Errands, weekends, hanging out',
     slot: 'day',

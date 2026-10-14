@@ -10,13 +10,14 @@
 // rank()'s score for it in that weather (scoreOf on the engine's own parts,
 // averaged over a few real windows from the band, so calendar season and dew
 // point come from real days). Owned bottles are measured against the
-// suggestion pool's scores in the same cell.
-import { seasonFit, timeFit, weatherFit, quality, occasionRaw, occasionPart, scoreOf, targetSeasonWeights } from './engine.js';
+// suggestion pool's scores in the same cell, every bottle read on the
+// pool's evidence (sameFooting).
+import { SEASONS, seasonFit, timeFit, weatherFit, quality, occasionRaw, occasionPart, scoreOf, targetSeasonWeights } from './engine.js';
 import { occasionById } from './occasions.js';
 import { similarity, sharedTraits } from './similar.js';
 import {
-  signalsOf, genderLean, allowContext, allow, poolNorms, candidateQuality, valueSlope, preferValueDefault,
-  familyIndex, ownedVectors, novelty, cheaperTwin, riskOf, PREFER_VALUE, FAMILY_MULT,
+  signalsOf, genderLean, leanWindow, allowContext, allow, poolNorms, candidateQuality, valueSlope, preferValueDefault,
+  familyIndex, ownedVectors, novelty, cheaperTwin, riskOf, weakLongevity, poolRowOf, PREFER_VALUE, FAMILY_MULT, MIN_RATING,
 } from './candidates.js';
 
 // Feels-like bands (°F, lower bound inclusive). Sticky versus dry heat is no
@@ -94,9 +95,14 @@ export function climateSummary(windows, { perCell = PER_CELL } = {}) {
  * ('office:day:cold'), use, occasion (object or null), slot, band, weight, sb
  * (its slot:band) }; weights sum to 1, and a use with no share keeps its
  * cells at weight 0, so a pool table fits any shares. slotBands holds each
- * slot × band's share and windows as engine conditions.
+ * slot × band's share and windows as engine conditions. Shares that aren't
+ * numbers adding up to more than 0 throw (settings go through sharesFrom).
  */
 export function cellsFor(summary, { shares = null } = {}) {
+  if (shares && !(USES.every(u => shares[u.id] == null || (Number.isFinite(shares[u.id]) && shares[u.id] >= 0))
+    && USES.some(u => shares[u.id] > 0))) {
+    throw new Error('Use shares must be numbers adding up to more than 0: pass settings through sharesFrom (src/uses.js).');
+  }
   const slotBands = {};
   for (const [key, { share, wins }] of Object.entries(summary)) {
     const [slot, band] = key.split(':');
@@ -149,17 +155,56 @@ export function cellTitle(use, slot, bands) {
 }
 export const cellLabel = cell => cellTitle(cell.use, cell.slot, cell.band);
 
+// The dataset keeps a bottle's 8 strongest accords; a scraped page shows up
+// to 10, and the extra two moved owned bottles' occasion cells by up to 8
+// points, against a FILL_MARGIN of 2.
+export const MAX_ACCORDS = 8;
+// Season or day/night votes that say nothing: the least-voted season (or
+// slot) drew FLAT_TURNOUT of the raters or more and the shares sit within
+// FLAT_SPREAD (most raters ticked everything: Elyon Dubai's 2025 releases),
+// or 3 seasons, or both slots, carry one identical count of FLAT_SAME or
+// more (some Louis Vuitton pages: 765 on every season and both slots).
+// Read as votes, they make a perfect all-rounder of a rose-oud.
+const FLAT_SPREAD = 0.03;
+const FLAT_TURNOUT = 0.5;
+const FLAT_SAME = 50;
+
+/** Whether vote counts ([winter, spring, summer, fall] or [day, night]) from `raters` raters say nothing. */
+export function flatVotes(counts, raters) {
+  const n = counts.reduce((a, b) => a + b, 0);
+  if (!n) return false;
+  const lo = Math.min(...counts), hi = Math.max(...counts);
+  if ((hi - lo) / n < FLAT_SPREAD && lo >= FLAT_TURNOUT * raters) return true;
+  return counts.some(c => c >= FLAT_SAME && counts.filter(x => x === c).length >= Math.min(3, counts.length));
+}
+
+const footed = new WeakMap();
 /**
- * A record as the gap finder scores owned bottles: without Parfumo's occasion
- * votes, which the pool's bottles lack, so owned and pool bottles stand on
- * the same evidence (a lucky vote doesn't read as coverage). Parfumo's
- * longevity and sillage stay: the pool has Fragrantica's, on the same scale.
+ * A record as the gap finder scores it, on the pool's evidence: no Parfumo
+ * occasion votes (the pool has none, and a lucky vote shouldn't read as
+ * coverage), its MAX_ACCORDS strongest accords, and flat votes (flatVotes)
+ * zeroed, so steadyShares reads the prediction alone. Parfumo's longevity
+ * and sillage stay: the pool has Fragrantica's, on the same scale. The same
+ * record comes back when nothing changes.
  */
 export function sameFooting(record) {
-  if (!record.parfumo?.occasion) return record;
-  const { occasion, occasionVotes, ...parfumo } = record.parfumo;
-  return { ...record, parfumo };
+  if (footed.has(record)) return footed.get(record);
+  const patch = {};
+  if (record.parfumo?.occasion) {
+    const { occasion, occasionVotes, ...parfumo } = record.parfumo;
+    patch.parfumo = parfumo;
+  }
+  const accords = Object.entries(record.accords ?? {});
+  if (accords.length > MAX_ACCORDS) patch.accords = Object.fromEntries(accords.sort((a, b) => b[1] - a[1]).slice(0, MAX_ACCORDS));
+  const sv = record.seasonVotes, tv = record.timeVotes;
+  if (sv && flatVotes(SEASONS.map(s => sv[s]), record.ratingVotes)) patch.seasonVotes = { winter: 0, spring: 0, summer: 0, fall: 0 };
+  if (tv && flatVotes([tv.day, tv.night], record.ratingVotes)) patch.timeVotes = { day: 0, night: 0 };
+  const out = Object.keys(patch).length ? { ...record, ...patch } : record;
+  footed.set(record, out);
+  return out;
 }
+const footedLists = new WeakMap();
+const allFooted = records => footedLists.get(records) ?? footedLists.set(records, records.map(sameFooting)).get(records);
 
 /**
  * Every bottle's fit in every cell, row-major [bottle][cell]: rank()'s score
@@ -244,22 +289,42 @@ const deficit = (target, s1, s2) => Math.max(0, target - s1) + SECOND_WEIGHT * M
 // A bottle is strong in a cell from the reference's 90th percentile. A cell
 // is a gap when 5% or more of the reference beats the wardrobe's best there,
 // or the best bottles beat it by GAP_HEADROOM; thin with under 2 strong
-// bottles; plenty with 4 strong and a best within PLENTY_HEADROOM of the top.
+// bottles and the next best under THIN_PCT (a runner-up just under the strong
+// line is depth, not a hole); plenty with 4 strong and a best within
+// PLENTY_HEADROOM of the top.
 export const STRONG_PCT = 90;
+export const THIN_PCT = 85;
 export const GAP_PCT = 95;
 export const GAP_HEADROOM = 0.06;
 export const PLENTY_HEADROOM = 0.03;
 // The summary leaves out cells that come up rarely (under MIN_WEIGHT of all
-// wears) or fall short by under MIN_DEFICIT, and a covered cell unless it
-// falls short by ROOM_DEFICIT: room to grow where the wardrobe is otherwise fine.
+// wears) or fall short by under MIN_DEFICIT. A covered cell short by
+// ROOM_DEFICIT is "room": room to grow where the wardrobe is otherwise fine.
 export const MIN_WEIGHT = 0.004;
 export const MIN_DEFICIT = 0.01;
 export const ROOM_DEFICIT = 0.05;
 
+// Thin: under 2 strong bottles, and a second best under THIN_PCT.
+const thinAt = (q, strong, s2) => strong < 2 && s2 < q[THIN_PCT];
+
+// A cell's status from what's there: the best score s1 (null with nothing),
+// the second best s2 and how many are strong.
+function statusOf(cell, q, s1, s2, strong) {
+  if (!cell.weight) return 'off';
+  if (s1 == null || s1 < q[GAP_PCT] || q[TARGET] - s1 >= GAP_HEADROOM) return 'gap';
+  if (thinAt(q, strong, s2)) return 'thin';
+  if (strong >= 4 && q[TARGET] - s1 < PLENTY_HEADROOM) return 'plenty';
+  return deficit(q[TARGET], s1, s2) >= ROOM_DEFICIT ? 'room' : 'covered';
+}
+// Whether the gap list names a cell: one that comes up, short by MIN_DEFICIT, a gap, thin or room to grow.
+const namedAs = (weight, status, d, { minWeight = MIN_WEIGHT, minDeficit = MIN_DEFICIT } = {}) => weight >= minWeight && d >= minDeficit
+  && (status === 'gap' || status === 'thin' || status === 'room');
+
 /**
  * How well `bottles` (rows of `table`) cover each cell: [{ cell, top (the
  * best 3: { bottle, score, pct }), strong, target, headroom, deficit,
- * severity (weight × deficit), status: 'gap' | 'thin' | 'covered' | 'plenty' }].
+ * severity (weight × deficit), status: 'gap' | 'thin' | 'room' | 'covered' |
+ * 'plenty', or 'off' for a use set to Never (weight 0) }].
  */
 export function coverage(bottles, table, cells, ref) {
   const m = cells.length;
@@ -269,17 +334,16 @@ export function coverage(bottles, table, cells, ref) {
     const top = scored.slice(0, 3).map(s => ({ ...s, pct: percentileIn(q, s.score) }));
     const strong = scored.filter(s => s.score >= q[STRONG_PCT]).length;
     const [s1 = 0, s2 = 0] = top.map(t => t.score);
-    const headroom = target - s1;
     const d = deficit(target, s1, s2);
-    const status = !top.length || top[0].pct < GAP_PCT || headroom >= GAP_HEADROOM ? 'gap'
-      : strong < 2 ? 'thin' : strong >= 4 && headroom < PLENTY_HEADROOM ? 'plenty' : 'covered';
-    return { cell, top, strong, target, headroom, deficit: d, severity: cell.weight * d, status };
+    const status = statusOf(cell, q, top.length ? s1 : null, s2, strong);
+    return { cell, top, strong, target, headroom: target - s1, deficit: d, severity: cell.weight * d, status };
   });
 }
 
 /** One line on a cell, in the app's voice ("Only Cream Velvet is a strong pick (89% match); …"). */
 export function explainCell(c) {
-  const [best, next] = c.top;
+  const [best] = c.top;
+  if (c.status === 'off') return 'You never dress for this.';
   if (!best) return 'Nothing you own fits here.';
   if (c.status === 'plenty') return `${c.strong} strong picks, led by ${best.bottle.name} (${pct(best.score)} match).`;
   if (c.status === 'covered') return `Covered by ${list(c.top.slice(0, Math.max(1, c.strong)).map(t => t.bottle.name))}.`;
@@ -310,19 +374,18 @@ function runsOf(cov, keep) {
   return runs;
 }
 
-const STATUS_ORDER = ['gap', 'thin', 'covered', 'plenty'];
-// Whether the summary names a cell.
-const named = (c, { minWeight = MIN_WEIGHT, minDeficit = MIN_DEFICIT } = {}) => c.cell.weight >= minWeight && c.deficit >= minDeficit
-  && (c.status === 'gap' || c.status === 'thin' || (c.status === 'covered' && c.deficit >= ROOM_DEFICIT));
+const STATUS_ORDER = ['gap', 'thin', 'room', 'covered', 'plenty', 'off'];
+const named = (c, opts) => namedAs(c.cell.weight, c.status, c.deficit, opts);
 
 /**
- * The thinnest spots, worst first: gap and thin cells with a real shortfall,
- * and covered ones short by ROOM_DEFICIT, neighbouring bands of one use and
- * slot merged. -> [{ cells (ids), use, slot, bands, status (the most serious
- * among them), severity, weight, title ("Formal on cold and cool nights"),
- * text (about the one that costs most) }]
+ * The thinnest spots: gap and thin cells with a real shortfall, then room to
+ * grow, each worst first, neighbouring bands of one use and slot merged.
+ * Every one by default: suggestions fill these cells and no others.
+ * -> [{ cells (ids), use, slot, bands, status ('gap' | 'thin' | 'room', the
+ * most serious among them), severity, weight, title ("Formal on cold and
+ * cool nights"), text (about the one that costs most) }]
  */
-export function gapSummary(cov, { limit = 6, minWeight = MIN_WEIGHT, minDeficit = MIN_DEFICIT } = {}) {
+export function gapSummary(cov, { limit = Infinity, minWeight = MIN_WEIGHT, minDeficit = MIN_DEFICIT } = {}) {
   return runsOf(cov, c => named(c, { minWeight, minDeficit })).map(run => {
     const worst = run.reduce((a, b) => (b.severity > a.severity ? b : a));
     const bands = run.map(c => c.cell.band);
@@ -338,13 +401,30 @@ export function gapSummary(cov, { limit = 6, minWeight = MIN_WEIGHT, minDeficit 
       title: cellTitle(worst.cell.use, worst.cell.slot, bands),
       text: run.length > 1 ? `Worst when ${worst.cell.band}: ${line.charAt(0).toLowerCase()}${line.slice(1)}` : line,
     };
-  }).sort((a, b) => b.severity - a.severity).slice(0, limit);
+  }).sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) || b.severity - a.severity).slice(0, limit);
+}
+
+/**
+ * One line on the whole wardrobe, before its gaps: { strongShare (the share
+ * of wears with a strong pick), short (gap and thin cells named), text }.
+ */
+export function overview(cov) {
+  const strongShare = cov.reduce((sum, c) => sum + (c.strong ? c.cell.weight : 0), 0);
+  const listed = cov.filter(c => named(c));
+  const short = listed.filter(c => c.status !== 'room').length;
+  const text = !cov.some(c => c.top.length) ? 'You don’t own anything yet, so every situation is open.'
+    : short ? `You have a strong pick for ${strongShare >= 0.95 ? 'nearly everything' : `${pct(strongShare)} of what`} you wear; here’s where it falls short.`
+      : listed.length ? 'Your wardrobe covers every situation well; here’s where it could go further.'
+        : 'Your wardrobe covers every situation well.';
+  return { strongShare: round(strongShare, 3), short, text };
 }
 
 /**
  * Where a wardrobe is deep: per use, its deepest run of "plenty" cells, most
  * strong bottles first. -> [{ cells, use, slot, bands, strong, title, text
- * ("Date Night on cold nights: 6 strong bottles, led by Amber Empire.") }]
+ * ("Date Night on cold nights: 6 strong bottles, led by Amber Empire.";
+ * across bands with different leaders, "led by CH Men Prive on cold nights
+ * and Jake on warm ones.") }]
  */
 export function strengths(cov, { limit = 4, minWeight = MIN_WEIGHT } = {}) {
   const best = new Map();
@@ -355,11 +435,13 @@ export function strengths(cov, { limit = 4, minWeight = MIN_WEIGHT } = {}) {
     if (!prev || depth > prev.depth) best.set(run[0].cell.use, { run, strong, depth });
   }
   return [...best.values()].sort((a, b) => b.strong - a.strong || b.depth - a.depth).slice(0, limit).map(({ run, strong }) => {
-    const lead = run.reduce((a, b) => (b.top[0].score > a.top[0].score ? b : a)).top[0].bottle;
-    const title = cellTitle(run[0].cell.use, run[0].cell.slot, run.map(c => c.cell.band));
+    const [first, last] = [run[0], run.at(-1)], slot = first.cell.slot;
+    const [a, b] = [first.top[0].bottle, last.top[0].bottle];
+    const lead = a === b ? a.name : `${a.name} on ${first.cell.band} ${SLOT_WORD[slot]} and ${b.name} on ${last.cell.band} ones`;
+    const title = cellTitle(first.cell.use, slot, run.map(c => c.cell.band));
     return {
-      cells: run.map(c => c.cell.id), use: run[0].cell.use, slot: run[0].cell.slot, bands: run.map(c => c.cell.band), strong, title,
-      text: `${title}: ${strong}${run.length > 1 ? ' or more' : ''} strong bottles, led by ${lead.name}.`,
+      cells: run.map(c => c.cell.id), use: first.cell.use, slot, bands: run.map(c => c.cell.band), strong, title,
+      text: `${title}: ${strong}${run.length > 1 ? ' or more' : ''} strong bottles, led by ${lead}.`,
     };
   });
 }
@@ -371,12 +453,14 @@ export function strengths(cov, { limit = 4, minWeight = MIN_WEIGHT } = {}) {
  * and set of shares. records: the pool (fromPool); byId: id -> record over
  * them; owned: the wardrobe's records (a visitor's outside the pool with
  * `about` attached); preferValue: only suggest bottles valued PREFER_VALUE or
- * more (default from the wardrobe, preferValueDefault).
+ * more (default from the wardrobe, preferValueDefault). Every bottle is
+ * scored as sameFooting has it.
  */
 export function gapContext({ owned, records, byId, summary = DEFAULT_CLIMATE, shares = null, preferValue = null }) {
+  summary ??= DEFAULT_CLIMATE;
   const cc = cellsFor(summary, { shares });
   const m = cc.cells.length;
-  const table = poolTable(records, summary, cc);
+  const table = poolTable(allFooted(records), summary, cc);
   const prefer = preferValue ?? preferValueDefault(owned, byId);
   const ctx = allowContext(owned, { byId, minValue: prefer ? PREFER_VALUE : null });
   // The reference: well-voted bottles in the wardrobe's lean range, not brigaded.
@@ -389,6 +473,7 @@ export function gapContext({ owned, records, byId, summary = DEFAULT_CLIMATE, sh
   const ownTable = fitTable(owned.map(sameFooting), cc);
   const cov = coverage(owned, ownTable, cc.cells, ref);
   const norms = poolNorms(records);
+  const leans = owned.map(f => genderLean(f, byId));
   return {
     owned, records, byId, summary, cc, table, rows, ref, ownTable, cov, norms,
     allow: ctx,
@@ -396,12 +481,19 @@ export function gapContext({ owned, records, byId, summary = DEFAULT_CLIMATE, sh
     valueSlope: valueSlope(owned, norms, byId),
     family: familyIndex(byId, owned),
     vecs: ownedVectors(owned, byId),
+    // The leans the wardrobe spans: its own 10th to 90th percentile, and all of it.
+    leanSpan: leanWindow(owned, 0, byId),
+    leanRange: leans.length >= 3 ? [Math.min(...leans), Math.max(...leans)] : null,
     severity: cov.reduce((sum, c) => sum + c.severity, 0),
+    gapSeverity: cov.reduce((sum, c) => sum + (named(c) ? c.severity : 0), 0),
   };
 }
 
-// The wardrobe's best and second best per cell, and who holds the best.
-function bestOwned(ctx) {
+// What the wardrobe has per cell, which suggestions add to: its best and
+// second best scores, who holds the best, how many strong bottles, and
+// whether the gap list names the cell (`short`: suggestions only count gains
+// there, so the gaps a report lists are the ones its picks fill).
+function ownedState(ctx) {
   const m = ctx.cc.cells.length, s1 = new Float32Array(m), s2 = new Float32Array(m), who = new Array(m).fill(null);
   ctx.owned.forEach((b, i) => {
     for (let j = 0; j < m; j++) {
@@ -410,16 +502,33 @@ function bestOwned(ctx) {
       else if (x > s2[j]) s2[j] = x;
     }
   });
-  return { s1, s2, who };
+  const strong = Uint16Array.from(ctx.cov, c => c.strong), short = Uint8Array.from(ctx.cov, c => (named(c) ? 1 : 0));
+  return { s1, s2, who, strong, short, picks: new Set() };
+}
+
+// Counts a suggestion as owned: `record` scoring `row` from rowAt. A cell it
+// lifts out of the gap list stops counting for the picks after it.
+function addTo(state, row, rowAt, record, ctx) {
+  const { cells } = ctx.cc;
+  for (let j = 0; j < cells.length; j++) {
+    const x = row[rowAt + j], q = ctx.ref[j];
+    if (x > state.s1[j]) [state.s2[j], state.s1[j], state.who[j]] = [state.s1[j], x, record];
+    else if (x > state.s2[j]) state.s2[j] = x;
+    if (x >= q[STRONG_PCT]) state.strong[j]++;
+    const status = statusOf(cells[j], q, state.s1[j], state.s2[j], state.strong[j]);
+    if (!namedAs(cells[j].weight, status, deficit(q[TARGET], state.s1[j], state.s2[j]))) state.short[j] = 0;
+  }
+  state.picks.add(record);
 }
 
 // How much less short every cell falls with a bottle scoring `row` added to
-// best/second best s1, s2: per cell, weight × (deficit before - after).
-function cellGains(row, rowAt, cells, ref, s1, s2) {
+// best/second best s1, s2: per cell, weight × (deficit before - after), only
+// in `focus` cells when given.
+function cellGains(row, rowAt, cells, ref, s1, s2, focus = null) {
   const out = [];
   for (let j = 0; j < cells.length; j++) {
     const x = row[rowAt + j];
-    if (x <= s2[j] || !cells[j].weight) continue;
+    if (x <= s2[j] || !cells[j].weight || (focus && !focus[j])) continue;
     const target = ref[j][TARGET];
     const before = deficit(target, s1[j], s2[j]);
     const after = x > s1[j] ? deficit(target, x, s1[j]) : deficit(target, s1[j], x);
@@ -428,24 +537,43 @@ function cellGains(row, rowAt, cells, ref, s1, s2) {
   return out;
 }
 
-// A fill matters when it lifts the wardrobe's best by FILL_MARGIN or more, or
-// adds a strong pick where it has fewer than 2, in a cell that comes up
-// (MIN_WEIGHT). One point better than a bottle you love doesn't fill anything.
+// A fill matters when it lifts the best by FILL_MARGIN or more, or adds a
+// strong pick where the cell is thin, in a cell that comes up (MIN_WEIGHT).
+// One point better than a bottle you love doesn't fill anything, and neither
+// does a strong pick that is kin of the one it backs up (KIN_SIM alike, or
+// voters link them): a Cream Velvet clone adds no depth to Cream Velvet. A
+// bottle that fades fast fills nothing where the occasion wants it to last.
 export const FILL_MARGIN = 0.02;
+export const KIN_SIM = 0.75;
 
-// What a bottle would add, as fills against the wardrobe: { cell, from (the
-// wardrobe's best there), second (its second best), to, first (beats the
-// best), pct, beats (the best bottle), matters, real (matters, in a cell the
-// summary names), gain }, most gain first.
-function fillsOf(gains, row, rowAt, ctx, own) {
+// Whether a and b smell like one family: KIN_SIM alike, a placed by voters'
+// links next to b (or b's original), or a family link between them.
+function kin(a, b, ctx) {
+  if (!b) return false;
+  if (ctx.family.dupeOf(a)?.via === b || similarity(a, b) >= KIN_SIM) return true;
+  return signalsOf(a, ctx.byId).family.includes(String(b.id)) || signalsOf(b, ctx.byId).family.includes(String(a.id));
+}
+
+// What `record` (scoring `row` from rowAt) would add, as fills against
+// `state`: { cell, from (the best there), second (the second best), to,
+// first (beats the best), pct, beats (the best bottle), beatsPick (an earlier
+// suggestion, not an owned bottle), matters, real (matters, in a cell the
+// summary names), fades (would matter, but it doesn't last), gain }, those
+// that matter first, then most gain.
+function fillsOf(gains, row, rowAt, ctx, state, record) {
+  const weak = weakLongevity(record);
   return gains.map(({ j, gain }) => {
-    const c = ctx.cov[j], to = row[rowAt + j];
-    const matters = c.cell.weight >= MIN_WEIGHT && (to - own.s1[j] >= FILL_MARGIN || (c.strong < 2 && to >= ctx.ref[j][STRONG_PCT]));
+    const c = ctx.cov[j], to = row[rowAt + j], beats = state.who[j];
+    const lifts = to - state.s1[j] >= FILL_MARGIN;
+    const deepens = !lifts && thinAt(ctx.ref[j], state.strong[j], state.s2[j]) && to >= ctx.ref[j][STRONG_PCT] && !kin(record, beats, ctx);
+    const would = c.cell.weight >= MIN_WEIGHT && (lifts || deepens);
+    const fades = would && weak && c.cell.occasion?.performance?.longevity > 0;
+    const matters = would && !fades;
     return {
-      cell: c.cell, from: own.s1[j], second: own.s2[j], to, first: to > own.s1[j], pct: percentileIn(ctx.ref[j], to), beats: own.who[j],
-      matters, real: matters && named(c), gain,
+      cell: c.cell, from: state.s1[j], second: state.s2[j], to, first: to > state.s1[j], pct: percentileIn(ctx.ref[j], to),
+      beats, beatsPick: state.picks.has(beats), matters, real: matters && Boolean(state.short[j]), fades, gain,
     };
-  }).sort((a, b) => b.gain - a.gain);
+  }).sort((a, b) => b.matters - a.matters || b.real - a.real || b.gain - a.gain);
 }
 
 // A suggestion's risk, as a multiplier: a high-risk bottle is never
@@ -454,27 +582,35 @@ function fillsOf(gains, row, rowAt, ctx, own) {
 const RISK_MULT = { low: 1, unknown: 1, medium: 0.85, high: 0 };
 const RISK_REASON = 0.9;
 const riskMult = risk => RISK_MULT[risk.level] * RISK_REASON ** risk.reasons.length;
+// A suggestion leaning past the wardrobe's own range (its 10th to 90th
+// percentile) counts for less, by how far past: allow() lets in a wider
+// window, and Brooke's picks drifted more masculine than anything she owns.
+const leanMult = (record, ctx) => {
+  const lean = genderLean(record, ctx.byId), [lo, hi] = ctx.leanSpan;
+  return Math.max(0, 1 - Math.max(0, lo - lean, lean - hi));
+};
 // Kin of an earlier pick (a family link either way) counts as a near twin.
 const PICK_KIN = 0.15;
 // Within SAME_SIM of an owned bottle a bottle smells too much alike, whatever
 // voters say: the buy check calls it redundant, and it's never suggested.
-export const SAME_SIM = 0.9;
+// (Sauvage EDT and EDP are 0.80 alike, Club de Nuit Intense and Aventus 0.78.)
+export const SAME_SIM = 0.8;
 
 /**
- * Gap fillers, greedily: each round takes the candidate whose addition most
- * cuts the total shortfall (gain), times its quality and novelty, then counts
- * it as owned, so the next pick fills something else and its value never
- * exceeds the last one's. Candidates pass allow() (and the value filter),
- * aren't owned, an owned dupe's original or its twin, discontinued or high
- * risk, and have a fill that matters. Novelty against the wardrobe (the
- * costly part) is worked out lazily, in order of what a candidate could still
- * be worth. -> [{ record, gain, value, quality, novelty: { mult, sim,
- * nearest, dupe }, fills, twin, risk, shared }]
+ * Gap fillers, greedily: each round takes the candidate whose fills that
+ * matter most cut the shortfall in the cells the gap list names (gain),
+ * times its quality, risk, lean and novelty, then counts it as owned, so the
+ * next pick fills something else, names it as the bottle to beat, and is
+ * worth no more than the last. Candidates pass allow() (and the value
+ * filter), aren't owned, an owned dupe's original or its twin, discontinued
+ * or high risk, and have a named cell they fill. Novelty against the
+ * wardrobe (the costly part) is worked out lazily, in order of what a
+ * candidate could still be worth. -> [{ record, gain, value, quality,
+ * novelty: { mult, sim, nearest, dupe }, fills, twin, risk, shared }]
  */
 export function suggest(ctx, { k = 5 } = {}) {
   const { cc: { cells }, table, ref, records, byId } = ctx, m = cells.length;
-  const own = bestOwned(ctx);
-  const s1 = Float32Array.from(own.s1), s2 = Float32Array.from(own.s2);
+  const state = ownedState(ctx);
   const meta = records.map((r, i) => {
     if (!allow(r, ctx.allow) || signalsOf(r).flags.includes('discontinued')) return null;
     const dupe = ctx.family.dupeOf(r);
@@ -482,13 +618,19 @@ export function suggest(ctx, { k = 5 } = {}) {
     const risk = riskOf(r, byId);
     if (!riskMult(risk)) return null;
     const q = candidateQuality(r, ctx.norms, { valueSlope: ctx.valueSlope, byId });
-    return { i, record: r, risk, q, bound: q.mult * riskMult(risk) * (dupe?.mult ?? 1), nov: null, fit: null };
+    const mult = q.mult * riskMult(risk) * leanMult(r, ctx);
+    return mult ? { i, record: r, risk, q, mult, bound: mult * (dupe?.mult ?? 1), nov: null, out: false } : null;
   }).filter(Boolean);
-  // Worked out for candidates that could still win: novelty, and whether anything it adds matters.
+  // Worked out for candidates that could still win: novelty, and the fills
+  // that matter now. The wardrobe only grows, so one with none stays out.
   const judge = mt => {
     mt.nov ??= novelty(mt.record, ctx.vecs, ctx.family);
-    mt.fit ??= mt.nov.sim < SAME_SIM && fillsOf(cellGains(table, mt.i * m, cells, ref, own.s1, own.s2), table, mt.i * m, ctx, own).some(f => f.matters);
-    return mt.fit ? mt.nov.mult : 0;
+    if (mt.nov.sim >= SAME_SIM) mt.out = true;
+    if (mt.out) return null;
+    const fills = fillsOf(cellGains(table, mt.i * m, cells, ref, state.s1, state.s2, state.short), table, mt.i * m, ctx, state, mt.record);
+    const gain = fills.reduce((sum, f) => sum + (f.real ? f.gain : 0), 0);
+    if (!gain) mt.out = true;
+    return gain ? { fills, gain } : null;
   };
   const picks = [];
   const pickNovelty = r => {
@@ -502,26 +644,23 @@ export function suggest(ctx, { k = 5 } = {}) {
   for (let round = 0; round < k; round++) {
     const options = [];
     for (const mt of meta) {
-      if (mt.picked || mt.fit === false) continue;
-      const gain = cellGains(table, mt.i * m, cells, ref, s1, s2).reduce((sum, g) => sum + g.gain, 0);
-      if (gain > 0) options.push({ mt, gain, bound: gain * mt.bound });
+      if (mt.picked || mt.out) continue;
+      const gain = cellGains(table, mt.i * m, cells, ref, state.s1, state.s2, state.short).reduce((sum, g) => sum + g.gain, 0);
+      if (gain > 0) options.push({ mt, bound: gain * mt.bound });
     }
     options.sort((a, b) => b.bound - a.bound);
     let best = null;
     for (const o of options) {
       if (best && o.bound <= best.value) break;
-      const value = o.gain * o.mt.q.mult * riskMult(o.mt.risk) * judge(o.mt) * pickNovelty(o.mt.record);
-      if (value > 0 && (!best || value > best.value)) best = { ...o, value };
+      const now = judge(o.mt);
+      if (!now) continue;
+      const value = now.gain * o.mt.mult * o.mt.nov.mult * pickNovelty(o.mt.record);
+      if (value > 0 && (!best || value > best.value)) best = { mt: o.mt, ...now, value };
     }
     if (!best) break;
     const { mt } = best, r = mt.record;
-    const gains = cellGains(table, mt.i * m, cells, ref, s1, s2);
-    for (const { j } of gains) {
-      const x = table[mt.i * m + j];
-      if (x > s1[j]) [s2[j], s1[j]] = [s1[j], x];
-      else if (x > s2[j]) s2[j] = x;
-    }
     mt.picked = true;
+    addTo(state, table, mt.i * m, r, ctx);
     const near = mt.nov.nearest;
     picks.push({
       record: r,
@@ -529,7 +668,7 @@ export function suggest(ctx, { k = 5 } = {}) {
       value: best.value,
       quality: mt.q,
       novelty: mt.nov,
-      fills: fillsOf(gains, table, mt.i * m, ctx, own),
+      fills: best.fills,
       twin: cheaperTwin(r, byId, ctx.allow),
       risk: mt.risk,
       shared: near ? sharedTraits(r, near.record) : [],
@@ -540,9 +679,35 @@ export function suggest(ctx, { k = 5 } = {}) {
 
 // ---------------------------------------------------------------- the buy check
 
-// A bottle whose fills that matter cut the named gaps by STRONG_GAIN or more,
-// rated at least the pool's usual and safe to blind buy, is a strong fit.
+// A strong fit's fills that matter cut the named gaps by STRONG_GAIN or more,
+// and by as much as the pool's top STRONG_TOP would (for a thin wardrobe a
+// third of the pool fills a real gap).
 export const STRONG_GAIN = 0.0015;
+export const STRONG_TOP = 0.02;
+// Rated under MIN_RATING (the pool's bottom fifth) by RATED_VOTES voters or
+// more, a bottle that would fill something is risky, never good.
+const RATED_VOTES = 50;
+// Under LIKE_SIM alike to everything owned, with no voters' link, nothing owned smells like it.
+const LIKE_SIM = 0.5;
+// The lean past the wardrobe's own extremes that earns "more masculine than anything you own".
+const LEAN_NOTE = 0.1;
+
+// What a strong fit's real gain must reach for a wardrobe: STRONG_GAIN, or
+// the pool's top STRONG_TOP of gains, whichever is more. Once per context.
+const bars = new WeakMap();
+function strongBar(ctx) {
+  if (!bars.has(ctx)) {
+    const { cc: { cells }, table, ref } = ctx, m = cells.length, state = ownedState(ctx), gains = [];
+    ctx.records.forEach((r, i) => {
+      if (ctx.allow.owned.has(String(r.id))) return;
+      const g = cellGains(table, i * m, cells, ref, state.s1, state.s2, state.short);
+      gains.push(g.length ? fillsOf(g, table, i * m, ctx, state, r).reduce((sum, f) => sum + (f.real ? f.gain : 0), 0) : 0);
+    });
+    gains.sort((a, b) => a - b);
+    bars.set(ctx, Math.max(STRONG_GAIN, quantile(gains, 1 - STRONG_TOP) ?? 0));
+  }
+  return bars.get(ctx);
+}
 
 // Fills grouped by use and slot, most gain first, as titles: "Office on cold
 // and cool days and Formal on cool nights" (the top two).
@@ -565,67 +730,87 @@ const lower = t => t.charAt(0).toLowerCase() + t.slice(1);
  * Whether a bottle is worth buying for this wardrobe: { verdict: 'Strong fit'
  * | 'Good' | 'Redundant' | 'Risky', reasons (2–3 short sentences), fills (the
  * ones that matter), gain, realGain, overlap: { bottle, via, sim, link },
- * risk, twin, quality }.
- * Redundant: owned, an owned dupe's original or a twin of one (dupeOf),
- * within SAME_SIM of an owned bottle, or nothing it adds matters. Risky:
- * riskOf says high. Strong fit: its fills cut the named gaps by STRONG_GAIN,
+ * risk, twin, quality }. It's scored as its pool row when it has one, else
+ * as sameFooting has it, so a catalog record and its pool row check alike.
+ * In order: Redundant when it duplicates something owned (owned, an owned
+ * dupe's original or a twin of one, SAME_SIM alike to an owned bottle, or
+ * KIN_SIM alike and placed in an owned bottle's family by voters). Risky
+ * when riskOf says high. Redundant when nothing it adds matters: the
+ * wardrobe already does what it would. Risky when voters rate it under
+ * MIN_RATING. Strong fit when its fills cut the named gaps by strongBar,
  * with quality at or above the pool's usual and low risk. Good otherwise.
  */
 export function buyCheck(record, ctx) {
-  const own = bestOwned(ctx), cells = ctx.cc.cells;
-  const nov = novelty(record, ctx.vecs, ctx.family);
+  const scored = sameFooting(poolRowOf(record, ctx.byId) ?? record);
+  const state = ownedState(ctx), cells = ctx.cc.cells;
+  const nov = novelty(scored, ctx.vecs, ctx.family);
   const dupe = nov.dupe;
   const mine = dupe?.kind === 'owned';
-  const row = fitTable([record], ctx.cc);
-  const all = mine ? [] : fillsOf(cellGains(row, 0, cells, ctx.ref, own.s1, own.s2), row, 0, ctx, own);
+  const row = fitTable([scored], ctx.cc);
+  const all = mine ? [] : fillsOf(cellGains(row, 0, cells, ctx.ref, state.s1, state.s2), row, 0, ctx, state, scored);
   const fills = all.filter(f => f.matters);
   const gain = all.reduce((sum, f) => sum + f.gain, 0);
   const realGain = fills.filter(f => f.real).reduce((sum, f) => sum + f.gain, 0);
-  const risk = riskOf(record, ctx.byId);
-  const twin = cheaperTwin(record, ctx.byId, ctx.allow);
-  const q = candidateQuality(record, ctx.norms, { valueSlope: ctx.valueSlope, byId: ctx.byId });
+  const risk = riskOf(scored, ctx.byId);
+  const twin = cheaperTwin(scored, ctx.byId, ctx.allow);
+  const q = candidateQuality(scored, ctx.norms, { valueSlope: ctx.valueSlope, byId: ctx.byId });
   // The nearest owned bottle; for an original, the dupe you own rather than itself.
   let near = nov.nearest, sim = nov.sim;
-  if (near && String(near.record.id) === String(record.id)) [near, sim] = [{ record: near.via, via: near.via }, similarity(record, near.via)];
+  if (near && String(near.record.id) === String(scored.id)) [near, sim] = [{ record: near.via, via: near.via }, similarity(scored, near.via)];
   const overlap = near && !mine ? { bottle: near.record, via: near.via, sim, link: dupe?.text ?? null } : null;
 
   const twinOwned = dupe && ['owned', 'original', 'near'].includes(dupe.kind);
+  const lookalike = !twinOwned && (nov.sim >= SAME_SIM || (dupe && nov.sim >= KIN_SIM));
+  const lowRated = scored.ratingVotes >= RATED_VOTES && scored.rating < MIN_RATING;
   let verdict;
-  if (twinOwned || nov.sim >= SAME_SIM || !fills.length) verdict = 'Redundant';
+  if (twinOwned || lookalike) verdict = 'Redundant';
   else if (risk.level === 'high') verdict = 'Risky';
-  else if (realGain >= STRONG_GAIN && q.mult >= 1 && (risk.level === 'low' || risk.level === 'unknown')) verdict = 'Strong fit';
+  else if (!fills.length) verdict = 'Redundant';
+  else if (lowRated) verdict = 'Risky';
+  else if (realGain >= strongBar(ctx) && q.mult >= 1 && risk.level === 'low') verdict = 'Strong fit';
   else verdict = 'Good';
 
   const nearWho = near && (near.record === near.via ? `your ${near.via.name}` : `${near.record.name}, the original of your ${near.via.name}`);
-  const shared = near ? sharedTraits(record, near.record, 3) : [];
+  const shared = near ? sharedTraits(scored, near.record, 3) : [];
   const overlapLine = dupe ? `${dupe.text}.`
     : nearWho && `Closest to ${nearWho}${shared.length ? `: both ${shared.length > 1 ? `share ${list(shared)}` : `lean on ${shared[0]}`}` : ''}.`;
   const firsts = fills.filter(f => f.first), seconds = fills.filter(f => !f.first);
   const fillLine = firsts.length ? `It would be your best for ${fillsText(firsts)}${realGain ? '' : ', though you’re well stocked there'}.`
     : seconds.length ? `It would be a second strong pick for ${fillsText(seconds)}.` : null;
-  const lean = genderLean(record, ctx.byId), [lo, hi] = ctx.allow.lean;
-  const leanLine = lean < lo ? 'Voters call it more feminine than anything you own.'
-    : lean > hi ? 'Voters call it more masculine than anything you own.' : null;
-  // Why it adds little: where it comes closest to beating what's owned.
-  const barely = all.find(f => f.first && f.beats && f.cell.weight >= MIN_WEIGHT);
-  const littleLine = !all.length ? 'It wouldn’t beat anything you own, in any weather or occasion.'
-    : barely ? `It adds little: it barely beats your ${barely.beats.name} for ${cellLabel(barely.cell)}.`
-      : 'It adds little: it wouldn’t beat your best bottle anywhere.';
+  const lean = genderLean(scored, ctx.byId), [lo, hi] = ctx.leanRange ?? [-Infinity, Infinity];
+  const leanLine = lean < lo - LEAN_NOTE ? 'Voters call it more feminine than anything you own.'
+    : lean > hi + LEAN_NOTE ? 'Voters call it more masculine than anything you own.' : null;
+  const ratedLine = lowRated ? `Voters rate it only ${scored.rating.toFixed(1)}★.`
+    : scored.ratingVotes ? `Rated ${scored.rating.toFixed(1)}★ by ${scored.ratingVotes.toLocaleString('en-US')} voters.`
+      : 'There’s no crowd data on it yet.';
+  // Why it adds nothing: it fades where it would help, or where it does best
+  // (closest to the wardrobe's best, in a cell that comes up) it's matched.
+  const fades = all.filter(f => f.fades);
+  let close = null;
+  cells.forEach((cell, j) => {
+    const by = row[j] - state.s1[j];
+    if (cell.weight >= MIN_WEIGHT && state.who[j] && (!close || by > close.by)) close = { cell, who: state.who[j], by };
+  });
+  const unlike = nov.sim < LIKE_SIM && !dupe;
+  const coveredLine = fades.length ? `It would be your best for ${fillsText(fades)}, but it doesn’t last long enough for that.`
+    : !close ? 'It wouldn’t beat anything you own, in any weather or occasion.'
+      : `${unlike ? 'Nothing you own smells like it, but' : 'It adds little:'} ${close.by > 0
+        ? `it would barely beat your ${close.who.name} for ${cellLabel(close.cell)}${unlike ? ', where it does best' : ''}`
+        : `your ${close.who.name} outdoes it even for ${cellLabel(close.cell)}, where it does best`}.`;
 
   const reasons = [];
   if (mine) reasons.push('You own it.');
-  else if (twinOwned || nov.sim >= SAME_SIM) {
-    const same = twinOwned ? dupe.via : near.via;
-    reasons.push(twinOwned ? `${dupe.text}.` : `It smells nearly the same as ${nearWho}.`,
+  else if (twinOwned || lookalike) {
+    const same = dupe?.via ?? near.via;
+    reasons.push(dupe ? `${dupe.text}.` : `It smells ${nov.sim >= 0.9 ? 'nearly the same as' : 'a lot like'} ${nearWho}.`,
       fillLine ? `Still, ${lower(fillLine)}` : `It would add nothing your ${same.name} doesn’t already do.`);
-  } else if (verdict === 'Redundant') {
-    reasons.push(littleLine, overlapLine);
   } else if (verdict === 'Risky') {
-    reasons.push(...risk.reasons.slice(0, 2), fillLine);
+    reasons.push(...[lowRated && ratedLine, ...risk.reasons].filter(Boolean).slice(0, 2), fillLine ?? coveredLine);
+  } else if (verdict === 'Redundant') {
+    reasons.push(coveredLine, lowRated || unlike ? (!lowRated && twin && !twin.owned && twin.text) || ratedLine : overlapLine);
   } else {
     reasons.push(fillLine, overlapLine);
-    reasons.push((risk.level === 'medium' && risk.reasons[0]) || leanLine || (twin && !twin.owned && twin.text)
-      || `Rated ${record.rating.toFixed(1)}★ by ${record.ratingVotes.toLocaleString('en-US')} voters.`);
+    reasons.push((risk.level === 'medium' && risk.reasons[0]) || leanLine || (twin && !twin.owned && twin.text) || ratedLine);
   }
   return { verdict, reasons: reasons.filter(Boolean).slice(0, 3), fills, gain, realGain, overlap, risk, twin, quality: q };
 }
@@ -639,24 +824,28 @@ export const stub = r => r && {
 };
 const fillJSON = f => ({
   cell: f.cell.id, title: cellLabel(f.cell), from: round(f.from, 3), second: round(f.second, 3), to: round(f.to, 3), first: f.first, pct: f.pct,
-  beats: f.beats ? stub(f.beats) : null, matters: f.matters, real: f.real, gain: round(f.gain, 5),
+  beats: f.beats ? stub(f.beats) : null, beatsPick: f.beatsPick, matters: f.matters, real: f.real, fades: f.fades, gain: round(f.gain, 5),
 });
 const twinJSON = t => t && { ...stub(t.record), value: t.value, owned: t.owned, text: t.text };
 
 /**
  * The report as plain data (ids, names, numbers and text: JSON and
- * postMessage safe): the cells, each one's coverage, gaps, strengths and k
- * suggestions. A suggestion carries its full record, for the app to rank it
- * with the wardrobe for its own reasons.
+ * postMessage safe): the cells, each one's coverage (status 'off' for a use
+ * set to Never), an overview line, gaps, strengths and k suggestions.
+ * `severity` is the whole shortfall, `gapSeverity` the named cells' part,
+ * which suggestions cut (`severityAfter`). A suggestion carries its full
+ * record, for the app to rank it with the wardrobe for its own reasons.
  */
-export function gapReport(ctx, { k = 5, gaps = 6 } = {}) {
+export function gapReport(ctx, { k = 5, gaps = Infinity } = {}) {
   const picks = suggest(ctx, { k });
-  let left = ctx.severity;
+  let left = ctx.gapSeverity;
   return {
     preferValue: ctx.preferValue,
     lean: ctx.allow.lean,
     valueSlope: round(ctx.valueSlope, 3),
     severity: round(ctx.severity, 5),
+    gapSeverity: round(ctx.gapSeverity, 5),
+    overview: overview(ctx.cov),
     climate: Object.fromEntries(Object.entries(ctx.cc.slotBands).map(([key, sb]) => [key, sb.share])),
     coverage: ctx.cov.map(c => ({
       cell: c.cell.id, use: c.cell.use, slot: c.cell.slot, band: c.cell.band, title: cellLabel(c.cell),

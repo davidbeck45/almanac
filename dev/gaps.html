@@ -57,8 +57,8 @@ try {
   out.textContent = [
     `First report ${Math.round(t1 - t0)} ms (pool ${Math.round(first.ms.pool)}, context ${Math.round(first.ms.context)}, report ${Math.round(first.ms.report)}); other shares ${Math.round(t2 - t1)} ms; check ${Math.round(t3 - t2)} ms`,
     '', 'Strengths', ...r.strengths.map(s => `  ${s.text}`),
-    '', 'Gaps', ...r.gaps.map(g => `  ${g.title} (${g.status})\n    ${g.text}`),
-    '', 'Picks', ...r.picks.map((p, i) => `  ${i + 1}. ${p.name} by ${p.brand} · ${p.rating}★ · ${p.risk.level} risk\n${p.fills.filter(f => f.matters).slice(0, 3).map(f => `     ${f.title}: ${pct(f.to)}${f.beats ? ` (your ${f.beats.name} ${pct(f.from)})` : ''}`).join('\n')}`),
+    '', r.overview.text, ...r.gaps.map(g => `  ${g.title} (${g.status === 'room' ? 'room to grow' : g.status})\n    ${g.text}`),
+    '', 'Picks', ...r.picks.map((p, i) => `  ${i + 1}. ${p.name} by ${p.brand} · ${p.rating}★ · ${p.risk.level} risk\n${p.fills.filter(f => f.matters).slice(0, 3).map(f => `     ${f.title}: ${pct(f.to)}${f.beats ? ` (${f.beatsPick ? '' : 'your '}${f.beats.name} ${pct(f.from)})` : ''}`).join('\n')}`),
     '', `Buy check: ${check.name} by ${check.brand}: ${check.verdict}`, ...check.reasons.map(x => `  ${x}`),
   ].join('\n');
 } catch (err) {

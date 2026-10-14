@@ -36,10 +36,10 @@ import { parseUses, sharesFrom } from '../src/uses.js';
 const SLOTS = ['day', 'night'];
 const squash = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
 
-/** An occasion by id or label, any case or spacing ("date", "Date Night", "night out"), or null. */
+/** An occasion by id, label or a former label, any case or spacing ("date", "Date Night", "night out", "everyday"), or null. */
 export function findOccasion(text) {
   const q = squash(text);
-  return OCCASIONS.find(o => squash(o.id) === q || squash(o.label) === q) ?? null;
+  return OCCASIONS.find(o => [o.id, o.label, ...(o.aliases ?? [])].some(n => squash(n) === q)) ?? null;
 }
 
 /**
@@ -340,9 +340,11 @@ async function main() {
     const pct = x => `${Math.round(x * 100)}%`;
     const stars = r => `${r.rating.toFixed(1)}★ from ${r.ratingVotes.toLocaleString('en-US')} votes`;
     const byLine = r => `${r.name} by ${r.brand}${r.year ? ` (${r.year})` : ''}`;
+    // The bottle a fill beats or backs up: owned, or an earlier suggestion.
+    const whose = f => (f.beatsPick ? `${f.beats.name} (suggested above)` : `your ${f.beats.name}`);
     const fillLine = f => (!f.beats ? `${f.title}: ${pct(f.to)}`
-      : f.first ? `${f.title}: ${pct(f.to)}, over your ${f.beats.name} at ${pct(f.from)}`
-        : `${f.title}: ${pct(f.to)} as a second pick, behind your ${f.beats.name} at ${pct(f.from)}`);
+      : f.first ? `${f.title}: ${pct(f.to)}, over ${whose(f)} at ${pct(f.from)}`
+        : `${f.title}: ${pct(f.to)} as a second pick, behind ${whose(f)} at ${pct(f.from)}`);
     const valueText = `prefer great value: ${ctx.preferValue ? 'on (only bottles voters value 3.8+)' : 'off'}`;
 
     if (args.check) {
@@ -393,14 +395,14 @@ async function main() {
       console.log(JSON.stringify({ climate: where, bottles: fragrances.length, ...report, picks }, null, 2));
       return;
     }
-    const STATUS = { gap: 'gap', thin: 'thin', covered: 'room to grow' };
+    const STATUS = { gap: 'gap', thin: 'thin', room: 'room to grow' };
     const shareText = USES.map(u => `${useLabel(u)} ${pct(shares?.[u.id] ?? u.share)}`).join(', ');
     console.log(`${fragrances.length} bottles · climate: ${where} · ${valueText}`);
     console.log(`How you wear: ${shareText}`);
     console.log('\nStrengths');
     for (const s of report.strengths) console.log(`  ${s.text}`);
     if (!report.strengths.length) console.log('  Nothing is deep yet.');
-    console.log('\nGaps, most costly first');
+    console.log(`\n${report.overview.text}`);
     for (const g of report.gaps) console.log(`  ${g.title} (${STATUS[g.status]})\n    ${g.text}`);
     if (!report.gaps.length) console.log('  None worth naming.');
     console.log('\nTo fill them (each counts as owned before the next)');
@@ -415,6 +417,7 @@ async function main() {
       if (p.risk.reasons.length) console.log(`     Risk: ${p.risk.reasons.join(' ')}`);
     });
     if (!report.picks.length) console.log('  Nothing in the pool would add enough.');
+    else if (report.picks.length < k) console.log('  Nothing else would fill these gaps by enough.');
     return;
   }
 

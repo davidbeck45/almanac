@@ -48,7 +48,14 @@ export function climateYears(now = new Date()) {
   return [`${end - YEARS + 1}-01-01`, `${end}-12-31`];
 }
 
-const browserStorage = () => (typeof window === 'object' && window.localStorage) || null;
+// Reading localStorage throws where the browser blocks it (cookies off, some private modes).
+const browserStorage = () => {
+  try {
+    return (typeof window === 'object' && window.localStorage) || null;
+  } catch {
+    return null;
+  }
+};
 
 function readCache(storage) {
   try {
