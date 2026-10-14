@@ -1,6 +1,6 @@
 ---
 name: ui-check
-description: Screenshot and inspect the Scentcast app headlessly with dev/shoot.mjs, on saved New York weather so it works any day and offline. Use after changing anything the app draws (src/views, src/ui, src/css, src/app, index.html), before saying a UI fix works, when asked to look at or screenshot a screen, and when Open-Meteo answers 429.
+description: Screenshot and inspect the Scentcast app headlessly with dev/shoot.mjs, on saved New York weather so it works any day and offline. Use after changing anything the app draws (src/views, src/ui, src/css, src/app, src/scene.js, src/tokens.css, src/theme.js, index.html), before saying a UI fix works, when asked to look at or screenshot a screen, and when Open-Meteo answers 429 while testing.
 ---
 
 # UI check
@@ -50,7 +50,7 @@ Every screen at once, in both themes with the sample journal, takes about 90 sec
 
 Variants:
 
-- **Theme**: add `&theme=gruvbox` to the query.
+- **Theme**: add `&theme=gruvbox` to the query. Both themes are dark and the app has no light mode, so shoot's `--dark` and `--light` change nothing: "dark mode" is the default theme; shoot gruvbox too when the question is about themes.
 - **Still sky**: `--reduced-motion` stops stars, rain and smoke, so a before and after differ only by your change. Shoot the same recipe into `shots/before/` and `shots/after/`.
 - **Whole page**: `--full-shot <file>` at that point, or `--full-page` for every shot. On a phone the fixed tab bar lands where the screen ended, over the content; hide it first with `--eval "document.querySelector('.nav').style.display = 'none'"`.
 - **Interaction**: `--click .hero-pick --wait .bp-head` opens the top pick's page (a real tap on phones); `--click '.seg.glass [data-value=day]'` flips Now to Day; `--key Tab` moves focus; `--click '.disc-search input' --type fig` searches Discover; `--eval` does the rest.
@@ -58,7 +58,7 @@ Variants:
 Personas, as another `--init` or in the query:
 
 - **David's demo**: the default.
-- **A shared list** (Brooke's): `&c=69541,122015,128201,115992,64338,137101,77284,97237,88207&n=Brooke`, wait for `.banner`.
+- **A shared list** (Brooke's): `&c=69541,122015,128201,115992,64338,137101,77284,97237,88207&n=Brooke`. Its `.banner` shows on the Wear panes and Owned only; on other screens wait on the screen's selector from the table.
 - **An empty Mine**: `--init "localStorage.setItem('scentcast.active', 'mine')"`, wait for `.message`.
 - **A wear journal**: `INIT="$(node dev/offline/init.mjs --journal)"` logs 66 wears of 10 bottles over six weeks, the newest three days ago, for Worn's calendar and the rotation lines on picks and bottle pages.
 - **A want list**: `--init "localStorage.setItem('scentcast.want', JSON.stringify([{ id: '124649', added: '2026-10-01' }, { id: '9828', added: '2026-10-02' }]))"`, wait for `.wish`.
@@ -90,6 +90,6 @@ Both should come back `false` and `0` once the screen has loaded.
 
 Say which screens, sizes, themes and personas you shot, where the files are, and what you saw, naming the shot that shows a fix working. Stop the server.
 
-## The CLI on a 429 day
+## The CLI while testing
 
-`node --import ./dev/offline/stub.mjs scripts/recommend.mjs --loc "40.71,-74.01,New York" …` answers the CLI's forecast and climate requests the same way. `--city` still looks the place up online; `--loc` doesn't.
+`node --import ./dev/offline/stub.mjs scripts/recommend.mjs --loc "40.71,-74.01,New York" …` answers the CLI's forecast and climate requests the same way. It's test data: every `--loc` or `--city` runs on New York's saved week and climate, and the output names the place "New York (saved)". To answer David on a 429 day, tell him the forecast or climate isn't available.
