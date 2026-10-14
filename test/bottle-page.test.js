@@ -613,7 +613,12 @@ test('tonight’s pick is a bottle you own when one is among them', () => {
   const pairs = [{ a: dupe, b: layton, ...relation(dupe, layton) }];
   const mine = verdictHTML(tonight, new Set([dupe.id]), pairs);
   assert.match(mine, /Wear <i>Liquid Brun<\/i>/);
-  assert.match(mine, /a point behind Layton, which it’s inspired by/);
+  // Tonight's numbers, both of them (the rows may show today's), and no "points".
+  assert.match(mine, /The best of yours tonight, \d+% match\. Layton, which it’s inspired by, matches \d+%\./);
+  assert.ok(!/points?\b/.test(mine));
+  const zenith = { ...byName('Terra'), id: '901', name: 'Zenith', original: null };
+  const plain = verdictHTML({ win: wx.night, ranked: [entry(zenith, 0.79), entry(dupe, 0.66)] }, new Set([dupe.id]), []);
+  assert.match(plain, /The best of yours tonight, 66% match\. Zenith matches 79%\./);
   const none = verdictHTML(tonight, new Set(), pairs);
   assert.match(none, /Close call: <i>Layton<\/i> by a nose/);
   assert.match(verdictHTML({ ...tonight, ranked: [entry(layton, 0.9), entry(dupe, 0.7)] }, new Set(), pairs), /<i>Layton<\/i> suits tonight best/);

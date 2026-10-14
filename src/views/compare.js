@@ -282,13 +282,12 @@ const shownAs = (digits, value) => f => {
   return v == null ? null : Number(v.toFixed(digits));
 };
 
-const points = n => (n === 1 ? 'a point' : `${n} points`);
-
 /**
  * Which to wear tonight. With a bottle you own among them, the pick is
- * yours: the best of them, saying how far behind one you don't own it is and
- * how they're linked ("Wear Détour Noir: a point behind Layton, which it's
- * inspired by"). Without, the one that suits tonight best.
+ * yours: the best of them, with its match tonight and the better one's (the
+ * rows may show another window's), and how they're linked ("Wear Détour
+ * Noir: the best of yours tonight, 87% match. Layton, which it's inspired
+ * by, matches 88%."). Without, the one that suits tonight best.
  */
 export function verdictHTML(tonight, owned, pairs = []) {
   if (!tonight || tonight.ranked.length < 2) return '';
@@ -299,12 +298,12 @@ export function verdictHTML(tonight, owned, pairs = []) {
   let pick = first, title, why;
   if (mine && mine !== first) {
     pick = mine;
-    const gap = matchPct(first) - matchPct(mine);
     const link = pairs.find(p => [p.a.id, p.b.id].includes(mine.fragrance.id) && [p.a.id, p.b.id].includes(first.fragrance.id));
-    const tie = link?.kind === 'dupe' ? (String(mine.fragrance.original?.id) === first.fragrance.id ? ', which it’s inspired by' : ', which copies it')
-      : link?.kind === 'voted' ? ', and voters say they smell alike' : '';
+    const other = esc(first.fragrance.name);
+    const who = link?.kind === 'dupe' ? `${other}, ${String(mine.fragrance.original?.id) === first.fragrance.id ? 'which it’s inspired by' : 'which copies it'},` : other;
+    const same = matchPct(first) === matchPct(mine) ? ' too' : '';
     title = `Wear ${name(mine)}`;
-    why = `The best of yours tonight${gap > 0 ? `, ${points(gap)} behind ${esc(first.fragrance.name)}` : `, as good as ${esc(first.fragrance.name)}`}${tie}. ${matchPct(mine)}% match.`;
+    why = `The best of yours tonight, ${matchPct(mine)}% match. ${who} matches ${matchPct(first)}%${same}${link?.kind === 'voted' ? ', and voters say they smell alike' : ''}.`;
   } else {
     const close = first.score - second.score < TOSS_UP;
     title = close ? `Close call: ${name(first)} by a nose` : owned.has(first.fragrance.id) ? `Wear ${name(first)}` : `${name(first)} suits tonight best`;
