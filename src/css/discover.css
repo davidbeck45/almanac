@@ -210,7 +210,8 @@ body[data-route='discover'] .page > :is(#main, #foot) { --disc-col: 1120px; max-
 }
 .disc-more { display: flex; justify-content: center; margin-top: var(--s-5); }
 .disc-list > .message { margin-top: var(--s-2); }
-.disc-list .rows.results { margin: 0 calc(-1 * var(--s-2)); }
+/* The photos line up with the text above; the buttons stay inside the column. */
+.disc-list .rows.results { margin: 0 0 0 calc(-1 * var(--s-2)); }
 @container disc (min-width: 600px) { .disc-list .rows.results { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--s-4); } }
 /* A quiet icon button in a row: what smells like it for less. */
 .ghost-btn { color: var(--text-secondary); }
