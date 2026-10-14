@@ -34,6 +34,7 @@ const ins = {
   open: null, // the style mix row showing its bottles
   allStyles: false, // the style mix shows every style
   kept: new Set(), // styles unliked here: their rows stay put, so focus has somewhere to stay
+  owning: null, // a suggestion just owned (id): when the next report lands, focus on its card stays in view
   // The styles half's answers; preferValue: what they used (null before one lands).
   styles: { key: null, more: {}, starters: {}, error: '', preferValue: null },
 };
@@ -182,6 +183,7 @@ export function coverageHTML(report, { uses, bands, cell, slot, fresh = false })
     <ul class="cov-legend" aria-label="Key">
       ${LEGEND.map(s => `<li>${vial(s)}<span>${STATUS_WORD[s]}</span></li>`).join('')}
       <li>${vial('covered', { rare: true })}<span>Rarely comes up</span></li>
+      <li><span class="cov-na" aria-hidden="true"></span><span>Doesn’t come up</span></li>
     </ul>
     <p class="muted small cov-note">Fuller is better covered. A mark at the top means your best falls short of the best out there. Select one to see your bottles there.</p>
     ${picked ? cellDetailHTML(picked, report) : ''}
@@ -304,10 +306,13 @@ export function pickCardHTML(p, { wanted = false, owned = null } = {}) {
   </li>`;
 }
 
-export function picksHTML(report, { wants = new Set(), ownedLabel = () => null } = {}) {
-  const note = report.preferValue
-    ? '<p class="muted small">Only bottles voters call great value. Turn off Prefer great value to see the rest.</p>'
-    : '';
+/**
+ * The report's picks as cards, with the value line every Insights list has
+ * under them (its link flips Prefer great value). preferValue: the setting in
+ * use (the switch's), else the report's.
+ */
+export function picksHTML(report, { wants = new Set(), ownedLabel = () => null, preferValue = report.preferValue } = {}) {
+  const note = valueNoteHTML(preferValue, 'fill');
   if (!report.picks.length) {
     return `<p class="muted">${report.gaps.length ? 'Nothing in the library fills these by enough.' : 'Nothing to fill.'}</p>${note}`;
   }
@@ -325,7 +330,7 @@ export function styleMixHTML(rows, { open = null, stated = true, all = false } =
   // The top MIX_ROWS and every liked one, until asked for all.
   const shown = all || rows.length <= MIX_ROWS + 2 ? rows : rows.filter((r, i) => i < MIX_ROWS || r.liked || r.keep);
   const hidden = rows.length - shown.length;
-  return `<p class="muted small mix-key">${stated ? 'The styles you like lead “More of what you like”.' : 'Liked for now: what most of your bottles lean toward. Like the styles you love.'} Tap a style to see its bottles.</p>
+  return `<p class="muted small mix-key">${stated ? 'The styles you like lead “More of what you like”.' : 'Liked for now: what most of your bottles lean toward. Like the styles you love.'} Select a style to see its bottles.</p>
     <ul class="mix" id="ins-mix-list">${shown.map(r => {
     const expanded = open === r.id;
     return `<li class="mix-row${r.liked ? ' liked' : ''}">
@@ -339,8 +344,8 @@ export function styleMixHTML(rows, { open = null, stated = true, all = false } =
     : '<p class="muted small mix-none">None of your bottles yet. More of what you like has some.</p>'}
     </li>`;
   }).join('')}</ul>
-    ${hidden ? `<button class="btn tertiary compact mix-all" data-action="ins-mix-all" aria-controls="ins-mix-list">${icon.chevron}<span>Show all ${rows.length} styles</span></button>`
-    : all && rows.length > MIX_ROWS + 2 ? `<button class="btn tertiary compact mix-all less" data-action="ins-mix-all" aria-controls="ins-mix-list">${icon.chevron}<span>Show fewer</span></button>` : ''}`;
+    ${hidden ? `<button class="btn tertiary compact mix-all" data-action="ins-mix-all" aria-controls="ins-mix-list" aria-expanded="false">${icon.chevron}<span>Show all ${rows.length} styles</span></button>`
+    : all && rows.length > MIX_ROWS + 2 ? `<button class="btn tertiary compact mix-all less" data-action="ins-mix-all" aria-controls="ins-mix-list" aria-expanded="true">${icon.chevron}<span>Show fewer</span></button>` : ''}`;
 }
 
 // Each part whole on its line: a narrow row wraps between them, never inside one.
@@ -370,7 +375,7 @@ export function startersHTML(items, { wants = new Set(), more = 0 } = {}) {
       : !pick ? '<p class="muted small starter-none">Nothing well rated and safe to buy blind yet.</p>'
         : `<ul class="rows starter-rows">${rowHTML(pick.record, { meta: pickMeta(pick), open: { ctx: '' }, trailing: wantButton(pick.record, wants.has(pick.id), { iconOnly: true }) })}</ul>`;
     return `<li class="starter">
-      <div class="starter-head"><h4>${esc(style.label)}</h4><a class="link-btn" href="#/discover?styles=${esc(style.id)}" aria-label="Explore ${esc(style.label.toLowerCase())} in Discover">Explore</a></div>
+      <div class="starter-head"><h4>${esc(style.label)}</h4><a class="btn tertiary compact" href="#/discover?styles=${esc(style.id)}" aria-label="Explore ${esc(style.label.toLowerCase())} in Discover">Explore${icon.chevron}</a></div>
       <p class="muted small">${esc(style.blurb)}</p>
       ${body}
     </li>`;
@@ -399,16 +404,25 @@ export function doublesHTML(d) {
     </li>`).join('')}</ul>`;
 }
 
-/** "How you wear": Never / Sometimes / Often per occasion; Daily always counts. */
+/**
+ * "How you wear": Never / Sometimes / Often per occasion; Daily always
+ * counts. Each occasion is a radio group, one Tab stop (the shell moves
+ * along it with the arrow keys), on its level, else on Sometimes.
+ */
 export function usesSheetHTML({ uses, settings, tagged = 0 }) {
   const levels = [['never', 'Never'], ['sometimes', 'Sometimes'], ['often', 'Often']];
+  const group = u => {
+    const on = levels.some(([v]) => v === settings[u.id]) ? settings[u.id] : null;
+    const stop = on ?? 'sometimes';
+    return `<div class="seg" role="radiogroup" aria-labelledby="use-${esc(u.id)}">${levels.map(([v, label]) => `<button type="button" role="radio" aria-checked="${v === on}" tabindex="${v === stop ? 0 : -1}" data-action="ins-use" data-value="${esc(`${u.id}:${v}`)}"><span>${label}</span></button>`).join('')}</div>`;
+  };
   return sheetFrame('uses-title', `
     <h2 id="uses-title" class="sheet-title">How you wear</h2>
     <p class="muted lede">How often you dress for each occasion. Insights weighs the gaps by it.</p>
     <ul class="uses">
       <li class="use-row"><span>Daily picks</span><span class="muted small">Always counted</span></li>
       ${uses.filter(u => u.id !== 'daily').map(u => `<li class="use-row"><span id="use-${esc(u.id)}">${esc(u.label)}</span>
-        ${segHTML(levels.map(([v, label]) => ({ value: `${u.id}:${v}`, label, on: settings[u.id] === v })), { action: 'ins-use', label: `${u.label}: how often` })}</li>`).join('')}
+        ${group(u)}</li>`).join('')}
     </ul>
     ${tagged ? `<p class="muted small">Your journal tunes these too: ${plural(tagged, 'wear')} logged for an occasion so far.</p>` : '<p class="muted small">Wears you log from the Occasion tab tune these too.</p>'}
     <div class="sheet-bar"><button class="btn primary" data-action="close-sheet">Done</button></div>`);
@@ -416,7 +430,7 @@ export function usesSheetHTML({ uses, settings, tagged = 0 }) {
 
 /** While the library loads: the headline, the map and a card, in outline. */
 // The map in outline, shaped like the table it becomes: 8 uses by 5 bands,
-// one slot at a time under 600px of page, day and night side by side from
+// one slot at a time under 740px of page, day and night side by side from
 // there (all 80 vials; wardrobe.css hides the second 40 below it).
 const mapSkeleton = (attrs = '') => `<div class="card sk-cov"${attrs}><span class="sk sk-line w40"></span><div class="sk-grid">${'<span class="sk sk-vial"></span>'.repeat(80)}</div></div>`;
 
@@ -450,8 +464,8 @@ export function insightsHTML(m) {
         ${strongHTML(r)}
       </section>
       <section class="ins-fill" aria-labelledby="fill-title">
-        ${sectionHead('Bottles that would fill the gaps', '<p>Picked as a set: each adds what the ones above it don’t.</p>', { ...h3, id: 'fill-title' })}
-        ${picksHTML(r, { wants: m.wants, ownedLabel: m.ownedLabel })}
+        ${sectionHead('Bottles that would fill the gaps', '<p>Picked as a set: each adds what the ones before it don’t.</p>', { ...h3, id: 'fill-title' })}
+        ${picksHTML(r, { wants: m.wants, ownedLabel: m.ownedLabel, preferValue: m.context.preferValue })}
       </section>`;
   const h = r ? headline(r) : null;
   const s = m.styles;
@@ -478,7 +492,7 @@ export function insightsHTML(m) {
 export function valueNoteHTML(preferValue, where) {
   if (preferValue == null) return '';
   return `<p class="muted small ins-value-note">${preferValue
-    ? `Only bottles voters call great value. <button class="link-btn" data-action="ins-value-note" data-value="${esc(where)}">Include pricier ones</button>`
+    ? `Only bottles voters call great value. <button class="link-btn" data-action="ins-value-note" data-value="${esc(where)}">Show all<span class="visually-hidden"> bottles, not only great value</span></button>`
     : `Every price shown. <button class="link-btn" data-action="ins-value-note" data-value="${esc(where)}">Great value only</button>`}</p>`;
 }
 
@@ -574,18 +588,19 @@ async function loadSignals(app, lib, owned) {
 }
 
 /**
- * A sentence on the styles someone likes against their shelf: "You like Skin
- * scent, Clean and Intimate, but only 4 of your 24 bottles are." (stated), or
- * what the bottles lean toward. liked: likedFor's; mix: styleMix's.
+ * A sentence on the styles someone likes against their shelf: "You like skin
+ * scent, clean and intimate, but only 4 of your 24 bottles are." (stated), or
+ * what the bottles lean toward. Style names in lower case mid-sentence, as
+ * the groups' titles have them. liked: likedFor's; mix: styleMix's.
  */
 export function storyOf(liked, mix, total, label) {
   if (!liked.ids.length || !total) return null;
-  const names = listWords(liked.ids.map(label));
-  if (!liked.stated) return `Most of your bottles lean toward ${names}.`;
+  const names = listWords(liked.ids.map(id => label(id).toLowerCase()));
+  if (!liked.stated) return total === 1 ? `Your bottle leans toward ${names}.` : `Most of your bottles lean toward ${names}.`;
   const n = new Set(liked.ids.flatMap(id => (id === 'intimate' ? mix.intimateIds : mix.ids[id] ?? []))).size;
-  const yours = `${total === 1 ? 'your one bottle' : `your ${total} bottles`}`;
-  if (!n) return `You like ${names}, but none of ${yours} ${total === 1 ? 'is' : 'are'}.`;
-  return `You like ${names}, ${n / total < 0.35 ? 'but only' : 'and'} ${n} of ${yours} ${n === 1 ? 'is' : 'are'}.`;
+  if (total === 1) return `You like ${names}, ${n ? 'and your one bottle is' : 'but your one bottle isn’t'}.`;
+  if (!n) return `You like ${names}, but none of your ${total} bottles are.`;
+  return `You like ${names}, ${n / total < 0.35 ? 'but only' : 'and'} ${n} of your ${total} bottles ${n === 1 ? 'is' : 'are'}.`;
 }
 
 function stylesModel(lib, owned) {
@@ -668,8 +683,8 @@ function insightsPane() {
 const onPane = () => state.base?.dest === 'wardrobe' && state.base.pane === 'insights';
 
 // Re-renders the pane if it's on screen, focus kept where it was.
-function paint(app) {
-  if (onPane()) repaint(app);
+function paint(app, options) {
+  if (onPane()) repaint(app, options);
 }
 
 // Only the styles half, so the map above doesn't redraw as its answers land.
@@ -718,7 +733,11 @@ async function refresh(app) {
     ins.error = err.message;
   }
   ins.busy = false;
-  paint(app);
+  // After I own it, focus on that card (or, with the card gone, the section's
+  // heading) is brought into view, not left where the old layout had it.
+  const owned = ins.owning && document.activeElement?.closest?.('.ins-pick')?.querySelector(`.pick-name-btn[data-id="${CSS.escape(ins.owning)}"]`);
+  ins.owning = null;
+  paint(app, { reveal: Boolean(owned) });
 }
 
 let stylesAsked = 0;
@@ -811,12 +830,18 @@ export const actions = {
     ins.cell = id;
     ins.slot = id.split(':')[1];
     app.keepingFocus(el, '#app', app.renderPage);
+    const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
     // From a thin spot: up to the map with it picked, focus on its detail.
     if (fromList) {
       const head = document.getElementById('ins-detail-title');
-      document.querySelector('.ins-cov')?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      document.querySelector('.ins-cov')?.scrollIntoView({ block: 'start', behavior });
       head?.focus({ preventScroll: true });
+      return;
     }
+    // From the map: on a phone the detail starts below the fold, so its head
+    // and the start of its list (scroll-margin-bottom) come up into view, clear
+    // of the tab bar (scroll-padding), the map moving no more than that.
+    document.querySelector('#ins-detail .cov-detail-head')?.scrollIntoView({ block: 'nearest', behavior });
   },
   // Day or Night: the detail follows to that slot's worst cell.
   'ins-slot'(el, app) {
@@ -856,9 +881,12 @@ export const actions = {
   'ins-reload'() {
     location.reload();
   },
+  // The toggle sits under the list, so it moves as the list grows or
+  // shrinks: it stays in view, clear of the tab bar (scroll-padding).
   'ins-thin-all'(el, app) {
     ins.allThin = !ins.allThin;
     app.keepingFocus(el, '#app', app.renderPage);
+    document.querySelector('#main [data-action="ins-thin-all"]')?.scrollIntoView({ block: 'nearest' });
   },
   async 'ins-own'(el, app) {
     const id = el.dataset.id;
@@ -872,14 +900,18 @@ export const actions = {
     setWant(id, false);
     app.own(record);
     // The card stays (with its owned tag) until the new report lands: focus
-    // its name, which repaint() hands on to the section's heading if it goes.
+    // its name. When the report lands, repaint() keeps it, or with the card
+    // gone the section's heading, and brings that into view (ins.owning).
     const name = document.querySelector(`.ins-pick .pick-name-btn[data-id="${CSS.escape(id)}"]`);
+    ins.owning = name ? id : null;
     (name ?? document.getElementById('page-title'))?.focus();
   },
   'ins-mix-all'(el, app) {
     ins.allStyles = !ins.allStyles;
     paintStyles(app);
-    document.querySelector('#ins-styles [data-action="ins-mix-all"]')?.focus();
+    const toggle = document.querySelector('#ins-styles [data-action="ins-mix-all"]');
+    toggle?.focus({ preventScroll: true });
+    toggle?.scrollIntoView({ block: 'nearest' });
   },
   'ins-mix'(el, app) {
     ins.open = ins.open === el.dataset.value ? null : el.dataset.value;

@@ -293,8 +293,9 @@
 .cov.fill-in .vial-fill { animation: rise 0.7s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 10ms); }
 @keyframes rise { from { transform: scaleY(0); } }
 
-/* The coverage map: a table, one slot at a time under 600px of column
-   (the Day / Night toggle), both side by side from there. */
+/* The coverage map: a table, one slot at a time under 740px of column
+   (the Day / Night toggle), both side by side from there, where every cell
+   (the first night one too, past its gap) is still 44px wide. */
 .cov-toggle { margin-bottom: var(--s-3); }
 .cov-table { width: 100%; border-collapse: separate; border-spacing: 2px; table-layout: fixed; }
 .cov-table col.cov-use { width: 92px; }
@@ -315,14 +316,14 @@
 .cov-cell[aria-pressed='true'] { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .cov-cell[aria-pressed='true']::after { content: ''; position: absolute; left: 50%; bottom: 2px; width: 16px; height: 3px; margin-left: -8px; border-radius: var(--r-pill); background: var(--accent); }
 .cov-na { display: block; width: 4px; height: 4px; margin: auto; border-radius: var(--r-round); background: var(--fill-strong); }
-@container page (max-width: 599px) {
+@container page (max-width: 739px) {
   .cov-slots { display: none; }
   .cov[data-show='day'] [data-slot='night'], .cov[data-show='night'] [data-slot='day'] { display: none; }
   .cov[data-show='day'] tr.only-night, .cov[data-show='night'] tr.only-day { display: none; }
 }
 /* A 320px phone gives the bands the room the uses' names don't need. */
 @container page (max-width: 327px) { .cov-table col.cov-use { width: 80px; } }
-@container page (min-width: 600px) {
+@container page (min-width: 740px) {
   .cov-toggle { display: none; }
   .cov-table col.cov-use { width: 112px; }
   .cov-table .edge { padding-left: var(--s-3); }
@@ -331,10 +332,11 @@
 .cov-legend li { display: flex; align-items: center; gap: var(--s-2); color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
 .cov-legend .vial { width: 12px; height: 16px; border-width: 1px; border-radius: 4px; }
 .cov-legend .vial[data-status='gap']::after { top: 2px; width: 6px; margin-left: -3px; height: 1.5px; }
+.cov-legend .cov-na { margin: 0 var(--s-1); }
 .cov-note { margin-top: var(--s-2); }
 
 .cov-detail { margin-top: var(--s-4); padding: var(--s-4); border-radius: var(--r-inset); border: 1px solid var(--border-subtle); background: var(--surface-2); }
-.cov-detail-head { display: flex; align-items: center; gap: var(--s-3); margin-bottom: var(--s-1); }
+.cov-detail-head { display: flex; align-items: center; gap: var(--s-3); margin-bottom: var(--s-1); scroll-margin-bottom: calc(var(--s-10) + var(--s-6)); }
 .cov-detail-head h4 { flex: 1; min-width: 0; font-size: var(--fs-headline); line-height: var(--lh-headline); font-weight: 600; }
 .cov-detail-head h4:focus { outline: none; }
 .cov-detail > .muted.small { margin-top: 0; }
@@ -488,7 +490,7 @@
 .starter { display: grid; align-content: start; gap: var(--s-1); padding: var(--s-3) var(--s-4) var(--s-2); border-radius: var(--r-inset); border: 1px solid var(--border-subtle); background: var(--surface-2); box-shadow: var(--e2); }
 .starter-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3); }
 .starter-head h4 { font-family: var(--display); font-size: var(--fs-title-3); line-height: var(--lh-title-3); font-weight: 600; }
-.starter-head .link-btn { flex: none; font-size: var(--fs-footnote); }
+.starter-head .btn.tertiary { flex: none; margin-right: calc(-1 * var(--s-2)); }
 .starter > .muted.small { margin-top: 0; }
 .starter-none { padding: var(--s-2) 0; }
 
@@ -507,14 +509,14 @@
 .sk-head { height: 22px; margin-bottom: var(--s-3); }
 .ins-top .sk-line { display: block; }
 /* Shaped like the table (.cov-table): a vial per cell, 5 bands of one slot
-   under 600px of page, both slots' 10 from there, past the uses' column. */
+   under 740px of page, both slots' 10 from there, past the uses' column. */
 .sk-cov { display: grid; gap: var(--s-4); }
 /* The top padding stands in for the Day / Night toggle and the bands' heads. */
 .sk-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; padding: 116px 0 0 94px; }
 .sk-grid .sk-vial { justify-self: center; width: 22px; height: 28px; margin: var(--s-2) 0; border-radius: 7px 7px 8px 8px; }
 .sk-grid .sk-vial:nth-child(n + 41) { display: none; }
 @container page (max-width: 327px) { .sk-grid { padding-left: 82px; } }
-@container page (min-width: 600px) {
+@container page (min-width: 740px) {
   .sk-grid { grid-template-columns: repeat(10, minmax(0, 1fr)); padding: 76px 0 0 114px; }
   .sk-grid .sk-vial:nth-child(n + 41) { display: block; }
 }
@@ -526,6 +528,12 @@
 .use-row > span:first-child { flex: 1 1 88px; font-weight: 500; }
 .use-row .muted.small { margin-top: 0; }
 .use-row .seg button { padding: 0 var(--s-3); font-size: var(--fs-footnote); }
+/* A radio group drawn as segments: the chosen one lit as a pressed segment. */
+.use-row .seg button[aria-checked='true'] {
+  background: var(--surface-3);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--border-strong), 0 2px 8px rgb(var(--shade) / 0.25);
+}
 
 /* ---------- Wishlist ---------- */
 
@@ -564,4 +572,5 @@
   .vial.rare { border-style: dashed; }
   .mix-like[aria-pressed='true'] { border: 2px solid Highlight; }
   .cov-cell[aria-pressed='true'] { outline: 2px solid Highlight; }
+  .use-row .seg button[aria-checked='true'] { outline: 2px solid Highlight; outline-offset: -2px; }
 }

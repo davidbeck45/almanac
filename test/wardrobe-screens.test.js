@@ -100,6 +100,7 @@ test('a vial fills by status, and one that falls short as near as your best come
   const html = insights.coverageHTML(report, { uses, bands, cell: c.cell, slot: null });
   assert.match(html, new RegExp(`data-value="${c.cell}"[^>]*aria-label="[^"]*: Falls short\\.[^"]*"><span class="vial[^"]*" data-status="gap" style="--lvl:${insights.vialLevel(c)};`), 'its level is set on the vial, its status said in words');
   assert.match(html, /Rarely comes up<\/span>/, 'the key has the dashed rim too');
+  assert.match(html, /<li><span class="cov-na" aria-hidden="true"><\/span><span>Doesn’t come up<\/span><\/li>/, 'and the mark of a cell that never comes up');
 });
 
 test('the map opens on the worst gap, and a cell’s detail names who covers it and who would beat them', () => {
@@ -160,6 +161,9 @@ test('a suggestion card shows its fills against your best, its facts and its act
   assert.match(own, /owned-tag/, 'one you own says where');
   assert.ok(!own.includes('wish-toggle') && !own.includes('ins-own'), 'and offers nothing to want or own');
   assert.match(insights.picksHTML(report), /Picked as a set|class="ins-picks"/);
+  // Under the cards, the value line every Insights list has, from the setting in use.
+  assert.match(insights.picksHTML(report, { preferValue: true }), /Only bottles voters call great value\. <button class="link-btn" data-action="ins-value-note" data-value="fill">Show all/);
+  assert.match(insights.picksHTML(report, { preferValue: false }), /Every price shown\. <button class="link-btn" data-action="ins-value-note" data-value="fill">Great value only/, 'so the link pressed has a successor');
 });
 
 test('the style mix marks liked styles with a Like toggle and folds the long tail', () => {
@@ -174,9 +178,16 @@ test('the style mix marks liked styles with a Like toggle and folds the long tai
   assert.match(none, /data-value="oud" aria-pressed="true"/);
   assert.ok(!none.includes('mix-bar'));
   assert.match(none, /None of your bottles yet/);
-  assert.match(html, /Show all 14 styles/);
+  assert.match(html, /aria-expanded="false"><svg[^]*?<\/svg><span>Show all 14 styles/);
+  assert.match(html, /Select a style to see its bottles/, 'no Tap on a desktop');
   assert.equal((insights.styleMixHTML(rows, { all: true }).match(/class="mix-row/g) ?? []).length, 14);
+  assert.match(insights.styleMixHTML(rows, { all: true }), /aria-expanded="true"><svg[^]*?<\/svg><span>Show fewer/);
   assert.match(insights.styleMixHTML([], {}), /None of your bottles/);
+});
+
+test('a style you don’t own yet leads to Discover with a button, as every section does', () => {
+  const html = clean(insights.startersHTML([{ style: { id: 'oud', label: EVIL, blurb: EVIL }, pick: null }]), 'starters');
+  assert.match(html, /<a class="btn tertiary compact" href="#\/discover\?styles=oud" aria-label="Explore [^"]+ in Discover">Explore<svg/);
 });
 
 test('doubles: dupes of one original, a dupe and its original, or none and the closest pair', async () => {
@@ -219,8 +230,14 @@ test('doubles on anyone’s wardrobe read voters’ links from the pool: Aventus
 test('How you wear: three levels for each occasion, Daily always counted', () => {
   const html = clean(insights.usesSheetHTML({ uses, settings: { office: 'often', formal: 'never' }, tagged: 4 }), 'uses sheet');
   assert.equal((html.match(/data-action="ins-use"/g) ?? []).length, 3 * (uses.length - 1));
-  assert.match(html, /data-value="office:often" aria-pressed="true"/);
-  assert.match(html, /data-value="formal:never" aria-pressed="true"/);
+  // Each occasion is a radio group: one Tab stop, on its level (else Sometimes).
+  assert.equal((html.match(/role="radiogroup"/g) ?? []).length, uses.length - 1);
+  assert.equal((html.match(/role="radio" [^>]*tabindex="0"/g) ?? []).length, uses.length - 1, 'one Tab stop per occasion');
+  assert.match(html, /role="radiogroup" aria-labelledby="use-office"/);
+  assert.match(html, /aria-checked="true" tabindex="0" data-action="ins-use" data-value="office:often"/);
+  assert.match(html, /aria-checked="true" tabindex="0" data-action="ins-use" data-value="formal:never"/);
+  assert.match(html, /aria-checked="false" tabindex="0" data-action="ins-use" data-value="date:sometimes"/, 'one not set lands on Sometimes');
+  assert.ok(!html.includes('aria-pressed'), 'radios, not toggles');
   assert.match(html, /Daily picks<\/span><span class="muted small">Always counted/);
   assert.match(html, /4 wears logged/);
 });
@@ -235,7 +252,7 @@ test('the climate line says where it comes from, and the value switch waits for 
   assert.ok(!/sk-switch|role="switch"/.test(failed), 'a failed report draws no switch that never resolves');
   assert.match(insights.contextHTML({ climate: 'local', preferValue: true, failed: true }), /aria-checked="true"/, 'one set by hand still shows');
   // The styles half says when great value narrows it, with a way out where it's read.
-  assert.match(insights.valueNoteHTML(true, 'more'), /Only bottles voters call great value\. <button class="link-btn" data-action="ins-value-note" data-value="more">Include pricier ones/);
+  assert.match(insights.valueNoteHTML(true, 'more'), /Only bottles voters call great value\. <button class="link-btn" data-action="ins-value-note" data-value="more">Show all<span class="visually-hidden"> bottles, not only great value/, 'Discover’s words');
   assert.match(insights.valueNoteHTML(false, 'start'), /data-value="start">Great value only/);
   assert.equal(insights.valueNoteHTML(null, 'more'), '');
   assert.match(insights.contextHTML({ climate: 'local', tagged: 2 }), /Tuned by the 2 wears you logged/);
@@ -256,10 +273,16 @@ test('David starts on the styles he says he loves; liking some replaces them, an
     state.likedStyles = null;
   }
   const mix = styles.styleMix(owned), label = id => styles.styleById(id).label;
+  // Style names in lower case mid-sentence, as the groups' titles have them.
   assert.match(insights.storyOf({ ids: discover.DEMO_LIKED, stated: true }, mix, owned.length, label),
-    new RegExp(`^You like Skin scent, Clean and Intimate, but only \\d+ of your ${owned.length} bottles are\\.$`));
-  assert.equal(insights.storyOf({ ids: ['oud'], stated: true }, mix, 3, label), 'You like Oud, but none of your 3 bottles are.');
-  assert.equal(insights.storyOf({ ids: ['amber', 'woody'], stated: false }, mix, 3, label), 'Most of your bottles lean toward Amber and Woody.');
+    new RegExp(`^You like skin scent, clean and intimate, but only \\d+ of your ${owned.length} bottles are\\.$`));
+  assert.equal(insights.storyOf({ ids: ['oud'], stated: true }, mix, 3, label), 'You like oud, but none of your 3 bottles are.');
+  assert.equal(insights.storyOf({ ids: ['amber', 'woody'], stated: false }, mix, 3, label), 'Most of your bottles lean toward amber and woody.');
+  // One bottle is one bottle, not "most of" or "1 of your one".
+  const one = { ids: { vanilla: ['x'] }, intimateIds: [] };
+  assert.equal(insights.storyOf({ ids: ['vanilla', 'spicy'], stated: false }, one, 1, label), 'Your bottle leans toward vanilla and spicy.');
+  assert.equal(insights.storyOf({ ids: ['vanilla'], stated: true }, one, 1, label), 'You like vanilla, and your one bottle is.');
+  assert.equal(insights.storyOf({ ids: ['oud'], stated: true }, one, 1, label), 'You like oud, but your one bottle isn’t.');
   assert.equal(insights.storyOf({ ids: [], stated: true }, mix, 3, label), null);
   state.active = 'mine';
   try {
@@ -345,7 +368,7 @@ test('verdicts, values and fills read in words', () => {
   const fill = { title: 'Formal on cool nights', from: 0.87, to: 0.91, first: true, beats: { name: EVIL }, beatsPick: true };
   const html = clean(fillHTML(fill), 'fill');
   assert.match(html, /91%<\/b>/);
-  assert.match(html, /\(suggested above\) at 87%/);
+  assert.match(html, /\(suggested earlier\) at 87%/, 'earlier, not above: the cards sit side by side on a wide page');
   for (const [, x] of html.matchAll(/left:([\d.]+)%/g)) assert.ok(+x >= 0 && +x <= 100);
   assert.match(fillHTML({ ...fill, beats: null }), /where you have nothing yet/);
   assert.match(wantButton({ id: '1', name: EVIL }, true, { iconOnly: true }), /aria-pressed="true" aria-label="Want &lt;img/);
