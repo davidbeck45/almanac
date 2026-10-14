@@ -62,7 +62,8 @@ test('without the stored file the pool is scored live, to the same chips', () =>
 
 test('styles read from typed text', () => {
   assert.deepEqual(findStyles('skin, Clean, INTIMATE').ids, ['skin', 'clean', 'intimate']);
-  assert.deepEqual(findStyles('skin scents, clean scents, musky, soapy').ids, ['skin', 'clean']);
+  assert.deepEqual(findStyles('skin scents, clean scents, musky, soapy'), { ids: ['skin', 'clean'], unknown: [] });
+  assert.deepEqual(findStyles('Skin scent').ids, ['skin']);
   assert.deepEqual(findStyles('smoky, fougère').ids, ['incense', 'aromatic']);
   assert.deepEqual(findStyles(', ,'), { ids: [], unknown: [] });
   assert.deepEqual(findStyles('skin scent,powdery & iris').ids, ['skin', 'powdery']);

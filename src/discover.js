@@ -444,15 +444,17 @@ function lazyTop(scored, k, final) {
 
 // Words for a style beside its label's: "musky" is a skin scent, "soapy" clean.
 const STYLE_WORDS = { musk: 'skin', soap: 'clean', fougere: 'aromatic' };
+// Words that say what kind of thing, not which style ("clean scents").
+const KIND_WORDS = ['scent', 'fragrance', 'perfume', 'one'];
 
 /** Style ids from typed text: ids, labels or their words, any case or plural, comma separated ("skin scents, Clean, intimate", "iris"). */
 export function findStyles(text) {
   const key = s => roots(s).join(' ');
   const found = [], unknown = [];
   for (const part of String(text).split(',').map(p => p.trim()).filter(p => roots(p).length)) {
-    const words = roots(part), q = words.join(' ');
+    const kinds = KIND_WORDS.flatMap(roots), words = roots(part).filter(w => !kinds.includes(w)), q = words.join(' ');
     const word = Object.entries(STYLE_WORDS).find(([w]) => key(w) === q)?.[1];
-    const style = STYLES.find(s => key(s.id) === q || key(s.label) === q || s.id === word)
+    const style = !words.length ? null : STYLES.find(s => key(s.id) === q || key(s.label) === q || s.id === word)
       ?? STYLES.find(s => words.every(w => roots(s.label).includes(w)) || plain(s.id).replace(/ /g, '').startsWith(plain(part).replace(/ /g, '')));
     if (style) {
       if (!found.includes(style.id)) found.push(style.id);
