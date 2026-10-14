@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { loadSkin, setSkin, withSkin, applySkin } from '../src/skin.js';
-import { rank, quality, performanceLevel } from '../src/engine.js';
+import { rank, planWindows, quality, performanceLevel, PLAN_MARGIN } from '../src/engine.js';
 import { occasionById, OCCASIONS } from '../src/occasions.js';
 
 const fragrances = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url))).fragrances
@@ -98,6 +98,40 @@ test('a bottle you rate 1★ or 2★ drops out of the top 3 unless it’s clearl
   }
   assert.equal(windows, 2 * 64 * (OCCASIONS.length + 1));
   assert.ok(kept[1] > 0 && kept[2] > kept[1], `kept ${JSON.stringify(kept)}`);
+});
+
+test('a week’s plan never brings in a bottle you rate 1★ or 2★ for variety', () => {
+  // Synthetic weeks (day and night, 4 months × 8 temperatures), each owned bottle rated 1★ then 2★: a
+  // disliked bottle is planned only where it ranks first and no bottle new to the plan comes within reach.
+  const win = (dateISO, slot, feelsF) => ({ feelsF, humidity: 60, dewF: Math.min(feelsF - 8, 72), category: 'clear',
+    date: new Date(`${dateISO}T${slot === 'day' ? '13' : '21'}:00:00`), dateISO, lat: 40, slot });
+  const weeks = [];
+  for (const month of ['01', '04', '07', '10']) {
+    for (const base of [20, 30, 40, 50, 60, 70, 80, 90]) {
+      const wins = [];
+      for (let d = 1; d <= 7; d++) {
+        const iso = `2026-${month}-${String(10 + d).padStart(2, '0')}`, wobble = ((d * 7) % 5) - 2;
+        wins.push(win(iso, 'day', base + 6 + wobble), win(iso, 'night', base - 4 + wobble));
+      }
+      weeks.push(wins);
+    }
+  }
+  for (const f of fragrances) {
+    for (const stars of [1, 2]) {
+      const rated = applySkin(fragrances, { [f.id]: { rating: stars } });
+      for (const wins of weeks) {
+        const used = new Set();
+        for (const { win: w, ranked, pick } of planWindows(rated, wins)) {
+          if (pick.fragrance.id === f.id) {
+            const where = `${f.name} ${stars}★, ${w.dateISO} ${w.slot} ${w.feelsF}`;
+            assert.equal(ranked[0], pick, `${where}: planned at #${ranked.indexOf(pick) + 1}`);
+            assert.ok(!ranked.some(r => r !== pick && !used.has(r.fragrance.id) && pick.score - r.score <= PLAN_MARGIN), `${where}: a new bottle was within reach`);
+          }
+          used.add(pick.fragrance.id);
+        }
+      }
+    }
+  }
 });
 
 test('a bottle you rate 5★ wins near ties but doesn’t take every window', () => {

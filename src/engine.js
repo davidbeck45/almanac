@@ -685,7 +685,9 @@ export function rank(fragrances, conditions, slot, opts = {}) {
  * A wear already logged for a window is kept as that window's pick. A window
  * can carry its own occasion (`win.occasion`, a formal dinner on a trip's
  * third night) over opts.occasion. With opts.nudge, a neglected bottle takes
- * a slot at most once every NUDGE_EVERY days.
+ * a slot at most once every NUDGE_EVERY days. A bottle you rate DISLIKED or
+ * lower is planned only where it ranks first with no new bottle within
+ * PLAN_MARGIN.
  * Returns [{ win, ranked, pick }].
  */
 export function planWindows(fragrances, windows, opts = {}) {
@@ -697,8 +699,10 @@ export function planWindows(fragrances, windows, opts = {}) {
     const logged = history.find(h => h.date === win.dateISO && h.slot === win.slot);
     const canNudge = nudge && !logged && (nudgedOn === null || daysBetween(nudgedOn, win.dateISO) >= NUDGE_EVERY);
     const ranked = rank(fragrances, win, win.slot, { occasion: win.occasion ?? occasion, history: planned, todayISO: win.dateISO, nudge: canNudge });
-    // A nudged bottle leads the list, and is new to the plan.
-    const fresh = ranked.find(r => !used.has(r.fragrance.id));
+    // A nudged bottle leads the list, and is new to the plan. A bottle you
+    // rate DISLIKED or lower never counts as the fresh one, so it's planned
+    // only where it ranks first and nothing new to the plan comes close.
+    const fresh = ranked.find(r => !used.has(r.fragrance.id) && !(r.fragrance.personal?.rating <= DISLIKED));
     let pick = logged && ranked.find(r => r.fragrance.id === logged.id);
     if (!pick) pick = fresh && ranked[0].score - fresh.score <= PLAN_MARGIN ? fresh : ranked[0];
     if (pick?.nudged) nudgedOn = win.dateISO;
