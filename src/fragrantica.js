@@ -19,6 +19,17 @@ const NOTE_TIER_KEYS = ['t', 'm', 'b', 'f'];
 const SEASONS = ['winter', 'spring', 'summer', 'fall'];
 
 const round3 = x => Math.round(x * 1000) / 1000;
+
+/**
+ * A brand written in capitals ("MAISON ASRAR", "ALREHAB PERFUMES") in title
+ * case, as scripts/build_collection.py brand_case (Python's str.title); short
+ * acronyms (BDK, YSL) stay. The dataset's files keep them as Fragrantica has
+ * them.
+ */
+export function brandCase(brand) {
+  if (typeof brand !== 'string' || brand !== brand.toUpperCase() || brand === brand.toLowerCase() || brand.replace(/ /g, '').length <= 4) return brand;
+  return brand.toLowerCase().replace(/(^|[^\p{L}])(\p{L})/gu, (_, before, letter) => before + letter.toUpperCase());
+}
 const thumbOf = id => `https://fimgs.net/mdimg/perfume-thumbs/dark-m.${id}.2x.webp`;
 
 /** One row of data/fragrantica/r/*.json -> engine record (same shape as data/collection.json). */
@@ -34,7 +45,7 @@ export function fromFragrantica(id, row) {
     id: String(id),
     source: 'fragrantica',
     name: row.n,
-    brand: row.b,
+    brand: brandCase(row.b),
     year: row.y ?? null,
     gender: GENDER[row.g] ?? null,
     url: `https://www.fragrantica.com/perfume/${row.s}-${id}.html`,
@@ -227,7 +238,7 @@ export function fragranticaLibrary(load = defaultLoad) {
       const hay = normalize(`${name} ${brand}`);
       const missed = words.filter(w => !hay.includes(w)).length;
       if (!missed || (missed === 1 && words.length > 1)) {
-        (missed ? near : full).push({ id, name, brand, year: Number(year) || null, thumb: thumbOf(id), stub: true });
+        (missed ? near : full).push({ id, name, brand: brandCase(brand), year: Number(year) || null, thumb: thumbOf(id), stub: true });
       }
     }
     const hits = full.length ? full : near;

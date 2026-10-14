@@ -93,6 +93,7 @@ Gotchas:
 - Note weights are 100 × (votes / the top note's votes)^1.61; records turn them back into relative `noteVotes`.
 - Its season and day/night votes are exact and match our scrapes; its ratings can come from an older index.
 - Some descriptions hold a raw U+2028, which Node's readline and Python's `splitlines()` treat as a line break; read the raw dump line by line in Python, as `decant.py` does.
+- Some brands are in capitals (MAISON ASRAR, PARIS CORNER, ALREHAB PERFUMES). Records read them in title case where they're made (`brandCase` in `src/fragrantica.js`, `brand_case` in `scripts/build_collection.py`; past 4 letters, so BDK and YSL stay); the dataset's files and page slugs keep Fragrantica's.
 
 ## Other people's collections
 

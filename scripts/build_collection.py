@@ -69,6 +69,12 @@ def split_name_brand(h1: str, brand_slug: str) -> tuple[str, str]:
     return name_brand, brand_slug.replace("-", " ")
 
 
+def brand_case(brand: str) -> str:
+    """A brand written in capitals ("MAISON ASRAR", "PARIS CORNER") in title
+    case, as src/fragrantica.js brandCase does; short acronyms (BDK, YSL) stay."""
+    return brand.title() if brand.isupper() and len(brand.replace(" ", "")) > 4 else brand
+
+
 def build(raw: dict) -> dict:
     brand_slug, rest = raw["slug"].split("/")
     pid = int(rest.rsplit("-", 1)[1])
@@ -86,7 +92,7 @@ def build(raw: dict) -> dict:
     return {
         "id": pid,
         "name": name,
-        "brand": brand,
+        "brand": brand_case(brand),
         "year": year,
         "gender": gender,
         "url": f"https://www.fragrantica.com/perfume/{raw['slug']}.html",

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { fromFragrantica, fragranticaLibrary } from '../src/fragrantica.js';
+import { fromFragrantica, fragranticaLibrary, loadPool, fromPool, brandCase } from '../src/fragrantica.js';
 import { performanceRating, steadyShares } from '../src/engine.js';
 import { DATASET_VERSION } from '../src/profiles.js';
 
@@ -44,6 +44,24 @@ test('search finds a bottle by brand and name, whole names first', async () => {
   assert.equal(brx.name, 'Baccarat Rouge 540', 'a word the bottle lacks is forgiven when nothing has them all');
   assert.deepEqual(await library.search('qqqxzzv'), []);
   assert.deepEqual(await library.search('a'), []);
+});
+
+test('brands written in capitals read in title case, as the build writes them; short acronyms stay', async () => {
+  assert.deepEqual(['MAISON ASRAR', 'PARIS CORNER', 'ALREHAB PERFUMES', 'D’ORSAY', 'BDK Parfums', 'YSL', 'ZARA', 'Lattafa'].map(brandCase),
+    ['Maison Asrar', 'Paris Corner', 'Alrehab Perfumes', 'D’Orsay', 'BDK Parfums', 'YSL', 'ZARA', 'Lattafa']);
+  // The wardrobe's, a dataset record's, its pool row's and a search hit's agree.
+  const legacy = wardrobe.find(f => f.name === 'Legacy');
+  assert.equal(legacy.brand, 'Maison Asrar');
+  assert.equal((await library.records([String(legacy.id)])).get(String(legacy.id)).brand, 'Maison Asrar');
+  const pool = await loadPool(async path => {
+    const file = new URL(path, dir);
+    return existsSync(file) ? readFileSync(file, 'utf8') : null;
+  });
+  const choco = fromPool(pool, pool.cols.n.findIndex((n, i) => n === 'Choco Musk' && pool.brands[pool.cols.b[i]] === 'ALREHAB PERFUMES'));
+  assert.equal(choco.brand, 'Alrehab Perfumes');
+  assert.ok(choco.url.includes('/perfume/'), 'its page link keeps Fragrantica’s slug');
+  assert.ok((await library.search('choco musk alrehab')).some(h => h.brand === 'Alrehab Perfumes'));
+  assert.ok(wardrobe.every(f => f.brand === brandCase(f.brand)));
 });
 
 test('records load by id; ids the dataset lacks are left out', async () => {
