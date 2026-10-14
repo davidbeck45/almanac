@@ -7,7 +7,9 @@ preview_urls = false
 # The Fragella key is a secret: `npx wrangler secret put FRAGELLA_KEY`
 [vars]
 ALLOWED_ORIGINS = "https://davidbeck45.github.io,http://127.0.0.1:5173,http://localhost:5173"
-DAILY_LOOKUPS_PER_IP = "15"
+# Fragella's free plan is 20 requests a month (see index.js).
+DAILY_LOOKUPS_PER_IP = "3"
+DAILY_LOOKUPS = "4"
 
 [[kv_namespaces]]
 binding = "CACHE"
