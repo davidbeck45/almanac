@@ -435,8 +435,6 @@ test('a newer question on a channel replaces the older, which answers stale and 
 
 test('the pool’s status follows the worker, for skeletons', async () => {
   const client = fakeClient();
-  const heard = [];
-  const stop = client.onStatus((status, error) => heard.push(error ? `${status}: ${error}` : status));
   assert.equal(client.status(), 'idle');
   client.ask('liked', { owned: [] }).catch(() => {});
   client.ask('records', { ids: [] }).catch(() => {});
@@ -453,9 +451,9 @@ test('the pool’s status follows the worker, for skeletons', async () => {
   client.ask('styles', { owned: [] }).catch(() => {});
   assert.equal(client.status(), 'ready');
   w.reply({ type: 'status', status: 'error', error: 'Can’t reach the fragrance library.' });
-  stop();
+  assert.equal(client.status(), 'error');
   w.reply({ type: 'status', status: 'ready' });
-  assert.deepEqual(heard, ['loading', 'ready', 'error: Can’t reach the fragrance library.']);
+  assert.equal(client.status(), 'ready');
 });
 
 test('the clock runs from when a question starts, and stops while the pool downloads', async t => {

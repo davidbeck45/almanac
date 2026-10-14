@@ -12,7 +12,7 @@ import {
   DEMO_LIKED, LEAN_WINDOWS, STORED_MIN, discoverContext, scoresOf, findStyles, likedStyles, moreOfStyles, defaultSeeds, moreLike,
   parseNotes, searchNotes, dupesOf, originalFromVotes, whyLine, addCloneVotes,
 } from '../src/discover.js';
-import { loadWants, saveWants, addWant, removeWant, hasWant, setWant, wantIdsToLoad } from '../src/wishlist.js';
+import { loadWants, saveWants, addWant, removeWant, hasWant, setWant } from '../src/wishlist.js';
 import { customRecord } from '../src/custom.js';
 import { applySkin } from '../src/skin.js';
 import { fitPoolStyles } from '../scripts/fit-pool-styles.mjs';
@@ -469,7 +469,7 @@ test('the want list keeps ids, and whole records for bottles the dataset can’t
   assert.deepEqual(wants.map(w => w.id), ['9828', 'my:abc', '48681']);
   assert.equal(wants[2].record, undefined, 'a dataset bottle keeps only its id');
   assert.equal(wants[1].record.name, 'Mine');
-  assert.deepEqual(wantIdsToLoad(wants), ['9828', '48681']);
+  assert.deepEqual(wants.filter(w => !w.record).map(w => w.id), ['9828', '48681'], 'the rest load by id');
   // Adding again moves it up and keeps its date and note.
   wants = addWant(wants, at(48681));
   assert.deepEqual([wants[0].id, wants[0].added, wants[0].note], ['48681', '2026-10-01', 'Try at Nordstrom']);
@@ -491,7 +491,6 @@ test('the want list keeps ids, and whole records for bottles the dataset can’t
   // A kept record without what ranking reads is dropped, and the bottle loads again by its id.
   store.set('scentcast.want', JSON.stringify([{ id: '69541', record: { id: '69541' } }, 'x', null, { record: { id: 'my:q', name: 'Q' } }]));
   assert.deepEqual(loadWants().map(w => [w.id, 'record' in w]), [['69541', false], ['my:q', false]]);
-  assert.deepEqual(wantIdsToLoad(loadWants()), ['69541', 'my:q']);
 });
 
 beforeEach(() => { delete globalThis.localStorage; });

@@ -19,8 +19,7 @@
 // stops (a slow line isn't a stuck question; a stalled one fails by itself),
 // and a worker that isn't up within TIMEOUT counts as one that can't start.
 // poolStatus() is 'idle' (nothing asked yet), 'loading' (the pool is on its
-// way), 'ready' or 'error' (a client's onStatus(fn) hears each change,
-// fn(status, error), the error a sentence; nothing in the app needs it yet).
+// way), 'ready' or 'error'.
 // warmPool() starts loading early, for a page about to need it.
 // onPoolRecords(fn) hears every dataset record an answer names (the wardrobe
 // sent with it, and its switched-off bottles, aside): src/app/state.js keeps
@@ -97,16 +96,10 @@ function recordsIn(value, skip, out = new Map(), depth = 0) {
  */
 export function poolClient({ worker: makeWorker = startWorker, inline: makeInline = inlineWorker, timeout = TIMEOUT } = {}) {
   let worker = null, ready = false, onMain = false, downloading = false, boot = null;
-  let next = 0, status = 'idle', error = null;
+  let next = 0, status = 'idle';
   const pending = new Map(); // id -> { msg, resolve, reject, channel, timer (once started) }
   const channels = new Map(); // channel -> id of its latest question
-  const statusFns = new Set(), recordFns = new Set();
-
-  function setStatus(to, err = null) {
-    if (to === status && err === error) return;
-    [status, error] = [to, err];
-    for (const fn of statusFns) fn(status, error);
-  }
+  const recordFns = new Set();
 
   // A question's entry, no longer pending.
   function settle(id) {
@@ -158,7 +151,7 @@ export function poolClient({ worker: makeWorker = startWorker, inline: makeInlin
       clearTimeout(boot);
     } else if (data?.type === 'status') {
       downloading = data.status === 'loading';
-      setStatus(data.status, data.error ?? null);
+      status = data.status;
     } else if (data?.type === 'start') {
       if (pending.has(data.id)) arm(data.id);
     } else if (data?.id != null) answer(data);
@@ -194,7 +187,7 @@ export function poolClient({ worker: makeWorker = startWorker, inline: makeInlin
     }
     const err = new Error(wasReady ? SORRY : UNREACHABLE);
     for (const id of [...pending.keys()]) settle(id).reject(err);
-    setStatus('error', err.message);
+    status = 'error';
   }
 
   function workerFor() {
@@ -218,7 +211,7 @@ export function poolClient({ worker: makeWorker = startWorker, inline: makeInlin
   }
 
   function send(msg) {
-    if (!QUICK.has(msg.type) && status !== 'ready') setStatus('loading');
+    if (!QUICK.has(msg.type) && status !== 'ready') status = 'loading';
     workerFor().postMessage(msg);
   }
 
@@ -238,7 +231,7 @@ export function poolClient({ worker: makeWorker = startWorker, inline: makeInlin
     if (downloading) return arm(id);
     settle(id).reject(new Error(TOO_LONG));
     stop();
-    if (status === 'ready') setStatus('idle');
+    if (status === 'ready') status = 'idle';
     resend();
   }
 
@@ -258,10 +251,6 @@ export function poolClient({ worker: makeWorker = startWorker, inline: makeInlin
       if (status === 'idle' || status === 'error') ask('warm', {}, { channel: WARM }).catch(() => {});
     },
     status: () => status,
-    onStatus(fn) {
-      statusFns.add(fn);
-      return () => statusFns.delete(fn);
-    },
     onRecords(fn) {
       recordFns.add(fn);
       return () => recordFns.delete(fn);

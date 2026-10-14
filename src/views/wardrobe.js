@@ -9,6 +9,7 @@ import { setHidden } from '../hidden.js';
 import { saveMine, shareURL, localMatches, nameMatches, importLines, MAX_IMPORT_LINES } from '../collections.js';
 import { customRecord, MAX_CUSTOM_ACCORDS } from '../custom.js';
 import { clearHistory, journalExport } from '../history.js';
+import { loadSkin } from '../skin.js';
 import { esc, plural, shortDate, relativeDay, accordLabel } from '../ui.js';
 import {
   icon, img, messageHTML, rowHTML, switchHTML, segHTML, sheetFrame, sharedBannerHTML, accordColor, sectionHead,
@@ -684,8 +685,7 @@ export const actions = {
     app.render();
   },
   // With your own ratings and skin nudges (src/skin.js), for journal-check.
-  async 'journal-export'() {
-    const { loadSkin } = await import('../skin.js');
+  'journal-export'() {
     const data = journalExport(state.history, state.loc, hiddenIn(true), { skin: loadSkin() });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
