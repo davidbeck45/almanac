@@ -339,3 +339,24 @@ test('a climate archive that fails isn’t asked again by every pool question', 
     state.loc = null;
   }
 });
+
+test('a link’s ?theme= shows for the visit, and only Settings saves a theme', async () => {
+  const { savePrefs, chooseTheme } = await import('../src/app/state.js');
+  const { setTheme } = await import('../src/theme.js');
+  const store = new Map();
+  globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k) };
+  const saved = () => JSON.parse(store.get('scentcast.prefs')).theme;
+  try {
+    setTheme('gruvbox'); // ?theme=gruvbox, no theme saved
+    savePrefs(); // picking an occasion, say
+    assert.equal(saved(), undefined, 'the link’s theme isn’t the device’s');
+    chooseTheme('gruvbox');
+    assert.equal(saved(), 'gruvbox');
+    setTheme('default'); // ?theme=default on a device that saved gruvbox
+    savePrefs();
+    assert.equal(saved(), 'gruvbox', 'a link doesn’t lose the saved one either');
+  } finally {
+    delete globalThis.localStorage;
+    setTheme('default');
+  }
+});

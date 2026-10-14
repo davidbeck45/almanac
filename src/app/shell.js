@@ -658,13 +658,14 @@ async function refreshWeather({ force = false } = {}) {
 }
 
 // A place picked here replaces one pinned by ?loc=, which would bring the
-// old place back on a reload.
+// old place back on a reload. It closes the location sheet, not another one
+// a late answer from "Use my location" finds open.
 async function setLocation(loc) {
   state.loc = loc;
   state.wx = null;
   state.slot = null;
   saveLocation(loc);
-  closeSheet();
+  if (state.sheet?.kind === 'location') closeSheet();
   if (new URLSearchParams(location.search).has('loc')) replacePageURL(withoutParams('loc').href);
   await refreshWeather();
 }

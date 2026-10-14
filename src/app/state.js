@@ -13,7 +13,7 @@ import { fragranticaLibrary } from '../fragrantica.js';
 import { onPoolRecords } from './pool.js';
 import { setHidden } from '../hidden.js';
 import { setUnits } from '../ui.js';
-import { setTheme, theme } from '../theme.js';
+import { setTheme } from '../theme.js';
 
 const PREFS_KEY = 'scentcast.prefs';
 const DUSTY_AFTER_DAYS = 30;
@@ -27,10 +27,19 @@ export function loadPrefs() {
 export function savePrefs() {
   try {
     localStorage.setItem(PREFS_KEY, JSON.stringify({
-      occasion: state.occasion, units: state.units, theme: theme(), preferValue: state.preferValue, likedStyles: state.likedStyles,
+      occasion: state.occasion, units: state.units, theme: savedTheme ?? undefined, preferValue: state.preferValue, likedStyles: state.likedStyles,
       stillSky: state.stillSky || undefined,
     }));
   } catch {}
+}
+
+// The theme Settings saved, apart from the one showing: a link's ?theme=
+// shows its theme for the visit without becoming the device's.
+let savedTheme = null;
+/** Settings › Theme: show it and save it. */
+export function chooseTheme(name) {
+  savedTheme = setTheme(name);
+  savePrefs();
 }
 
 function defaultUnits() {
@@ -90,7 +99,8 @@ export const state = {
   lastRemoved: null, // { record, index } for undo
 };
 setUnits(state.units);
-setTheme(prefs.theme);
+const shownTheme = setTheme(prefs.theme);
+savedTheme = typeof prefs.theme === 'string' ? shownTheme : null;
 
 // ---------- Collections ----------
 
