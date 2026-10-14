@@ -308,6 +308,7 @@ test('on my skin: stars, nudges and where the bottle moved', () => {
   assert.match(html, /data-action="bp-skin-clear"/);
   assert.match(html, /data-action="bp-skin-lasts" data-value="-1" aria-pressed="true"/);
   assert.match(html, /data-action="bp-skin-projects" data-value="1" aria-pressed="true"/);
+  assert.ok(!html.includes('role="status"'), 'the line is drawn anew each time; #bp-status, which outlasts the page, says it');
   const unrated = skinHTML(modelOf(evil));
   assert.ok(!unrated.includes('bp-skin-clear'));
   assert.match(unrated, /tabindex="0" data-action="bp-skin-rate" data-value="1"/, 'one tab stop, on the first star');

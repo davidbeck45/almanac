@@ -55,7 +55,7 @@ export function skinHTML(m, change = '') {
       </div>
       <div class="skin-row stacked"><span class="skin-label">How long it lasts on me</span>${seg(LASTS, m.skin?.longevity ?? 0, 'bp-skin-lasts', 'How long it lasts on you')}</div>
       <div class="skin-row stacked"><span class="skin-label">How far it projects on me</span>${seg(PROJECTS, m.skin?.sillage ?? 0, 'bp-skin-projects', 'How far it projects on you')}</div>
-      <p class="skin-change" role="status">${esc(change)}</p>
+      <p class="skin-change">${esc(change)}</p>
       <p class="skin-help">Your stars move it up or down in picks. How it wears on you tunes the spray guide.</p>
     </div>
   </section>`;
@@ -63,6 +63,29 @@ export function skinHTML(m, change = '') {
 
 // The last save's line, by bottle; it goes when the page shows another bottle.
 const changes = new Map();
+
+// What a save changed, said to screen readers: the line under the stars is
+// drawn anew with the page, and a live region that arrives holding its text
+// isn't heard, so it's also written into one that outlasts the page's
+// renders (#bp-status, at the end of the body: made when the section first
+// draws, cleared, then filled on the next frame).
+function statusNode() {
+  let el = document.getElementById('bp-status');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'bp-status';
+    el.className = 'visually-hidden';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    document.body.append(el);
+  }
+  return el;
+}
+function announce(text) {
+  const el = statusNode();
+  el.textContent = '';
+  if (text) requestAnimationFrame(() => { el.textContent = text; });
+}
 let shown = null;
 function changeFor(id) {
   if (id !== shown) {
@@ -91,16 +114,19 @@ function save(el, app, patch) {
   app.render();
   // Stars move it in the list; how it wears on you changes the spray guide.
   const ctx = state.contexts[key], model = bottleModel(state.route);
-  changes.set(id, 'rating' in patch ? moveText(before, placeIn(key, id), listLabel(ctx?.win, ctx?.occasion))
-    : model && Object.keys(model.f.accords ?? {}).length ? `Spray guide updated: ${sprayCount(guideFor(model))}.` : '');
+  const said = 'rating' in patch ? moveText(before, placeIn(key, id), listLabel(ctx?.win, ctx?.occasion))
+    : model && Object.keys(model.f.accords ?? {}).length ? `Spray guide updated: ${sprayCount(guideFor(model))}.` : '';
+  changes.set(id, said);
   app.keepingFocus(el, '#bottle', app.renderBottle);
   if (!el.isConnected && !document.activeElement?.closest?.('#bottle')) document.querySelector('#skin-title')?.focus({ preventScroll: true });
+  announce(said);
 }
 
 addSection({
   id: 'skin',
   order: 260,
   render: m => skinHTML(m, changeFor(m.f.id)),
+  after: m => { if (m.owned || m.inMine) statusNode(); },
   actions: {
     // The same star tapped again takes the rating off. Keys (Space, Enter,
     // arrows, Home, End) only ever choose, as on a native radio: Clear clears.
