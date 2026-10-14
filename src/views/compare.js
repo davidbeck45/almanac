@@ -124,9 +124,10 @@ function seasonsCell(f) {
   const peak = Math.max(...SEASONS.map(s => f.season?.[s] ?? 0)) || 1;
   const cols = SEASONS.map(s => `<li><span class="cmp-col-track"><span class="cmp-col" style="height:${(((f.season?.[s] ?? 0) / peak) * 100).toFixed(1)}%"></span></span><span>${SEASON_LABELS[s]}</span></li>`).join('');
   const spoken = SEASONS.map(s => `${SEASON_LABELS[s]} ${pct(f.season?.[s] ?? 0)}`).join(', ');
-  const night = f.dayNight?.night ?? 0.5;
+  // Whole percents that add up to 100.
+  const night = Math.round((f.dayNight?.night ?? 0.5) * 100);
   return `<ul class="cmp-seasons" role="img" aria-label="${esc(spoken)}">${cols}</ul>
-    <p class="cmp-daynight"><span>Day ${pct(1 - night)}</span><span class="cmp-split" aria-hidden="true"><span style="width:${((1 - night) * 100).toFixed(1)}%"></span></span><span>Night ${pct(night)}</span></p>`;
+    <p class="cmp-daynight"><span>Day ${100 - night}%</span><span class="cmp-split" aria-hidden="true"><span style="width:${100 - night}%"></span></span><span>Night ${night}%</span></p>`;
 }
 
 function performanceCell(f, key) {
@@ -218,8 +219,9 @@ function verdictHTML(tonight, owned) {
 // "Match today", "Match tonight", "Match tomorrow night".
 const matchLabel = win => `Match ${/^(Today|Tonight|Tomorrow)/.test(win.label) ? win.label.toLowerCase() : `on ${win.label}`}`;
 
+// One bottle alone asks for another more loudly.
 const addButton = ids => (ids.length < MAX_COMPARE
-  ? `<button class="btn secondary compact" data-action="cmp-add">${icon.plus}<span>Add a bottle</span></button>` : '');
+  ? `<button class="btn ${ids.length === 1 ? 'primary' : 'secondary'} compact" data-action="cmp-add">${icon.plus}<span>Add a bottle</span></button>` : '');
 
 /** The page for compareModel()'s model. */
 export function compareHTML(m) {

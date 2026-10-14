@@ -176,7 +176,13 @@
 .star.lit { color: var(--accent); }
 .star.lit svg path { fill: currentColor; }
 .star:active { transform: scale(0.9); }
-@media (hover: hover) { .stars:hover .star { color: var(--accent); } .star:hover ~ .star:not(.lit) { color: var(--text-tertiary); } }
+/* Hovering previews the rating: the stars up to the pointer light, the rest go dark. */
+@media (hover: hover) {
+  .stars:hover .star { color: var(--accent); }
+  .stars:hover .star svg path { fill: currentColor; }
+  .stars .star:hover ~ .star { color: var(--text-tertiary); }
+  .stars .star:hover ~ .star svg path { fill: none; }
+}
 .skin-row .seg { min-width: 0; }
 .skin-change:empty { display: none; }
 .skin-change { padding: var(--s-2) var(--s-3); border-radius: var(--r-control); background: color-mix(in srgb, var(--ambient) 12%, transparent); color: var(--text-primary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }

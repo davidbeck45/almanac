@@ -92,7 +92,8 @@ export function crowdHTML(m) {
   const lean = about?.crowdGender?.lean ?? f.extras?.lean ?? null;
   const made = [
     about?.perfumers?.length && `By ${about.perfumers.join(', ')}`,
-    about?.line && `${about.line} line`,
+    // "Supremacy line", "Sweet Pleasure Collection": a line's name may say what it is.
+    about?.line && (/\b(line|collection|series|range)\b/i.test(about.line) ? `Part of ${about.line}` : `${about.line} line`),
   ].filter(Boolean).map(esc).join(' · ');
   const blocks = [
     stats.length ? `<dl class="stats">${stats.join('')}</dl>` : '',
