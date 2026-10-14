@@ -448,7 +448,7 @@ async function main() {
           spray: sprayJSON(sprayGuide(p.pick, p.window, p.occasion)),
         })),
         uncovered: trip.uncovered.map(u => ({ date: u.window.dateISO, slot: u.window.slot, occasion: u.occasion?.id ?? null, best: u.best.name, score: +u.score.toFixed(3) })),
-        variety: trip.variety && { add: trip.variety.add.name, everyDay: trip.variety.everyDay.map(f => f.name) },
+        variety: trip.variety && { add: trip.variety.add.name, everyDay: trip.variety.everyDay.map(f => f.name), slot: trip.variety.slot },
       }, null, 2));
     } else {
       const onSlot = occasion && `${occasion.label} ${(slot ?? occasion.slot) === 'day' ? 'days' : 'nights'}`;

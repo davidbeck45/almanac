@@ -87,7 +87,7 @@ function bestSets(windows, k) {
     }
     const dates = [...new Set(windows.map(w => w.dateISO))];
     const everyDay = set.filter(f => dates.every(d => windows.some((w, i) => w.dateISO === d && picks[i] === f))).length;
-    return { reached, total, everyDay };
+    return { reached, total, everyDay, most: Math.max(...set.map(f => picks.filter(p => p === f).length)) };
   };
   const out = [];
   const walk = (from, set) => {
@@ -151,20 +151,39 @@ const LONDON = typical([
 const wornEveryDay = out => out.bottles.filter(b => [...new Set(out.plan.map(p => p.window.dateISO))]
   .every(d => out.plan.some(p => p.window.dateISO === d && p.pick === b.record))).map(b => b.record.name);
 
-test('a long trip wears no bottle every day when another set plans nearly as well', () => {
-  const out = packTrip(fragrances, CANCUN, { max: 3 });
+// Ten hot July days, 88–92 by day and 76–80 at night.
+const SUMMER = Array.from({ length: 10 }, (_, i) => shift('2026-07-10', i))
+  .flatMap((d, i) => [win(d, 'day', 90 + ((i * 7) % 5) - 2, 70, { lat: 40 }), win(d, 'night', 78 + ((i * 7) % 5) - 2, 68, { lat: 40 })]);
+const sameSet = (out, set) => set.length === out.bottles.length && set.every(f => out.bottles.some(b => b.record.id === f.id));
+
+test('a long trip wears no bottle every day when another set plans nearly as well and rests it', () => {
+  const out = packTrip(fragrances, SUMMER, { max: 3 });
   assert.deepEqual(out.uncovered, []);
   assert.deepEqual(wornEveryDay(out), [], out.text);
   assert.equal(out.variety, null);
-  // The best-planned three wear one every day; these give up under 0.015 a window for it.
-  const sets = bestSets(CANCUN, 3);
+  // The best-planned three wear one every night; these give up under 0.015 a window, and two nights of it, for a rest.
+  const sets = bestSets(SUMMER, 3);
   assert.ok(sets[0].everyDay > 0);
-  const mine = sets.find(x => x.set.every(f => out.bottles.some(b => b.record.id === f.id)));
-  assert.ok(mine.total < sets[0].total && mine.total >= sets[0].total - 0.015 * CANCUN.length, `${mine.total} vs ${sets[0].total}`);
+  const mine = sets.find(x => sameSet(out, x.set));
+  assert.ok(mine.total < sets[0].total && mine.total >= sets[0].total - 0.015 * SUMMER.length, `${mine.total} vs ${sets[0].total}`);
+  assert.ok(mine.most <= sets[0].most - 2, `${mine.most} vs ${sets[0].most}`);
   // Two bottles for a week wear both every day: the best plan, as before.
   const two = packTrip(fragrances, CANCUN, { max: 2 });
   const [best2] = bestSets(CANCUN, 2);
-  assert.deepEqual(two.bottles.map(b => b.record.id).sort(), best2.set.map(f => f.id).sort());
+  assert.ok(sameSet(two, best2.set));
+});
+
+test('a set that only breaks a run of nights once isn’t variety: the plan stands, and the text says which night bottle to add', () => {
+  // Cancún: the three that wear none every day only take one of Supremacy's seven nights, at a cost.
+  const out = packTrip(fragrances, CANCUN, { max: 3 });
+  const sets = bestSets(CANCUN, 3), [best] = sets;
+  assert.ok(best.everyDay > 0 && sameSet(out, best.set), out.text);
+  assert.ok(sets.filter(x => !x.everyDay && x.total >= best.total - 0.015 * CANCUN.length).every(x => x.most > best.most - 2));
+  const [daily] = wornEveryDay(out);
+  assert.equal(out.variety.slot, 'night');
+  assert.match(out.text, new RegExp(`${daily} \\(every night\\)`));
+  assert.match(out.text, new RegExp(`${daily} is worn every night of the trip; pack ${out.variety.add.name} too and each gets a night off\\.`));
+  assert.doesNotMatch(out.text, /every day of the trip/);
 });
 
 test('when no three rest a bottle worn every day, the plan names the fourth that would, and packs it when there’s room', () => {
@@ -174,7 +193,8 @@ test('when no three rest a bottle worn every day, the plan names the fourth that
   assert.equal(three.bottles.length, 3);
   const [daily] = wornEveryDay(three), add = three.variety?.add;
   assert.ok(daily && add && three.variety.everyDay.map(f => f.name).includes(daily), three.text);
-  assert.match(three.text, new RegExp(`${daily} is worn every day of the trip; pack ${add.name} too and each gets a day off\\.`));
+  assert.equal(three.variety.slot, 'day');
+  assert.match(three.text, new RegExp(`${daily} \\(every day\\).+ ${daily} is worn every day of the trip; pack ${add.name} too and each gets a day off\\.`));
   const four = packTrip(fragrances, LONDON, { max: 4 });
   assert.equal(four.bottles.length, 4, four.text);
   assert.ok(four.bottles.some(b => b.record.id === add.id) && !wornEveryDay(four).length && !four.variety, four.text);
