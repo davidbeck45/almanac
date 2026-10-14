@@ -113,16 +113,18 @@ function addToMine(record) {
 // The list "I own it" moved away from, for the toast's way back.
 let listBefore = null;
 
-// "I own it": the bottle goes into Mine, and picks come from Mine. When that
-// switches lists (from David's wardrobe or a shared link), the toast says so
-// and offers the way back.
+// "I own it": the bottle goes into Mine, and picks come from Mine; it comes
+// off the wishlist, whichever screen said so. When that switches lists (from
+// David's wardrobe or a shared link), the toast says so and offers the way
+// back.
 function own(record) {
   const switching = Boolean(state.shared) || state.active !== 'mine';
   const label = state.shared ? (state.shared.name ? `${state.shared.name}’s` : 'the shared list') : 'David’s';
   const before = { active: state.active, shared: state.shared, search: location.search };
   addToMine(record);
+  if (hasWant(loadWants(), record.id)) setWant(record.id, false);
   render();
-  if (!switching) return showToast(`<span>${esc(record.name)} added to Mine</span>`);
+  if (!switching) return showToast(`<span>${esc(toastName(record.name))} added to Mine</span>`);
   listBefore = before;
   showToast(`<span class="note">${esc(record.name)} added to Mine. Picks now come from your ${plural(state.mine.records.length, 'bottle')}.</span>
     <button class="btn secondary compact" data-action="list-back">Back to ${esc(label)}</button>`);
@@ -364,12 +366,22 @@ function bottleModelFor(r) {
         keepBottles([found.get(id)]);
         askedFull.add(id);
       } else missing.add(id);
-    }, () => failed.add(id)).finally(() => {
+    }, () => fromPool(id).catch(() => failed.add(id))).finally(() => {
       loadingBottles.delete(id);
       if (state.route?.dest === 'bottle' && state.route.arg === id) renderBottle();
     });
   }
   return undefined;
+}
+
+// Offline, a dataset bottle's r/ shard can't load, but the suggestion pool
+// the service worker keeps (once Discover or Insights loaded it) may hold the
+// bottle, with its 8 strongest notes. Its answer keeps the record
+// (onPoolRecords); rejects when it isn't there either.
+async function fromPool(id) {
+  await askPool('warm');
+  const { records } = await askPool('records', { ids: [id], poolOnly: true });
+  if (!records?.some(r => String(r.id) === id)) throw new Error('Not in the pool');
 }
 
 function setModal(on) {
