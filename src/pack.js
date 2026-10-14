@@ -51,18 +51,22 @@ function datesPhrase(isos) {
 }
 
 // "every day and 3 nights", "formal wear on Dec 15", "the office on Oct
-// 20–22": a set of windows against the whole trip. `the` reads "the days and
-// nights" for all of them.
+// 20–22", "the day and night of Oct 14": a set of windows against the whole
+// trip. `the` reads "the days and nights" for all of them.
 function windowsPhrase(wins, all, { the = false } = {}) {
   const plain = slot => all.filter(w => !w.occasion && w.slot === slot);
+  const day = wins.filter(w => !w.occasion && w.slot === 'day'), night = wins.filter(w => !w.occasion && w.slot === 'night');
   const parts = [];
-  for (const slot of ['day', 'night']) {
-    const mine = wins.filter(w => !w.occasion && w.slot === slot);
+  for (const [slot, mine] of [['day', day], ['night', night]]) {
     const total = plain(slot).length;
     if (!mine.length) continue;
     if (mine.length === total && total > 1) parts.push(the ? `the ${slot}s` : `every ${slot}`);
     else if (mine.length === 1) parts.push(`${slot === 'day' ? '' : 'the night of '}${shortDate(mine[0].dateISO)}`);
     else parts.push(plural(mine.length, slot));
+  }
+  // One date's day and night together.
+  if (day.length === 1 && night.length === 1 && day[0].dateISO === night[0].dateISO) {
+    parts.splice(0, 2, `the day and night of ${shortDate(day[0].dateISO)}`);
   }
   if (parts[0] === 'every day' && parts[1] === 'every night') parts.splice(0, 2, 'every day and night');
   if (parts[0] === 'the days' && parts[1] === 'the nights') parts.splice(0, 2, 'the days and nights');
@@ -301,9 +305,10 @@ function chooseSet(trip, least, most) {
 
 // "Pack Essence de Blanc (every day) and Supremacy (every night). …"
 function packText(bottles, plan, uncovered, wins, full, variety) {
-  // Each bottle with the windows it suits and is worn for.
+  // Each bottle with the windows it's worn for, as its own line says (a
+  // window nothing packed suits has the sentence after this too).
   const worn = bottles.map(b => {
-    const mine = plan.filter(p => p.pick === b.record && p.covered).map(p => p.window);
+    const mine = plan.filter(p => p.pick === b.record).map(p => p.window);
     return `${b.record.name}${mine.length ? ` (${windowsPhrase(mine, wins)})` : ''}`;
   });
   const out = [`Pack ${listOf(worn)}.`];
@@ -311,7 +316,7 @@ function packText(bottles, plan, uncovered, wins, full, variety) {
   const missing = new Map();
   for (const u of uncovered) missing.set(u.best, [...(missing.get(u.best) ?? []), u.window]);
   for (const [best, missed] of missing) {
-    out.push(`Nothing packed is quite right for ${windowsPhrase(missed, wins, { the: true })}; ${best.name} would be${full ? ', if there\'s room' : ''}.`);
+    out.push(`Nothing packed is quite right for ${windowsPhrase(missed, wins, { the: true })}; ${best.name} would be${full ? ', if there’s room' : ''}.`);
   }
   if (variety) {
     // By what it's worn for: "every night … a night off", or by day and night alike "a break".

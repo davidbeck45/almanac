@@ -48,7 +48,18 @@ test('hot days and cold nights want different bottles; too few to pack says what
   assert.equal(one.bottles.length, 1);
   assert.ok(one.uncovered.length >= 4, `${one.uncovered.length} uncovered`);
   const missing = one.uncovered[0].best.name;
-  assert.match(one.text, new RegExp(`Nothing packed is quite right for .+; ${missing} would be, if there's room\\.`));
+  assert.match(one.text, new RegExp(`Nothing packed is quite right for .+; ${missing} would be, if there’s room\\.`));
+  // The text counts every wear, as each bottle's line does: the shortfall has its own sentence.
+  const [only] = one.bottles;
+  assert.match(only.why, /^Every day and night/);
+  assert.match(one.text, new RegExp(`^Pack ${only.record.name} \\(every day and night\\)\\.`));
+});
+
+test('a bottle worn by day and night on one date says so once', () => {
+  const out = packTrip(fragrances, [win(START, 'day', 66, 50), win(START, 'night', 60, 48)], { max: 1 });
+  assert.equal(out.bottles.length, 1);
+  assert.match(out.text, /^Pack .+ \(the day and night of Oct 19\)\./);
+  assert.match(out.bottles[0].why, /^The day and night of Oct 19/);
 });
 
 // Denver, Oct 16–21 2026 as forecast on Oct 13: a greedy cover packed two
