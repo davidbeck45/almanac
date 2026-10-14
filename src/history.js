@@ -22,20 +22,27 @@ export function wornIn(history, dateISO, slot) {
 
 const round2 = x => Math.round(x * 100) / 100;
 
-// Toggle: logging the same bottle again for the same slot clears it.
-export function toggleWear(id, dateISO, slot, where = null) {
+// Toggle: logging the same bottle again for the same slot clears it. A wear
+// keeps the use it was logged for, for occasionCounts: an occasion id from
+// the Occasion tab, 'daily' from Today and the Week.
+export function toggleWear(id, dateISO, slot, where = null, occasion = null) {
   const history = loadHistory();
   const current = wornIn(history, dateISO, slot);
   const rest = history.filter(h => !(h.date === dateISO && h.slot === slot));
-  const entry = { id, date: dateISO, slot, ...(where && { lat: round2(where.lat), lon: round2(where.lon) }) };
+  const entry = {
+    id, date: dateISO, slot,
+    ...(where && { lat: round2(where.lat), lon: round2(where.lon) }),
+    ...(occasion && { occasion: String(occasion) }),
+  };
   const next = current?.id === id ? rest : [entry, ...rest];
   save(next);
   return next;
 }
 
 // The journal as a file: the wears, plus the device's place and hidden bottles
-// so a check can rebuild what the app was choosing from.
-export function journalExport(history, loc, hidden, nowISO = new Date().toISOString()) {
+// so a check can rebuild what the app was choosing from, and your own
+// ratings and skin nudges (`skin`, src/skin.js's loadSkin()) when there are any.
+export function journalExport(history, loc, hidden, { nowISO = new Date().toISOString(), skin = null } = {}) {
   return {
     app: 'scentcast-journal',
     version: 1,
@@ -43,18 +50,39 @@ export function journalExport(history, loc, hidden, nowISO = new Date().toISOStr
     location: loc ? { name: loc.name ?? null, lat: round2(loc.lat), lon: round2(loc.lon) } : null,
     hidden: [...hidden].map(String),
     history,
+    ...(skin && Object.keys(skin).length && { skin }),
   };
 }
 
 // A journal file read back (scripts/journal-check.mjs, recommend.mjs --journal),
-// ids as strings like the app keeps them. Null when it isn't one.
+// ids as strings like the app keeps them. Null when it isn't one. Files from
+// before ratings were exported read with an empty `skin`.
 export function parseJournal(data) {
   if (data?.app !== 'scentcast-journal' || !Array.isArray(data.history)) return null;
+  const skin = data.skin && typeof data.skin === 'object' ? data.skin : {};
   return {
     location: data.location ?? null,
     hidden: (data.hidden ?? []).map(String),
     history: data.history.filter(h => h?.date && h.slot).map(h => ({ ...h, id: String(h.id) })),
+    skin: Object.fromEntries(Object.entries(skin).map(([id, e]) => [String(id), e])),
   };
+}
+
+/**
+ * Logged wears per use, for the gap finder's use shares: { daily, office,
+ * date, …, untagged } (only keys worn). A wear logged without a use (before
+ * wears recorded one) counts as `untagged`, not daily: a year of those would
+ * swamp the shares. Plans don't count. `since` (YYYY-MM-DD) leaves out
+ * older wears.
+ */
+export function occasionCounts(history, since = null) {
+  const counts = {};
+  for (const h of history) {
+    if (h.planned || (since && h.date < since)) continue;
+    const use = h.occasion ?? 'untagged';
+    counts[use] = (counts[use] ?? 0) + 1;
+  }
+  return counts;
 }
 
 export function clearHistory() {

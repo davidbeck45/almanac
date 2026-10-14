@@ -45,7 +45,7 @@ const TIERS = ['S', 'A', 'B', 'C'];
 // Worn today, yesterday, 2 days ago … 9 days ago. Top scores sit within a few
 // hundredths of each other, so a 3-day memory cycled the same 3 bottles
 // through a month of steady weather; a 10-day tail rotates 9–17.
-const ROTATION_PENALTY = [0.2, 0.12, 0.08, 0.06, 0.045, 0.035, 0.025, 0.02, 0.015, 0.01];
+export const ROTATION_PENALTY = Object.freeze([0.2, 0.12, 0.08, 0.06, 0.045, 0.035, 0.025, 0.02, 0.015, 0.01]);
 
 const RAIN_ACCORDS = ['green', 'earthy', 'woody', 'aromatic', 'mossy', 'aquatic'];
 
@@ -245,12 +245,36 @@ export function comfortRange(frag, { dewF = 55 } = {}) {
   return { lowF, highF, bestF };
 }
 
+// Your own rating and "on my skin" nudges (`personal`, from src/skin.js:
+// rating 1–5, longevity and sillage -1, 0 or 1). Your stars outweigh the
+// crowd's, and each nudge moves a performance level by PERSONAL_SHIFT.
+const PERSONAL_RATING_WEIGHT = 0.8;
+const PERSONAL_SHIFT = 0.5;
+// What your stars add to a score on top of quality(), which is only 5% of it:
+// a bottle you rate 1★ falls out of the S and A tiers, one at 2★ gives way to
+// any bottle that suits the window nearly as well, and a 5★ one wins near
+// ties (half the time it sits second to fourth). 4★ is what most bottles you
+// keep would get, so it moves a bottle only through quality(). By stars, 1 to 5.
+const PERSONAL_PICK = [-0.3, -0.12, 0, 0, 0.02];
+// Ratings at or below this mean you'd rather not wear it: no nudges, no packing.
+export const DISLIKED = 2;
+
+/** Your stars' term in a score (rank's `parts.personal`, see scoreOf); 0 unrated. */
+export function personalPart(frag) {
+  const stars = frag.personal?.rating;
+  return Number.isFinite(stars) ? PERSONAL_PICK[clamp(Math.round(stars), 1, 5) - 1] : 0;
+}
+
 // Community rating, trusted more as votes grow; unknowns sit at neutral 0.5.
+// A rating of your own leads: 1★ reads 0, 3★ neutral, 5★ 1.
 export function quality(frag) {
   const votes = Number.isFinite(frag.ratingVotes) ? frag.ratingVotes : 0;
   const rating = Number.isFinite(frag.rating) ? frag.rating : 0;
   const confidence = Math.min(1, Math.log10(Math.max(votes, 1)) / 3);
-  return clamp((rating - 3.5) / 1.0, 0, 1) * confidence + 0.5 * (1 - confidence);
+  const crowd = clamp((rating - 3.5) / 1.0, 0, 1) * confidence + 0.5 * (1 - confidence);
+  const mine = frag.personal?.rating;
+  if (!Number.isFinite(mine)) return crowd;
+  return PERSONAL_RATING_WEIGHT * clamp((mine - 1) / 4, 0, 1) + (1 - PERSONAL_RATING_WEIGHT) * crowd;
 }
 
 // Parfumo's longevity and sillage ratings (0–10 averages, `parfumo` from
@@ -266,6 +290,11 @@ const PERFORMANCE_PRIOR_VOTES = 10;
 const FRAGRANTICA_TO_PARFUMO = { longevity: [1.17, 1.839], sillage: [2.53, 2.047] };
 // How much an occasion's wish for longevity or sillage counts against its accords.
 const PERFORMANCE_WEIGHT = 0.4;
+// What a nudge of your own reads as, up and down.
+const PERSONAL_PERFORMANCE = {
+  sillage: ['Projects more on you', 'Sits closer on you'],
+  longevity: ['Lasts longer on you', 'Fades faster on you'],
+};
 // The share of an occasion's fit that earns a reason ("Stays close to the skin").
 const PERFORMANCE_REASON = 0.1;
 
@@ -278,11 +307,16 @@ export function performanceRating(frag) {
   return { longevity: scale('longevity'), sillage: scale('sillage'), votes: p.votes };
 }
 
+// A nudge of your own ("lasts longer on me") shifts the level from there.
 export function performanceLevel(frag, key) {
   const p = performanceRating(frag);
-  if (!p || p[key] == null) return 0;
-  const steady = (p.votes * p[key] + PERFORMANCE_PRIOR_VOTES * PERFORMANCE_MID[key]) / (p.votes + PERFORMANCE_PRIOR_VOTES);
-  return clamp((steady - PERFORMANCE_MID[key]) / PERFORMANCE_SPAN, -1, 1);
+  let level = 0;
+  if (p && p[key] != null) {
+    const steady = (p.votes * p[key] + PERFORMANCE_PRIOR_VOTES * PERFORMANCE_MID[key]) / (p.votes + PERFORMANCE_PRIOR_VOTES);
+    level = clamp((steady - PERFORMANCE_MID[key]) / PERFORMANCE_SPAN, -1, 1);
+  }
+  const mine = frag.personal?.[key];
+  return mine ? clamp(level + PERSONAL_SHIFT * Math.sign(mine), -1, 1) : level;
 }
 
 // What longevity and sillage add to a bottle's fit for the occasion: its
@@ -350,15 +384,16 @@ export function occasionPart(raw, occasion) {
 }
 
 /**
- * A bottle's score from its parts (rank's `parts`): the weighted fits, less
- * the rotation penalty. Shared with anything that scores bottles the way
- * rank() does (the gap finder), so the two can't drift apart.
+ * A bottle's score from its parts (rank's `parts`): the weighted fits, plus
+ * your stars' term (`personal`, when there is one), less the rotation
+ * penalty. Shared with anything that scores bottles the way rank() does (the
+ * gap finder), so the two can't drift apart.
  */
 export function scoreOf(parts, occasion = null) {
   const W = occasion ? OCCASION_WEIGHTS : DAILY_WEIGHTS;
   let score = W.season * parts.season + W.time * parts.time + W.weather * parts.weather + W.quality * parts.quality;
   if (occasion) score += W.occasion * parts.occasion;
-  return score - (parts.rotation ?? 0);
+  return score + (parts.personal ?? 0) - (parts.rotation ?? 0);
 }
 
 export function daysBetween(fromISO, toISO) {
@@ -381,6 +416,54 @@ export function rotationPenalty(fragId, history, todayISO, slot) {
     }
   }
   return { penalty, daysAgo, planned };
+}
+
+// How far below the top score a bottle not yet in the plan can sit and still
+// take the slot. Keeps one all-rounder from filling the whole week.
+export const PLAN_MARGIN = 0.06;
+
+// The rotation nudge (rank's and planWindows' `nudge`): a bottle left on the
+// shelf NUDGE_AFTER days or more takes the slot when it scores within
+// PLAN_MARGIN of the top and shares the top pick's tier, so a nudge never
+// trades an S pick for an A. A bottle never worn counts from the journal's
+// first wear (or from `added`, when a record carries the date it joined),
+// so nothing is neglected before the journal is a month old. Bottles you
+// rate DISLIKED or lower sit out on purpose and are never nudged. A plan
+// nudges at most once every NUDGE_EVERY days.
+export const NUDGE_AFTER = 30;
+const NUDGE_EVERY = 3;
+
+// Moves the best neglected bottle within reach to the front (`nudged`, with
+// its idle days as `parts.idle`, and `parts.unworn` when the journal has no
+// wear of it), unless the top pick is one already. Wears and plans before
+// this window count; the journal starts at its first logged wear.
+function nudgeIdle(scored, history, todayISO, slot) {
+  let start = null;
+  const last = new Map();
+  for (const h of history) {
+    if (h.date > todayISO || (h.date === todayISO && h.slot === slot)) continue;
+    if (!h.planned && (start === null || h.date < start)) start = h.date;
+    if (!last.has(h.id) || h.date > last.get(h.id)) last.set(h.id, h.date);
+  }
+  if (start === null || !scored.length) return;
+  const since = f => {
+    const added = typeof f.added === 'string' ? f.added.slice(0, 10) : null;
+    return last.get(f.id) ?? (added > start ? added : start);
+  };
+  const idle = s => daysBetween(since(s.fragrance), todayISO);
+  const [top] = scored;
+  if (idle(top) >= NUDGE_AFTER) return;
+  // Tiers fall in rank order, so the first bottle out of the top's tier ends the search.
+  for (let i = 1; i < scored.length && top.score - scored[i].score <= PLAN_MARGIN && scored[i].tier === top.tier; i++) {
+    const days = idle(scored[i]);
+    if (days < NUDGE_AFTER || scored[i].fragrance.personal?.rating <= DISLIKED) continue;
+    const [pick] = scored.splice(i, 1);
+    pick.nudged = true;
+    pick.parts.idle = days;
+    pick.parts.unworn = !last.has(pick.fragrance.id);
+    scored.unshift(pick);
+    return;
+  }
 }
 
 // The bottle's strongest accord that passes `keep`.
@@ -445,14 +528,25 @@ function reasonsFor(frag, parts, ctx) {
     if (fits.length) good(`${cap(fits.join(' & '))} suit${plural ? '' : 's'} ${phrase}`, W.occasion * (0.5 + parts.occasion), true);
     if (clash) bad(`${cap(nounOf(clash))} ${isPlural(nounOf(clash)) ? 'are' : 'is'} off for ${phrase}`, W.occasion * (1.5 - parts.occasion) * 0.5, true);
 
-    // Longevity and sillage, where the occasion cares about them.
+    // Longevity and sillage, where the occasion cares about them. A nudge of
+    // your own says so ("Lasts longer on you") in place of the crowd's word
+    // when they agree.
     const perf = performanceFit(frag, occasion);
     const wish = occasion.performance ?? {};
+    const said = {};
+    for (const key of ['sillage', 'longevity']) {
+      const mine = Math.sign(frag.personal?.[key] ?? 0);
+      if (!mine || !wish[key]) continue;
+      said[key] = mine * wish[key] > 0 ? 'good' : 'bad';
+      const text = PERSONAL_PERFORMANCE[key][mine > 0 ? 0 : 1];
+      (said[key] === 'good' ? good : bad)(text, W.occasion * PERFORMANCE_WEIGHT * PERSONAL_SHIFT * Math.abs(wish[key]) * 2, true);
+    }
+    const crowd = (key, tone, text, strength) => said[key] !== tone && (tone === 'good' ? good : bad)(text, strength, true);
     const [loud, quiet] = wish.sillage > 0 ? ['Projects across a room', `Too quiet for ${phrase}`] : ['Stays close to the skin', `Projects a lot for ${phrase}`];
-    if (perf.sillage >= PERFORMANCE_REASON) good(loud, W.occasion * perf.sillage * 2, true);
-    else if (perf.sillage <= -PERFORMANCE_REASON) bad(quiet, W.occasion * -perf.sillage * 2, true);
-    if (perf.longevity >= PERFORMANCE_REASON) good(`Lasts the whole ${slot === 'night' ? 'night' : 'day'}`, W.occasion * perf.longevity * 2, true);
-    else if (perf.longevity <= -PERFORMANCE_REASON) bad('Fades early', W.occasion * -perf.longevity * 2, true);
+    if (perf.sillage >= PERFORMANCE_REASON) crowd('sillage', 'good', loud, W.occasion * perf.sillage * 2);
+    else if (perf.sillage <= -PERFORMANCE_REASON) crowd('sillage', 'bad', quiet, W.occasion * -perf.sillage * 2);
+    if (perf.longevity >= PERFORMANCE_REASON) crowd('longevity', 'good', `Lasts the whole ${slot === 'night' ? 'night' : 'day'}`, W.occasion * perf.longevity * 2);
+    else if (perf.longevity <= -PERFORMANCE_REASON) crowd('longevity', 'bad', 'Fades early', W.occasion * -perf.longevity * 2);
 
     const voted = votedOccasionFit(frag, occasion);
     const what = VOTED_OCCASIONS[occasion.id]?.[3];
@@ -460,7 +554,15 @@ function reasonsFor(frag, parts, ctx) {
     else if (voted <= -PERFORMANCE_REASON) bad(`Parfumo voters rarely wear it for ${what}`, W.occasion * -voted * 2, true);
   }
 
-  if (frag.rating >= 4.35 && frag.ratingVotes >= 1000) good(`Crowd favorite · ${frag.rating.toFixed(1)}★`, 0.03);
+  // Your own stars replace the crowd's where they push the bottle up or down.
+  const stars = frag.personal?.rating;
+  if (Number.isFinite(stars)) {
+    if (stars >= 4) good(`You rate it ${stars}★`, W.quality * parts.quality + (parts.personal ?? 0), true);
+    else if (stars <= 2) bad(`You rate it ${stars}★`, W.quality * (1 - parts.quality) - (parts.personal ?? 0), true);
+  } else if (frag.rating >= 4.35 && frag.ratingVotes >= 1000) good(`Crowd favorite · ${frag.rating.toFixed(1)}★`, 0.03);
+
+  if (parts.unworn) good('Not worn yet', 0.3, true);
+  else if (parts.idle) good(`Not worn in ${parts.idle} days`, 0.3, true);
 
   const d = parts.daysAgo;
   if (parts.planned) {
@@ -477,10 +579,11 @@ function reasonsFor(frag, parts, ctx) {
  * Rank a collection for one time slot.
  * conditions: { feelsF, humidity, dewF?, category, date: Date, lat }
  * slot: 'day' | 'night'
- * opts: { occasion?, history?: [{id, date: 'YYYY-MM-DD'}], todayISO? (default: the window's dateISO) }
+ * opts: { occasion?, history?: [{id, date: 'YYYY-MM-DD'}], todayISO? (default: the window's dateISO),
+ *   nudge?: put a neglected bottle within reach first (see NUDGE_AFTER) }
  */
 export function rank(fragrances, conditions, slot, opts = {}) {
-  const { occasion = null, history = [], todayISO = conditions.dateISO ?? localISO(new Date()) } = opts;
+  const { occasion = null, history = [], todayISO = conditions.dateISO ?? localISO(new Date()), nudge = false } = opts;
   const weights = targetSeasonWeights(conditions.feelsF, conditions.date, conditions.lat);
 
   const scored = fragrances.map(frag => {
@@ -491,6 +594,7 @@ export function rank(fragrances, conditions, slot, opts = {}) {
       weather: weatherFit(frag, conditions),
       quality: quality(frag),
       occasion: occasion ? occasionPart(occasionRaw(frag, occasion), occasion) : null,
+      personal: personalPart(frag),
       rotation: penalty,
       daysAgo,
       planned,
@@ -508,33 +612,37 @@ export function rank(fragrances, conditions, slot, opts = {}) {
   for (const s of scored) {
     while (s.score < TIER_FLOORS[s.tier]) s.tier = TIERS[TIERS.indexOf(s.tier) + 1];
   }
+  if (nudge) nudgeIdle(scored, history, todayISO, slot);
 
   const ctx = { conditions, slot, weights, occasion };
   for (const s of scored) s.reasons = reasonsFor(s.fragrance, s.parts, ctx);
   return scored;
 }
 
-// How far below the top score a bottle not yet in the plan can sit and still
-// take the slot. Keeps one all-rounder from filling the whole week.
-const PLAN_MARGIN = 0.06;
-
 /**
  * Plan a run of windows in time order (e.g. the week ahead, day then night).
  * Each planned pick counts as worn for the windows after it, and a bottle not
  * yet in the plan wins over a repeat when it scores within PLAN_MARGIN.
- * A wear already logged for a window is kept as that window's pick.
+ * A wear already logged for a window is kept as that window's pick. A window
+ * can carry its own occasion (`win.occasion`, a formal dinner on a trip's
+ * third night) over opts.occasion. With opts.nudge, a neglected bottle takes
+ * a slot at most once every NUDGE_EVERY days.
  * Returns [{ win, ranked, pick }].
  */
 export function planWindows(fragrances, windows, opts = {}) {
-  const { occasion = null, history = [] } = opts;
+  const { occasion = null, history = [], nudge = false } = opts;
   let planned = [...history];
   const used = new Set();
+  let nudgedOn = null;
   return windows.map(win => {
-    const ranked = rank(fragrances, win, win.slot, { occasion, history: planned, todayISO: win.dateISO });
     const logged = history.find(h => h.date === win.dateISO && h.slot === win.slot);
+    const canNudge = nudge && !logged && (nudgedOn === null || daysBetween(nudgedOn, win.dateISO) >= NUDGE_EVERY);
+    const ranked = rank(fragrances, win, win.slot, { occasion: win.occasion ?? occasion, history: planned, todayISO: win.dateISO, nudge: canNudge });
+    // A nudged bottle leads the list, and is new to the plan.
     const fresh = ranked.find(r => !used.has(r.fragrance.id));
     let pick = logged && ranked.find(r => r.fragrance.id === logged.id);
     if (!pick) pick = fresh && ranked[0].score - fresh.score <= PLAN_MARGIN ? fresh : ranked[0];
+    if (pick?.nudged) nudgedOn = win.dateISO;
     if (pick) {
       used.add(pick.fragrance.id);
       if (!logged) planned = [{ id: pick.fragrance.id, date: win.dateISO, slot: win.slot, planned: true }, ...planned];
