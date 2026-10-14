@@ -66,10 +66,11 @@ export const state = {
   // wardrobe's default. Pool questions send it (poolInputs).
   preferValue: typeof prefs.preferValue === 'boolean' ? prefs.preferValue : null,
   // The scent styles someone says they like (style ids, src/scent-styles.js),
-  // hearted on Insights' style mix; null until they pick, when David's
-  // wardrobe starts on DEMO_LIKED and anyone else's on what most of its
-  // bottles lean toward (likedStyles in src/discover.js). setLikedStyles.
-  likedStyles: Array.isArray(prefs.likedStyles) && prefs.likedStyles.length ? prefs.likedStyles.filter(s => typeof s === 'string') : null,
+  // picked on Insights' style mix; [] when they unpicked every one; null
+  // until they pick, when David's wardrobe starts on DEMO_LIKED and anyone
+  // else's on what most of its bottles lean toward (likedStyles in
+  // src/discover.js). setLikedStyles.
+  likedStyles: Array.isArray(prefs.likedStyles) ? prefs.likedStyles.filter(s => typeof s === 'string') : null,
   // Discover's search: `draft` is the field as typed, `query` what was last
   // searched; `offline` the library's error when only local matches came back.
   discover: { draft: null, query: '', results: null, busy: false, error: '', offline: '' },
@@ -302,10 +303,10 @@ export function setPreferValue(on) {
   savePrefs();
 }
 
-// The styles someone likes, saved in prefs; none (an empty list) goes back
-// to the default (state.likedStyles).
+// The styles someone likes, saved in prefs: an empty list means none, null
+// goes back to the default (state.likedStyles).
 export function setLikedStyles(ids) {
-  state.likedStyles = Array.isArray(ids) && ids.length ? [...new Set(ids.map(String))] : null;
+  state.likedStyles = Array.isArray(ids) ? [...new Set(ids.map(String))] : null;
   savePrefs();
 }
 

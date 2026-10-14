@@ -8,77 +8,103 @@ import { rank } from '../../engine.js';
 import { esc, plural, shortDate } from '../../ui.js';
 import { icon, img, messageHTML, sectionHead, matchBadge } from '../../ui/components.js';
 import { askPool, warmPool } from '../../app/pool.js';
-import { state, findRecord, nowSlot, poolInputs } from '../../app/state.js';
+import { state, findRecord, nowSlot, poolInputs, ownedIn } from '../../app/state.js';
 import { loadWants, saveWants, setWant, hasWant } from '../../wishlist.js';
-import { libNow, loadLib, likedFor, inputsKey, ownable, repaint, listLoading, verdictBadge, verdictRank, fillsHTML } from './parts.js';
+import {
+  libNow, loadLib, libFailed, likedFor, inputsKey, ownable, repaint, listLoading, verdictBadge, verdictOf, verdictRank, fillsHTML, OWNED_WORD,
+} from './parts.js';
 
 const wish = {
   key: null, // the inputs and wants the checks answer
   checks: new Map(), // id -> a buy check ({ missing: true } when the library has no such bottle)
   busy: false,
   error: '',
-  loading: new Set(), // ids whose records are on their way
-  undo: null, // the list before the last removal
+  asked: new Set(), // ids whose records were asked for (asked again only by Try again)
+  recordsError: '', // a sentence, when those records couldn't load
+  undo: null, // { list: the wants before the last removal, id: the one removed }
 };
 
 // ---------- Templates (pure) ----------
 
 /**
- * The wants in order: those checked by verdict (best first) and gain, the
- * rest as added. items: [{ want, record, check, today }].
+ * The wants in order: those checked by verdict (best first) and gain, then
+ * the rest as added, then the ones you own already. items: [{ want, record,
+ * check, owned (OWNED_WORD's words, or null), today }].
  */
 export function sortWants(items) {
-  const checked = items.filter(i => i.check && !i.check.missing);
-  const rest = items.filter(i => !checked.includes(i));
-  checked.sort((a, b) => verdictRank(a.check.verdict) - verdictRank(b.check.verdict) || b.check.gain - a.check.gain);
-  return [...checked, ...rest];
+  const owned = items.filter(i => i.owned);
+  const checked = items.filter(i => !i.owned && i.check && !i.check.missing);
+  const rest = items.filter(i => !i.owned && !checked.includes(i));
+  checked.sort((a, b) => verdictRank(verdictOf(a.check)) - verdictRank(verdictOf(b.check)) || b.check.gain - a.check.gain);
+  return [...checked, ...rest, ...owned];
 }
 
-/** One want: photo, name, its verdict and reasons, what it would fill, today's match, I bought it and Remove. */
-export function wantCardHTML({ want, record, check, today }) {
-  const name = record?.name ?? check?.name ?? (check?.missing ? 'A bottle the library doesn’t have' : null);
-  const f = record ?? { id: want.id, name: name ?? 'Loading' };
-  const named = Boolean(name);
-  const verdict = !check ? '<span class="sk sk-pill" aria-hidden="true"></span><span class="visually-hidden">Checking</span>'
-    : check.missing ? '' : verdictBadge(check.verdict);
+// A want's name while it has none: loading, or in plain words when it can't
+// load (offline, or a bottle the library lacks).
+const STAND_IN = 'A bottle on your wishlist';
+
+/**
+ * One want: photo, name, its verdict and reasons, what it would fill,
+ * today's match, I bought it and Remove. One you own already says where,
+ * and offers only Remove. `failed`: its checks or record couldn't load, so
+ * nothing on it is still on its way.
+ */
+export function wantCardHTML({ want, record, check, today, owned = null }, { failed = false } = {}) {
+  const name = record?.name ?? check?.name ?? null;
+  const stand = name ? null : check?.missing ? 'A bottle the library doesn’t have' : failed ? STAND_IN : null;
+  const f = record ?? { id: want.id, name: name ?? stand ?? STAND_IN };
+  const verdict = owned ? `<span class="owned-tag">${icon.check}${esc(owned)}</span>`
+    : check ? (check.missing ? '' : verdictBadge(verdictOf(check)))
+      : failed ? '' : '<span class="sk sk-pill" aria-hidden="true"></span><span class="visually-hidden">Checking</span>';
   const meta = [record?.brand ?? check?.brand, `added ${shortDate(want.added)}`].filter(Boolean).join(' · ');
   const fills = check?.fills?.filter(x => x.matters) ?? [];
-  const body = !check ? ''
-    : check.missing ? '<p class="muted small">This bottle isn’t in the fragrance library, so there’s nothing to check it against.</p>'
-      : `<ul class="wish-reasons">${check.reasons.slice(0, 2).map(r => `<li>${esc(r)}</li>`).join('')}</ul>
+  const body = owned ? '<p class="muted small">You own it, so there’s nothing to check.</p>'
+    : !check ? ''
+      : check.missing ? '<p class="muted small">This bottle isn’t in the fragrance library, so there’s nothing to check it against.</p>'
+        : `<ul class="wish-reasons">${check.reasons.slice(0, 2).map(r => `<li>${esc(r)}</li>`).join('')}</ul>
         ${fills.length ? `<p class="wish-label">Would fill</p>${fillsHTML(fills, 2)}` : ''}`;
   const id = esc(want.id);
+  const title = name ? `<button class="pick-name-btn" data-action="open" data-ctx="" data-id="${id}">${esc(name)}</button>`
+    : stand ? `<span class="wish-stand">${esc(stand)}</span>` : '<span class="sk sk-line w70"></span>';
+  // Nothing to buy without its record: dimmed while it loads, gone when it can't.
+  const bought = owned || (!record && failed) ? ''
+    : `<button class="btn secondary compact" data-action="wish-bought" data-id="${id}"${record ? '' : ' disabled'}>${icon.plus}<span>I bought it<span class="visually-hidden">: ${esc(f.name)}</span></span></button>`;
   // The photo is a second way in for a pointer: out of the tab order, and
   // without data-ctx, so a redraw never hands it the name's focus.
-  return `<li class="wish" data-kind="${check && !check.missing ? esc(check.verdict) : ''}">
+  return `<li class="wish${owned ? ' owned' : ''}" data-kind="${!owned && check && !check.missing ? esc(verdictOf(check)) : ''}">
     <button class="wish-photo" data-action="open" data-id="${id}" tabindex="-1" aria-hidden="true">${img(f)}</button>
     <div class="wish-body">
       <div class="wish-head">
-        <h3 class="wish-name">${named ? `<button class="pick-name-btn" data-action="open" data-ctx="" data-id="${id}">${esc(f.name)}</button>` : '<span class="sk sk-line w70"></span>'}</h3>
+        <h3 class="wish-name">${title}</h3>
         ${verdict}
       </div>
       <p class="wish-meta">${esc(meta)}</p>
       ${want.note ? `<p class="wish-note">${esc(want.note)}</p>` : ''}
       ${body}
-      ${today ? `<p class="wish-today">${matchBadge(today.entry)}<span>${today.slot === 'day' ? 'today' : 'tonight'}</span></p>` : ''}
+      ${today && !owned ? `<p class="wish-today">${matchBadge(today.entry)}<span>${today.slot === 'day' ? 'today' : 'tonight'}</span></p>` : ''}
       <div class="action-row">
-        <button class="btn secondary compact" data-action="wish-bought" data-id="${id}"${record ? '' : ' disabled'}>${icon.check}<span>I bought it<span class="visually-hidden">: ${esc(f.name)}</span></span></button>
+        ${bought}
         <button class="btn tertiary compact" data-action="wish-remove" data-id="${id}">${icon.remove}<span>Remove<span class="visually-hidden"> ${esc(f.name)}</span></span></button>
       </div>
     </div>
   </li>`;
 }
 
-/** What the list adds up to, once checked: "1 strong fit, 2 good". */
+/** What the list adds up to, once checked: "1 strong fit, 2 good, 1 you own already". */
 export function wishSummary(items) {
   const counts = new Map();
-  for (const { check } of items) if (check && !check.missing) counts.set(check.verdict, (counts.get(check.verdict) ?? 0) + 1);
-  return [...counts].sort((a, b) => verdictRank(a[0]) - verdictRank(b[0]))
-    .map(([v, n]) => (v === 'Strong fit' ? plural(n, 'strong fit') : `${n} ${v.toLowerCase()}`)).join(', ');
+  for (const { check, owned } of items) if (!owned && check && !check.missing) counts.set(verdictOf(check), (counts.get(verdictOf(check)) ?? 0) + 1);
+  const owned = items.filter(i => i.owned).length;
+  return [...[...counts].sort((a, b) => verdictRank(a[0]) - verdictRank(b[0]))
+    .map(([v, n]) => (v === 'Strong fit' ? plural(n, 'strong fit') : `${n} ${v.toLowerCase()}`)), owned ? `${owned} you own already` : null].filter(Boolean).join(', ');
 }
 
-/** The pane: { items (sorted), busy, error }. */
-export function wishlistHTML({ items, busy = false, error = '' }) {
+/**
+ * The pane: { items (sorted), busy, error (a sentence), reload (the checks
+ * need modules that didn't load: only a reload helps), failed (a record
+ * didn't load) }.
+ */
+export function wishlistHTML({ items, busy = false, error = '', reload = false, failed = false }) {
   if (!items.length) {
     return messageHTML({
       glyph: icon.heart,
@@ -91,13 +117,15 @@ export function wishlistHTML({ items, busy = false, error = '' }) {
     });
   }
   const summary = wishSummary(items);
-  const status = error ? `<span class="error">${esc(error)}</span> <button class="link-btn" data-action="wish-retry">Try again</button>`
-    : busy ? `Checking ${plural(items.length, 'bottle')} against your wardrobe…`
-      : summary ? `${plural(items.length, 'bottle')}: ${summary}.` : '';
+  const status = reload ? '<span class="error">Checking needs a connection the first time. Reconnect, then reload.</span> <button class="link-btn" data-action="wish-reload">Reload</button>'
+    : error ? `<span class="error">${esc(error)}</span> <button class="link-btn" data-action="wish-retry">Try again</button>`
+      : busy ? `Checking ${plural(items.filter(i => !i.owned).length, 'bottle')} against your wardrobe…`
+        : summary ? `${plural(items.length, 'bottle')}: ${summary}.` : '';
+  const down = Boolean(reload || error || failed);
   return `<section class="card wishlist" aria-labelledby="wish-title">
     ${sectionHead('Bottles you want', '<p>Best fit for your shelf first.</p>', { id: 'wish-title' })}
     <p class="muted small wish-status" role="status">${status}</p>
-    <ul class="wishes${busy ? ' busy' : ''}">${items.map(wantCardHTML).join('')}</ul>
+    <ul class="wishes${busy ? ' busy' : ''}">${items.map(i => wantCardHTML(i, { failed: down })).join('')}</ul>
   </section>`;
 }
 
@@ -111,51 +139,63 @@ function todayFor(record) {
   return entry ? { entry, slot: p.win.slot } : null;
 }
 
+// A want you own already (in the ranked list, switched off or not, or in Mine) isn't checked.
+const ownedWord = id => OWNED_WORD[ownedIn(id)] ?? null;
+
 function items() {
   return sortWants(loadWants().map(want => {
-    const check = wish.checks.get(want.id);
+    const owned = ownedWord(want.id);
+    const check = owned ? undefined : wish.checks.get(want.id);
     const record = want.record ?? findRecord(want.id) ?? check?.record ?? null;
-    return { want, record, check, today: todayFor(record) };
+    return { want, record, check, owned, today: owned ? null : todayFor(record) };
   }));
 }
 
-const wishlistPane = () => wishlistHTML({ items: items(), busy: wish.busy, error: wish.error });
+const wishlistPane = () => wishlistHTML({ items: items(), busy: wish.busy, error: wish.error || wish.recordsError, reload: libFailed(), failed: Boolean(wish.recordsError) });
 
 const onPane = () => state.base?.dest === 'wardrobe' && state.base.pane === 'wishlist';
 function paint(app) {
   if (onPane()) repaint(app);
 }
 
-// Names and photos first (records answer at once), then the checks.
+// Names and photos first (records answer at once), then the checks. Each
+// want's record is asked for once (a bottle the library lacks never turns
+// up, and an offline answer would otherwise ask again on every redraw).
 let asked = 0;
 async function refresh(app) {
   const wants = loadWants();
   if (!wants.length) return;
-  const need = wants.filter(w => !w.record && !findRecord(w.id) && !wish.loading.has(w.id)).map(w => w.id);
+  const need = wants.filter(w => !w.record && !findRecord(w.id) && !wish.asked.has(w.id)).map(w => w.id);
   if (need.length) {
-    need.forEach(id => wish.loading.add(id));
-    askPool('records', { ids: need }).then(() => paint(app), () => {}).finally(() => need.forEach(id => wish.loading.delete(id)));
+    need.forEach(id => wish.asked.add(id));
+    askPool('records', { ids: need }).then(() => paint(app), err => {
+      wish.recordsError = err.message;
+      paint(app);
+    });
   }
   let lib = libNow();
   if (!lib) {
+    // A failed load stays failed until a reload: say so once, and ask nothing.
+    if (libFailed()) return;
     try {
       lib = await loadLib();
-    } catch (err) {
-      wish.error = 'Checking needs a connection the first time.';
+    } catch {
       return paint(app);
     }
   }
   // Checks judge against the ranked list, so they wait for it.
   if (listLoading()) return;
   const liked = likedFor(lib).ids;
-  const key = JSON.stringify([inputsKey(lib), wants.map(w => w.id), liked]);
+  const check = wants.filter(w => !ownedWord(w.id));
+  const key = JSON.stringify([inputsKey(lib), check.map(w => w.id), liked]);
   if (key === wish.key) return;
   const n = ++asked;
-  Object.assign(wish, { key, busy: true, error: '' });
+  Object.assign(wish, { key, busy: check.length > 0, error: '' });
+  if (!check.length) return paint(app);
   paint(app);
   try {
     const inputs = await poolInputs();
-    const r = await askPool('check', { ...inputs, records: wants.map(w => w.record ?? w.id), liked }, { channel: 'wish-checks' });
+    const r = await askPool('check', { ...inputs, records: check.map(w => w.record ?? w.id), liked }, { channel: 'wish-checks' });
     if (r.stale || n !== asked) return;
     wish.checks = new Map(r.checks.map(c => [String(c.id), c]));
   } catch (err) {
@@ -188,7 +228,7 @@ function redraw(el, app) {
 }
 
 function removed(app, id, before) {
-  wish.undo = before;
+  wish.undo = { list: before, id };
   const name = findRecord(id)?.name ?? before.find(w => w.id === id)?.record?.name ?? 'Bottle';
   app.showToast(`<span class="note">${esc(name)} removed from your wishlist.</span><button class="btn primary compact" data-action="wish-undo">Undo</button>`);
 }
@@ -217,12 +257,19 @@ export const actions = {
     (target ?? document.getElementById('page-title'))?.focus();
     removed(app, id, before);
   },
+  // The Undo button goes with its toast: focus moves to the bottle that came
+  // back (its name on the Wishlist, else its Want button), or the page's heading.
   'wish-undo'(el, app) {
     if (!wish.undo) return;
-    saveWants(wish.undo);
+    const { list, id } = wish.undo;
+    saveWants(list);
     wish.undo = null;
     app.render();
     app.hideToast();
+    const sel = CSS.escape(id);
+    const target = (onPane() && document.querySelector(`.wish .pick-name-btn[data-id="${sel}"]`))
+      || document.querySelector(`[data-action="wish-toggle"][data-id="${sel}"]`) || document.getElementById('page-title');
+    target?.focus();
   },
   async 'wish-bought'(el, app) {
     const id = el.dataset.id;
@@ -239,7 +286,12 @@ export const actions = {
     document.getElementById('page-title')?.focus();
   },
   'wish-retry'(el, app) {
-    Object.assign(wish, { key: null, error: '' });
+    Object.assign(wish, { key: null, error: '', recordsError: '' });
+    wish.asked.clear();
     app.renderPage();
+  },
+  // The modules didn't load, and a failed import stays failed: only a reload asks again.
+  'wish-reload'() {
+    location.reload();
   },
 };

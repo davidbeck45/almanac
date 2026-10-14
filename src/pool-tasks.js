@@ -285,7 +285,7 @@ const TASKS = {
       const found = await recordFor(cache, x, pool, ctx.owned);
       if (!found) return { id: String(x.id ?? x.record?.id), missing: true };
       const record = await withAbout(cache, found, pool);
-      const check = buyCheck(record, ctx), out = checkJSON(record, check);
+      const check = buyCheck(record, ctx, { liked }), out = checkJSON(record, check);
       if (out.overlap) out.overlap.record = bare(check.overlap.bottle);
       if (out.twin) out.twin.record = check.twin.record;
       const scores = scoresOf(found, shown);

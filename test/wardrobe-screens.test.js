@@ -10,11 +10,11 @@ import * as gaps from '../src/gaps.js';
 import * as styles from '../src/scent-styles.js';
 import * as discover from '../src/discover.js';
 import { doubles, DOUBLE_SIM } from '../src/doubles.js';
-import { state } from '../src/app/state.js';
+import { state, setLikedStyles } from '../src/app/state.js';
 import { esc } from '../src/ui.js';
 import * as insights from '../src/views/wardrobe/insights.js';
 import * as wishlist from '../src/views/wardrobe/wishlist.js';
-import { placeOf, valueWord, verdictBadge, verdictRank, VERDICTS, fillHTML, ratingText, likedFor, wantButton } from '../src/views/wardrobe/parts.js';
+import { placeOf, valueWord, verdictBadge, verdictRank, verdictOf, VERDICTS, fillHTML, ratingText, riskText, likedFor, wantButton } from '../src/views/wardrobe/parts.js';
 
 const dir = new URL('../data/fragrantica/', import.meta.url);
 const load = async path => {
@@ -80,10 +80,26 @@ test('Insights renders the report clean: the map, thin spots, strengths and sugg
   assert.ok(html.includes('insights busy'), 'a newer report on its way dims the old');
   assert.ok(html.includes(`data-action="wish-toggle" data-id="${r.picks[0].id}" aria-pressed="true"`), 'wanted ones say so');
   for (const g of report.gaps) assert.ok(html.includes(insights.STATUS_WORD[g.status]), `the status of ${g.title} is a word`);
-  assert.ok(!/<h4/.test(html), 'no h4');
+  // Each half an h2, its cards h3s, what's in them h4s.
+  assert.deepEqual([...html.matchAll(/<h2 id="([\w-]+)"/g)].map(m => m[1]), ['ins-headline', 'styles-title']);
+  for (const id of ['cov-title', 'thin-title', 'fill-title', 'mix-title', 'more-title', 'start-title', 'doubles-title']) assert.match(html, new RegExp(`<h3 id="${id}"`));
+  assert.ok(!/<h5/.test(html), 'no h5');
   const failed = clean(insights.stylesHTML({ ...model.styles, error: EVIL }), 'styles, failed');
   assert.equal((failed.match(/data-action="ins-retry"/g) ?? []).length, 2, 'Try again in place of each list');
   assert.ok(!failed.includes('ins-more-head'));
+});
+
+test('a vial fills by status, and one that falls short as near as your best comes: empty only with nothing', () => {
+  const level = s => report.coverage.filter(c => c.status === s).map(insights.vialLevel);
+  const gaps = level('gap');
+  assert.ok(gaps.length && gaps.every(x => x > 0 && x < Math.min(...level('thin'), insights.vialLevel({ status: 'thin' }))), 'a cell that falls short, with a bottle, is partly full and under Thin');
+  assert.ok(Math.min(...level('plenty')) > Math.max(...level('covered')) && Math.min(...level('covered')) > Math.max(...level('room')));
+  const c = report.coverage.find(x => x.status === 'gap');
+  assert.equal(insights.vialLevel({ ...c, top: [] }), 0, 'empty when nothing you own fits');
+  assert.ok(insights.vialLevel({ ...c, top: [{ ...c.top[0], score: c.target - 0.06 }] }) > insights.vialLevel({ ...c, top: [{ ...c.top[0], score: c.target - 0.2 }] }), 'nearer is fuller');
+  const html = insights.coverageHTML(report, { uses, bands, cell: c.cell, slot: null });
+  assert.match(html, new RegExp(`data-value="${c.cell}"[^>]*aria-label="[^"]*: Falls short\\.[^"]*"><span class="vial[^"]*" data-status="gap" style="--lvl:${insights.vialLevel(c)};`), 'its level is set on the vial, its status said in words');
+  assert.match(html, /Rarely comes up<\/span>/, 'the key has the dashed rim too');
 });
 
 test('the map opens on the worst gap, and a cell’s detail names who covers it and who would beat them', () => {
@@ -109,7 +125,17 @@ test('the headline reads plainly, and the thin spots name what fills them', () =
   assert.deepEqual(insights.headline({ ...report, overview: { strongShare: 0.81 }, gaps: [] }),
     { lead: 'You have a strong pick for 81% of what you wear.', tail: 'Nothing’s thin. Here’s where you’re strongest.' });
   const html = insights.thinHTML(report);
-  assert.equal((html.match(/class="thin-row"/g) ?? []).length, report.gaps.length);
+  assert.equal((html.match(/class="thin-row"/g) ?? []).length, report.gaps.length, 'five spots show whole');
+  assert.ok(!html.includes('ins-thin-all'));
+  assert.match(html, /The best out there reach \d+%\./);
+  // A small wardrobe's many thin spots: the biggest four, the rest behind Show more.
+  const many = { ...report, gaps: Array.from({ length: 12 }, (_, i) => ({ ...report.gaps[i % report.gaps.length], title: `Spot ${i}` })) };
+  const folded = insights.thinHTML(many);
+  assert.equal((folded.match(/class="thin-row"/g) ?? []).length, 4);
+  assert.match(folded, /12 situations could use a better bottle\. The biggest four:/);
+  assert.match(folded, /data-action="ins-thin-all"[^>]*aria-expanded="false"><svg[^]*Show 8 more/);
+  assert.equal((insights.thinHTML(many, { all: true }).match(/class="thin-row"/g) ?? []).length, 12);
+  assert.match(insights.thinHTML(many, { all: true }), /Show fewer/);
   const zenith = report.picks.find(p => p.name === 'Zenith');
   if (zenith) assert.ok(html.includes(`data-id="${zenith.id}">Zenith</button>`), 'Zenith fills a thin spot');
   assert.ok(!/match;\s*$|NaN%/.test(html));
@@ -124,14 +150,25 @@ test('a suggestion card shows its fills against your best, its facts and its act
   assert.match(html, /Great value/, 'a value-filtered pick is great value');
   assert.match(html, /data-action="wish-toggle"[^>]*aria-pressed="false"/);
   assert.match(html, /data-action="ins-own"/);
-  assert.match(insights.pickCardHTML(p, { owned: 'In Mine' }), /owned-tag/, 'one you own says where');
+  assert.match(html, /Safe blind buy|Try before buying|Risky blind buy|Not much crowd data/);
+  const own = insights.pickCardHTML(p, { owned: 'In Mine' });
+  assert.match(own, /owned-tag/, 'one you own says where');
+  assert.ok(!own.includes('wish-toggle') && !own.includes('ins-own'), 'and offers nothing to want or own');
+  assert.match(insights.picksHTML(report), /Picked as a set|class="ins-picks"/);
 });
 
-test('the style mix hearts liked styles and folds the long tail', () => {
+test('the style mix marks liked styles with a Like toggle and folds the long tail', () => {
   const rows = Array.from({ length: 14 }, (_, i) => ({ id: `s${i}`, label: `Style ${i}`, count: 14 - i, liked: i === 12, bottles: [] }));
   const html = insights.styleMixHTML(rows, { open: null, stated: true });
   assert.equal((html.match(/class="mix-row/g) ?? []).length, 9, 'the top 8 and the liked one');
-  assert.match(html, /data-value="s12" aria-pressed="true"/);
+  assert.match(html, /data-value="s12" aria-pressed="true"><svg[^]*?<\/svg><span>Liked<span class="visually-hidden">: Style 12</);
+  assert.match(html, /data-value="s0" aria-pressed="false"><svg[^]*?<\/svg><span>Like<span class="visually-hidden">: Style 0</);
+  assert.ok(!/heart/.test(html), 'the heart is Want’s alone');
+  // A style liked elsewhere with no bottle yet still has its row, so it can be unliked here.
+  const none = clean(insights.styleMixHTML([{ id: 'oud', label: 'Oud', count: 0, liked: true, bottles: [] }], { open: 'oud' }), 'mix, liked and empty');
+  assert.match(none, /data-value="oud" aria-pressed="true"/);
+  assert.ok(!none.includes('mix-bar'));
+  assert.match(none, /None of your bottles yet/);
   assert.match(html, /Show all 14 styles/);
   assert.equal((insights.styleMixHTML(rows, { all: true }).match(/class="mix-row/g) ?? []).length, 14);
   assert.match(insights.styleMixHTML([], {}), /None of your bottles/);
@@ -156,6 +193,22 @@ test('doubles: dupes of one original, a dupe and its original, or none and the c
   assert.deepEqual(none.pairs, [], 'nothing in David’s wardrobe wears like another');
   assert.ok(none.closest.sim < DOUBLE_SIM);
   assert.match(insights.doublesHTML(none), /No doubles: every bottle smells its own way\. The closest pair, .+ and .+, is \d+% alike, sharing /);
+  assert.deepEqual(insights.needsSignals(owned), [], 'David’s records carry their signals');
+  assert.match(insights.doublesHTML(undefined), /sk-rows/, 'a wardrobe whose signals are loading waits');
+  assert.match(insights.doublesHTML({ ...none, partial: true }), /compares notes and accords only/);
+});
+
+test('doubles on anyone’s wardrobe read voters’ links from the pool: Aventus and Club de Nuit Intense Man', async () => {
+  // As Mine or a shared link has them: r/ records, no signals of their own.
+  const ids = ['9828', '34696', '31861', '13016', '33519'];
+  const { records } = await ask('records', { ids });
+  const mine = records.map(({ extras, ...r }) => r);
+  assert.deepEqual(insights.needsSignals(mine), ids);
+  const pair = d => d.pairs.find(p => [p.a.id, p.b.id].sort().join() === '34696,9828');
+  assert.equal(pair(doubles(mine)), undefined, 'without the pool, a 76% pair reads as no double');
+  const byId = new Map(records.map(r => [String(r.id), r]));
+  assert.equal(pair(doubles(mine, { byId }))?.why, 'voters', 'with it, voters tie them');
+  assert.match(insights.doublesHTML(doubles(mine, { byId })), /Aventus and Club de Nuit Intense Man<\/b><small>Voters say they smell alike/);
 });
 
 test('How you wear: three levels for each occasion, Daily always counted', () => {
@@ -173,17 +226,36 @@ test('the climate line says where it comes from, and the value switch waits for 
   assert.match(insights.contextHTML({ place: 'New York', climate: 'failed' }), /Couldn’t load New York’s climate/);
   assert.match(insights.contextHTML({ climate: 'local', preferValue: null }), /sk-switch/);
   assert.match(insights.contextHTML({ climate: 'local', preferValue: false }), /role="switch" aria-checked="false"/);
+  const failed = insights.contextHTML({ climate: 'local', preferValue: null, failed: true });
+  assert.ok(!/sk-switch|role="switch"/.test(failed), 'a failed report draws no switch that never resolves');
+  assert.match(insights.contextHTML({ climate: 'local', preferValue: true, failed: true }), /aria-checked="true"/, 'one set by hand still shows');
+  // The styles half says when great value narrows it, with a way out where it's read.
+  assert.match(insights.valueNoteHTML(true, 'more'), /Only bottles voters call great value\. <button class="link-btn" data-action="ins-value-note" data-value="more">Include pricier ones/);
+  assert.match(insights.valueNoteHTML(false, 'start'), /data-value="start">Great value only/);
+  assert.equal(insights.valueNoteHTML(null, 'more'), '');
   assert.match(insights.contextHTML({ climate: 'local', tagged: 2 }), /Tuned by the 2 wears you logged/);
 });
 
-test('David starts on the styles he says he loves; hearting some replaces them', () => {
+test('David starts on the styles he says he loves; liking some replaces them, and unliking all leaves none', () => {
   assert.deepEqual(likedFor(lib, owned), { ids: discover.DEMO_LIKED, stated: true });
   state.likedStyles = ['oud', 'nope'];
   try {
     assert.deepEqual(likedFor(lib, owned), { ids: ['oud'], stated: true });
+    setLikedStyles([]);
+    assert.deepEqual(state.likedStyles, [], 'none is a choice, not the default');
+    assert.deepEqual(likedFor(lib, owned), { ids: [], stated: true });
+    assert.match(insights.moreHTML([]), /Like a style above/);
+    setLikedStyles(null);
+    assert.deepEqual(likedFor(lib, owned).ids, discover.DEMO_LIKED, 'null goes back to the default');
   } finally {
     state.likedStyles = null;
   }
+  const mix = styles.styleMix(owned), label = id => styles.styleById(id).label;
+  assert.match(insights.storyOf({ ids: discover.DEMO_LIKED, stated: true }, mix, owned.length, label),
+    new RegExp(`^You like Skin scent, Clean and Intimate, but only \\d+ of your ${owned.length} bottles are\\.$`));
+  assert.equal(insights.storyOf({ ids: ['oud'], stated: true }, mix, 3, label), 'You like Oud, but none of your 3 bottles are.');
+  assert.equal(insights.storyOf({ ids: ['amber', 'woody'], stated: false }, mix, 3, label), 'Most of your bottles lean toward Amber and Woody.');
+  assert.equal(insights.storyOf({ ids: [], stated: true }, mix, 3, label), null);
   state.active = 'mine';
   try {
     const from = likedFor(lib, owned);
@@ -215,6 +287,42 @@ test('the wishlist puts the best fits first and says what each would add', async
   const empty = wishlist.wishlistHTML({ items: [] });
   assert.match(empty, /href="#\/wardrobe\/insights"/);
   assert.match(empty, /href="#\/discover"/);
+
+  // A want you own already: last, where it is, nothing to buy, out of the verdicts.
+  const sauvage = { want: { id: '31861', added: '2026-10-01' }, record: { id: '31861', name: 'Sauvage', brand: 'Dior' }, check: undefined, owned: 'In David’s' };
+  const withOwned = wishlist.sortWants([sauvage, ...items]);
+  assert.equal(withOwned.at(-1), sauvage);
+  assert.equal(wishlist.wishSummary(withOwned), '1 strong fit, 2 redundant, 1 you own already');
+  const card = clean(wishlist.wantCardHTML(sauvage), 'owned want');
+  assert.match(card, /owned-tag[^]*In David’s/);
+  assert.ok(!card.includes('wish-bought') && !card.includes('sk-pill'), 'no I bought it, nothing checking');
+  assert.match(card, /data-action="wish-remove"/);
+});
+
+test('offline, a want with nothing loaded says so plainly instead of loading forever', () => {
+  const lost = { want: { id: '123', added: '2026-10-02' }, record: null, check: undefined };
+  const waiting = wishlist.wantCardHTML(lost);
+  assert.match(waiting, /sk-pill/, 'still checking while it can');
+  const failed = wishlist.wantCardHTML(lost, { failed: true });
+  assert.ok(!/sk-pill|sk-line|Loading/.test(failed), 'no placeholder that never resolves');
+  assert.match(failed, /<span class="wish-stand">A bottle on your wishlist<\/span>/);
+  assert.match(failed, /Remove<span class="visually-hidden"> A bottle on your wishlist/);
+  assert.ok(!failed.includes('wish-bought'), 'nothing to buy without its record');
+  const page = wishlist.wishlistHTML({ items: [lost], error: 'Can’t reach the fragrance library. Check your connection.', failed: true });
+  assert.match(page, /wish-retry/);
+  assert.ok(!/sk-pill/.test(page));
+  assert.match(wishlist.wishlistHTML({ items: [lost], reload: true }), /data-action="wish-reload">Reload/, 'modules that didn’t load need a reload');
+});
+
+test('a Redundant check that ties to nothing you own reads Covered', () => {
+  const base = { verdict: 'Redundant', reasons: ['Nothing you own smells like it, but your Cedrus Blanc outdoes it even for Formal on warm nights, where it does best.'] };
+  assert.equal(verdictOf({ ...base, overlap: { id: '1', name: 'Cedrus Blanc', via: null, sim: 0.42, link: null } }), 'Covered');
+  assert.equal(verdictOf({ ...base, overlap: { id: '1', name: 'Liam', via: null, sim: 0.83, link: null } }), 'Redundant', 'too alike');
+  assert.equal(verdictOf({ ...base, overlap: { id: '1', name: 'Liam', via: null, sim: 0.6, link: 'Voters call it a twin of your Liam' } }), 'Redundant', 'voters tie them');
+  assert.equal(verdictOf({ ...base, overlap: null }), 'Redundant', 'you own it');
+  assert.equal(verdictOf({ verdict: 'Good' }), 'Good');
+  assert.equal(riskText({ level: 'low' }).word, 'Safe blind buy');
+  assert.equal(riskText({ level: 'medium', reasons: ['Voters split on it.'] }).word, 'Try before buying');
 });
 
 test('verdicts, values and fills read in words', () => {

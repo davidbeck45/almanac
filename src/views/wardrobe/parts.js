@@ -13,20 +13,36 @@ import { state, activeFragrances, hiddenIn, viewingDemo, findRecord, library } f
 // out of the boot graph (src/app/state.js poolInputs loads the first two the
 // same way); the pane shows a skeleton until they're in.
 
-let lib = null, loading = null;
+let lib = null, loading = null, failed = null;
+let importLib = () => Promise.all([
+  import('../../gaps.js'), import('../../uses.js'), import('../../scent-styles.js'), import('../../discover.js'), import('../../doubles.js'),
+]).then(([gaps, uses, styles, discover, doubles]) => ({ gaps, uses, styles, discover, doubles }));
 
 /** The modules, once loaded (null before). */
 export const libNow = () => lib;
 
-/** Loads them once; a failed load (offline, first visit) is tried again next time. */
+/**
+ * Whether they failed to load (offline before the service worker had them):
+ * the browser keeps a failed module import failed for the page's life, so
+ * only a reload tries again, and the panes ask once, not on every render.
+ */
+export const libFailed = () => Boolean(failed);
+
+/** Loads them once. After a failure it rejects at once, without importing again. */
 export function loadLib() {
-  loading ??= Promise.all([
-    import('../../gaps.js'), import('../../uses.js'), import('../../scent-styles.js'), import('../../discover.js'), import('../../doubles.js'),
-  ]).then(([gaps, uses, styles, discover, doubles]) => (lib = { gaps, uses, styles, discover, doubles }), err => {
+  if (failed) return Promise.reject(failed);
+  loading ??= importLib().then(l => (lib = l), err => {
+    failed = err;
     loading = null;
     throw err;
   });
   return loading;
+}
+
+/** For tests: load the modules with `fn`, starting over. */
+export function useLibLoader(fn) {
+  importLib = fn;
+  lib = loading = failed = null;
 }
 
 // ---------- Painting ----------
@@ -50,12 +66,14 @@ export function repaint(app) {
 export const listLoading = () => (viewingDemo() && !state.demo) || Boolean(state.shared?.loading);
 
 /**
- * The styles someone likes: { ids, stated } — the ones they hearted
- * (state.likedStyles), David's DEMO_LIKED on his wardrobe, else (stated
- * false) the ones most of their bottles lean toward.
+ * The styles someone likes: { ids, stated } — the ones they picked
+ * (state.likedStyles; none when they unpicked them all), David's DEMO_LIKED
+ * on his wardrobe, else (stated false) the ones most of their bottles lean
+ * toward.
  */
 export function likedFor(l = lib, owned = activeFragrances()) {
   const known = new Set(l.styles.STYLES.map(s => s.id));
+  if (state.likedStyles?.length === 0) return { ids: [], stated: true };
   const stated = (state.likedStyles ?? (viewingDemo() ? l.discover.DEMO_LIKED : null))?.filter(id => known.has(id));
   if (stated?.length) return { ids: stated, stated: true };
   return { ids: l.discover.likedStyles(owned).map(s => s.id), stated: false };
@@ -97,6 +115,9 @@ export async function ownable(id, kept = null) {
   return kept ?? findRecord(id);
 }
 
+/** Where a bottle you own already is, as a tag's words ("In David’s"), or null. */
+export const OWNED_WORD = { demo: 'In David’s', mine: 'In Mine', shared: 'In this list' };
+
 // ---------- Templates ----------
 
 // Best first, as the wishlist sorts them.
@@ -114,6 +135,21 @@ const VERDICT_GLYPH = {
   redundant: mark('<circle cx="6" cy="8" r="4.3" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="10" cy="8" r="4.3" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
   risky: mark('<path d="M8 1.8l6.4 11.4H1.6Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6.2v3.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="8" cy="11.3" r="0.95" fill="currentColor"/>'),
 };
+
+// Under this likeness a bottle doesn't double one you own (SAME_SIM in src/gaps.js).
+const SAME_SIM = 0.8;
+
+/**
+ * The verdict to show for a buy check. A Redundant one that ties to nothing
+ * you own (no dupe or smells-like link, under SAME_SIM alike, not owned
+ * itself) only says the wardrobe already does what it would: Covered, as
+ * the buy check itself calls that once it knows the word.
+ */
+export function verdictOf(check, sameSim = SAME_SIM) {
+  if (check?.verdict !== 'Redundant') return check?.verdict ?? null;
+  const o = check.overlap;
+  return !o || o.link || o.sim >= sameSim ? 'Redundant' : 'Covered';
+}
 
 /** A buy-check verdict as a tag: its glyph and its word. */
 export function verdictBadge(verdict) {
@@ -138,7 +174,7 @@ export function valueWord(value) {
 
 /** A blind buy's risk in words: { word, reason }. */
 export function riskText(risk) {
-  const word = { low: 'Low risk', medium: 'Some risk', high: 'Risky blind buy' }[risk?.level] ?? 'Not much crowd data';
+  const word = { low: 'Safe blind buy', medium: 'Try before buying', high: 'Risky blind buy' }[risk?.level] ?? 'Not much crowd data';
   return { word, reason: risk?.level !== 'low' ? risk?.reasons?.[0] ?? '' : '' };
 }
 

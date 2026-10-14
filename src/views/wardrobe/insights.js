@@ -15,7 +15,8 @@ import {
 } from '../../app/state.js';
 import { loadWants, setWant } from '../../wishlist.js';
 import {
-  libNow, loadLib, likedFor, taggedWears, inputsKey, ownable, repaint, listLoading, ratingText, valueWord, riskText, fillsHTML, wantButton, nearestText,
+  libNow, loadLib, libFailed, likedFor, taggedWears, inputsKey, ownable, repaint, listLoading, ratingText, valueWord, riskText, fillsHTML, wantButton,
+  nearestText, OWNED_WORD,
 } from './parts.js';
 
 // ---------- The pane's own state ----------
@@ -24,23 +25,30 @@ const ins = {
   key: null, // the inputs (inputsKey) the report answers or is being asked for
   report: null, // gapReport from the pool, null until the first lands
   error: '', // a sentence, when the report couldn't be worked out
-  libError: '', // a sentence, when the modules above didn't load (offline, first visit)
   busy: false, // a newer report is on its way (the old one stays, dimmed)
   fresh: false, // the first report since the pane opened: its map fills in
   climate: null, // 'local' | 'default' (no place set) | 'failed' (the archive didn't answer)
   cell: null, // the map's cell picked (id); null = the worst gap
   slot: null, // Day or Night on narrow screens; null = the picked cell's
+  allThin: false, // where it's thin shows every spot
   open: null, // the style mix row showing its bottles
   allStyles: false, // the style mix shows every style
-  styles: { key: null, more: {}, starters: {}, error: '' },
+  kept: new Set(), // styles unliked here: their rows stay put, so focus has somewhere to stay
+  // The styles half's answers; preferValue: what they used (null before one lands).
+  styles: { key: null, more: {}, starters: {}, error: '', preferValue: null },
 };
 
-// Statuses from the gap finder, worst first, as the map's legend reads.
-export const STATUS_WORD = { gap: 'Gap', thin: 'Thin', room: 'Room to grow', covered: 'Covered', plenty: 'Plenty', off: 'Never' };
+// Statuses from the gap finder, worst first, as the map's legend reads. A
+// gap there means your best falls short of what the best bottles reach (in
+// the bottom of the top 5%, or 6 points or more under them), not that you
+// own nothing, so it says so.
+export const STATUS_WORD = { gap: 'Falls short', thin: 'Thin', room: 'Room to grow', covered: 'Covered', plenty: 'Plenty', off: 'Never' };
 const LEGEND = ['plenty', 'covered', 'room', 'thin', 'gap'];
 const SLOT_WORD = { day: 'days', night: 'nights' };
-// Under this share of wears a cell rarely comes up (MIN_WEIGHT in src/gaps.js): its vial is faded.
+// Under this share of wears a cell rarely comes up (MIN_WEIGHT in src/gaps.js): its vial has a dashed rim.
 const RARE = 0.004;
+// Thin spots shown before "Show more" ("The biggest four").
+const THIN_ROWS = 4;
 // A starter for a style you don't own: well rated, a safe blind buy, fair value.
 const STARTER = { minRating: 4, minSafe: 50, minValue: 3.5 };
 const MAX_STARTERS = 6;
@@ -58,8 +66,24 @@ const pct = x => Math.round(x * 100);
 
 // ---------- Templates (pure) ----------
 
-const vial = (status, { rare = false, i = null } = {}) =>
-  `<span class="vial${rare ? ' rare' : ''}" data-status="${esc(status)}"${i == null ? '' : ` style="--i:${i}"`} aria-hidden="true"><span class="vial-fill"></span></span>`;
+// How full a cell's vial stands: by its status, and when it falls short by
+// how near your best comes to what the best bottles reach (from FLOOR up),
+// below Thin's level either way. Empty only when nothing you own fits.
+const LEVEL = { plenty: 1, covered: 0.75, room: 0.58, thin: 0.42 };
+const FLOOR = 0.6;
+/** A coverage cell's fill level, 0..1. */
+export function vialLevel(c) {
+  if (c.status in LEVEL) return LEVEL[c.status];
+  const best = c.top?.[0]?.score;
+  if (c.status !== 'gap' || best == null) return 0;
+  const near = Math.max(0, Math.min(1, (best - FLOOR) / (c.target - FLOOR)));
+  return Math.round((0.06 + 0.3 * near) * 100) / 100;
+}
+
+const vial = (status, { level = null, rare = false, i = null } = {}) => {
+  const style = [level == null ? '' : `--lvl:${level}`, i == null ? '' : `--i:${i}`].filter(Boolean).join(';');
+  return `<span class="vial${rare ? ' rare' : ''}" data-status="${esc(status)}"${style ? ` style="${style}"` : ''} aria-hidden="true"><span class="vial-fill"></span></span>`;
+};
 
 /** The headline: how much of what you wear has a strong pick, and whether anything's thin. */
 export function headline(report) {
@@ -73,9 +97,11 @@ export function headline(report) {
 /**
  * The line under the headline and its controls: the climate it read
  * (`climate` 'local', 'default' or 'failed', or null while it loads), "How
- * you wear" and how many logged wears tune it, "Prefer great value".
+ * you wear" and how many logged wears tune it, "Prefer great value" (a
+ * placeholder until an answer says which it used; none when the report
+ * failed, `failed`, and nothing has).
  */
-export function contextHTML({ place, climate, tagged, preferValue }) {
+export function contextHTML({ place, climate, tagged, preferValue, failed = false }) {
   const where = esc(place ?? 'your area');
   const line = climate === 'default'
     ? `<span>A typical temperate climate. <button class="link-btn" data-action="location">Set your location</button> to use yours.</span>`
@@ -86,8 +112,8 @@ export function contextHTML({ place, climate, tagged, preferValue }) {
     <p class="ins-climate">${icon.pin}${line}</p>
     <div class="ins-controls">
       <button class="btn secondary compact" data-action="ins-uses">${icon.calendar}<span>How you wear</span></button>
-      <span class="ins-switch"><span aria-hidden="true">Prefer great value</span>${preferValue == null ? '<span class="sk sk-switch" aria-hidden="true"></span>'
-    : switchHTML({ on: preferValue, label: 'Prefer great value', action: 'ins-value', id: 'value' })}</span>
+      ${preferValue == null && failed ? '' : `<span class="ins-switch"><span aria-hidden="true">Prefer great value</span>${preferValue == null ? '<span class="sk sk-switch" aria-hidden="true"></span>'
+    : switchHTML({ on: preferValue, label: 'Prefer great value', action: 'ins-value', id: 'value' })}</span>`}
     </div>
     ${tagged ? `<p class="muted small ins-tuned">Tuned by the ${plural(tagged, 'wear')} you logged for an occasion.</p>` : ''}
   </div>`;
@@ -130,9 +156,9 @@ export function coverageHTML(report, { uses, bands, cell, slot, fresh = false })
   const td = (u, s, b) => {
     const c = byCell.get(`${u.id}:${s}:${b.id}`);
     if (!c) return `<td data-slot="${s}"${edge(s, b)}><span class="cov-na" aria-hidden="true"></span><span class="visually-hidden">Doesn’t come up</span></td>`;
-    const best = c.top[0];
-    const label = `${u.label}, ${b.id} ${SLOT_WORD[s]}: ${STATUS_WORD[c.status]}. ${best ? `Your best: ${best.name}, ${pct(best.score)}% match.` : 'Nothing you own fits.'}`;
-    return `<td data-slot="${s}"${edge(s, b)}><button class="cov-cell" data-action="ins-cell" data-value="${esc(c.cell)}" aria-pressed="${c === picked}" tabindex="${c === picked ? 0 : -1}" aria-label="${esc(label)}">${vial(c.status, { rare: c.weight < RARE, i: i++ })}</button></td>`;
+    const best = c.top[0], rare = c.weight < RARE;
+    const label = `${u.label}, ${b.id} ${SLOT_WORD[s]}: ${STATUS_WORD[c.status]}${rare && c.status !== 'off' ? ', rarely comes up' : ''}. ${best ? `Your best: ${best.name}, ${pct(best.score)}% match.` : 'Nothing you own fits.'}`;
+    return `<td data-slot="${s}"${edge(s, b)}><button class="cov-cell" data-action="ins-cell" data-value="${esc(c.cell)}" aria-pressed="${c === picked}" tabindex="${c === picked ? 0 : -1}" aria-label="${esc(label)}">${vial(c.status, { level: vialLevel(c), rare, i: i++ })}</button></td>`;
   };
   const rows = uses.map(u => {
     const has = slots.filter(s => bands.some(b => byCell.has(`${u.id}:${s}:${b.id}`)));
@@ -154,8 +180,9 @@ export function coverageHTML(report, { uses, bands, cell, slot, fresh = false })
     </div>
     <ul class="cov-legend" aria-label="Key">
       ${LEGEND.map(s => `<li>${vial(s)}<span>${STATUS_WORD[s]}</span></li>`).join('')}
+      <li>${vial('covered', { rare: true })}<span>Rarely comes up</span></li>
     </ul>
-    <p class="muted small cov-note">Fuller is better covered. Faded ones rarely come up where you live. Tap one to see your best bottles there.</p>
+    <p class="muted small cov-note">Fuller is better covered. A mark at the top means your best falls short of the best out there. Tap one to see your bottles there.</p>
     ${picked ? cellDetailHTML(picked, report) : ''}
   </div>`;
 }
@@ -184,8 +211,8 @@ export function cellDetailHTML(c, report, resolve = findRecord) {
     : ['gap', 'thin', 'room'].includes(c.status) ? '<p class="muted small cov-none">None of the suggestions below lifts this one by enough.</p>' : '';
   return `<div class="cov-detail" id="ins-detail">
     <div class="cov-detail-head">
-      ${vial(c.status, { rare: c.weight < RARE })}
-      <h3 id="ins-detail-title" tabindex="-1">${esc(c.title)}</h3>
+      ${vial(c.status, { level: vialLevel(c), rare: c.weight < RARE })}
+      <h4 id="ins-detail-title" tabindex="-1">${esc(c.title)}</h4>
       <span class="status-word" data-status="${esc(c.status)}">${STATUS_WORD[c.status]}</span>
     </div>
     <p class="muted small">${esc(oftenText(c.weight))}</p>
@@ -195,37 +222,45 @@ export function cellDetailHTML(c, report, resolve = findRecord) {
   </div>`;
 }
 
-// A thin spot's line: who covers it now, and how far the best go.
+// A thin spot's line: your best there, and how far the best go.
 function thinLine(c) {
   const best = c?.top[0];
   if (!best) return 'Nothing you own fits here.';
-  if (c.status === 'thin') return `Only ${best.name} is a strong pick here, at ${pct(best.score)}% match.`;
-  return `Your best is ${best.name} at ${pct(best.score)}% match; the best bottles reach ${pct(c.target)}%.`;
+  if (c.status === 'thin') return `Only ${best.name} is strong here, at ${pct(best.score)}%.`;
+  return `Your best: ${best.name}, ${pct(best.score)}%. The best out there reach ${pct(c.target)}%.`;
 }
 
-/** Where it's thin (gaps, thin spots, room to grow), each with the suggestions that fill it. */
-export function thinHTML(report) {
+/**
+ * Where it's thin (falls short, thin, room to grow), worst first, each with
+ * the suggestions that fill it: the first THIN_ROWS, the rest behind Show
+ * more (`all`).
+ */
+export function thinHTML(report, { all = false } = {}) {
   if (!report.gaps.length) return '<p class="muted ins-empty-line">Nothing’s thin. Every situation you dress for has a strong pick.</p>';
-  return `<ul class="thin-list">${report.gaps.map(g => {
+  const n = report.gaps.length, folds = n > THIN_ROWS + 1;
+  const shown = all || !folds ? report.gaps : report.gaps.slice(0, THIN_ROWS);
+  const lead = folds ? `<p class="muted small thin-count">${n} situations could use a better bottle.${all ? '' : ' The biggest four:'}</p>` : '';
+  const toggle = !folds ? ''
+    : `<button class="btn tertiary compact mix-all${all ? ' less' : ''}" data-action="ins-thin-all" aria-controls="ins-thin-list" aria-expanded="${all}">${icon.chevron}<span>${all ? 'Show fewer' : `Show ${n - shown.length} more`}</span></button>`;
+  return `${lead}<ul class="thin-list" id="ins-thin-list">${shown.map(g => {
     const worst = worstOf(report, g.cells);
     const fillers = report.picks.filter(p => p.fills.some(f => f.matters && g.cells.includes(f.cell)));
-    const word = STATUS_WORD[g.status];
     return `<li class="thin-row">
-      ${vial(g.status)}
+      ${vial(g.status, { level: worst ? vialLevel(worst) : null })}
       <div class="thin-text">
-        <h3><button class="thin-title" data-action="ins-cell" data-value="${esc(worst?.cell ?? g.cells[0])}">${esc(g.title)}</button></h3>
-        <p><span class="status-word" data-status="${esc(g.status)}">${word}</span> ${esc(thinLine(worst))}</p>
+        <h4><button class="thin-title" data-action="ins-cell" data-value="${esc(worst?.cell ?? g.cells[0])}">${esc(g.title)}</button></h4>
+        <p><span class="status-word" data-status="${esc(g.status)}">${STATUS_WORD[g.status]}</span> ${esc(thinLine(worst))}</p>
         ${fillers.length ? `<p class="thin-fix">Filled by ${fillers.map(p => `<button class="link-btn" data-action="open" data-ctx="" data-id="${esc(p.id)}">${esc(p.name)}</button>`).join(', ')}</p>` : ''}
       </div>
     </li>`;
-  }).join('')}</ul>`;
+  }).join('')}</ul>${toggle}`;
 }
 
 /** Where it's strong: "Plenty for Date Night on cold nights", "Amber Empire and 5 more". */
 export function strongHTML(report) {
   if (!report.strengths.length) return '';
   const byCell = new Map(report.coverage.map(c => [c.cell, c]));
-  return `<h3 class="ins-subhead">Where you’re strong</h3>
+  return `<h4 class="ins-subhead">Where you’re strong</h4>
     <ul class="strong-list">${report.strengths.map(s => {
     const lead = byCell.get(s.cells[0])?.top[0]?.name;
     const more = Math.max(0, s.strong - 1);
@@ -246,21 +281,22 @@ export function pickCardHTML(p, { wanted = false, owned = null } = {}) {
   const twin = p.twin && !p.twin.owned
     ? `<p class="ins-twin">Cheaper twin: <button class="link-btn" data-action="open" data-ctx="" data-id="${esc(p.twin.id)}">${esc(p.twin.name)}</button>${p.twin.brand ? ` by ${esc(p.twin.brand)}` : ''}${valueWord(p.twin.value) ? `, ${esc(valueWord(p.twin.value).toLowerCase())}` : ''}.</p>`
     : '';
-  const own = owned
+  // One you own already says where, with nothing to want.
+  const actions = owned
     ? `<span class="owned-tag">${icon.check}${esc(owned)}</span>`
-    : `<button class="btn tertiary compact" data-action="ins-own" data-id="${esc(p.id)}">${icon.check}<span>I own it<span class="visually-hidden">: ${esc(p.name)}</span></span></button>`;
+    : `${wantButton(p, wanted)}<button class="btn tertiary compact" data-action="ins-own" data-id="${esc(p.id)}">${icon.plus}<span>I own it<span class="visually-hidden">: ${esc(p.name)}</span></span></button>`;
   // The photo opens it too, for a pointer (as on the Wishlist).
   return `<li class="ins-pick">
     <button class="ins-pick-photo" data-action="open" data-id="${esc(p.id)}" tabindex="-1" aria-hidden="true">${img(f)}</button>
     <div class="ins-pick-body">
-      <h3 class="ins-pick-name"><button class="pick-name-btn" data-action="open" data-ctx="" data-id="${esc(p.id)}">${esc(p.name)}</button></h3>
+      <h4 class="ins-pick-name"><button class="pick-name-btn" data-action="open" data-ctx="" data-id="${esc(p.id)}">${esc(p.name)}</button></h4>
       <p class="ins-pick-brand">${esc([p.brand, p.year].filter(Boolean).join(', '))}</p>
       <p class="ins-facts">${facts.map((t, i) => (i ? `<span>${esc(t)}</span>` : `<b>${esc(t)}</b>`)).join(' · ')}</p>
       ${risk.reason ? `<p class="muted small">${esc(risk.reason)}</p>` : ''}
       ${fillsHTML(fills.length ? fills : p.fills)}
       ${p.nearest ? `<p class="muted small ins-near">${esc(nearestText(p.nearest))}.</p>` : ''}
       ${twin}
-      <div class="action-row">${wantButton(p, wanted)}${own}</div>
+      <div class="action-row">${actions}</div>
     </div>
   </li>`;
 }
@@ -276,43 +312,46 @@ export function picksHTML(report, { wants = new Set(), ownedLabel = () => null }
 }
 
 /**
- * The style mix: how many bottles lean toward each style, liked ones
- * hearted. rows: [{ id, label, count, liked, bottles (records), close (a wear style) }].
+ * The style mix: how many bottles lean toward each style, each with a Like
+ * toggle (the heart is Want's). rows: [{ id, label, count, liked, bottles
+ * (records), close (a wear style), keep (shown even past the fold) }].
  */
 export function styleMixHTML(rows, { open = null, stated = true, all = false } = {}) {
   if (!rows.length) return '<p class="muted">None of your bottles leans clearly toward one style yet.</p>';
-  const max = Math.max(...rows.map(r => r.count));
+  const max = Math.max(1, ...rows.map(r => r.count));
   // The top MIX_ROWS and every liked one, until asked for all.
-  const shown = all || rows.length <= MIX_ROWS + 2 ? rows : rows.filter((r, i) => i < MIX_ROWS || r.liked);
+  const shown = all || rows.length <= MIX_ROWS + 2 ? rows : rows.filter((r, i) => i < MIX_ROWS || r.liked || r.keep);
   const hidden = rows.length - shown.length;
-  return `<p class="muted small mix-key">${stated ? 'Hearted: the styles you like.' : 'Hearted: what most of your bottles lean toward. Heart the styles you like.'} Tap a style to see its bottles.</p>
+  return `<p class="muted small mix-key">${stated ? 'The styles you like lead “More of what you like”.' : 'Liked for now: what most of your bottles lean toward. Like the styles you love.'} Tap a style to see its bottles.</p>
     <ul class="mix" id="ins-mix-list">${shown.map(r => {
     const expanded = open === r.id;
     return `<li class="mix-row${r.liked ? ' liked' : ''}">
       <button class="mix-main" data-action="ins-mix" data-value="${esc(r.id)}" aria-expanded="${expanded}">
         <span class="mix-label">${esc(r.label)}${r.close ? '<small>wears close</small>' : ''}</span>
-        <span class="mix-track" aria-hidden="true"><span class="mix-bar" style="width:${((r.count / max) * 100).toFixed(1)}%"></span></span>
+        <span class="mix-track" aria-hidden="true">${r.count ? `<span class="mix-bar" style="width:${((r.count / max) * 100).toFixed(1)}%"></span>` : ''}</span>
         <span class="mix-n">${r.count}<span class="visually-hidden"> ${r.count === 1 ? 'bottle' : 'bottles'}</span></span>
       </button>
-      <button class="icon-btn ghosted mix-like" data-action="ins-like" data-value="${esc(r.id)}" aria-pressed="${r.liked}" aria-label="I like ${esc(r.label)}">${icon.heart}</button>
-      ${expanded ? `<ul class="mix-bottles">${r.bottles.map(f => `<li><button data-action="open" data-ctx="" data-id="${esc(f.id)}">${img(f)}<span>${esc(f.name)}</span></button></li>`).join('')}</ul>` : ''}
+      <button class="mix-like" data-action="ins-like" data-value="${esc(r.id)}" aria-pressed="${r.liked}">${r.liked ? icon.check : icon.plus}<span>${r.liked ? 'Liked' : 'Like'}<span class="visually-hidden">: ${esc(r.label)}</span></span></button>
+      ${!expanded ? '' : r.bottles.length ? `<ul class="mix-bottles">${r.bottles.map(f => `<li><button data-action="open" data-ctx="" data-id="${esc(f.id)}">${img(f)}<span>${esc(f.name)}</span></button></li>`).join('')}</ul>`
+    : '<p class="muted small mix-none">None of your bottles yet. More of what you like has some.</p>'}
     </li>`;
   }).join('')}</ul>
     ${hidden ? `<button class="btn tertiary compact mix-all" data-action="ins-mix-all" aria-controls="ins-mix-list">${icon.chevron}<span>Show all ${rows.length} styles</span></button>`
     : all && rows.length > MIX_ROWS + 2 ? `<button class="btn tertiary compact mix-all less" data-action="ins-mix-all" aria-controls="ins-mix-list">${icon.chevron}<span>Show fewer</span></button>` : ''}`;
 }
 
-const pickMeta = p => [p.record.brand, ratingText(p.rating)?.split(' · ')[0], valueWord(p.value)].filter(Boolean).map(esc).join(' · ');
+// Each part whole on its line: a narrow row wraps between them, never inside one.
+const pickMeta = p => [p.record.brand, ratingText(p.rating)?.split(' · ')[0], valueWord(p.value)].filter(Boolean).map(t => `<span>${esc(t)}</span>`).join(' · ');
 
 /** "More skin scents": per group of liked styles, its top picks (undefined while loading, null when it failed). */
 export function moreHTML(groups, { wants = new Set() } = {}) {
-  if (!groups.length) return '<p class="muted">Heart a style above and the best bottles in it show here.</p>';
+  if (!groups.length) return '<p class="muted">Like a style above and the best bottles in it show here.</p>';
   return `<div class="ins-more-groups">${groups.map(g => {
     const list = g.picks === undefined ? skeletonRows(MORE_PICKS)
       : !g.picks?.length ? '<p class="muted small">Nothing new to suggest here: you have the best of it.</p>'
         : `<ul class="rows more-rows">${g.picks.map(p => rowHTML(p.record, { meta: pickMeta(p), open: { ctx: '' }, trailing: wantButton(p.record, wants.has(p.id), { iconOnly: true }) })).join('')}</ul>`;
     return `<section class="ins-more" aria-label="${esc(g.title)}">
-      <h3 class="ins-more-head">${esc(g.title)}</h3>
+      <h4 class="ins-more-head">${esc(g.title)}</h4>
       ${list}
     </section>`;
   }).join('')}</div>`;
@@ -328,7 +367,7 @@ export function startersHTML(items, { wants = new Set(), more = 0 } = {}) {
       : !pick ? '<p class="muted small starter-none">Nothing well rated and safe to buy blind yet.</p>'
         : `<ul class="rows starter-rows">${rowHTML(pick.record, { meta: pickMeta(pick), open: { ctx: '' }, trailing: wantButton(pick.record, wants.has(pick.id), { iconOnly: true }) })}</ul>`;
     return `<li class="starter">
-      <div class="starter-head"><h3>${esc(style.label)}</h3><a class="link-btn" href="#/discover?styles=${esc(style.id)}" aria-label="Explore ${esc(style.label.toLowerCase())} in Discover">Explore</a></div>
+      <div class="starter-head"><h4>${esc(style.label)}</h4><a class="link-btn" href="#/discover?styles=${esc(style.id)}" aria-label="Explore ${esc(style.label.toLowerCase())} in Discover">Explore</a></div>
       <p class="muted small">${esc(style.blurb)}</p>
       ${body}
     </li>`;
@@ -338,12 +377,19 @@ export function startersHTML(items, { wants = new Set(), more = 0 } = {}) {
 const listWords = w => (w.length <= 2 ? w.join(' and ') : `${w.slice(0, -1).join(', ')} and ${w.at(-1)}`);
 
 
-/** Doubles: pairs that smell alike, or the closest pair when there are none. */
-export function doublesHTML({ pairs, closest }) {
+/**
+ * Doubles: pairs that smell alike, or the closest pair when there are none.
+ * undefined while voters' links load; `partial`: they didn't, so it compares
+ * notes and accords alone.
+ */
+export function doublesHTML(d) {
+  if (d === undefined) return skeletonRows(2);
+  const { pairs, closest, partial = false } = d;
+  const caveat = partial ? '<p class="muted small">Couldn’t load what voters say smells alike, so this compares notes and accords only.</p>' : '';
   if (!pairs.length) {
-    return `<p class="muted">No doubles: every bottle smells its own way.${closest ? ` The closest pair, ${esc(closest.a.name)} and ${esc(closest.b.name)}, is ${pct(closest.sim)}% alike${closest.traits.length ? `, sharing ${esc(listWords(closest.traits))}` : ''}.` : ''}</p>`;
+    return `<p class="muted">No doubles: every bottle smells its own way.${closest ? ` The closest pair, ${esc(closest.a.name)} and ${esc(closest.b.name)}, is ${pct(closest.sim)}% alike${closest.traits.length ? `, sharing ${esc(listWords(closest.traits))}` : ''}.` : ''}</p>${caveat}`;
   }
-  return `<p class="muted small">Pairs that wear much the same. Worth knowing before the next one like them.</p>
+  return `${caveat}<p class="muted small">Pairs that wear much the same. Worth knowing before the next one like them.</p>
     <ul class="doubles">${pairs.map(p => `<li class="double">
       <span class="double-photos">${[p.a, p.b].map(f => `<button data-action="open" data-ctx="" data-id="${esc(f.id)}" aria-label="Open ${esc(f.name)}">${img(f)}</button>`).join('')}</span>
       <span class="double-text"><b>${esc(p.a.name)} and ${esc(p.b.name)}</b><small>${esc(p.reason)} · ${pct(p.sim)}% alike</small></span>
@@ -377,25 +423,27 @@ export function insightsSkeletonHTML() {
 
 /**
  * The whole pane from its model: { report, error, busy, fresh, uses,
- * bands, cell, slot, context, wants (ids), ownedLabel (id -> label | null),
- * styles: { rows, stated, open, groups, starters, moreStarters, doubles } }.
+ * bands, cell, slot, allThin, context, wants (ids), ownedLabel (id -> label
+ * | null), styles: stylesHTML's }. Each half has an h2 (the headline, Your
+ * styles), its cards h3s.
  */
 export function insightsHTML(m) {
   const r = m.report;
+  const h3 = { level: 3 };
   const situations = m.error && !r
     ? `<div class="card ins-error">${messageHTML({ glyph: icon.chart, title: 'Couldn’t work out your gaps', body: m.error, action: '<button class="btn primary" data-action="ins-retry">Try again</button>' })}</div>`
     : !r ? `<div class="card sk-cov" aria-busy="true" aria-label="Working out your gaps"><span class="sk sk-line w40"></span><div class="sk-grid">${'<span class="sk sk-vial"></span>'.repeat(40)}</div></div>`
       : `<section class="card ins-cov" aria-labelledby="cov-title">
-        ${sectionHead('What you’re covered for', '', { id: 'cov-title' })}
+        ${sectionHead('What you’re covered for', '', { ...h3, id: 'cov-title' })}
         ${coverageHTML(r, { uses: m.uses, bands: m.bands, cell: m.cell, slot: m.slot, fresh: m.fresh })}
       </section>
       <section class="card ins-thin" aria-labelledby="thin-title">
-        ${sectionHead('Where it’s thin', '', { id: 'thin-title' })}
-        ${thinHTML(r)}
+        ${sectionHead('Where it’s thin', '', { ...h3, id: 'thin-title' })}
+        ${thinHTML(r, { all: m.allThin })}
         ${strongHTML(r)}
       </section>
       <section class="ins-fill" aria-labelledby="fill-title">
-        ${sectionHead('Bottles that would fill the gaps', '<p>Each one fills something the one before it doesn’t.</p>', { id: 'fill-title' })}
+        ${sectionHead('Bottles that would fill the gaps', '<p>Picked as a set: each covers a situation the others don’t.</p>', { ...h3, id: 'fill-title' })}
         ${picksHTML(r, { wants: m.wants, ownedLabel: m.ownedLabel })}
       </section>`;
   const h = r ? headline(r) : null;
@@ -415,26 +463,45 @@ export function insightsHTML(m) {
   </div>`;
 }
 
-/** The styles half (re-rendered on its own as its answers land). */
+/**
+ * Under a list "Prefer great value" narrows: what it shows, and the switch
+ * (`where` tells the two apart, so focus stays on the one tapped).
+ * preferValue: the setting in use, null before an answer says.
+ */
+export function valueNoteHTML(preferValue, where) {
+  if (preferValue == null) return '';
+  return `<p class="muted small ins-value-note">${preferValue
+    ? `Only bottles voters call great value. <button class="link-btn" data-action="ins-value-note" data-value="${esc(where)}">Include pricier ones</button>`
+    : `Every price shown. <button class="link-btn" data-action="ins-value-note" data-value="${esc(where)}">Great value only</button>`}</p>`;
+}
+
+/**
+ * The styles half (re-rendered on its own as its answers land): { rows,
+ * stated, open, all, story (a sentence on the liked styles, or null),
+ * groups, starters, moreStarters, error, preferValue, doubles }.
+ */
 export function stylesHTML(s, wants = new Set()) {
   const all = [...new Set(s.groups.flatMap(g => g.ids))];
+  const h3 = { level: 3 };
   // When the pool couldn't answer, one line says so in place of each list.
   const failed = s.error && `<p class="error ins-failed">${esc(s.error)} <button class="link-btn" data-action="ins-retry">Try again</button></p>`;
   return `<section class="card ins-mix" aria-labelledby="mix-title">
-      ${sectionHead('Your style mix', '', { id: 'mix-title' })}
+      ${sectionHead('Your style mix', '', { ...h3, id: 'mix-title' })}
       ${styleMixHTML(s.rows, { open: s.open, stated: s.stated, all: s.all })}
     </section>
     <section class="card ins-more-card" aria-labelledby="more-title">
-      ${sectionHead(s.stated ? 'More of what you like' : 'More of what you reach for', '', { id: 'more-title' })}
+      ${sectionHead(s.stated ? 'More of what you like' : 'More of what you reach for', s.story ? `<p>${esc(s.story)}</p>` : '', { ...h3, id: 'more-title' })}
       ${failed || moreHTML(s.groups, { wants })}
+      ${failed || !s.groups.length ? '' : valueNoteHTML(s.preferValue, 'more')}
       ${all.length ? `<a class="btn secondary compact more-link" href="#/discover?styles=${esc(all.join(','))}">${icon.discover}<span>See more in Discover</span></a>` : ''}
     </section>
     <section class="card ins-start" aria-labelledby="start-title">
-      ${sectionHead('Styles you don’t own yet', '<p>One well-rated, safe, good-value bottle to start each.</p>', { id: 'start-title' })}
+      ${sectionHead('Styles you don’t own yet', '<p>One well-rated, safe, good-value bottle to start each.</p>', { ...h3, id: 'start-title' })}
       ${failed || startersHTML(s.starters, { wants, more: s.moreStarters })}
+      ${failed || !s.starters.length ? '' : valueNoteHTML(s.preferValue, 'start')}
     </section>
     <section class="card ins-doubles" aria-labelledby="doubles-title">
-      ${sectionHead('Doubles', '', { id: 'doubles-title' })}
+      ${sectionHead('Doubles', '', { ...h3, id: 'doubles-title' })}
       ${doublesHTML(s.doubles)}
     </section>`;
 }
@@ -459,23 +526,73 @@ const groupTitle = (lib, ids) => {
 // Scent styles none of the bottles leans toward.
 const unownedOf = (lib, mix) => lib.styles.STYLES.filter(s => s.kind === 'scent' && !mix.counts[s.id]).map(s => s.id);
 
-// The style mix and doubles read only the owned bottles: worked out once per wardrobe.
-let owning = { key: null, mix: null, doubles: null };
+/**
+ * The owned dataset bottles whose smells-like votes doubles can't read: they
+ * came from r/ (added to Mine, a shared link) without the pool's signals
+ * (`extras`) or about data. Ids.
+ */
+export const needsSignals = owned => owned.filter(f => !f.extras && !f.about && /^\d+$/.test(String(f.id))).map(f => String(f.id));
+
+// The style mix and doubles read only the owned bottles: worked out once per
+// wardrobe. Doubles wait (undefined) for the pool's rows of the bottles
+// needsSignals names, so a clone pair voters link shows on anyone's
+// wardrobe, not only David's (whose records carry their signals).
+let owning = { key: null, mix: null, doubles: null, need: [] };
 function ownedWork(lib, owned) {
   const key = JSON.stringify(owned.map(f => f.id));
-  if (owning.key !== key) owning = { key, mix: lib.styles.styleMix(owned), doubles: lib.doubles.doubles(owned) };
+  if (owning.key !== key) {
+    const need = needsSignals(owned);
+    owning = { key, mix: lib.styles.styleMix(owned), doubles: need.length ? undefined : lib.doubles.doubles(owned), need, asked: false };
+  }
   return owning;
+}
+
+// The pool's rows for those bottles, then the doubles with their signals
+// (byId); offline, notes and accords alone (`partial`).
+async function loadSignals(app, lib, owned) {
+  const work = ownedWork(lib, owned);
+  if (work.doubles !== undefined || work.asked) return;
+  work.asked = true;
+  let byId = null;
+  try {
+    await askPool('warm');
+    const { records } = await askPool('records', { ids: work.need });
+    byId = new Map(records.map(r => [String(r.id), r]));
+  } catch {
+    // byId stays null: the caveat says so.
+  }
+  if (owning !== work) return;
+  work.doubles = { ...lib.doubles.doubles(owned, { byId }), partial: !byId };
+  paintStyles(app);
+}
+
+/**
+ * A sentence on the styles someone likes against their shelf: "You like Skin
+ * scent, Clean and Intimate, but only 4 of your 24 bottles are." (stated), or
+ * what the bottles lean toward. liked: likedFor's; mix: styleMix's.
+ */
+export function storyOf(liked, mix, total, label) {
+  if (!liked.ids.length || !total) return null;
+  const names = listWords(liked.ids.map(label));
+  if (!liked.stated) return `Most of your bottles lean toward ${names}.`;
+  const n = new Set(liked.ids.flatMap(id => (id === 'intimate' ? mix.intimateIds : mix.ids[id] ?? []))).size;
+  const yours = `${total === 1 ? 'your one bottle' : `your ${total} bottles`}`;
+  if (!n) return `You like ${names}, but none of ${yours} ${total === 1 ? 'is' : 'are'}.`;
+  return `You like ${names}, ${n / total < 0.35 ? 'but only' : 'and'} ${n} of ${yours} ${n === 1 ? 'is' : 'are'}.`;
 }
 
 function stylesModel(lib, owned) {
   const { mix, doubles } = ownedWork(lib, owned);
   const liked = likedFor(lib, owned);
   const byId = new Map(owned.map(f => [f.id, f]));
+  // Every style with a bottle, and every liked one (a style liked on Discover
+  // may have none yet), so each like can be undone here; one just unliked
+  // stays where it was.
   const rows = [
-    ...lib.styles.STYLES.filter(s => s.kind === 'scent').map(s => ({ s, ids: mix.ids[s.id] })),
+    ...lib.styles.STYLES.filter(s => s.kind === 'scent').map(s => ({ s, ids: mix.ids[s.id] ?? [] })),
     { s: lib.styles.styleById('intimate'), ids: mix.intimateIds, close: true },
-  ].filter(r => r.ids.length).map(({ s, ids, close = false }) => ({
-    id: s.id, label: s.label, count: ids.length, liked: liked.ids.includes(s.id), close, bottles: ids.map(id => byId.get(id)).filter(Boolean),
+  ].filter(r => r.ids.length || liked.ids.includes(r.s.id) || ins.kept.has(r.s.id)).map(({ s, ids, close = false }) => ({
+    id: s.id, label: s.label, count: ids.length, liked: liked.ids.includes(s.id), close, bottles: ids.map(id => byId.get(id)).filter(Boolean), keep: ins.kept.has(s.id),
   })).sort((a, b) => b.count - a.count || b.liked - a.liked);
   const st = ins.styles;
   const unowned = unownedOf(lib, mix);
@@ -484,15 +601,15 @@ function stylesModel(lib, owned) {
     stated: liked.stated,
     open: ins.open,
     all: ins.allStyles,
+    story: storyOf(liked, mix, owned.length, id => lib.styles.styleById(id).label),
     groups: groupsOf(lib, liked.ids).map(ids => ({ ids, title: groupTitle(lib, ids), href: `#/discover?styles=${ids.join(',')}`, picks: st.more[ids[0]] })),
     starters: unowned.slice(0, MAX_STARTERS).map(id => ({ style: lib.styles.styleById(id), pick: st.starters[id] })),
     moreStarters: Math.max(0, unowned.length - MAX_STARTERS),
     error: st.error,
+    preferValue: state.preferValue ?? st.preferValue,
     doubles,
   };
 }
-
-const OWNED_WORD = { demo: 'In David’s', mine: 'In Mine', shared: 'In this list' };
 
 function model(lib) {
   const owned = activeFragrances();
@@ -506,7 +623,11 @@ function model(lib) {
     bands: bandColumns(gaps.BANDS),
     cell: ins.cell,
     slot: ins.slot,
-    context: { place: state.loc?.name ?? null, climate: state.loc ? ins.climate : 'default', tagged: taggedWears(lib), preferValue: state.preferValue ?? ins.report?.preferValue ?? null },
+    allThin: ins.allThin,
+    context: {
+      place: state.loc?.name ?? null, climate: state.loc ? ins.climate : 'default', tagged: taggedWears(lib),
+      preferValue: state.preferValue ?? ins.report?.preferValue ?? null, failed: Boolean(ins.error && !ins.report),
+    },
     wants: new Set(loadWants().map(w => w.id)),
     ownedLabel: id => OWNED_WORD[ownedIn(id)] ?? null,
     styles: stylesModel(lib, owned),
@@ -514,8 +635,11 @@ function model(lib) {
 }
 
 function insightsPane() {
-  if (ins.libError) {
-    return messageHTML({ glyph: icon.chart, title: 'Insights didn’t load', body: ins.libError, action: '<button class="btn primary" data-action="ins-retry">Try again</button>' });
+  if (libFailed()) {
+    return messageHTML({
+      glyph: icon.chart, title: 'Insights didn’t load', body: 'It needs a connection the first time it opens. Reconnect, then reload.',
+      action: '<button class="btn primary" data-action="ins-reload">Reload</button>',
+    });
   }
   if (listLoading()) return insightsSkeletonHTML();
   if (!activeFragrances().length) {
@@ -552,23 +676,29 @@ function paintStyles(app) {
   });
 }
 
+// Called on every render (the pane's after()): each half asks only when
+// what it answers has changed.
 let asked = 0;
 async function refresh(app) {
   if (!libNow()) {
+    // A failed load stays failed until a reload: the pane says so once, and
+    // nothing asks again (a repaint calls this again).
+    if (libFailed()) return;
     try {
       await loadLib();
     } catch {
-      ins.libError = 'Insights needs a connection the first time. Check it and try again.';
+      // The pane says so.
     }
     return paint(app);
   }
   if (listLoading() || !activeFragrances().length) return;
+  // Liked styles can change elsewhere (Discover), so the styles half checks its own key each time.
+  refreshStyles(app);
   const key = inputsKey();
   if (key === ins.key) return;
   const n = ++asked;
   Object.assign(ins, { key, busy: Boolean(ins.report), error: '' });
   if (ins.report) paint(app);
-  refreshStyles(app);
   try {
     const inputs = await poolInputs();
     if (n !== asked) return;
@@ -587,11 +717,13 @@ async function refresh(app) {
 let stylesAsked = 0;
 async function refreshStyles(app) {
   const lib = libNow(), owned = activeFragrances();
+  loadSignals(app, lib, owned);
   const liked = likedFor(lib, owned);
   const key = JSON.stringify([inputsKey(), liked.ids]);
   if (key === ins.styles.key) return;
   const n = ++stylesAsked;
-  ins.styles = { key, more: {}, starters: {}, error: '' };
+  // The value setting the last answers used stays until new ones say.
+  ins.styles = { key, more: {}, starters: {}, error: '', preferValue: ins.styles.preferValue };
   const groups = groupsOf(lib, liked.ids);
   const unowned = unownedOf(lib, ownedWork(lib, owned).mix).slice(0, MAX_STARTERS);
   let inputs;
@@ -602,7 +734,9 @@ async function refreshStyles(app) {
   }
   const ask = async (payload, channel) => {
     const r = await askPool('styles', { ...inputs, ...payload }, { channel });
-    return r.stale ? undefined : r.picks;
+    if (r.stale) return undefined;
+    if (n === stylesAsked) ins.styles.preferValue = r.preferValue;
+    return r.picks;
   };
   const failed = err => { if (n === stylesAsked) ins.styles.error = err.message; return null; };
   const more = groups.map(ids => ask({ styles: ids, k: MORE_PICKS }, `ins-more-${ids[0]}`).catch(failed)
@@ -651,6 +785,12 @@ export const insightsPaneDef = {
     warmPool();
     refresh(app);
     document.querySelector('.cov-table')?.addEventListener('keydown', mapKeys);
+    // The first report fills the vials in once: a slot that shows later (the
+    // column crossing the map's two-slot width) mustn't play it again.
+    const cov = document.querySelector('.cov.fill-in');
+    cov?.addEventListener('animationend', () => {
+      if (!cov.getAnimations({ subtree: true }).some(a => a.playState === 'running')) cov.classList.remove('fill-in');
+    });
   },
 };
 
@@ -666,7 +806,7 @@ export const actions = {
     app.keepingFocus(el, '#app', app.renderPage);
     // From a thin spot: up to the map with it picked, focus on its detail.
     if (fromList) {
-      const head = document.querySelector('#ins-detail h3');
+      const head = document.getElementById('ins-detail-title');
       document.querySelector('.ins-cov')?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
       head?.focus({ preventScroll: true });
     }
@@ -691,15 +831,27 @@ export const actions = {
     app.keepingFocus(el, '#sheet', () => app.renderSheet({ keepScroll: true }));
     app.renderPage();
   },
-  // "Prefer great value", flipped from what the report used.
+  // "Prefer great value", flipped from what the answers used.
   'ins-value'(el, app) {
-    setPreferValue(!(state.preferValue ?? ins.report?.preferValue ?? false));
+    setPreferValue(!(state.preferValue ?? ins.report?.preferValue ?? ins.styles.preferValue ?? false));
     app.keepingFocus(el, '#app', app.renderPage);
   },
+  // The same, from the line under a styles list.
+  'ins-value-note'(el, app) {
+    actions['ins-value'](el, app);
+  },
   'ins-retry'(el, app) {
-    Object.assign(ins, { key: null, error: '', libError: '' });
+    Object.assign(ins, { key: null, error: '' });
     ins.styles.key = null;
     app.renderPage();
+  },
+  // The modules didn't load, and a failed import stays failed: only a reload asks again.
+  'ins-reload'() {
+    location.reload();
+  },
+  'ins-thin-all'(el, app) {
+    ins.allThin = !ins.allThin;
+    app.keepingFocus(el, '#app', app.renderPage);
   },
   async 'ins-own'(el, app) {
     const id = el.dataset.id;
@@ -725,11 +877,13 @@ export const actions = {
     paintStyles(app);
     document.querySelector(`#ins-styles [data-action="ins-mix"][data-value="${CSS.escape(el.dataset.value)}"]`)?.focus();
   },
-  // Heart a style: the liked set as shown (stated or not) with this one in or out.
+  // Like a style: the liked set as shown (stated or not) with this one in or
+  // out; unliking the last leaves none.
   'ins-like'(el, app) {
     const lib = libNow();
     const id = el.dataset.value;
     const now = likedFor(lib).ids;
+    if (now.includes(id)) ins.kept.add(id);
     setLikedStyles(now.includes(id) ? now.filter(x => x !== id) : [...now, id]);
     paintStyles(app);
     refreshStyles(app);
