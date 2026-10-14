@@ -109,6 +109,8 @@ function fail(message) {
 }
 
 const byLine = r => `${r.name} by ${r.brand}${r.year ? ` (${r.year})` : ''}`;
+// Answers built on the dataset's ratings and votes say where they're from.
+const CREDIT = 'From Le Decanteur\'s Fragrantica dataset (CC BY-NC-SA 4.0)';
 
 /**
  * A dataset bottle by name, as --check, --styles, --more-like and --dupes
@@ -282,8 +284,13 @@ async function main() {
     fail(`Nothing left to rank: ${by} ${by.includes(' and ') ? 'leave' : 'leaves'} out all ${wardrobe.length} bottles`);
   }
 
+  // A bottle by name: switched-on ones first, then switched-off ones (said on stderr).
   const findBottle = name => {
-    const hits = matchBottles(fragrances, name);
+    let hits = matchBottles(fragrances, name);
+    if (!hits.length) {
+      hits = matchBottles(hidden, name);
+      if (hits.length) console.error(`${hits[0].name} is switched off; answering for it anyway.`);
+    }
     if (!hits.length) fail(`No bottle matches "${name}"`);
     if (hits.length > 1) console.error(`"${name}" matches ${hits.map(f => f.name).join(', ')}; using ${hits[0].name}. Give more of the name for another.`);
     return hits[0];
@@ -368,10 +375,14 @@ async function main() {
   // whatever the time of year, like the range itself).
   if (args.ideal) {
     const f = findBottle(args.ideal);
+    // A switched-off bottle is ranked among the rest as if switched on.
+    const pool = fragrances.includes(f) ? fragrances : [...fragrances, f];
     const SCAN = [0, 105];
+    // Runs of degrees; spans GAP_F or fewer degrees apart join (a one-degree hole says nothing).
+    const GAP_F = 2;
     const runs = temps => temps.reduce((out, t) => {
       const last = out.at(-1);
-      if (last && last[1] === t - 1) last[1] = t;
+      if (last && t - last[1] <= GAP_F + 1) last[1] = t;
       else out.push([t, t]);
       return out;
     }, []).map(([lo, hi]) => ({ lowF: lo === SCAN[0] ? null : lo, highF: hi === SCAN[1] ? null : hi }));
@@ -379,7 +390,7 @@ async function main() {
     for (const s of SLOTS) {
       const temps = [];
       for (let feelsF = SCAN[0]; feelsF <= SCAN[1]; feelsF++) {
-        const ranked = rank(fragrances, { feelsF, humidity: 50, dewF: 55, category: 'clear', date: null }, s, { todayISO: '2000-01-01' });
+        const ranked = rank(pool, { feelsF, humidity: 50, dewF: 55, category: 'clear', date: null }, s, { todayISO: '2000-01-01' });
         if (ranked.slice(0, 3).some(r => r.fragrance.id === f.id)) temps.push(feelsF);
       }
       topPick[s] = runs(temps);
@@ -389,7 +400,7 @@ async function main() {
       console.log(JSON.stringify({ name: f.name, brand: f.brand, inspiredBy: inspiredBy(f), range, topPick }, null, 2));
     } else {
       const span = ({ lowF, highF }) => lowF === null && highF === null ? 'any temperature'
-        : lowF === null ? `${highF}°F and colder` : highF === null ? `${lowF}°F and warmer` : `${lowF}–${highF}°F`;
+        : lowF === null ? `${highF}°F and colder` : highF === null ? `${lowF}°F and warmer` : lowF === highF ? `${lowF}°F` : `${lowF}–${highF}°F`;
       console.log(`${f.name} (${f.brand}) wears best at ${span(range)} feels-like${range.bestF !== null ? `, peaking around ${range.bestF}°F` : ''}.`);
       for (const s of SLOTS) {
         console.log(`  Top 3 in this collection by ${s}: ${topPick[s].length ? topPick[s].map(span).join(', ') : 'never'}`);
@@ -662,6 +673,7 @@ async function main() {
       console.log(`Risk: ${check.risk.level}${check.risk.reasons.length ? ` (${check.risk.reasons.join(' ')})` : ''}`);
       if (check.twin) console.log(`Twin: ${check.twin.text}`);
       console.log(`\nClimate: ${where} · ${valueText} · styles you like: ${liked.map(id => styleById(id).label).join(', ')}`);
+      console.log(`${CREDIT}.`);
       return;
     }
 
@@ -696,6 +708,7 @@ async function main() {
     });
     if (!report.picks.length) console.log('  Nothing in the pool would add enough.');
     else if (report.picks.length < k) console.log('  Nothing else would fill these gaps by enough.');
+    console.log(`\n${CREDIT}.`);
     return;
   }
 
@@ -899,7 +912,7 @@ async function discover(args, fragrances, { slot, count, history, hidden }) {
     console.log(title);
     if (!picks.length) console.log('  Nothing in the pool passes. Try fewer filters.');
     picks.forEach((p, i) => console.log(`${String(i + 1).padStart(2)}. ${line(p.record, p)} · ${whyLine(p)}`));
-    console.log('\nFrom Le Decanteur\'s Fragrantica dataset (CC BY-NC-SA 4.0), 9,600 well-voted bottles.');
+    console.log(`\n${CREDIT}, 9,600 well-voted bottles.`);
   };
 
   if (args.style) {
@@ -980,7 +993,7 @@ async function discover(args, fragrances, { slot, count, history, hidden }) {
   section('Smells like it for far less', family.cheaper);
   section('Voters say these smell like it', family.siblings);
   if (!family.original && !family.cheaper.length && !family.siblings.length) console.log('No smells-like votes for it.');
-  console.log('\nFrom Le Decanteur\'s Fragrantica dataset (CC BY-NC-SA 4.0).');
+  console.log(`\n${CREDIT}.`);
 }
 
 const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,NAME]) [--occasion ${OCCASIONS.map(o => o.id).join('|')}] [--slot day|night] [--week] [--journal FILE] [--exclude NAME,NAME] [--demo] [--top N] [--json]

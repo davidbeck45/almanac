@@ -34,10 +34,12 @@ test('--gaps and --check answer in the terminal', async () => {
   assert.match(text.stdout, /How you wear: Daily \d+%.*Office 0%/);
   assert.doesNotMatch(text.stdout.split('To fill them')[0], /Office on/);
   assert.match(text.stdout, /prefer great value: off/);
+  assert.match(text.stdout, /\nFrom Le Decanteur's Fragrantica dataset \(CC BY-NC-SA 4\.0\)\.\n$/, 'the dataset credited');
 
   assert.equal(check.status, 0, check.stderr);
   assert.equal(JSON.parse(check.stdout).verdict, 'Redundant');
   assert.match(byNumber.stdout, /^Shalimar Millésime Tonka by Guerlain \(2022\).*\nCovered\n/);
+  assert.match(byNumber.stdout, /CC BY-NC-SA 4\.0/);
   assert.equal(byNumber.stderr, '', 'a number no bottle is named is an id, said nothing about');
   // His styles by default, others when named.
   assert.deepEqual([JSON.parse(you.stdout).verdict, JSON.parse(you.stdout).liked], ['Good', DEMO_LIKED]);

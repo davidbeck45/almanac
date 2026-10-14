@@ -166,6 +166,25 @@ test('an ambiguous name says which bottle it took', () => {
   assert.ok(out.range && out.topPick.day && out.topPick.night);
 });
 
+test('--ideal gives a lone degree once and joins spans a degree or two apart', () => {
+  for (const name of ['Supremacy Collector’s Edition', 'Jake', 'Amber Empire']) {
+    const out = cli('--ideal', name).stdout;
+    assert.match(out, /Top 3 in this collection by night: /);
+    assert.doesNotMatch(out, /\b(\d+)–\1°F/, out);
+  }
+  const amber = JSON.parse(cli('--ideal', 'Amber Empire', '--json').stdout).topPick.night;
+  for (let i = 1; i < amber.length; i++) assert.ok(amber[i].lowF - amber[i - 1].highF > 3, JSON.stringify(amber));
+});
+
+test('a switched-off bottle still answers for --layer, --ideal and --spray, saying so', () => {
+  for (const flag of ['--layer', '--ideal', '--spray']) {
+    const run = cli('--exclude', 'Sauvage', flag, 'Sauvage');
+    assert.equal(run.status, 0, `${flag}: ${run.stderr}`);
+    assert.match(run.stderr, /^Sauvage is switched off; answering for it anyway\.\n$/);
+  }
+  assert.doesNotMatch(cli('--exclude', 'Sauvage', '--layer', 'Sauvage').stdout, /\+ Sauvage /, 'nor is it anyone’s partner');
+});
+
 const dayISO = days => new Date(Date.now() - new Date().getTimezoneOffset() * 60_000 + days * 86_400_000).toISOString().slice(0, 10);
 
 test('--events reads a date, an optional slot and an occasion', () => {
