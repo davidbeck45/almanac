@@ -48,9 +48,14 @@ async function ipCity() {
 
 // A place to forecast: the widget's own setting, else Omarchy's weather
 // location (coordinates or a name), else wherever the IP address is.
+// Coordinates out of range ("999,999") say so, as the CLI's --loc does.
 export async function resolvePlace(setting = '', { stateFile = OMARCHY_LOCATION } = {}) {
   const coords = setting.match(COORDS);
-  if (coords) return { name: coords[3] ?? `${coords[1]},${coords[2]}`, lat: +coords[1], lon: +coords[2] };
+  if (coords) {
+    const [lat, lon] = [+coords[1], +coords[2]];
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) throw new Error('Set a latitude between -90 and 90 and a longitude between -180 and 180.');
+    return { name: coords[3] ?? `${coords[1]},${coords[2]}`, lat, lon };
+  }
   if (setting.trim()) return findCity(setting);
   const omarchy = readOmarchyLocation(stateFile);
   if (omarchy && Number.isFinite(omarchy.lat) && Number.isFinite(omarchy.lon)) return omarchy;
