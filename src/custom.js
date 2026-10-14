@@ -24,8 +24,10 @@ const round3 = x => Math.round(x * 1000) / 1000;
 
 export const isCustomId = id => String(id).startsWith(CUSTOM_PREFIX);
 
+// Each accord once (a link could repeat one), the engine's own only.
 const accordStrengths = names => Object.fromEntries(
-  names.filter(a => ACCORDS[a]).slice(0, MAX_CUSTOM_ACCORDS).map((a, i) => [a, 100 - STRENGTH_STEP * i]),
+  [...new Set(names)].filter(a => typeof a === 'string' && Object.hasOwn(ACCORDS, a)).slice(0, MAX_CUSTOM_ACCORDS)
+    .map((a, i) => [a, 100 - STRENGTH_STEP * i]),
 );
 
 // [winter, spring, summer, fall, night]: each accord's profile, weighted by
@@ -133,17 +135,19 @@ export function fromShareToken(token) {
   try {
     const [name, brand, accordNames, seasonPct, nightPct] = JSON.parse(fromBase64Url(data));
     const accords = accordStrengths(Array.isArray(accordNames) ? accordNames : []);
-    const nums = Array.isArray(seasonPct) ? seasonPct.map(Number) : [];
+    // Finite percentages, each at most 100: a crafted 1e999 made every share NaN.
+    const raw = Array.isArray(seasonPct) ? seasonPct.map(Number) : [], night = Number(nightPct);
     if (typeof name !== 'string' || !name.trim() || !Object.keys(accords).length) return null;
-    if (nums.length !== 4 || !nums.every(n => n >= 0) || !(nums.reduce((a, b) => a + b, 0) > 0) || !(nightPct >= 0 && nightPct <= 100)) return null;
-    const total = nums.reduce((a, b) => a + b, 0);
+    if (raw.length !== 4 || !raw.every(n => Number.isFinite(n) && n >= 0)) return null;
+    const nums = raw.map(n => Math.min(100, n)), total = nums.reduce((a, b) => a + b, 0);
+    if (!(total > 0) || !(Number.isFinite(night) && night >= 0 && night <= 100)) return null;
     return fromParts({
       id,
       name: name.slice(0, 80),
       brand: String(brand ?? '').slice(0, 80),
       accords,
       season: Object.fromEntries(SEASONS.map((s, i) => [s, round3(nums[i] / total)])),
-      night: round3(nightPct / 100),
+      night: round3(night / 100),
     });
   } catch {
     return null;
