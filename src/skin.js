@@ -6,13 +6,17 @@
 const KEY = 'scentcast.skin';
 const NUDGES = ['longevity', 'sillage'];
 
-const today = () => new Date().toISOString().slice(0, 10);
+// The device's date, as the journal keeps it (not UTC's, a day ahead by evening).
+const today = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-// One entry, cleaned: stars 1–5 or null, nudges -1, 0 or 1.
+// One entry, cleaned: stars 1–5 or null, nudges -1, 0 or 1. Numbers can come
+// as the strings a form or select hands over ("5", "-1"); blanks mean none.
 function clean(entry) {
-  const rating = Number.isInteger(entry?.rating) && entry.rating >= 1 && entry.rating <= 5 ? entry.rating : null;
+  const num = x => (x === '' || x == null ? NaN : Number(x));
+  const stars = num(entry?.rating);
+  const rating = Number.isInteger(stars) && stars >= 1 && stars <= 5 ? stars : null;
   const out = { rating };
-  for (const key of NUDGES) out[key] = [-1, 0, 1].includes(entry?.[key]) ? entry[key] : 0;
+  for (const key of NUDGES) out[key] = [-1, 0, 1].includes(num(entry?.[key])) ? num(entry[key]) : 0;
   if (entry?.updated) out.updated = String(entry.updated);
   return out;
 }

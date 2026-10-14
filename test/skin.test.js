@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { loadSkin, setSkin, withSkin, applySkin } from '../src/skin.js';
 import { rank, quality, performanceLevel } from '../src/engine.js';
-import { occasionById } from '../src/occasions.js';
+import { occasionById, OCCASIONS } from '../src/occasions.js';
 
 const fragrances = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url))).fragrances
   .map(f => ({ ...f, id: String(f.id) }));
@@ -20,6 +20,15 @@ test('entries clean up: stars 1–5 or none, nudges -1, 0 or 1, blank ones drop'
   assert.deepEqual(skin['31861'], { rating: null, longevity: 1, sillage: 0, updated: '2026-10-02' });
   skin = withSkin(skin, '31861', { longevity: 0 });
   assert.deepEqual(skin, {}, 'back to as-voted with no stars drops the entry');
+  // What a form hands over: strings, and blanks for none.
+  assert.deepEqual(withSkin({}, 7, { rating: '4', longevity: '-1', sillage: '' }, '2026-10-04')['7'],
+    { rating: 4, longevity: -1, sillage: 0, updated: '2026-10-04' });
+  assert.deepEqual(withSkin({}, 7, { rating: '', longevity: '1' }, '2026-10-04')['7'].rating, null);
+  assert.deepEqual(withSkin({}, 7, { rating: 4.5 }), {}, 'whole stars only, so nothing left');
+  // Stamped with the device's date, not UTC's.
+  const now = new Date();
+  const local = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  assert.equal(withSkin({}, 7, { rating: 4 })['7'].updated, local);
   // No localStorage in Node: loading is empty and saving is a no-op.
   assert.deepEqual(loadSkin(), {});
   assert.deepEqual(setSkin('1', { rating: 3 }, '2026-10-03'), { 1: { rating: 3, longevity: 0, sillage: 0, updated: '2026-10-03' } });
@@ -50,6 +59,33 @@ test('your stars outweigh the crowd’s', () => {
   const after = rank(loved, mildDay, 'day');
   assert.equal(after[0].fragrance.id, second.fragrance.id);
   assert.ok(texts(after[0]).includes('+ You rate it 5★'), texts(after[0]).join(' | '));
+});
+
+test('a bottle you rate 1★ is never the pick, and one at 2★ gives way to any other S bottle', () => {
+  // Every window's top pick, rated low: 8 temperatures, day and night, four months, daily and every occasion.
+  let windows = 0;
+  for (const month of ['01', '04', '07', '10']) {
+    for (const feelsF of [25, 35, 45, 55, 65, 75, 85, 95]) {
+      for (const slot of ['day', 'night']) {
+        const dateISO = `2026-${month}-15`;
+        const c = { feelsF, humidity: 60, dewF: Math.min(feelsF - 8, 72), category: 'clear', date: new Date(`${dateISO}T12:00:00`), dateISO, lat: 40 };
+        for (const occasion of [null, ...OCCASIONS]) {
+          const plain = rank(fragrances, c, slot, { occasion });
+          const top = plain[0].fragrance;
+          const where = `${top.name}, ${feelsF} ${slot} ${month} ${occasion?.id ?? 'daily'}`;
+          const one = rank(applySkin(fragrances, { [top.id]: { rating: 1 } }), c, slot, { occasion });
+          const benched = one.find(r => r.fragrance.id === top.id);
+          assert.notEqual(one[0].fragrance.id, top.id, where);
+          assert.ok(!['S', 'A'].includes(benched.tier), `${where}: ${benched.tier}`);
+          if (plain.slice(1).some(r => r.tier === 'S')) {
+            assert.notEqual(rank(applySkin(fragrances, { [top.id]: { rating: 2 } }), c, slot, { occasion })[0].fragrance.id, top.id, where);
+          }
+          windows++;
+        }
+      }
+    }
+  }
+  assert.equal(windows, 64 * (OCCASIONS.length + 1));
 });
 
 test('a low rating says so, and your stars replace the crowd favorite line', () => {

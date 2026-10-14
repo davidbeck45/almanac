@@ -55,10 +55,30 @@ test('a never-worn bottle counts from the journal’s first wear, once that is a
   const old = journal({ start: '2026-09-07', recent: '2026-09-25', last: { 'Meant To Be Seen': null } });
   const [pick] = rank(fragrances, mildDay(), 'day', { history: old, nudge: true });
   assert.equal(pick.fragrance.name, 'Meant To Be Seen');
-  assert.ok(reasons(pick).includes(`Not worn in ${daysBetween('2026-09-07', TODAY)} days`));
+  assert.equal(pick.parts.idle, daysBetween('2026-09-07', TODAY));
+  assert.ok(pick.parts.unworn);
+  assert.equal(reasons(pick)[0], 'Not worn yet', 'not "in 35 days": it may have joined the shelf last week');
+  assert.ok(!reasons(pick).some(t => /Not worn in/.test(t)));
+  // A bottle that joined lately counts from the day it did.
+  const added = fragrances.map(f => (f.name === 'Meant To Be Seen' ? { ...f, added: '2026-10-01' } : f));
+  assert.ok(!rank(added, mildDay(), 'day', { history: old, nudge: true }).some(r => r.nudged), 'added 11 days ago');
+  const addedLongAgo = fragrances.map(f => (f.name === 'Meant To Be Seen' ? { ...f, added: '2026-08-01T09:30:00Z' } : f));
+  assert.equal(rank(addedLongAgo, mildDay(), 'day', { history: old, nudge: true })[0].parts.idle, 35, 'the journal’s start, when that is later');
   // Plans alone don't start a journal.
   const planned = fragrances.slice(0, 3).map(f => ({ id: f.id, date: '2026-08-01', slot: 'day', planned: true }));
   assert.ok(!rank(fragrances, mildDay(), 'day', { history: planned, nudge: true }).some(r => r.nudged || r.parts.idle));
+});
+
+test('a bottle you rate 2★ or lower is left alone on purpose, never nudged', () => {
+  const history = journal({ last: { 'Meant To Be Seen': '2026-09-01' } });
+  for (const rating of [1, 2]) {
+    const rated = fragrances.map(f => (f.name === 'Meant To Be Seen' ? { ...f, personal: { rating, longevity: 0, sillage: 0 } } : f));
+    const ranked = rank(rated, mildDay(), 'day', { history, nudge: true });
+    assert.ok(!ranked.some(r => r.nudged), `${rating}★`);
+    assert.notEqual(ranked[0].fragrance.name, 'Meant To Be Seen');
+  }
+  const liked = fragrances.map(f => (f.name === 'Meant To Be Seen' ? { ...f, personal: { rating: 4, longevity: 0, sillage: 0 } } : f));
+  assert.equal(rank(liked, mildDay(), 'day', { history, nudge: true })[0].fragrance.name, 'Meant To Be Seen', '4★ still is');
 });
 
 test('never past the margin, and never trading an S pick for an A', () => {
