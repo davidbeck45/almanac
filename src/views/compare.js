@@ -160,11 +160,23 @@ function seasonsCell(f) {
     <p class="cmp-daynight"><span>Day ${100 - night}%</span><span class="cmp-split" aria-hidden="true"><span style="width:${100 - night}%"></span></span><span>Night ${night}%</span></p>`;
 }
 
+// Parfumo's 0–10 ratings, or (≈) an estimate on that scale from
+// Fragrantica's votes (engine performanceRating) for a bottle Parfumo lacks.
+const estimated = f => !f.parfumo && Boolean(f.performance);
+
 function performanceCell(f, key) {
   const p = performanceRating(f);
   if (p?.[key] == null) return '<span class="muted">No votes</span>';
-  return `<span class="cmp-num">${p[key].toFixed(1)}<small> of 10</small></span>${meter(p[key] / 10)}`;
+  const guess = estimated(f);
+  return `<span class="cmp-num"${guess ? ' title="Estimated from Fragrantica votes"' : ''}>${guess ? '≈ ' : ''}${p[key].toFixed(1)}<small> of 10</small>${guess ? '<span class="visually-hidden">, estimated from Fragrantica votes</span>' : ''}</span>${meter(p[key] / 10)}`;
 }
+
+// The value a performance row's lead is judged by: an estimate only
+// against other estimates, never against Parfumo's own ratings.
+const performanceShown = (bottles, key) => {
+  const rated = bottles.some(b => b.f?.parfumo);
+  return shownAs(1, f => (rated && estimated(f) ? null : performanceRating(f)?.[key]));
+};
 
 const valueOf = (f, about) => signalsOf(f).value ?? about?.value?.avg ?? null;
 
@@ -269,13 +281,12 @@ const shownAs = (digits, value) => f => {
   return v == null ? null : Number(v.toFixed(digits));
 };
 
-const points = n => (n === 1 ? 'a point' : `${n} points`);
-
 /**
  * Which to wear tonight. With a bottle you own among them, the pick is
- * yours: the best of them, saying how far behind one you don't own it is and
- * how they're linked ("Wear Détour Noir: a point behind Layton, which it's
- * inspired by"). Without, the one that suits tonight best.
+ * yours: the best of them, with its match tonight and the better one's (the
+ * rows may show another window's), and how they're linked ("Wear Détour
+ * Noir: the best of yours tonight, 87% match. Layton, which it's inspired
+ * by, matches 88%."). Without, the one that suits tonight best.
  */
 export function verdictHTML(tonight, owned, pairs = []) {
   if (!tonight || tonight.ranked.length < 2) return '';
@@ -286,12 +297,12 @@ export function verdictHTML(tonight, owned, pairs = []) {
   let pick = first, title, why;
   if (mine && mine !== first) {
     pick = mine;
-    const gap = matchPct(first) - matchPct(mine);
     const link = pairs.find(p => [p.a.id, p.b.id].includes(mine.fragrance.id) && [p.a.id, p.b.id].includes(first.fragrance.id));
-    const tie = link?.kind === 'dupe' ? (String(mine.fragrance.original?.id) === first.fragrance.id ? ', which it’s inspired by' : ', which copies it')
-      : link?.kind === 'voted' ? ', and voters say they smell alike' : '';
+    const other = esc(first.fragrance.name);
+    const who = link?.kind === 'dupe' ? `${other}, ${String(mine.fragrance.original?.id) === first.fragrance.id ? 'which it’s inspired by' : 'which copies it'},` : other;
+    const same = matchPct(first) === matchPct(mine) ? ' too' : '';
     title = `Wear ${name(mine)}`;
-    why = `The best of yours tonight${gap > 0 ? `, ${points(gap)} behind ${esc(first.fragrance.name)}` : `, as good as ${esc(first.fragrance.name)}`}${tie}. ${matchPct(mine)}% match.`;
+    why = `The best of yours tonight, ${matchPct(mine)}% match. ${who} matches ${matchPct(first)}%${same}${link?.kind === 'voted' ? ', and voters say they smell alike' : ''}.`;
   } else {
     const close = first.score - second.score < TOSS_UP;
     title = close ? `Close call: ${name(first)} by a nose` : owned.has(first.fragrance.id) ? `Wear ${name(first)}` : `${name(first)} suits tonight best`;
@@ -349,8 +360,8 @@ export function compareHTML(m) {
     cmpRow('Rating', bottles, ratingCell, { best: leader(bottles, shownAs(2, f => f.rating || null)), id: 'cmp-rating' }),
     cmpRow('Main accords', bottles, accordsCell, { id: 'cmp-accords', stack: true }),
     cmpRow('Seasons', bottles, seasonsCell, { id: 'cmp-seasons', stack: true }),
-    cmpRow('Lasts', bottles, f => performanceCell(f, 'longevity'), { best: leader(bottles, shownAs(1, f => performanceRating(f)?.longevity)), tag: 'Longest', neutral: true, id: 'cmp-lasts' }),
-    cmpRow('Projects', bottles, f => performanceCell(f, 'sillage'), { best: leader(bottles, shownAs(1, f => performanceRating(f)?.sillage)), tag: 'Loudest', neutral: true, id: 'cmp-projects' }),
+    cmpRow('Lasts', bottles, f => performanceCell(f, 'longevity'), { best: leader(bottles, performanceShown(bottles, 'longevity')), tag: 'Longest', neutral: true, id: 'cmp-lasts' }),
+    cmpRow('Projects', bottles, f => performanceCell(f, 'sillage'), { best: leader(bottles, performanceShown(bottles, 'sillage')), tag: 'Loudest', neutral: true, id: 'cmp-projects' }),
     cmpRow('Value for money', bottles, f => valueCell(f, m.about(f)), { best: leader(bottles, shownAs(1, f => valueOf(f, m.about(f)))), id: 'cmp-value' }),
     cmpRow('Style', bottles, stylesCell, { id: 'cmp-style' }),
     cmpRow('Blind buy', bottles, (f, b) => riskCell(f, m.about(f), b.owned), { id: 'cmp-risk' }),
@@ -365,11 +376,37 @@ export function compareHTML(m) {
     ${heads}
     ${relations}
     <div class="cmp-table">${stripHTML(bottles)}${rows}</div>
-    <p class="bp-credit">Ratings, votes and value from Fragrantica members, via Le Decanteur’s dataset; performance from Parfumo where it has the bottle.</p>
+    <p class="bp-credit">Ratings, votes and value from Fragrantica members, via Le Decanteur’s dataset. How long they last and how far they project from Parfumo${ready.some(b => estimated(b.f)) ? ', or estimated (≈) from Fragrantica votes where Parfumo lacks the bottle' : ''}.</p>
   </div>`;
 }
 
 // ---------- Loading ----------
+
+// Draws the page again as something it loads lands, focus kept: on the
+// control's successor, else the element with its id (the heading), else the
+// heading. Never on the body.
+function redraw(app) {
+  if (!onCompare()) return;
+  const focused = document.activeElement;
+  const inMain = Boolean(focused?.closest?.('#main'));
+  app.renderPage();
+  if (!inMain || focused.isConnected || app.refocus(focused, '#main')) return;
+  ((focused.id && document.getElementById(focused.id)) || document.querySelector('#page-title'))?.focus({ preventScroll: true });
+}
+
+// The route the page last arrived on: arriving anew (a link from a bottle
+// page, which closes as the page opens), focus left nowhere on the page goes
+// to its heading, as on any other page.
+let arrived = null;
+function settle(route) {
+  if (route === arrived) return;
+  arrived = route;
+  queueMicrotask(() => {
+    const el = document.activeElement;
+    const lost = !el || el === document.body || !el.isConnected || !el.closest('#page');
+    if (lost && state.from && onCompare() && state.base === route) document.querySelector('#page-title')?.focus({ preventScroll: true });
+  });
+}
 
 // Brings in what the page needs and isn't here: records (r/, or a hand-entered
 // bottle's own link), about data, the pool's signals (value, safety) for
@@ -378,8 +415,9 @@ export function compareHTML(m) {
 function load(app, route) {
   listen(app);
   watchHeads();
+  settle(route);
   const ids = compareIds(route.arg);
-  const again = () => queueMicrotask(() => { if (onCompare()) app.renderPage(); });
+  const again = () => queueMicrotask(() => redraw(app));
   const absent = ids.filter(id => !findRecord(id) && !missing.has(id) && !failed.has(id) && !loading.has(id));
   const fetch = absent.filter(id => /^\d+$/.test(id));
   for (const id of absent.filter(id => !/^\d+$/.test(id))) {
@@ -415,12 +453,25 @@ function load(app, route) {
     askPool('warm').then(() => askPool('records', { ids: bare })).then(again, () => bare.forEach(id => askedSignals.delete(id)));
   }
   // A lone bottle's column suggests from its family.
-  const lone = ids.length === 1 ? findRecord(ids[0]) : null;
-  if (lone && !familyOf(ids[0]) && !families.has(ids[0]) && Object.keys(lone.accords ?? {}).length) {
-    families.set(ids[0], null);
-    poolInputs().then(inputs => askPool('dupes', { ...inputs, record: lone }, { channel: 'cmp-family' }))
-      .then(r => { if (!r.stale) families.set(ids[0], r); else families.delete(ids[0]); again(); }, () => families.delete(ids[0]));
-  }
+  if (ids.length === 1) askFamily(app, ids[0]);
+}
+
+/**
+ * Asks the pool for a bottle's smells-like family (`dupes`), for a lone
+ * bottle's column and the first list of "Compare with…", unless its bottle
+ * page has it (familyOf) or it was asked. Whichever of them is on screen
+ * draws again when it lands.
+ */
+function askFamily(app, id) {
+  const f = findRecord(id);
+  if (!f || familyOf(id) || families.has(id) || !Object.keys(f.accords ?? {}).length) return;
+  families.set(id, null);
+  const landed = () => {
+    if (onCompare()) redraw(app);
+    if (state.sheet?.kind === 'cmp-pick' && state.sheet.base?.[0] === id) app.keepingFocus(document.activeElement, '#sheet', () => app.updateSheet({}));
+  };
+  poolInputs().then(inputs => askPool('dupes', { ...inputs, record: f }, { channel: 'cmp-family' }))
+    .then(r => { if (!r.stale) families.set(id, r); else families.delete(id); landed(); }, () => families.delete(id));
 }
 
 // Back online: bottles that couldn't load try again.
@@ -430,7 +481,7 @@ function listen(app) {
   listening = true;
   addEventListener('online', () => {
     failed.clear();
-    if (onCompare()) app.renderPage();
+    redraw(app);
   });
 }
 
@@ -473,26 +524,38 @@ const pickRow = f => `<li class="row"><button class="row-main" data-action="cmp-
 const FEW = 5;
 
 /**
+ * Whether a bottle answers what's typed: every word of it is somewhere in
+ * its name and brand, in any order ("dior sauvage", "baccarat 540"), as
+ * localMatches reads a search (one-letter words count only when nothing
+ * longer was typed).
+ */
+export function pickerMatches(query, f) {
+  const typed = normalize(query).split(' ').filter(Boolean);
+  const words = typed.some(w => w.length > 1) ? typed.filter(w => w.length > 1) : typed;
+  if (!words.length) return true;
+  const hay = normalize(`${f.name} ${f.brand ?? ''}`);
+  return words.every(w => hay.includes(w));
+}
+
+/**
  * The picker's lists for a sheet { base: [ids], ctx, query, results, busy,
  * error }: [{ title, records }], the bottle's smells-like family first, then
  * the list it was opened from, then your own; filtered by the query, with
- * the library's matches after. Each bottle shows once, in the first list it
+ * the library's matches after (as the library found them: it matched them
+ * already, by its own rules). Each bottle shows once, in the first list it
  * makes; the family and the list it came from show their first five, so the
  * rest of your bottles stay under "Your bottles".
  */
 export function pickerLists(sheet, { family = null, context = [], owned = [] } = {}) {
   const seen = new Set(sheet.base ?? []);
-  const q = normalize(sheet.query ?? '');
-  const ok = f => {
-    const id = String(f?.id ?? '');
-    return Boolean(f?.name) && !seen.has(id) && (!q || normalize(`${f.name} ${f.brand ?? ''}`).includes(q));
-  };
-  // The first n that match, each marked as listed (the rest stay free for later lists).
-  const keep = (list, n = Infinity) => {
+  const q = sheet.query ?? '';
+  const typed = normalize(q) !== '';
+  // The first n that fit, each marked as listed (the rest stay free for later lists).
+  const keep = (list, n = Infinity, match = f => pickerMatches(q, f)) => {
     const out = [];
     for (const f of list) {
       if (out.length >= n) break;
-      if (!ok(f)) continue;
+      if (!f?.name || seen.has(String(f.id ?? '')) || !match(f)) continue;
       seen.add(String(f.id));
       out.push(f);
     }
@@ -504,7 +567,7 @@ export function pickerLists(sheet, { family = null, context = [], owned = [] } =
     { title: 'From the same list', records: keep(context, FEW) },
     { title: 'Your bottles', records: keep([...owned].sort((a, b) => a.name.localeCompare(b.name))) },
   ];
-  if (q) lists.push({ title: 'From Fragrantica', records: keep(sheet.results ?? []) });
+  if (typed) lists.push({ title: 'From Fragrantica', records: keep(sheet.results ?? [], Infinity, () => true) });
   return lists.filter(l => l.records.length);
 }
 
@@ -558,14 +621,26 @@ export const actions = {
   'cmp-add'(el, app) {
     app.openSheet({ kind: 'cmp-pick', base: compareIds(state.base?.dest === 'compare' ? state.base.arg : ''), ctx: null, query: '', results: null });
   },
-  // From the picker, or a lone bottle's suggestions on the page.
+  // A bottle page's Compare: the picker, that bottle first, its family (the
+  // first list) asked now if its page's section hadn't yet.
+  'bp-compare'(el, app) {
+    app.openSheet({ kind: 'cmp-pick', base: [el.dataset.id], ctx: el.dataset.ctx || null, query: '', results: null });
+    askFamily(app, el.dataset.id);
+  },
+  // From the picker, or a lone bottle's suggestions on the page. The page
+  // drawn (and the bottle page under the picker gone), focus on its heading:
+  // the control that asked went with the sheet.
   'cmp-pick'(el, app) {
     const picking = state.sheet?.kind === 'cmp-pick';
     const base = picking ? state.sheet.base ?? [] : compareIds(onCompare() ? state.base.arg : '');
     const ids = [...base, el.dataset.id].slice(0, MAX_COMPARE);
     const replace = onCompare() && state.route?.dest === 'compare';
-    if (picking) app.closeSheet({ then: () => app.navigate(hrefFor(ids), { replace }) });
-    else app.navigate(hrefFor(ids), { replace });
+    const go = () => {
+      app.navigate(hrefFor(ids), { replace });
+      document.querySelector('#page-title')?.focus({ preventScroll: true });
+    };
+    if (picking) app.closeSheet({ then: go });
+    else go();
   },
   'cmp-remove'(el, app) {
     const before = compareIds(state.base?.arg);
@@ -573,14 +648,16 @@ export const actions = {
     const name = findRecord(el.dataset.id)?.name ?? 'Bottle';
     removedFrom = before;
     app.navigate(hrefFor(ids), { replace: true });
-    focusAfterRemove();
+    focusCard(before.indexOf(el.dataset.id));
     app.showToast(`<span class="note">${esc(name)} removed.</span><button class="btn primary compact" data-action="cmp-undo">Undo</button>`);
   },
   'cmp-undo'(el, app) {
     if (!removedFrom) return;
     const ids = removedFrom;
+    const back = ids.findIndex(id => !compareIds(state.base?.arg).includes(id));
     removedFrom = null;
     app.navigate(hrefFor(ids), { replace: true });
+    focusCard(back);
     app.hideToast();
   },
   'cmp-retry'(el, app) {
@@ -594,8 +671,12 @@ export const actions = {
   },
 };
 
-// The page drew again without the card: focus the next card's name, else the page's heading.
-function focusAfterRemove() {
-  const next = document.querySelector('#main .cmp-open, #main [data-action="cmp-add"]') ?? document.querySelector('#page-title');
+// The page drawn again after a removal (or its Undo): focus the card now in
+// column i (the next one along; the last when it was the last), else Add a
+// bottle when no card is left, else the page's heading.
+function focusCard(i) {
+  const cards = [...document.querySelectorAll('#main .cmp-heads > .cmp-head:not(.cmp-add)')];
+  const card = cards[Math.max(0, Math.min(i, cards.length - 1))];
+  const next = card?.querySelector('.cmp-open, button') ?? document.querySelector('#main [data-action="cmp-add"]') ?? document.querySelector('#page-title');
   next?.focus({ preventScroll: true });
 }

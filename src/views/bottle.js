@@ -165,26 +165,32 @@ export function keepReading(panel, at) {
 
 // ---------- The styles someone likes ----------
 
-let liked = { key: null, ids: null };
+let liked = { key: null, ids: null, stated: true };
 
 /**
  * The scent styles someone likes, as Insights, Discover and the Wishlist
- * read them (likedFor in src/views/wardrobe/parts.js): the ones hearted on
- * Insights (state.likedStyles; [] once every one is unliked), David's
- * DEMO_LIKED on his wardrobe, else the ones most of the bottles lean toward.
- * src/discover.js loads on demand.
+ * read them (likedFor in src/views/wardrobe/parts.js): { ids, stated }. The
+ * ones liked on Insights (state.likedStyles; [] once every one is unliked)
+ * or David's DEMO_LIKED on his wardrobe are stated; else they're the ones
+ * most of the bottles lean toward, a guess (`stated` false: the page says
+ * "a style you reach for", not "you like"). src/discover.js loads on demand.
  */
-export async function likedStyleIds(owned = activeFragrances()) {
+export async function likedTaste(owned = activeFragrances()) {
   const key = JSON.stringify([state.likedStyles ?? null, viewingDemo(), owned.map(f => f.id)]);
-  if (liked.key === key) return liked.ids;
+  if (liked.key === key) return liked;
   const { DEMO_LIKED, likedStyles } = await import('../discover.js');
   const stated = (state.likedStyles ?? (viewingDemo() ? DEMO_LIKED : null))?.filter(id => styleById(id));
-  liked = { key, ids: state.likedStyles?.length === 0 ? [] : stated?.length ? stated : likedStyles(owned).map(s => s.id) };
-  return liked.ids;
+  const none = state.likedStyles?.length === 0;
+  liked = { key, ids: none ? [] : stated?.length ? stated : likedStyles(owned).map(s => s.id), stated: none || Boolean(stated?.length) };
+  return liked;
 }
 
-/** likedStyleIds() as last worked out (null before), for templates. */
+/** likedTaste()'s style ids. */
+export const likedStyleIds = async (owned = activeFragrances()) => (await likedTaste(owned)).ids;
+
+/** likedTaste() as last worked out (ids null before), for templates. */
 export const likedNow = () => liked.ids;
+export const likedStatedNow = () => liked.stated;
 
 // ---------- Links ----------
 
@@ -227,7 +233,7 @@ export function bottleModel(route) {
     win,
     ctx: key,
     // "Formal · tonight", but "Formal · Friday night": only the relative words go lower case.
-    ctxLabel: win ? (ctx.occasion ? `${ctx.occasion.label} · ${win.label.replace(/^(Today|Tonight|Tomorrow)\b/, w => w.toLowerCase())}` : win.label) : '',
+    ctxLabel: win ? (ctx.occasion ? `${ctx.occasion.label} · ${inSentence(win.label)}` : win.label) : '',
     occasion: ctx?.occasion ?? null,
     owned,
     inMine: state.mine.records.some(r => r.id === f.id),
@@ -250,17 +256,19 @@ export function bottleModel(route) {
 /** A bottle's about data: the build's (wardrobe, catalog) or loadAbout's; undefined while that loads. */
 export const aboutOf = m => m.f.about ?? m.about;
 
-// The whole page. `modal`: a dialog over the page (phones and tablets).
+// The whole page. `modal`: a dialog over the page (phones and tablets), a
+// <div> then (an <article> can't take role=dialog); docked, an <article>.
 // model: undefined while its record loads, null for a bottle no source has,
 // false when it couldn't load (offline).
 export function bottlePageHTML(model, { modal = true } = {}) {
+  const tag = modal ? 'div' : 'article';
   const frame = inner => `
     ${modal ? '<div class="bp-backdrop" data-action="close-bottle"></div>' : ''}
-    <article class="bp-panel"${modal ? ' role="dialog" aria-modal="true"' : ''} aria-labelledby="bottle-title">
+    <${tag} class="bp-panel"${modal ? ' role="dialog" aria-modal="true"' : ''} aria-labelledby="bottle-title">
       <div class="sheet-grip" aria-hidden="true"></div>
       <button class="icon-btn bp-close" data-action="close-bottle" aria-label="Close">${icon.close}</button>
       ${inner}
-    </article>`;
+    </${tag}>`;
   // The page's h2 is the tab's title too (the shell reads it).
   const notice = (title, message) => frame(`<h2 id="bottle-title" class="visually-hidden">${title}</h2><div class="bp-notice">${messageHTML(message)}</div>`);
   if (model === undefined) {
@@ -286,7 +294,7 @@ const FACTORS = [
   ['season', 'Season', '#9be39a'],
   ['weather', 'Weather', '#8fc7f0'],
   ['time', 'Time of day', '#f5c451'],
-  ['quality', 'Crowd rating', '#f2b264'],
+  ['quality', 'Rating', '#f2b264'],
 ];
 // Names longer than this step down a size, so they don't run to four lines.
 const LONG_NAME = 28;
@@ -296,16 +304,17 @@ const strength = width => (width >= 85 ? 'dominant' : width >= 65 ? 'strong' : w
 function headSection({ f, entry, ctxLabel, solo }) {
   const meta = [f.brand, f.year, GENDER[f.gender]].filter(Boolean).map(esc).join(' · ');
   const ratingLine = f.source === 'custom'
-    ? '<span>Entered by hand</span>'
+    ? '<span class="by-hand">Entered by hand</span>'
     : !f.rating ? 'Unrated'
     : `★ ${f.rating.toFixed(2)} <span>${esc(f.source === 'fragella' ? 'Fragella rating' : `${f.ratingVotes.toLocaleString()} votes`)}</span>`;
-  // Parfumo's 0–10 ratings when we have them, else Fragrantica's votes, else Fragella's words.
+  // Parfumo's 0–10 ratings when we have them, else Fragrantica's votes, else
+  // Fragella's words; Lasts and Projects, as compare and On your skin say it.
   const pf = f.parfumo, fv = f.performance;
   const performance = pf
-    ? `Longevity ${pf.longevity.toFixed(1)} · Sillage ${pf.sillage.toFixed(1)} <span>of 10 on <a href="${esc(pf.url)}" target="_blank" rel="noopener" data-focus="bp-parfumo">Parfumo</a></span>`
+    ? `Lasts ${pf.longevity.toFixed(1)} · Projects ${pf.sillage.toFixed(1)} <span>of 10 on <a href="${esc(pf.url)}" target="_blank" rel="noopener" data-focus="bp-parfumo">Parfumo</a></span>`
     : fv
-    ? `Longevity ${fv.longevity.toFixed(1)} of 5 · Sillage ${fv.sillage.toFixed(1)} of 4 <span>on Fragrantica</span>`
-    : [f.longevity, f.sillage && `${f.sillage} sillage`].filter(Boolean).map(esc).join(' · ');
+    ? `Lasts ${fv.longevity.toFixed(1)} of 5 · Projects ${fv.sillage.toFixed(1)} of 4 <span>on Fragrantica</span>`
+    : [f.longevity, f.sillage && `${f.sillage} projection`].filter(Boolean).map(esc).join(' · ');
   const o = f.original;
   const inspired = o ? `<p class="inspired">Inspired by ${o.url ? `<a href="${esc(o.url)}" target="_blank" rel="noopener" data-focus="bp-inspired">${esc(o.name)}</a>` : esc(o.name)} · ${esc(o.brand)}</p>` : '';
   const kicker = entry && !solo ? `<p class="kicker">${magDot(entry.tier)}${esc(ctxLabel)}</p>` : '';
@@ -375,8 +384,14 @@ function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned, inMine,
 function whySection({ entry, solo, win }) {
   if (!entry) return '';
   const p = entry.parts;
-  const bars = FACTORS.filter(([k]) => p[k] !== null && p[k] !== undefined)
-    .map(([k, label, color]) => bar(label, p[k] * 100, color, `${Math.round(p[k] * 100)}`)).join('');
+  // The rating bar is mostly your stars once you've rated it (engine
+  // quality()), and says so; with neither stars nor crowd votes (a bottle
+  // entered by hand) it would only read a neutral 50, so it stays out.
+  const f = entry.fragrance;
+  const yours = Number.isFinite(f.personal?.rating);
+  const crowd = f.source !== 'custom' && f.rating > 0 && f.ratingVotes > 0;
+  const bars = FACTORS.filter(([k]) => p[k] !== null && p[k] !== undefined && (k !== 'quality' || yours || crowd))
+    .map(([k, label, color]) => bar(k === 'quality' && yours ? 'Your rating' : label, p[k] * 100, color, `${Math.round(p[k] * 100)}`)).join('');
   const rotation = p.rotation > 0
     ? `<p class="why-note">−${Math.round(p.rotation * 100)} for rotation: ${esc(p.planned ? 'already in the plan nearby' : 'worn recently')}.</p>`
     : '';
@@ -384,10 +399,13 @@ function whySection({ entry, solo, win }) {
   return `<section class="bp-section"><h3>${title} <span class="h3-aside">${matchPct(entry)}% match</span></h3><div class="bars why">${bars}</div>${rotation}</section>`;
 }
 
+// Only the relative words go lower case: "Also good for tonight", "Also good for Saturday night".
+const inSentence = label => label.replace(/^(Today|Tonight|Tomorrow)\b/, w => w.toLowerCase());
+
 // The next few from the same list, on the same shelf the list draws.
 function altsSection({ alts, ctx, ctxLabel, worn }) {
   if (!alts.length) return '';
-  return `<section class="bp-section"><h3>Also good for ${esc(ctxLabel.toLowerCase())}</h3>${shelfHTML(alts, ctx, { wornId: worn })}</section>`;
+  return `<section class="bp-section"><h3>Also good for ${esc(inSentence(ctxLabel))}</h3>${shelfHTML(alts, ctx, { wornId: worn })}</section>`;
 }
 
 // Partners from the same collection (src/layering.js), heavier one sprayed first.
@@ -423,16 +441,19 @@ function seasonsSection({ f }) {
   const dnBars = ['day', 'night'].map(s => bar(s, (f.dayNight[s] / dnPeak) * 100, SEASON_COLORS[s], `${Math.round(f.dayNight[s] * 100)}%`)).join('');
   return `<section class="bp-section two-col">
     <div><h3>${estimated ? 'Season fit' : 'Seasons voted'}</h3><div class="bars">${seasonBars}</div></div>
-    <div><h3>${estimated ? 'Time of day (est.)' : 'Time of day'}</h3><div class="bars">${dnBars}</div></div>
+    <div><h3>${estimated ? 'Time of day, estimated' : 'Time of day'}</h3><div class="bars">${dnBars}</div></div>
   </section>`;
 }
 
+// The pyramid by layer; a bottle listed flat (only `all`) shows its notes
+// under the heading alone, not a "Notes" label under "Notes".
 function notesSection({ f }) {
-  const layers = [['top', 'Top'], ['mid', 'Heart'], ['base', 'Base'], ['all', 'Notes']]
-    .filter(([k]) => f.notes?.[k]?.length)
-    .map(([k, label]) => `<div class="layer"><span class="layer-label">${label}</span><div class="notes">${f.notes[k].map(n => `<span class="note-chip">${esc(n)}</span>`).join('')}</div></div>`)
-    .join('');
-  return layers ? `<section class="bp-section"><h3>Notes</h3><div class="pyramid">${layers}</div></section>` : '';
+  const chips = list => `<div class="notes">${list.map(n => `<span class="note-chip">${esc(n)}</span>`).join('')}</div>`;
+  const layers = [['top', 'Top'], ['mid', 'Heart'], ['base', 'Base'], ['all', 'Notes']].filter(([k]) => f.notes?.[k]?.length);
+  if (!layers.length) return '';
+  const body = layers.length === 1 && layers[0][0] === 'all' ? chips(f.notes.all)
+    : `<div class="pyramid">${layers.map(([k, label]) => `<div class="layer"><span class="layer-label">${label}</span>${chips(f.notes[k])}</div>`).join('')}</div>`;
+  return `<section class="bp-section"><h3>Notes</h3>${body}</section>`;
 }
 
 // Orders leave room between them for wave 4's sections (shell-map.md lists
@@ -510,8 +531,5 @@ export const actions = {
     app.render();
     app.hideToast();
   },
-  // "Compare with…": the picker (src/views/compare.js), this bottle first.
-  'bp-compare'(el, app) {
-    app.openSheet({ kind: 'cmp-pick', base: [el.dataset.id], ctx: el.dataset.ctx || null, query: '', results: null });
-  },
+  // Compare (bp-compare) opens "Compare with…", whose handler lives with it in src/views/compare.js.
 };

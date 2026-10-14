@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { SECTIONS, bottlePageHTML, pooled, sectionsFor, linkId, likedStyleIds, actions as bottleActions } from '../src/views/bottle.js';
+import { SECTIONS, bottlePageHTML, pooled, sectionsFor, linkId, likedStyleIds, likedTaste } from '../src/views/bottle.js';
 import { state, computeToday } from '../src/app/state.js';
 import '../src/views/sections.js';
 import { buyCheckHTML, checkable, fillGroups } from '../src/views/bottle-check.js';
@@ -14,15 +14,16 @@ import { sprayHTML, figureSVG, sprayCount } from '../src/views/bottle-spray.js';
 import { skinHTML, moveText, listLabel, ordinal } from '../src/views/bottle-skin.js';
 import { stylesHTML } from '../src/views/bottle-styles.js';
 import { dupesHTML } from '../src/views/bottle-dupes.js';
-import { crowdHTML, riskLine } from '../src/views/bottle-crowd.js';
+import { crowdHTML, riskLine, wholePercents } from '../src/views/bottle-crowd.js';
 import { reviewsHTML } from '../src/views/bottle-reviews.js';
-import { compareHTML, compareModel, relation, leader, verdictHTML, pickerLists, pickerHTML, MAX_COMPARE } from '../src/views/compare.js';
+import { compareHTML, compareModel, relation, leader, verdictHTML, pickerLists, pickerHTML, pickerMatches, MAX_COMPARE } from '../src/views/compare.js';
 import { parseRoute, routeHash, compareIds } from '../src/app/router.js';
-import { shareToken } from '../src/custom.js';
+import { shareToken, customRecord } from '../src/custom.js';
 import { rank, comfortRange } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { summarize } from '../src/weather.js';
 import { esc } from '../src/ui.js';
+import { icon } from '../src/ui/components.js';
 import { syntheticForecast } from './fixtures.js';
 
 const { fragrances } = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url)));
@@ -92,7 +93,7 @@ test('the sections take their slots in the page', () => {
 
 test('a whole page renders clean, owned or not', () => {
   const owned = clean(bottlePageHTML(modelOf(evil, { skin: { rating: 4, longevity: 1, sillage: 0 } })), 'an owned bottle');
-  assert.match(owned, /On my skin/);
+  assert.match(owned, /On your skin/);
   assert.match(owned, /How much to spray/);
   assert.match(owned, /What voters say/);
   assert.match(owned, /Pros and cons/);
@@ -101,13 +102,51 @@ test('a whole page renders clean, owned or not', () => {
   assert.ok(!owned.includes('data-action="bp-want"'), 'no Want for a bottle you own');
 
   assert.match(owned, /<div class="bp-slot" data-section="check"><\/div>/, 'every section has its slot, empty or not');
+  assert.match(owned, /<div class="bp-panel" role="dialog" aria-modal="true"/, 'a dialog is a div: an article can’t take role=dialog');
+  assert.match(bottlePageHTML(modelOf(evil), { modal: false }), /<article class="bp-panel" aria-labelledby/, 'docked, it’s an article');
   assert.match(owned, /id="bp-spray"/, 'Now’s spray line finds the spray guide');
 
   const other = clean(bottlePageHTML(modelOf(stranger, { owned: false, active: false, entry: null, solo: true, wanted: true })), 'a bottle you don’t own');
-  assert.ok(!other.includes('On my skin'), 'no skin section for a bottle you don’t own');
+  assert.ok(!other.includes('On your skin'), 'no skin section for a bottle you don’t own');
   assert.ok(other.indexOf('Main accords') < other.indexOf('How much to spray'), 'what it smells like before how to spray it');
   assert.match(other, /data-action="bp-want" data-id="9828" aria-pressed="true"/, 'Want shows as on');
   assert.match(other, /aria-busy="true"/, 'the pool-backed sections show a skeleton until they’re asked');
+});
+
+test('why it ranks here: the rating bar says whose rating it is, and a bottle nobody rated has none', () => {
+  const night = rec => rank([rec], wx.night, 'night', { history: [], todayISO: wx.night.dateISO })[0];
+  const why = rec => {
+    const html = bottlePageHTML(modelOf(rec, { entry: night(rec) }));
+    return html.slice(html.indexOf('data-section="why"'), html.indexOf('data-section="alts"'));
+  };
+  const f = byName('Liquid Brun');
+  assert.match(why(f), /bar-label">Rating</, 'the crowd’s rating');
+  assert.ok(!why(f).includes('Crowd rating'));
+  const yours = why({ ...f, personal: { rating: 1, longevity: 0, sillage: 0 } });
+  assert.match(yours, /bar-label">Your rating</, 'your stars lead it once you rate it');
+  assert.ok(!/bar-label">Rating</.test(yours));
+  const byHand = customRecord({ name: 'Rose', accords: ['rose', 'musky'] });
+  assert.match(why(byHand), /bar-label">Season</);
+  assert.ok(!/bar-label">(Your r|R)ating</.test(why(byHand)), 'no crowd, no rating bar');
+  assert.match(why({ ...byHand, personal: { rating: 5, longevity: 0, sillage: 0 } }), /bar-label">Your rating</);
+});
+
+test('notes listed flat show under their heading alone, and estimated seasons say so in words', () => {
+  const section = (html, id) => html.slice(html.indexOf(`data-section="${id}"`), html.indexOf('</section>', html.indexOf(`data-section="${id}"`)));
+  const flat = section(bottlePageHTML(modelOf({ ...byName('Liquid Brun'), notes: { all: ['Vanilla', 'Musk'] } })), 'notes');
+  assert.match(flat, /<h3>Notes<\/h3><div class="notes">/);
+  assert.ok(!flat.includes('layer-label'), 'no "Notes" under "Notes"');
+  assert.match(section(bottlePageHTML(modelOf(byName('Liquid Brun'))), 'notes'), /layer-label">Top</);
+  const byHand = customRecord({ name: 'Rose', accords: ['rose', 'musky'] });
+  assert.match(bottlePageHTML(modelOf(byHand, { entry: null })), /Time of day, estimated/);
+});
+
+test('also good: only today, tonight and tomorrow go lower case in its heading', () => {
+  const alts = ranked.filter(r => r.fragrance.id !== evil.id).slice(0, 4);
+  const head = label => bottlePageHTML(modelOf(evil, { alts, ctxLabel: label })).match(/Also good for ([^<]*)</)?.[1];
+  assert.equal(head('Tonight'), 'tonight');
+  assert.equal(head('Saturday night'), 'Saturday night');
+  assert.equal(head('Formal · Saturday night'), 'Formal · Saturday night');
 });
 
 // ---------- Pool answers ----------
@@ -235,6 +274,14 @@ test('the buy check: nothing for a bottle you own, a skeleton until it answers, 
   assert.match(liked, /Styles you like: Skin scent and Wears close/);
   const said = buyCheckHTML(m, { status: 'ready', result: { ...check, reasons: ['More of the skin scents you like: you own two.'], likedShown: ['skin'] } });
   assert.ok(!said.includes('A style you like'));
+  // Styles only guessed from the bottles: ones you reach for, and never the Want heart.
+  const leaning = buyCheckHTML(m, { status: 'ready', result: { ...check, likedShown: ['vanilla'] } }, { stated: false });
+  assert.match(leaning, /class="bc-liked leaning"/);
+  assert.match(leaning, /A style you reach for: Vanilla/);
+  assert.ok(!leaning.includes('you like'));
+  const reached = buyCheckHTML(m, { status: 'ready', result: { ...check, reasons: ['More of the vanilla scents you reach for: you own one.'], likedShown: ['vanilla'] } }, { stated: false });
+  assert.ok(!reached.includes('bc-liked'), 'the reason says it already');
+  for (const html of [liked, leaning]) assert.ok(!html.includes(icon.heartFill), 'the heart means Want');
 });
 
 test('fills group by use and time of day', () => {
@@ -270,7 +317,7 @@ test('the spray guide counts sprays, lights the spots and says why', () => {
   assert.deepEqual([sprayCount({ sprays: [1, 1] }), sprayCount({ sprays: [2, 3] })], ['1 spray', '2–3 sprays']);
 });
 
-// ---------- On my skin ----------
+// ---------- On your skin ----------
 
 test('on my skin: stars, nudges and where the bottle moved', () => {
   assert.equal(skinHTML(modelOf(stranger, { owned: false })), '');
@@ -281,6 +328,11 @@ test('on my skin: stars, nudges and where the bottle moved', () => {
   assert.match(html, /data-action="bp-skin-clear"/);
   assert.match(html, /data-action="bp-skin-lasts" data-value="-1" aria-pressed="true"/);
   assert.match(html, /data-action="bp-skin-projects" data-value="1" aria-pressed="true"/);
+  assert.ok(!html.includes('role="status"'), 'the line is drawn anew each time; #bp-status, which outlasts the page, says it');
+  // One person throughout: what you see is what a screen reader hears.
+  assert.match(html, /How long it lasts on you<\/span>[^]*aria-label="How long it lasts on you"/);
+  assert.match(html, /How far it projects on you<\/span>[^]*aria-label="How far it projects on you"/);
+  assert.ok(!/\bon me\b|On my skin/.test(html));
   const unrated = skinHTML(modelOf(evil));
   assert.ok(!unrated.includes('bp-skin-clear'));
   assert.match(unrated, /tabindex="0" data-action="bp-skin-rate" data-value="1"/, 'one tab stop, on the first star');
@@ -307,6 +359,14 @@ test('styles link to Discover, and a quiet bottle says it wears close', () => {
   assert.equal(stylesHTML(modelOf({ ...evil, accords: {} })), '');
   assert.deepEqual(parseRoute('#/discover?styles=skin,clean', { discover: [] }).query, { styles: 'skin,clean' }, 'the router keeps the styles');
   clean(stylesHTML(modelOf(evil)), 'styles');
+  // A style you said you like says so; one only guessed from your bottles is one you reach for. No heart: it means Want.
+  const said = stylesHTML(modelOf(byName('Sandalwood & Musk')), ['skin'], { stated: true });
+  assert.match(said, /style-row liked/);
+  assert.match(said, /You like it/);
+  const guessed = stylesHTML(modelOf(byName('Sandalwood & Musk')), ['skin'], { stated: false });
+  assert.match(guessed, /You reach for it/);
+  assert.ok(!guessed.includes('You like it') && !guessed.includes('style-row liked'));
+  for (const html of [said, guessed]) assert.ok(!html.includes(icon.heartFill), 'the heart means Want');
 });
 
 // ---------- Smells like ----------
@@ -333,20 +393,20 @@ test('smells like: the original, cheaper twins and siblings, each opening its pa
   assert.match(html, /Inspired by/);
   assert.match(html, /data-action="open" data-ctx="night" data-id="84112"/, 'an original opens by id');
   assert.match(html, /href="#\/compare\/9828,1"/);
-  assert.match(html, /1,200 votes · great value/);
+  assert.match(html, /1,200 say it smells like it · Great value/, 'what the count counts');
   assert.match(html, /Alike by its notes/);
   assert.match(html, /You own it/);
-  assert.match(html, /risky blind buy/);
+  assert.match(html, /Risky blind buy/);
   assert.match(html, /<span>Compare<\/span>/, 'the compare link says what it does');
   assert.match(html, /id="bp-dupes"/, 'Discover’s Similar & cheaper scrolls here');
   assert.equal((html.match(/<li class="row/g) ?? []).length, 6, 'four cheaper at most, the original and a sibling');
-  assert.match(html, /“smells like” votes/, 'credited');
+  assert.match(html, /“smells like” votes, via Le Decanteur’s dataset/, 'credited, the dataset too');
 
   // A sibling the pool sent no votes for: the page's own top five, else "voters link them".
   const quiet = { ...result, original: null, cheaper: [], siblings: [entry('7', { up: null, down: null }), entry('8', { up: null, down: null })] };
   const counted = dupesHTML(modelOf(stranger, { owned: false, about: { smellsLike: [{ id: 7, up: 321, down: 4 }] } }), { status: 'ready', result: quiet });
-  assert.match(counted, /321 votes · great value/);
-  assert.match(counted, /Voters link them · great value/);
+  assert.match(counted, /321 say it smells like it · Great value/);
+  assert.match(counted, /Voters link them · Great value/);
   // A bottle the library has nothing on (newer than the dataset): nothing to show, not an error.
   assert.equal(dupesHTML(m, { status: 'error', error: 'That bottle isn’t in the fragrance library.' }), '');
 });
@@ -366,6 +426,14 @@ test('what voters say: value, keepers, blind buy, buzz, ratings and lean, credit
   assert.match(html, /Top 1%/);
   assert.equal((html.match(/class="crowd-hist-fill"/g) ?? []).length, 5);
   assert.match(html, /love or like it/);
+  // The headline agrees with its bars: 52.6% + 26.6% rounds to 79 but the bars say 53 and 27.
+  const hist = { love: 526, like: 266, ok: 110, dislike: 58, hate: 40 };
+  const said = crowdHTML(modelOf({ ...stranger, extras: undefined, sentiment: hist }, { about: null }));
+  const bars = [...said.matchAll(/crowd-hist-value">(\d+)%/g)].map(m => Number(m[1]));
+  assert.equal(bars.reduce((a, b) => a + b, 0), 100, 'the bars add up');
+  assert.match(said, new RegExp(`>${bars[0] + bars[1]}% love or like it`));
+  assert.deepEqual(wholePercents([1, 1, 1]), [34, 33, 33]);
+  assert.deepEqual(wholePercents([0, 0]), [0, 0]);
   assert.match(html, /left:\d+(\.\d)?%/, 'the lean has a place on its scale');
   assert.match(html, /Voters call it masculine/);
   assert.match(crowdHTML(modelOf(evil, { owned: false })), /Blind buy/);
@@ -518,6 +586,25 @@ test('compare marks one leader by the value it shows, and calls lasting and loud
   assert.match(row('cmp-now'), /66%[^]*66%/);
   assert.ok(!row('cmp-now').includes('cmp-lead-tag'), '66% and 66% lead nobody');
   assert.match(html, /cmp-lead-tag">(Longest|Loudest)</, 'performance leads are named, not "best"');
+
+  // A bottle Parfumo lacks shows an estimate from Fragrantica's votes, marked, and never leads one Parfumo rates.
+  const rated = byName('Liquid Brun'), guess = { ...byName('Terra'), id: 'x1', name: 'Zenith', parfumo: undefined };
+  const page = (...fs) => compareHTML({
+    ids: fs.map(f => f.id), bottles: fs.map(f => ({ id: f.id, f, status: 'ready', owned: false })),
+    now: null, occ: null, tonight: null, pairs: [], about: () => null,
+  });
+  const mixed = page(rated, guess);
+  const lasts = mixed.slice(mixed.indexOf('aria-labelledby="cmp-lasts"'), mixed.indexOf('aria-labelledby="cmp-projects"'));
+  assert.match(lasts, /≈ 8\.6<small> of 10<\/small><span class="visually-hidden">, estimated from Fragrantica votes/);
+  assert.match(lasts, />8\.4<small> of 10/, 'Parfumo’s own rating stands as it is');
+  assert.ok(!lasts.includes('cmp-cell lead'), 'an estimate doesn’t outlast a real rating');
+  assert.match(mixed, /estimated \(≈\) from Fragrantica votes where Parfumo lacks the bottle/);
+  assert.ok(!page(rated, byName('Sauvage')).includes('≈'), 'all on Parfumo: no estimates, none credited');
+  const guesses = page(guess, { ...byName('Jake'), parfumo: undefined });
+  assert.match(guesses, /cmp-lead-tag">Longest</, 'estimates lead each other');
+  // The bottle page says it with the same words.
+  assert.match(bottlePageHTML(modelOf(rated)), /Lasts 8\.4 · Projects \d\.\d <span>of 10 on/);
+  assert.match(bottlePageHTML(modelOf(guess)), /Lasts 4\.0 of 5 · Projects 2\.9 of 4 <span>on Fragrantica/);
 });
 
 test('tonight’s pick is a bottle you own when one is among them', () => {
@@ -528,7 +615,12 @@ test('tonight’s pick is a bottle you own when one is among them', () => {
   const pairs = [{ a: dupe, b: layton, ...relation(dupe, layton) }];
   const mine = verdictHTML(tonight, new Set([dupe.id]), pairs);
   assert.match(mine, /Wear <i>Liquid Brun<\/i>/);
-  assert.match(mine, /a point behind Layton, which it’s inspired by/);
+  // Tonight's numbers, both of them (the rows may show today's), and no "points".
+  assert.match(mine, /The best of yours tonight, \d+% match\. Layton, which it’s inspired by, matches \d+%\./);
+  assert.ok(!/points?\b/.test(mine));
+  const zenith = { ...byName('Terra'), id: '901', name: 'Zenith', original: null };
+  const plain = verdictHTML({ win: wx.night, ranked: [entry(zenith, 0.79), entry(dupe, 0.66)] }, new Set([dupe.id]), []);
+  assert.match(plain, /The best of yours tonight, 66% match\. Zenith matches 79%\./);
   const none = verdictHTML(tonight, new Set(), pairs);
   assert.match(none, /Close call: <i>Layton<\/i> by a nose/);
   assert.match(verdictHTML({ ...tonight, ranked: [entry(layton, 0.9), entry(dupe, 0.7)] }, new Set(), pairs), /<i>Layton<\/i> suits tonight best/);
@@ -586,6 +678,18 @@ test('compare with… lists its family, the list it came from and your bottles, 
   assert.deepEqual(all.map(l => l.records.length), [5, fragrances.length - 6]);
   const typed = pickerLists({ base: [], query: 'origin', results: [{ id: '77', name: 'Original Musk', brand: 'X', stub: true }] }, { family, owned: fragrances });
   assert.deepEqual(typed.map(l => l.title), ['Smells like it', 'From Fragrantica']);
+  // Brand first, or the words out of order, as the Add sheet teaches ("e.g. Dior Sauvage").
+  const sauvage = byName('Sauvage');
+  const dior = pickerLists({ base: [a.id], query: 'dior sauvage', results: [] }, { owned: fragrances });
+  assert.deepEqual(dior.map(l => [l.title, l.records.map(r => r.id)]), [['Your bottles', [sauvage.id]]], 'brand then name finds your Sauvage');
+  assert.deepEqual(pickerLists({ base: [], query: 'SAUVAGE  Dior' }, { owned: fragrances })[0].records.map(r => r.id), [sauvage.id]);
+  // The library's matches stand as it found them: "baccarat 540" isn't a substring of "Baccarat Rouge 540".
+  const br540 = [{ id: '33519', name: 'Baccarat Rouge 540', brand: 'Maison Francis Kurkdjian' }, { id: '45178', name: 'Baccarat Rouge 540 Extrait de Parfum', brand: 'Maison Francis Kurkdjian' }];
+  const library = pickerLists({ base: [a.id], query: 'baccarat 540', results: br540 }, { owned: fragrances, context: [{ ...br540[0] }] });
+  assert.deepEqual(library.map(l => [l.title, l.records.map(r => r.id)]), [['From the same list', ['33519']], ['From Fragrantica', ['45178']]], 'every word in any order, and each bottle once');
+  assert.equal(pickerLists({ base: [], query: 'creed aventus', results: [] }, { owned: fragrances }).length, 0, 'a word that names nothing here: no local match');
+  assert.ok(pickerMatches('chanel n 5', { name: 'N°5', brand: 'Chanel' }) && pickerMatches('n 5', { name: 'N°5', brand: 'Chanel' }), 'one-letter words count when nothing longer was typed');
+  assert.ok(!pickerMatches('n 5', { name: 'Sauvage', brand: 'Dior' }));
   const html = clean(pickerHTML({ base: [a.id], query: EVIL }, []), 'picker');
   assert.match(html, /No bottles match/);
   assert.match(html, /data-field="cmp-query"/);
@@ -595,15 +699,23 @@ test('compare with… lists its family, the list it came from and your bottles, 
 
 test('the buy check reads the liked styles as Insights does: none liked is none, not the wardrobe’s leanings', async () => {
   const owned = fragrances.map(f => ({ ...f, id: String(f.id) }));
-  const before = state.likedStyles;
+  const before = state.likedStyles, active = state.active;
   try {
     state.likedStyles = [];
     assert.deepEqual(await likedStyleIds(owned), []);
+    assert.equal((await likedTaste(owned)).stated, true, 'none liked is a stated choice');
     state.likedStyles = ['oud', 'nope'];
     assert.deepEqual(await likedStyleIds(owned), ['oud']);
+    assert.equal((await likedTaste(owned)).stated, true);
     state.likedStyles = null;
     assert.ok((await likedStyleIds(owned)).length > 0, 'unset: the stated loves or the leanings');
+    // Unset on a list that isn't David's: the leanings, a guess.
+    state.active = 'mine';
+    const mine = await likedTaste(owned.slice(0, 1));
+    assert.ok(mine.ids.length > 0);
+    assert.equal(mine.stated, false, 'what the bottles lean toward isn’t something you said');
   } finally {
     state.likedStyles = before;
+    state.active = active;
   }
 });

@@ -7,8 +7,8 @@
 import { styleById } from '../scent-styles.js';
 import { esc, valueWord as valueWords } from '../ui.js';
 import { icon, rowHTML } from '../ui/components.js';
-import { addSection, pooled, likedStyleIds } from './bottle.js';
-import { state, collectionLabel, findRecord } from '../app/state.js';
+import { addSection, pooled, likedTaste, likedStatedNow } from './bottle.js';
+import { state, collectionLabel, findRecord, viewingDemo } from '../app/state.js';
 import { loadWants, hasWant } from '../wishlist.js';
 
 // Verdicts as tones (any other verdict reads neutral).
@@ -26,10 +26,18 @@ export const checkable = f => /^\d+$/.test(f.id) || Object.keys(f.accords ?? {})
 // its own row for a dataset id.
 const payload = m => (m.owned || m.inMine || !checkable(m.f) ? null
   : Object.keys(m.f.accords ?? {}).length ? { record: m.f } : { id: m.f.id });
+// The ranked list still on its way (David's wardrobe at boot, a shared
+// link): whether it owns the bottle isn't known yet, so it doesn't ask (and
+// load the pool) for one it may own.
+const listLoading = () => (viewingDemo() && !state.demo) || Boolean(state.shared?.loading);
 const checks = pooled('check', 'bp-check', payload, {
   section: 'check',
-  // The liked styles, so a skin scent for someone who loves them reads as one.
-  prepare: async (m, inputs) => ({ liked: await likedStyleIds(inputs.owned) }),
+  // The liked styles, so a skin scent for someone who loves them reads as
+  // one; `stated` false when they're only what the bottles lean toward.
+  prepare: async (m, inputs) => {
+    const { ids, stated } = await likedTaste(inputs.owned);
+    return { liked: ids, stated };
+  },
 });
 
 const pct = x => `${Math.round(x * 100)}%`;
@@ -68,12 +76,14 @@ export function fillGroups(fills) {
   return [...groups.values()].map(g => ({ title: g.when ? `${g.use} · ${bandsText(g.bands)} ${g.when}` : g.use, first: g.first }));
 }
 
-// The styles you like that it adds to: "Skin scent and Wears close".
-function likedLine(r) {
+// The styles you like that it adds to: "Skin scent and Wears close". Only
+// guessed from your bottles (`stated` false), they're styles you reach for.
+function likedLine(r, stated) {
   const labels = (r.likedShown ?? []).map(id => (id === 'intimate' ? 'Wears close' : styleById(id)?.label)).filter(Boolean);
-  if (!labels.length || r.reasons.some(t => /\byou like\b/.test(t))) return '';
+  if (!labels.length || r.reasons.some(t => /\byou (like|reach for)\b/.test(t))) return '';
   const list = labels.length > 1 ? `${labels.slice(0, -1).join(', ')} and ${labels.at(-1)}` : labels[0];
-  return `<p class="bc-liked">${icon.heartFill}<span>${labels.length > 1 ? 'Styles' : 'A style'} you like: ${esc(list)}</span></p>`;
+  const what = `${labels.length > 1 ? 'Styles' : 'A style'} you ${stated ? 'like' : 'reach for'}`;
+  return `<p class="bc-liked${stated ? '' : ' leaning'}">${stated ? icon.check : icon.wardrobe}<span>${what}: ${esc(list)}</span></p>`;
 }
 
 function overlapRow(o, ctx) {
@@ -98,9 +108,10 @@ const fillReason = t => /^(Still, )?it would be (your best|a second strong pick)
 /**
  * The section from the bottle's model and its check: undefined before it's
  * asked, else pooled()'s { status, result, error }. `who`: the list it's
- * judged against ("David’s wardrobe"); `wants`: the want list.
+ * judged against ("David’s wardrobe"); `wants`: the want list; `stated`:
+ * the liked styles were said, not guessed from the bottles.
  */
-export function buyCheckHTML(m, answer, { who = 'your collection', wants = [] } = {}) {
+export function buyCheckHTML(m, answer, { who = 'your collection', wants = [], stated = true } = {}) {
   if (!payload(m)) return '';
   const head = `<h3 id="bc-title" tabindex="-1">Would it suit ${esc(whose(who))}?</h3>`;
   const r = answer?.result;
@@ -137,7 +148,7 @@ export function buyCheckHTML(m, answer, { who = 'your collection', wants = [] } 
       <p class="bc-verdict" data-tone="${tone}">${esc(r.verdict)}</p>
       ${lead ? chips : ''}
       ${reasons.length ? `<ul class="bc-reasons">${reasons.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
-      ${likedLine(r)}
+      ${likedLine(r, stated)}
       ${lead ? '' : chips}
       ${overlap || twin ? `<ul class="rows bc-rows">${overlap}${twin}</ul>` : ''}
     </div>
@@ -147,8 +158,8 @@ export function buyCheckHTML(m, answer, { who = 'your collection', wants = [] } 
 addSection({
   id: 'check',
   order: 170,
-  render: m => buyCheckHTML(m, checks.get(m.f.id), { who: collectionLabel(), wants: loadWants() }),
-  after: (m, app) => checks.ask(m, app),
+  render: m => buyCheckHTML(m, checks.get(m.f.id), { who: collectionLabel(), wants: loadWants(), stated: likedStatedNow() }),
+  after: (m, app) => { if (!listLoading()) checks.ask(m, app); },
   actions: {
     'bp-check-retry'(el, app) {
       checks.forget(el.dataset.id);

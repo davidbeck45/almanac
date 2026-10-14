@@ -8,6 +8,10 @@
    (src/views/bottle.js redrawSection, keepReading), so the browser's own
    scroll anchoring would move it twice. */
 .bp-panel { overflow-anchor: none; }
+/* The sky's accent as text on its own tint (a tag, a lead): drawn toward
+   --paper, as --ambient alone is only about 4.8:1 on gruvbox's surfaces and
+   any tint under it takes it below 4.5. */
+.bp-panel, .cmp { --ambient-ink: color-mix(in srgb, var(--ambient) 65%, var(--paper)); }
 
 .bp-head { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: var(--s-4); align-items: center; padding-right: var(--s-7); }
 .bp-bottle {
@@ -26,6 +30,8 @@
 .bp-title .brand { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .rating { margin-top: var(--s-2); color: var(--accent); font-size: var(--fs-body); font-weight: 600; font-variant-numeric: tabular-nums; }
 .rating span { margin-left: var(--s-1); color: var(--text-secondary); font-size: var(--fs-footnote); font-weight: 400; }
+/* With no stars before it, it lines up with the name and brand. */
+.rating .by-hand { margin-left: 0; }
 .performance, .inspired { margin-top: var(--s-0); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .inspired a { color: var(--text-primary); }
 .performance span { color: var(--text-tertiary); }
@@ -137,7 +143,7 @@
   padding: var(--s-1) var(--s-3);
   border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--tone) 16%, transparent);
-  color: color-mix(in srgb, var(--tone) 72%, var(--paper));
+  color: color-mix(in srgb, var(--tone) 55%, var(--paper));
   font-size: var(--fs-footnote);
   line-height: var(--lh-footnote);
   font-weight: 600;
@@ -146,6 +152,8 @@
 .bc-reasons { display: grid; gap: var(--s-2); font-size: var(--fs-body); line-height: var(--lh-body); }
 .bc-liked { display: flex; align-items: center; gap: var(--s-2); color: var(--text-primary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
 .bc-liked svg { width: 14px; height: 14px; flex: none; color: var(--accent); }
+/* Styles only guessed from the wardrobe: a quiet mark, not the selection color. */
+.bc-liked.leaning svg, .style-liked.leaning svg { color: var(--text-tertiary); }
 .bc-fills .bp-sub { margin-bottom: var(--s-1); }
 .fill-chips { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-2); }
 .fill-chip, .fill-more { padding: var(--s-0) var(--s-3); border-radius: var(--r-pill); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
@@ -174,7 +182,7 @@
 .spray-where { margin-top: var(--s-1); font-size: var(--fs-body); line-height: var(--lh-body); }
 .spray-note { margin-top: var(--s-2); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 
-/* ---------- On my skin ---------- */
+/* ---------- On your skin ---------- */
 
 .skin-box { display: grid; gap: var(--s-3); }
 .skin-row { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: var(--s-2) var(--s-3); }
@@ -222,7 +230,7 @@
 @media (hover: hover) { .style-row:hover { border-color: var(--border-strong); background: var(--surface-3); } }
 .style-name { grid-area: name; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-1) var(--s-2); font-size: var(--fs-body); line-height: var(--lh-body); }
 .style-name b { font-weight: 600; }
-.style-tag { padding: 0 var(--s-2); border-radius: var(--r-pill); background: color-mix(in srgb, var(--ambient) 15%, transparent); color: var(--ambient); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; }
+.style-tag { padding: 0 var(--s-2); border-radius: var(--r-pill); background: color-mix(in srgb, var(--ambient) 15%, transparent); color: var(--ambient-ink); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; }
 .style-liked { display: inline-flex; align-items: center; gap: var(--s-1); color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; }
 .style-liked svg { width: 12px; height: 12px; color: var(--accent); }
 .style-blurb { grid-area: blurb; color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
@@ -281,7 +289,7 @@
   background: var(--negative);
   --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6h7' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
 }
-.pros-cons small { grid-column: 2; color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
+.pros-cons small { grid-column: 2; color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
 
 /* ---------- Compare (#/compare/…) ----------
    The bottles stand in columns at every width: the cards, then the rows,
@@ -307,7 +315,7 @@
   box-shadow: var(--e1);
 }
 .cmp-verdict-photo img { width: 56px; height: 64px; object-fit: contain; filter: var(--drop-bottle); }
-.cmp-kicker { display: flex; align-items: center; gap: var(--s-1); color: var(--ambient); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
+.cmp-kicker { display: flex; align-items: center; gap: var(--s-1); color: var(--ambient-ink); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
 .cmp-kicker svg { width: 14px; height: 14px; }
 .cmp-verdict h2 { margin: var(--s-1) 0; font-family: var(--display); font-size: var(--fs-title-2); line-height: var(--lh-title-2); font-weight: 600; letter-spacing: -0.01em; }
 .cmp-verdict h2 i { font-style: italic; }
@@ -347,7 +355,7 @@
 .cmp-relations { padding: var(--s-4); border-radius: var(--r-surface); border: 1px solid var(--border-subtle); background: var(--surface-1); }
 .cmp-relations ul { display: grid; gap: var(--s-2); }
 .cmp-relations li { display: flex; align-items: baseline; gap: var(--s-3); font-size: var(--fs-body); line-height: var(--lh-body); }
-.cmp-sim { flex: none; padding: 0 var(--s-2); border-radius: var(--r-pill); background: color-mix(in srgb, var(--ambient) 15%, transparent); color: var(--ambient); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cmp-sim { flex: none; padding: 0 var(--s-2); border-radius: var(--r-pill); background: color-mix(in srgb, var(--ambient) 15%, transparent); color: var(--ambient-ink); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 .cmp-table { position: relative; display: grid; gap: var(--s-3); }
 .cmp-sentinel { position: absolute; top: 0; left: 0; width: 1px; height: 1px; pointer-events: none; }
@@ -398,10 +406,10 @@
 .cmp-num { font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 600; font-variant-numeric: tabular-nums; }
 .cmp-num small { color: var(--text-secondary); font-size: var(--fs-footnote); font-weight: 400; }
 /* The lead in a row: a word for it (Best; Longest, Loudest in neutral, as louder isn't better). */
-.cmp-lead-tag { min-height: var(--lh-caption); padding: 0 var(--s-2); border-radius: var(--r-pill); background: color-mix(in srgb, var(--ambient) 16%, transparent); color: var(--ambient); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; }
+.cmp-lead-tag { min-height: var(--lh-caption); padding: 0 var(--s-2); border-radius: var(--r-pill); background: color-mix(in srgb, var(--ambient) 16%, transparent); color: var(--ambient-ink); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; }
 .cmp-cell.lead.neutral .cmp-lead-tag { background: var(--fill); color: var(--text-secondary); }
 .cmp-lead-tag.none { visibility: hidden; }
-.cmp-cell.lead:not(.neutral) .cmp-num { color: var(--ambient); }
+.cmp-cell.lead:not(.neutral) .cmp-num { color: var(--ambient-ink); }
 .cmp-why { color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
 .cmp-meter { display: block; height: 6px; overflow: hidden; border-radius: var(--r-pill); background: var(--fill); }
 .cmp-meter > span { display: block; height: 100%; border-radius: var(--r-pill); background: var(--c, var(--ambient)); }

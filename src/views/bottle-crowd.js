@@ -75,16 +75,28 @@ function tiles(f, about, owned) {
   return out;
 }
 
+/** Whole percents of `counts` that add up to 100 (largest remainder). */
+export function wholePercents(counts) {
+  const total = counts.reduce((a, b) => a + b, 0);
+  if (!total) return counts.map(() => 0);
+  const raw = counts.map(n => (n / total) * 100);
+  const out = raw.map(Math.floor);
+  const left = 100 - out.reduce((a, b) => a + b, 0);
+  raw.map((x, i) => [x - Math.floor(x), i]).sort((a, b) => b[0] - a[0]).slice(0, left).forEach(([, i]) => out[i]++);
+  return out;
+}
+
+// The bars' percents add up to 100, and the headline is read off them, so
+// "80% love or like it" sits over Love 53% and Like 27%.
 function ratingsHTML(hist) {
-  const total = SENTIMENT.reduce((s, [k]) => s + (hist[k] ?? 0), 0);
+  const counts = SENTIMENT.map(([k]) => hist[k] ?? 0);
+  const total = counts.reduce((a, b) => a + b, 0);
   if (!total) return '';
-  const peak = Math.max(...SENTIMENT.map(([k]) => hist[k] ?? 0));
-  const warm = ((hist.love ?? 0) + (hist.like ?? 0)) / total;
-  const rows = SENTIMENT.map(([k, label]) => {
-    const n = hist[k] ?? 0;
-    return `<li><span class="crowd-hist-label">${label}</span><span class="crowd-hist-track"><span class="crowd-hist-fill" style="width:${((n / peak) * 100).toFixed(1)}%"></span></span><span class="crowd-hist-value">${pct(n / total)}</span></li>`;
-  }).join('');
-  return `<div class="crowd-block"><p class="bp-sub">Ratings <span>${pct(warm)} love or like it · ${num(total)} votes</span></p><ul class="crowd-hist" aria-label="How voters rate it">${rows}</ul></div>`;
+  const peak = Math.max(...counts);
+  const shares = wholePercents(counts);
+  const warm = shares[0] + shares[1]; // love and like
+  const rows = SENTIMENT.map(([, label], i) => `<li><span class="crowd-hist-label">${label}</span><span class="crowd-hist-track"><span class="crowd-hist-fill" style="width:${((counts[i] / peak) * 100).toFixed(1)}%"></span></span><span class="crowd-hist-value">${shares[i]}%</span></li>`).join('');
+  return `<div class="crowd-block"><p class="bp-sub">Ratings <span>${warm}% love or like it · ${num(total)} votes</span></p><ul class="crowd-hist" aria-label="How voters rate it">${rows}</ul></div>`;
 }
 
 // Fragrantica's gender votes say how a scent reads to voters, not who wears it.

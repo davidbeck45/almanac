@@ -394,6 +394,9 @@ test('the buy check knows what he likes: more of a style he’s thin on is good,
   assert.deepEqual(you.reasons.slice(0, 2), ['More of the skin scents you like: you own 2.', 'Nothing you own smells like it.']);
   assert.deepEqual([you.taste.style, you.taste.owned, you.taste.thin], ['skin', 2, true]);
   assert.equal(check(named('You', 'Glossier'), {}).verdict, 'Covered', 'without his styles it adds nothing');
+  // Styles only guessed from the wardrobe's leanings are ones he reaches for, not ones he said he likes.
+  assert.equal(check(named('You', 'Glossier'), { liked, stated: false }).reasons[0], 'More of the skin scents you reach for: you own 2.');
+  assert.equal(check(named('Acqua di Gio', 'Giorgio Armani'), { liked, stated: false }).reasons[1], 'It’s fresh citrus and aquatic, none of the styles you reach for.');
   // A twin of his Supremacy Collector's Edition is redundant, whatever he likes.
   const precieux = check('93272'); // Armaf Club de Nuit Precieux I
   assert.equal(precieux.verdict, 'Redundant');
