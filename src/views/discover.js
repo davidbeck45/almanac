@@ -3,7 +3,7 @@
 // Mine. Wave 4 adds styles, more like this and notes search below the field.
 // Styles: src/css/discover.css.
 import { esc, plural } from '../ui.js';
-import { icon, rowHTML, messageHTML } from '../ui/components.js';
+import { icon, rowHTML } from '../ui/components.js';
 import { routeHash, go } from '../app/router.js';
 import { state, findBottles, fullRecords } from '../app/state.js';
 
