@@ -2,8 +2,16 @@ const KEY = 'scentcast.location';
 const RECENT_KEY = 'scentcast.recentLocations';
 const MAX_RECENT = 5;
 
+// A stored place, kept only with coordinates.
+const isPlace = loc => Number.isFinite(loc?.lat) && Number.isFinite(loc?.lon);
+
 export function loadLocation() {
-  try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; }
+  try {
+    const loc = JSON.parse(localStorage.getItem(KEY));
+    return isPlace(loc) ? loc : null;
+  } catch {
+    return null;
+  }
 }
 
 export function saveLocation(loc) {
@@ -14,7 +22,12 @@ export function saveLocation(loc) {
 const sameSpot = (a, b) => Math.abs(a.lat - b.lat) < 0.01 && Math.abs(a.lon - b.lon) < 0.01;
 
 export function loadRecent() {
-  try { return JSON.parse(localStorage.getItem(RECENT_KEY)) ?? []; } catch { return []; }
+  try {
+    const list = JSON.parse(localStorage.getItem(RECENT_KEY));
+    return Array.isArray(list) ? list.filter(isPlace) : [];
+  } catch {
+    return [];
+  }
 }
 
 function saveRecent(loc) {

@@ -94,8 +94,14 @@ export async function fetchForecast({ lat, lon }, { days = 7 } = {}) {
 }
 
 const cacheKey = loc => `${CACHE_VERSION}:${loc.lat},${loc.lon}`;
+// The saved { key, forecast }, or null when there's none or it isn't one.
 function readCache() {
-  try { return JSON.parse(localStorage.getItem(CACHE_KEY)); } catch { return null; }
+  try {
+    const cached = JSON.parse(localStorage.getItem(CACHE_KEY));
+    return typeof cached?.key === 'string' && Number.isFinite(cached.forecast?.fetchedAt) ? cached : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

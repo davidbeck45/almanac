@@ -13,6 +13,7 @@ import {
   parseNotes, searchNotes, dupesOf, originalFromVotes, whyLine, addCloneVotes,
 } from '../src/discover.js';
 import { loadWants, saveWants, addWant, removeWant, hasWant, setWant, wantIdsToLoad } from '../src/wishlist.js';
+import { customRecord } from '../src/custom.js';
 import { fitPoolStyles } from '../scripts/fit-pool-styles.mjs';
 
 const dir = new URL('../data/fragrantica/', import.meta.url);
@@ -425,7 +426,7 @@ test('the want list keeps ids, and whole records for bottles the dataset can’t
   globalThis.localStorage = { getItem: k => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) };
   assert.deepEqual(loadWants(), []);
   let wants = addWant([], at(48681), { note: 'Try at Nordstrom', added: '2026-10-01' });
-  wants = addWant(wants, { id: 'my:abc', name: 'Mine', brand: 'Me', source: 'custom', accords: { vanilla: 80 } });
+  wants = addWant(wants, customRecord({ id: 'my:abc', name: 'Mine', brand: 'Me', accords: ['vanilla'] }));
   wants = addWant(wants, '9828');
   assert.deepEqual(wants.map(w => w.id), ['9828', 'my:abc', '48681']);
   assert.equal(wants[2].record, undefined, 'a dataset bottle keeps only its id');
@@ -449,6 +450,10 @@ test('the want list keeps ids, and whole records for bottles the dataset can’t
   assert.equal(loadWants()[0].note, 'sample first');
   store.set('scentcast.want', '{broken');
   assert.deepEqual(loadWants(), []);
+  // A kept record without what ranking reads is dropped, and the bottle loads again by its id.
+  store.set('scentcast.want', JSON.stringify([{ id: '69541', record: { id: '69541' } }, 'x', null, { record: { id: 'my:q', name: 'Q' } }]));
+  assert.deepEqual(loadWants().map(w => [w.id, 'record' in w]), [['69541', false], ['my:q', false]]);
+  assert.deepEqual(wantIdsToLoad(loadWants()), ['69541', 'my:q']);
 });
 
 beforeEach(() => { delete globalThis.localStorage; });
