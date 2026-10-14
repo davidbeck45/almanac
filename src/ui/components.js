@@ -180,9 +180,11 @@ const TIER_WORDS = { S: 'top pick', A: 'strong', B: 'good' };
 // The magnitude shelf: bottles standing on a 1px shelf line with a caption
 // and a magnitude dot, B and C dimmed. Scrolls sideways on phones and stacks
 // into rows on wide screens. Each opens its bottle page in context `ctx`.
+// It keeps its sideways scroll through a re-render (data-keep-scroll), so
+// focus coming back to a bottle far along it finds it in view.
 export function shelfHTML(ranked, ctx, { wornId = null } = {}) {
   if (!ranked.length) return '';
-  return `<ul class="shelf">${ranked.map(r => {
+  return `<ul class="shelf" data-keep-scroll="shelf-${esc(ctx)}">${ranked.map(r => {
     const f = r.fragrance;
     return `<li class="shelf-slot" data-tier="${r.tier}"><button class="shelf-item${wornId === f.id ? ' worn' : ''}" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(f.id)}" aria-label="${esc([f.name, `${matchPct(r)}% match`, TIER_WORDS[r.tier]].filter(Boolean).join(', '))}">
       <span class="shelf-bottle">${img(f)}${magDot(r.tier)}</span>

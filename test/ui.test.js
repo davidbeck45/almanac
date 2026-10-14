@@ -273,3 +273,8 @@ test('the shared link says what it would replace, and calls the list Mine', () =
   assert.match(sharedBannerHTML(link, 1, { confirm: true }), />Replace your 1 bottle\?</);
   assert.match(sharedBannerHTML(link, 4, { confirm: true }), />Replace your 4 bottles\?</);
 });
+
+test('a shelf keeps its sideways scroll through a redraw, one key per list', () => {
+  assert.match(shelfHTML(ranked, 'day'), /<ul class="shelf" data-keep-scroll="shelf-day">/);
+  assert.match(shelfHTML(ranked, 'w:2026-10-14:night'), /data-keep-scroll="shelf-w:2026-10-14:night"/);
+});

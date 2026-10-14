@@ -269,9 +269,13 @@ function renderHero(r, page) {
   el.innerHTML = page.hero.render(r, state.heroAspect);
 }
 
-// Sideways strips marked data-keep-scroll keep their place through a re-render.
-function keptScrolls() {
-  return new Map([...document.querySelectorAll('#main [data-keep-scroll]')].map(el => [el.dataset.keepScroll, el.scrollLeft]));
+// Sideways strips marked data-keep-scroll (the shelves, the occasion strip)
+// keep their place through a re-render of the page or the bottle page.
+function keptScrolls(region) {
+  return new Map([...region.querySelectorAll('[data-keep-scroll]')].map(el => [el.dataset.keepScroll, el.scrollLeft]));
+}
+function keepScrolls(region, kept) {
+  for (const el of region.querySelectorAll('[data-keep-scroll]')) el.scrollLeft = kept.get(el.dataset.keepScroll) ?? 0;
 }
 
 function renderPage() {
@@ -279,10 +283,10 @@ function renderPage() {
   const { r, page, pane } = currentPage();
   renderHero(r, page);
   const main = $('#main');
-  const kept = keptScrolls();
+  const kept = keptScrolls(main);
   const stuck = Boolean(main.querySelector('.head-bar.stuck'));
   main.innerHTML = `${headHTML(page, pane, r)}<div class="pane" data-pane="${esc(r.dest)}${r.pane ? `/${esc(r.pane)}` : ''}">${pane.render(app, r)}</div>`;
-  for (const el of main.querySelectorAll('[data-keep-scroll]')) el.scrollLeft = kept.get(el.dataset.keepScroll) ?? 0;
+  keepScrolls(main, kept);
   watchHeadBar(stuck);
   main.classList.toggle('updating', state.updating);
   main.setAttribute('aria-busy', String(state.updating));
@@ -405,9 +409,11 @@ function renderBottle({ fresh = false, instant = false } = {}) {
   // above it grow (an answer landing turns a skeleton into a card).
   const reading = sameBottle && panel ? bottleView.readingAt(panel) : null;
   const focused = sameBottle && el.contains(document.activeElement) ? document.activeElement : null;
+  const kept = sameBottle ? keptScrolls(el) : new Map();
   const model = bottleModelFor(r);
   const opening = el.hidden;
   el.innerHTML = bottleView.bottlePageHTML(model, { modal });
+  keepScrolls(el, kept);
   // Focus on its successor, else on the element with its id, else the close button: never the body.
   if (focused && !refocus(focused, '#bottle')) {
     ((focused.id && document.getElementById(focused.id)) || $('#bottle .bp-close'))?.focus({ preventScroll: true });
@@ -458,11 +464,16 @@ function closeBottle() {
 
 // ---------- Routing ----------
 
-const scrolls = new Map(); // dest/pane -> scrollY
-const scrollKey = r => `${r.dest}/${r.pane ?? ''}`;
+// Where each page was left: by its route less a pane's argument (Occasion's
+// pick), so each of Discover's lists, its own query, keeps its own.
+const scrolls = new Map();
+const scrollKey = r => routeHash({ ...r, arg: null });
+const samePane = (a, b) => Boolean(a && b) && a.dest === b.dest && a.pane === b.pane;
 let pushedBottle = false; // the bottle page's entry was pushed by the app
 
-function navigate(hash, { replace = false, quiet = false, instant = false } = {}) {
+// `restore`: a return to a page (the nav, the sub-navigation), which opens
+// where it was left, as Back and Forward do; any other link opens at the top.
+function navigate(hash, { replace = false, quiet = false, instant = false, restore = false } = {}) {
   const next = parseRoute(hash, PANES);
   if (sameRoute(next, state.route)) {
     // The current tab again goes back to its top.
@@ -471,7 +482,7 @@ function navigate(hash, { replace = false, quiet = false, instant = false } = {}
   }
   go(routeHash(next), { replace });
   if (next.dest === 'bottle' && state.route?.dest !== 'bottle') pushedBottle = !replace;
-  transition(next, { quiet, instant });
+  transition(next, { quiet, instant, restore });
 }
 
 // Moves to a route: the page under a bottle page changes only when the route
@@ -480,7 +491,7 @@ function navigate(hash, { replace = false, quiet = false, instant = false } = {}
 // hashchange; the second must not start the flight again).
 let arriving = null;
 
-function transition(next, { quiet = false, instant = false } = {}) {
+function transition(next, { quiet = false, instant = false, restore = false } = {}) {
   const prev = state.route;
   if (sameRoute(arriving ?? prev, next)) return;
   if (prev?.dest === 'bottle' && next.dest !== 'bottle' && sameRoute(state.base, next) && canMorph()) {
@@ -489,10 +500,10 @@ function transition(next, { quiet = false, instant = false } = {}) {
     const home = () => [...document.querySelectorAll(`#page [data-action="open"][data-id="${CSS.escape(id)}"] img`)].find(visible);
     if (visible(from) && home()) {
       arriving = next;
-      return morph(from, () => { arriving = null; applyRoute(next, { quiet, instant: true }); }, home);
+      return morph(from, () => { arriving = null; applyRoute(next, { quiet, instant: true, restore }); }, home);
     }
   }
-  applyRoute(next, { quiet, instant });
+  applyRoute(next, { quiet, instant, restore });
 }
 
 // The page a bottle page opened straight from a link sits over: the list its
@@ -503,12 +514,25 @@ function baseFor({ query }) {
   return ctx.startsWith('w:') ? '#/wear/week' : ctx.startsWith('trip:') ? '#/wear/trip' : ctx === 'occ' ? '#/wear/occasion' : HOME;
 }
 
-function applyRoute(next, { quiet = false, instant = false } = {}) {
+// The bottle page a link left (its Compare, "More like this") and the page
+// it was over: Back onto it puts that page under it again, as it was, so it
+// doesn't sit over the page the link went to.
+let leftBottle = null; // { bottle, base, opener }
+
+function applyRoute(next, { quiet = false, instant = false, restore = false } = {}) {
   const prev = state.route;
   state.route = next;
   if (next.dest === 'bottle') {
+    const focused = document.activeElement;
+    const back = restore && leftBottle && sameRoute(next, leftBottle.bottle);
     if (!state.base) setBase(parseRoute(baseFor(next), PANES), { quiet: true });
-    if (prev?.dest !== 'bottle') bottleOpener = document.activeElement;
+    else if (back && !sameRoute(state.base, leftBottle.base)) setBase(leftBottle.base, { quiet: true, restore: true });
+    // Focus goes back to what opened it when it closes (Back onto it: what
+    // opened it first). Docked beside the page, that's the latest control on
+    // the page to open one (bottle after bottle); one opened from inside the
+    // bottle page keeps the first.
+    if (back) bottleOpener = leftBottle.opener;
+    else if (prev?.dest !== 'bottle' || (docked() && focused !== document.body && !$('#bottle').contains(focused))) bottleOpener = focused;
     renderBottle({ fresh: true, instant });
     if (!quiet) $('#bottle .bp-close')?.focus({ preventScroll: true });
     return;
@@ -518,19 +542,29 @@ function applyRoute(next, { quiet = false, instant = false } = {}) {
   // what opened it; a new page (a link out of the bottle page, the rail with
   // the inspector open) is a navigation like any other. The bottle page goes
   // first: as a dialog it keeps the page under it inert, and focus can't
-  // land on the new page's heading until it's gone.
+  // land on the new page's heading until it's gone. Docked, it gives focus
+  // back only when focus was in it: a control on the page keeps it.
   const changed = !sameRoute(state.base, next);
+  const focused = document.activeElement;
+  const pageHadFocus = docked() && focused && focused !== document.body && !$('#bottle').contains(focused);
   renderBottle({ instant });
   if (changed) {
+    if (prev?.dest === 'bottle') leftBottle = { bottle: prev, base: state.base, opener: bottleOpener };
     state.from = prev;
-    setBase(next, { quiet });
+    // Back from a bottle page onto the page it was over, whose URL caught up
+    // with it meanwhile (Discover's chips changed beside it): no new page.
+    const closing = prev?.dest === 'bottle' && restore && samePane(state.base, next);
+    setBase(next, { quiet, restore, keepScroll: closing });
   }
-  if (prev?.dest === 'bottle' && !changed && !refocus(bottleOpener)) $('#page-title')?.focus({ preventScroll: true });
+  if (prev?.dest === 'bottle' && !changed && !pageHadFocus && !refocus(bottleOpener)) $('#page-title')?.focus({ preventScroll: true });
   if (prev?.dest === 'bottle') bottleOpener = null;
   syncTitle();
 }
 
-function setBase(next, { quiet = false } = {}) {
+// `restore`: open where it was left (Back, Forward, a tab, the
+// sub-navigation), else at the top (a link: another of Discover's lists
+// too). `keepScroll`: the scroll doesn't move.
+function setBase(next, { quiet = false, restore = false, keepScroll = false } = {}) {
   const prev = state.base;
   const from = document.activeElement;
   if (prev) scrolls.set(scrollKey(prev), scrollY);
@@ -541,8 +575,8 @@ function setBase(next, { quiet = false } = {}) {
   if (newPane) settleToast();
   renderNav();
   renderPage();
-  if (newPane && prev) {
-    scrollTo(0, scrolls.get(scrollKey(next)) ?? 0);
+  if (newPane && prev && !keepScroll) {
+    scrollTo(0, (restore && scrolls.get(scrollKey(next))) || 0);
     if (!reducedMotion()) {
       const main = $('#main');
       main.classList.remove('enter');
@@ -564,7 +598,7 @@ function sync() {
   // Forward onto a bottle page, or a typed one: the page before is its own
   // entry, so closing can go Back to it.
   if (next.dest === 'bottle' && state.route?.dest !== 'bottle') pushedBottle = true;
-  transition(next);
+  transition(next, { restore: true });
 }
 
 window.addEventListener('popstate', () => {
@@ -659,7 +693,7 @@ function listen() {
     if (link) {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
       e.preventDefault();
-      navigate(link.getAttribute('href'));
+      navigate(link.getAttribute('href'), { restore: Boolean(link.closest('#nav, .subnav')) });
       if (inToast) hideToast();
       return;
     }
