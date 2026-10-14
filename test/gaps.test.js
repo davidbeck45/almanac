@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { rank, steadyShares, votedShares } from '../src/engine.js';
 import { loadPool, fromPool } from '../src/fragrantica.js';
-import { allow } from '../src/candidates.js';
+import { allow, genderLean, leanWindow } from '../src/candidates.js';
 import {
   BANDS, USES, DEFAULT_CLIMATE, PER_CELL, MAX_ACCORDS, climateSummary, cellsFor, fitTable, sameFooting, flatVotes, gapContext,
   coverage, gapSummary, strengths, suggest, buyCheck, gapReport, checkJSON, cellTitle, explainCell, SAME_SIM,
@@ -28,6 +28,7 @@ const wardrobe = JSON.parse(readFileSync(new URL('../data/collection.json', impo
 const owned = name => wardrobe.find(f => f.name === name);
 const ctx = gapContext({ owned: wardrobe, records, byId });
 const report = gapReport(ctx, { k: 5 });
+const BROOKE = ['69541', '122015', '128201', '115992', '64338', '137101', '77284', '97237', '88207'];
 const FRESH = ['Atlantis Extrait', 'Shiyaaka Sky', 'Essence de Blanc', 'Jake', 'Legacy', 'Cedrus Blanc', 'Aristo', 'Sauvage'];
 
 test('a bottle’s fit in a cell is exactly rank()’s score in that weather', () => {
@@ -189,6 +190,43 @@ test('David’s gaps name real situations, gaps before room to grow, and his str
   assert.equal(cellTitle('formal', 'night', ['cold', 'cool']), 'Formal on cold and cool nights');
   assert.equal(cellTitle('date', 'night', BANDS.map(b => b.id)), 'Date Night on any night');
   assert.match(explainCell(ctx.cov.find(c => c.cell.id === 'date:night:cold')), /^\d+ strong picks, led by /);
+});
+
+test('a gap’s text describes a cell in the state its status names, the one Insights opens on', () => {
+  const brooke = JSON.parse(readFileSync(new URL('../data/catalog.json', import.meta.url))).fragrances
+    .filter(f => BROOKE.includes(String(f.id))).map(f => ({ ...f, id: String(f.id) }));
+  let runs = 0;
+  for (const c of [ctx, gapContext({ owned: brooke, records, byId })]) {
+    for (const g of gapSummary(c.cov)) {
+      if (g.cells.length < 2) continue;
+      runs++;
+      const [, band] = g.text.match(/^Worst when (\w+):/);
+      const cells = c.cov.filter(x => g.cells.includes(x.cell.id));
+      const told = cells.find(x => x.cell.band === band);
+      assert.equal(told.status, g.status, `${g.title}: ${g.text}`);
+      // The costliest of the cells in that state.
+      assert.ok(cells.every(x => x.status !== g.status || x.severity <= told.severity), g.title);
+    }
+  }
+  assert.ok(runs >= 3);
+  // David's date nights: the warm cell is the gap, so it's the one described.
+  assert.match(report.gaps.find(g => g.use === 'date').text, /^Worst when warm: your best is Supremacy Collector's Edition Pour Homme/);
+});
+
+test('gap fillers keep near the wardrobe’s own leans', () => {
+  // Brooke's indie gourmand wardrobe spans -0.55 to 0.32: fresh men's bottles
+  // fill her office days best, but at most one pick leans past her most masculine.
+  const brooke = JSON.parse(readFileSync(new URL('../data/catalog.json', import.meta.url))).fragrances
+    .filter(f => BROOKE.includes(String(f.id))).map(f => ({ ...f, id: String(f.id) }));
+  const hers = gapContext({ owned: brooke, records, byId });
+  const [lo, hi] = leanWindow(brooke, 0, byId);
+  const picks = suggest(hers, { k: 5 });
+  assert.equal(picks.length, 5);
+  const past = picks.filter(p => genderLean(p.record, byId) > hi || genderLean(p.record, byId) < lo);
+  assert.ok(past.length <= 1, past.map(p => `${p.record.name} ${genderLean(p.record, byId)}`).join(', '));
+  assert.ok(picks.every(p => genderLean(p.record, byId) < hi + 0.15), picks.map(p => `${p.record.name} ${genderLean(p.record, byId)}`).join(', '));
+  // David's picks hold.
+  assert.deepEqual(report.picks.map(p => p.name), ['Zenith', 'Infinity For Men']);
 });
 
 test('without its fresh bottles, the wardrobe’s top gaps are warm and hot days', () => {
