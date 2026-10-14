@@ -144,5 +144,6 @@ export const occasionById = id => OCCASIONS.find(o => o.id === id);
 
 // The raw occasion fit (occasionRaw in src/engine.js) that reads as 0 and as 1:
 // its 2nd and 98th percentile over the dataset's 8,000 bottles with 500+
-// rating votes. Fitted by `node scripts/fit-occasions.mjs --write`.
-export const OCCASION_SCALE = { casual: [-0.026, 0.249], office: [-0.383, 0.362], date: [-0.236, 0.471], nightout: [-0.281, 0.552], formal: [-0.336, 0.399], outdoors: [-0.427, 0.423], cozy: [-0.189, 0.417] };
+// rating votes, never narrower than the accords' fit alone spans (Office's
+// top is the accords'). Fitted by `node scripts/fit-occasions.mjs --write`.
+export const OCCASION_SCALE = { casual: [-0.026, 0.249], office: [-0.383, 0.446], date: [-0.236, 0.471], nightout: [-0.281, 0.552], formal: [-0.336, 0.402], outdoors: [-0.427, 0.423], cozy: [-0.189, 0.417] };

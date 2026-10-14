@@ -298,9 +298,15 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   assert.match(dhi.reasons[0], /^It would barely beat your .+, where it does best\.$/);
   assert.equal(dhi.reasons[1], 'Nothing you own smells like it.');
   assert.ok(dhi.overlap.sim < 0.5 && !dhi.overlap.link);
-  // Dior Homme Intense lasts the working day, so it edges his best for the office in the cold; its clone doesn't.
+  // Dior Homme Intense lasts the working day, so it edges his best for the office in the cold (by too little to
+  // fill anything: he's covered there); its clone doesn't.
+  const cold = ctx.cc.cells.findIndex(c => c.id === 'office:day:cold'), m = ctx.cc.cells.length;
+  const best = Math.max(...wardrobe.map((_, i) => ctx.ownTable[i * m + cold]));
+  const coldFit = name => fitTable([sameFooting(records.find(r => r.name === name))], ctx.cc)[cold];
+  assert.ok(coldFit('Dior Homme Intense 2011') > best && best > coldFit('Dark Door Intense'));
   const dior = buyCheck(records.find(r => r.name === 'Dior Homme Intense 2011'), ctx);
-  assert.ok(dior.fills.some(f => f.cell.id === 'office:day:cold' && f.first), dior.reasons.join(' '));
+  assert.equal(dior.verdict, 'Covered');
+  assert.match(dior.reasons[0], /^It would barely beat your Sandalwood & Musk for Office on cold days/);
   assert.ok(!buyCheck(records.find(r => r.name === 'Dark Door Intense'), ctx).fills.some(f => f.cell.use === 'office'));
   // Risky shows through even when it fills nothing.
   const kouros = buyCheck(records.find(r => r.name === 'Kouros'), ctx);

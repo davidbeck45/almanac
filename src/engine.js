@@ -412,19 +412,26 @@ export function votedOccasionFit(frag, occasion) {
   return OCCASION_VOTE_WEIGHT * clamp((share - mean) / (2 * spread), -1, 1);
 }
 
-export function occasionRaw(frag, occasion) {
+/** How well a bottle's accords suit the occasion: their profile values, weighted by strength. */
+export function accordFit(frag, occasion) {
   let sum = 0, total = 0;
   for (const [a, s] of Object.entries(frag.accords)) {
     total += s;
     sum += s * (occasion.profile[a] ?? 0);
   }
+  return total ? sum / total : 0;
+}
+
+/** The occasion fit before it's put on the scale: the accords' fit, plus performance and Parfumo's votes. */
+export function occasionRaw(frag, occasion) {
   const perf = performanceFit(frag, occasion);
-  return (total ? sum / total : 0) + perf.longevity + perf.sillage + votedOccasionFit(frag, occasion);
+  return accordFit(frag, occasion) + perf.longevity + perf.sillage + votedOccasionFit(frag, occasion);
 }
 
 // The occasion fit as a part, 0..1, on one scale for every collection: about
 // 0 at the dataset's 2nd percentile for that occasion, about 1 at its 98th
-// (OCCASION_SCALE, scripts/fit-occasions.mjs). Stretching each list's own
+// (OCCASION_SCALE, scripts/fit-occasions.mjs; never narrower than the
+// accords' fit alone spans, see there). Stretching each list's own
 // min..max instead made any wardrobe's best bottle a perfect fit, blew up
 // small and one-note lists, and let a narrow spread drown out the weather.
 // Within OCCASION_KNEE of either end the part bends toward 0 or 1 instead of

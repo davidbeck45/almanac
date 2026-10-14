@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, seasonFit, SEASONS, votedShares } from '../src/engine.js';
+import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, seasonFit, SEASONS, votedShares, performanceLevel } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { heaviness } from '../src/accords.js';
 import { predictedShares } from '../src/custom.js';
@@ -254,6 +254,20 @@ test('office wants moderate projection that lasts the day, not a whisper that fa
   // The reason still says what it does.
   const reasons = rank([{ ...base, parfumo: { sillage: 6.2, longevity: 6.6, votes: 1000 } }], mildFallNight, 'day', { occasion: office })[0].reasons.map(r => r.text);
   assert.ok(reasons.includes('Stays close to the skin') && reasons.includes('Fades early'), reasons.join(' | '));
+  // In David's wardrobe, nothing a fifth of a level louder than the middle (Sauvage and up) makes the office's
+  // top 3, day or night, nor Jake, which fades by lunch.
+  const loud = new Set(fragrances.filter(f => performanceLevel(f, 'sillage') >= 0.2).map(f => f.name));
+  assert.ok(loud.has('Sauvage') && loud.size >= 5, [...loud].join(', '));
+  for (const month of ['01', '04', '07', '10']) {
+    for (const feelsF of [25, 45, 65, 85, 95]) {
+      for (const slot of ['day', 'night']) {
+        const dateISO = `2026-${month}-15`;
+        const c = { feelsF, humidity: 60, dewF: Math.min(feelsF - 8, 72), category: 'clear', date: new Date(`${dateISO}T12:00:00`), dateISO, lat: 40 };
+        const top = rank(fragrances, c, slot, { occasion: office }).slice(0, 3).map(r => r.fragrance.name);
+        assert.ok(!top.some(n => loud.has(n) || n === 'Jake'), `${dateISO} ${slot} ${feelsF}: ${top.join(', ')}`);
+      }
+    }
+  }
 });
 
 test('Parfumo occasion votes nudge a bottle toward what voters wear it for', () => {
@@ -291,15 +305,16 @@ test('bottles past the scale\'s top keep their order instead of tying at a perfe
   for (let i = 1; i < parts.length; i++) assert.ok(parts[i] > parts[i - 1], `rises at ${xs[i]}`);
   assert.ok(parts[0] > 0 && parts.at(-1) < 1);
   // Parfumo's occasion votes carry several owned bottles past the dataset's
-  // 98th percentile; at most one per occasion should read as near-perfect.
-  // Office wants a bottle that lasts the day, which few of the dataset's
-  // fresh bottles do and David's fresh clones do: two of them pass it, in order.
+  // 98th percentile; at most one per occasion should read as near-perfect,
+  // and only a few as above 0.9 (Office's wish to last, which few of the
+  // dataset's fresh bottles do, once pressed eight of David's past it).
   for (const id of ['casual', 'office', 'date', 'nightout', 'formal', 'outdoors', 'cozy']) {
     const occasion = occasionById(id);
-    const top = fragrances.filter(f => String(f.id) !== '4310' && occasionPart(occasionRaw(f, occasion), occasion) >= 0.99);
-    assert.ok(top.length <= (id === 'office' ? 2 : 1), `${id}: ${top.map(f => f.name).join(', ')}`);
-    const parts = top.map(f => occasionPart(occasionRaw(f, occasion), occasion));
-    assert.equal(new Set(parts).size, parts.length, `${id}: no ties`);
+    const parts = fragrances.filter(f => String(f.id) !== '4310').map(f => occasionPart(occasionRaw(f, occasion), occasion));
+    assert.ok(parts.filter(p => p >= 0.99).length <= 1, `${id}: ${parts.filter(p => p >= 0.99).length} near-perfect`);
+    assert.ok(parts.filter(p => p > 0.9).length <= 6, `${id}: ${parts.filter(p => p > 0.9).length} above 0.9`);
+    const top = parts.filter(p => p > 0.9);
+    assert.equal(new Set(top).size, top.length, `${id}: no ties`);
   }
   // Amber Empire's date fit (accords and votes) beats Terra's; a hard cap tied them.
   const date = occasionById('date');
