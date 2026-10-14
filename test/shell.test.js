@@ -138,3 +138,15 @@ test('the service worker keeps one copy of the app page, and other pages opened 
   assert.equal(await w.get('index.html?c=1,2&n=Brooke', 'navigate'), '/scentcast/ from the network');
   assert.equal(await w.get('?theme=gruvbox', 'navigate'), '/scentcast/ from the network');
 });
+
+test('the suggestion pool’s files stay cached offline, however many dataset shards come and go', async () => {
+  const max = Number(sw.match(/const DATA_MAX = (\d+)/)[1]);
+  const w = serviceWorker();
+  const pool = ['pool.json', 'pool-notes.json', 'pool-styles.json'].map(f => `data/fragrantica/${f}`);
+  for (const path of pool) await w.get(path);
+  for (let i = 0; i < max + 20; i++) await w.get(`data/fragrantica/x/${i}.json`);
+  w.net.online = false;
+  for (const path of pool) assert.equal(await w.get(path), `/scentcast/${path} from the network`, `${path} is still there`);
+  assert.equal(await w.get(`data/fragrantica/x/${max + 19}.json`), `/scentcast/data/fragrantica/x/${max + 19}.json from the network`);
+  assert.equal(await w.get('data/fragrantica/x/0.json'), '', 'the oldest shards make room');
+});

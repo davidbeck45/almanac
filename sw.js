@@ -4,11 +4,16 @@
 // App files always revalidate with the server: GitHub Pages lets browsers
 // keep files for 10 minutes, and a fresh main.js importing a stale module
 // fails to load at all.
-const CACHE = 'scentcast-v15';
+const CACHE = 'scentcast-v18';
 // Dataset files (data/fragrantica/) load a shard at a time as people search
 // and add bottles; they keep their own small cache instead of the shell's.
+// Each Discover answer reads a few about shards (x/), so it holds plenty.
 const DATA_CACHE = 'scentcast-data';
-const DATA_MAX = 60;
+const DATA_MAX = 120;
+// The suggestion pool's three files (data/fragrantica/pool*.json) keep a
+// cache of their own, never trimmed: shards coming and going in the data
+// cache must not push them out, or the gap finder and Discover go dark offline.
+const POOL_CACHE = 'scentcast-pool';
 // Bottle photos from other hosts. They come back opaque (no CORS headers),
 // so the worker can't see whether one failed; a capped cache keeps a bad
 // one from sticking around for good, and the cap bounds the padding Chrome
@@ -30,6 +35,7 @@ const SHELL = [
   'src/css/discover.css',
   'src/css/bottle.css',
   'src/main.js',
+  'src/app/pool.js',
   'src/app/router.js',
   'src/app/sheets.js',
   'src/app/shell.js',
@@ -40,6 +46,9 @@ const SHELL = [
   'src/views/settings.js',
   'src/views/wardrobe.js',
   'src/views/wear.js',
+  'src/views/wear/pickers.js',
+  'src/views/wear/trip.js',
+  'src/views/wear/when.js',
   'src/ui.js',
   'src/ui/components.js',
   'src/accords.js',
@@ -52,7 +61,6 @@ const SHELL = [
   'src/engine.js',
   'src/fragella.js',
   'src/fragrantica.js',
-  'src/gaps-worker.js',
   'src/gaps.js',
   'src/hidden.js',
   'src/history.js',
@@ -60,6 +68,8 @@ const SHELL = [
   'src/location.js',
   'src/occasions.js',
   'src/pack.js',
+  'src/pool-tasks.js',
+  'src/pool-worker.js',
   'src/profiles.js',
   'src/scene.js',
   'src/scent-styles.js',
@@ -77,7 +87,7 @@ const SHELL = [
   'icons/icon.svg',
 ];
 const IMAGE_HOSTS = ['fimgs.net', 'cdn.fragella.com'];
-const KEEP = [CACHE, DATA_CACHE, IMAGE_CACHE];
+const KEEP = [CACHE, DATA_CACHE, POOL_CACHE, IMAGE_CACHE];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(path => new Request(path, { cache: 'reload' })))).then(() => self.skipWaiting()));
@@ -122,10 +132,12 @@ self.addEventListener('fetch', e => {
     if (req.mode === 'navigate' && !appPage) return;
     const key = appPage ? './' : req;
     const data = url.pathname.includes('/data/fragrantica/');
+    const pool = data && /\/data\/fragrantica\/pool[\w-]*\.json$/.test(url.pathname);
+    const [store, max] = pool ? [POOL_CACHE, 0] : data ? [DATA_CACHE, DATA_MAX] : [CACHE, 0];
     e.respondWith(
       fetch(appPage ? req.url : req, { cache: 'no-cache' })
         .then(res => {
-          if (res.ok) e.waitUntil(put(data ? DATA_CACHE : CACHE, key, res.clone(), data ? DATA_MAX : 0));
+          if (res.ok) e.waitUntil(put(store, key, res.clone(), max));
           return res;
         })
         .catch(async () => (await caches.match(key, { ignoreSearch: true })) ?? Response.error()),

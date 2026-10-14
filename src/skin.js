@@ -37,6 +37,12 @@ export function saveSkin(skin) {
   try { localStorage.setItem(KEY, JSON.stringify(skin)); } catch {}
 }
 
+// The saved entries as stored, for telling cheaply whether they changed
+// (src/app/state.js caches the ranked records on it); '' without any.
+export function skinStamp() {
+  try { return localStorage.getItem(KEY) ?? ''; } catch { return ''; }
+}
+
 /**
  * The map with one bottle's entry changed (pure): `patch` sets any of rating,
  * longevity, sillage. An entry back to "as voted" with no stars drops out.

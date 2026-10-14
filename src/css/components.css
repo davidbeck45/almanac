@@ -623,6 +623,7 @@
 .wx .dr, .wx .fg { color: var(--info); }
 .wx .sw { color: var(--wx-bright); }
 .wx .bt { color: var(--accent); }
+.wx .mn { color: var(--moon); } /* wxIconFor's night glyphs */
 
 /* Windows high contrast and other forced palettes: keep states that were
    drawn with fills visible as outlines and system colors. */

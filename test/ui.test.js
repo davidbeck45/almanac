@@ -85,7 +85,6 @@ test('every template renders clean: no undefined or NaN, names escaped', () => {
     week: wear.weekHTML(days),
     journalTeaser: wear.journalTeaserHTML({ strip, stats: { wears: 3, bottles: 1 } }, resolve),
     occasions: wear.occasionPickerHTML('office'),
-    slotToggle: wear.slotToggleHTML('night', wx),
     bottle: bottlePageHTML(model),
     bottleDocked: bottlePageHTML({ ...model, owned: false, solo: true, alts: [] }, { modal: false }),
     bottleLoading: bottlePageHTML(undefined),
