@@ -2,7 +2,8 @@
 // tablets and an inspector beside the page from 1100px (src/css/shell.css
 // places it, src/css/bottle.css draws it). It's built from SECTIONS, an
 // ordered registry: a new section registers itself from its own module with
-// addSection() and the shell imports that module (.sweep/notes/shell-map.md).
+// addSection() and src/views/sections.js imports that module (CLAUDE.md,
+// "The bottle page", lists the order slots).
 // The sections in their own modules are src/views/bottle-*.js; the ones that
 // ask the suggestion pool keep their answers with pooled(), and draw again
 // on their own when an answer lands (redrawSection).
@@ -508,10 +509,11 @@ function notesSection({ f }) {
   return `<section class="bp-section"><h3>Notes</h3>${body}</section>`;
 }
 
-// Orders leave room between them for wave 4's sections (shell-map.md lists
-// them). Shopping for a bottle, what it smells like (accords and notes, its
-// styles and look-alikes, what voters say) comes before how to wear it
-// (spray, layering): `shopOrder`.
+// Orders leave room between them for the sections in their own modules
+// (src/views/bottle-*.js; CLAUDE.md, "The bottle page", lists every slot).
+// Shopping for a bottle, what it smells like (accords and notes, its styles
+// and look-alikes, what voters say) comes before how to wear it (spray,
+// layering): `shopOrder`.
 addSection({ id: 'head', order: 0, render: headSection });
 addSection({ id: 'summary', order: 100, render: summarySection });
 addSection({ id: 'actions', order: 150, render: actionsSection });
