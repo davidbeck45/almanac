@@ -403,6 +403,46 @@ export function rotationPenalty(fragId, history, todayISO, slot) {
   return { penalty, daysAgo, planned };
 }
 
+// How far below the top score a bottle not yet in the plan can sit and still
+// take the slot. Keeps one all-rounder from filling the whole week.
+export const PLAN_MARGIN = 0.06;
+
+// The rotation nudge (rank's and planWindows' `nudge`): a bottle left on the
+// shelf NUDGE_AFTER days or more takes the slot when it scores within
+// PLAN_MARGIN of the top and shares the top pick's tier, so a nudge never
+// trades an S pick for an A. A bottle never worn counts from the journal's
+// first wear, so nothing is neglected before the journal is a month old. A
+// plan nudges at most once every NUDGE_EVERY days.
+export const NUDGE_AFTER = 30;
+const NUDGE_EVERY = 3;
+
+// Moves the best neglected bottle within reach to the front (`nudged`), and
+// marks every neglected one within reach with its idle days (`parts.idle`).
+// Wears and plans before this window count; the journal starts at its first
+// logged wear.
+function nudgeIdle(scored, history, todayISO, slot) {
+  let start = null;
+  const last = new Map();
+  for (const h of history) {
+    if (h.date > todayISO || (h.date === todayISO && h.slot === slot)) continue;
+    if (!h.planned && (start === null || h.date < start)) start = h.date;
+    if (!last.has(h.id) || h.date > last.get(h.id)) last.set(h.id, h.date);
+  }
+  if (start === null || !scored.length) return;
+  const top = scored[0];
+  for (const s of scored) {
+    if (top.score - s.score > PLAN_MARGIN) break;
+    const idle = daysBetween(last.get(s.fragrance.id) ?? start, todayISO);
+    if (s.tier === top.tier && idle >= NUDGE_AFTER) s.parts.idle = idle;
+  }
+  const at = scored.findIndex(s => s.parts.idle);
+  if (at > 0) {
+    const [pick] = scored.splice(at, 1);
+    pick.nudged = true;
+    scored.unshift(pick);
+  }
+}
+
 // The bottle's strongest accord that passes `keep`.
 function strongest(accords, keep) {
   let best = null;
@@ -498,6 +538,8 @@ function reasonsFor(frag, parts, ctx) {
     else if (stars <= 2) bad(`You rate it ${stars}★`, W.quality * (1 - parts.quality), true);
   } else if (frag.rating >= 4.35 && frag.ratingVotes >= 1000) good(`Crowd favorite · ${frag.rating.toFixed(1)}★`, 0.03);
 
+  if (parts.idle) good(`Not worn in ${parts.idle} days`, 0.3, true);
+
   const d = parts.daysAgo;
   if (parts.planned) {
     if (d === 0) bad('Already picked for that day', parts.rotation, true);
@@ -513,10 +555,11 @@ function reasonsFor(frag, parts, ctx) {
  * Rank a collection for one time slot.
  * conditions: { feelsF, humidity, dewF?, category, date: Date, lat }
  * slot: 'day' | 'night'
- * opts: { occasion?, history?: [{id, date: 'YYYY-MM-DD'}], todayISO? (default: the window's dateISO) }
+ * opts: { occasion?, history?: [{id, date: 'YYYY-MM-DD'}], todayISO? (default: the window's dateISO),
+ *   nudge?: put a neglected bottle within reach first (see NUDGE_AFTER) }
  */
 export function rank(fragrances, conditions, slot, opts = {}) {
-  const { occasion = null, history = [], todayISO = conditions.dateISO ?? localISO(new Date()) } = opts;
+  const { occasion = null, history = [], todayISO = conditions.dateISO ?? localISO(new Date()), nudge = false } = opts;
   const weights = targetSeasonWeights(conditions.feelsF, conditions.date, conditions.lat);
 
   const scored = fragrances.map(frag => {
@@ -544,33 +587,37 @@ export function rank(fragrances, conditions, slot, opts = {}) {
   for (const s of scored) {
     while (s.score < TIER_FLOORS[s.tier]) s.tier = TIERS[TIERS.indexOf(s.tier) + 1];
   }
+  if (nudge) nudgeIdle(scored, history, todayISO, slot);
 
   const ctx = { conditions, slot, weights, occasion };
   for (const s of scored) s.reasons = reasonsFor(s.fragrance, s.parts, ctx);
   return scored;
 }
 
-// How far below the top score a bottle not yet in the plan can sit and still
-// take the slot. Keeps one all-rounder from filling the whole week.
-const PLAN_MARGIN = 0.06;
-
 /**
  * Plan a run of windows in time order (e.g. the week ahead, day then night).
  * Each planned pick counts as worn for the windows after it, and a bottle not
  * yet in the plan wins over a repeat when it scores within PLAN_MARGIN.
- * A wear already logged for a window is kept as that window's pick.
+ * A wear already logged for a window is kept as that window's pick. A window
+ * can carry its own occasion (`win.occasion`, a formal dinner on a trip's
+ * third night) over opts.occasion. With opts.nudge, a neglected bottle takes
+ * a slot at most once every NUDGE_EVERY days.
  * Returns [{ win, ranked, pick }].
  */
 export function planWindows(fragrances, windows, opts = {}) {
-  const { occasion = null, history = [] } = opts;
+  const { occasion = null, history = [], nudge = false } = opts;
   let planned = [...history];
   const used = new Set();
+  let nudgedOn = null;
   return windows.map(win => {
-    const ranked = rank(fragrances, win, win.slot, { occasion, history: planned, todayISO: win.dateISO });
     const logged = history.find(h => h.date === win.dateISO && h.slot === win.slot);
+    const canNudge = nudge && !logged && (nudgedOn === null || daysBetween(nudgedOn, win.dateISO) >= NUDGE_EVERY);
+    const ranked = rank(fragrances, win, win.slot, { occasion: win.occasion ?? occasion, history: planned, todayISO: win.dateISO, nudge: canNudge });
+    // A nudged bottle leads the list, and is new to the plan.
     const fresh = ranked.find(r => !used.has(r.fragrance.id));
     let pick = logged && ranked.find(r => r.fragrance.id === logged.id);
     if (!pick) pick = fresh && ranked[0].score - fresh.score <= PLAN_MARGIN ? fresh : ranked[0];
+    if (pick?.nudged) nudgedOn = win.dateISO;
     if (pick) {
       used.add(pick.fragrance.id);
       if (!logged) planned = [{ id: pick.fragrance.id, date: win.dateISO, slot: win.slot, planned: true }, ...planned];
