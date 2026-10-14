@@ -709,8 +709,12 @@ for (const [word, more] of Object.entries(BROADER)) addAlias(word, more);
 // TYPO_MIN_LETTERS. A word that names nothing is read so. One that names only
 // notes on under RARE_TERM bottles stays as typed, with the near name as a
 // suggestion when that's on TYPO_GAIN times as many: "vanila" is a misspelt
-// note on 43 bottles, but clover isn't clove.
+// note on 43 bottles, but clover isn't clove. A word of TYPO_SWAP_LETTERS
+// (iris, musk, rose) is read so only through a swap of two neighbours
+// ("irsi"), and only when it names nothing: any other edit turns too many
+// short words into a note.
 const TYPO_MIN_LETTERS = 5;
+const TYPO_SWAP_LETTERS = 4;
 const RARE_TERM = 100;
 const TYPO_GAIN = 10;
 
@@ -732,6 +736,14 @@ function editDistance(a, b, max) {
     [prev2, prev] = [prev, row];
   }
   return prev[b.length];
+}
+
+// Whether b is a with two neighbouring letters swapped.
+function swapped(a, b) {
+  if (a.length !== b.length) return false;
+  let i = 0;
+  while (i < a.length && a[i] === b[i]) i++;
+  return i < a.length - 1 && a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2);
 }
 
 // The note names search knows: the pool's and the wardrobe's, by their roots,
@@ -762,21 +774,25 @@ function termOf(text, vocab) {
   return { text, accords, notes: new Set(matched.map(v => v.name)), reach };
 }
 
-// The name a mistyped word most likely means (TYPO_MIN_LETTERS and up), as a
-// term reaching more than `reach` × TYPO_GAIN bottles, or null.
+// The name a mistyped word most likely means (TYPO_MIN_LETTERS and up, or a
+// swap in a TYPO_SWAP_LETTERS word that names nothing), as a term reaching
+// more than `reach` × TYPO_GAIN bottles, or null.
 function retype(word, reach, vocab) {
-  if (word.length < TYPO_MIN_LETTERS || /\d/.test(word)) return null;
+  if (/\d/.test(word)) return null;
+  const short = word.length < TYPO_MIN_LETTERS;
+  if (short && (word.length !== TYPO_SWAP_LETTERS || reach > 0)) return null;
   const max = word.length <= 6 ? 1 : 2, w = root(word);
   let best = null;
   for (const entry of vocab.words) {
-    const d = editDistance(w, entry, max);
+    const d = short ? (swapped(w, entry) ? 1 : max + 1) : editDistance(w, entry, max);
     if (d > max || d === 0) continue;
     const term = termOf(entry, vocab);
     if (term.reach > Math.max(reach * TYPO_GAIN, 0) && (!best || d < best.d || (d === best.d && term.reach > best.term.reach))) best = { d, term };
   }
   if (!best) return null;
-  // Show the name as the bottles have it ("lavender", not its root).
-  const named = [...best.term.accords][0] ?? vocab.find(v => v.roots.join(' ') === best.term.text)?.name;
+  // Show the name as the bottles have it ("lavender", not its root; the note
+  // "musk" before the accord "musky").
+  const named = vocab.find(v => v.roots.join(' ') === best.term.text)?.name ?? [...best.term.accords][0];
   return { ...best.term, text: named ? plain(named) : best.term.text };
 }
 

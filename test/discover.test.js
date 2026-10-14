@@ -257,6 +257,16 @@ test('notes and accords search: every term, forgiving how it’s typed', () => {
     assert.deepEqual([read.unknown, read.corrected], [[], [{ from: typo, to: meant }]], typo);
     same(typo, meant);
   }
+  // A four-letter word that names nothing reads through a swap of two neighbours.
+  for (const [typo, meant] of [['irsi', 'iris'], ['msuk', 'musk'], ['rsoe', 'rose']]) {
+    const read = parseNotes(`${typo} leather`, ctx);
+    assert.deepEqual([read.unknown, read.corrected], [[], [{ from: typo, to: meant }]], typo);
+    same(typo, meant);
+  }
+  assert.equal(searchNotes('irsi leather', ctx, {}, { k: 5 }).results.length, 5);
+  // Only a swap, only in a word that names nothing: real four-letter names stay, and other slips don't guess.
+  for (const word of ['rose', 'musk', 'lime', 'pear', 'wood']) assert.deepEqual(parseNotes(word, ctx).corrected, [], word);
+  for (const word of ['irus', 'muks', 'qzxw']) assert.deepEqual([parseNotes(word, ctx).corrected, parseNotes(word, ctx).unknown], [[], [word]], word);
   // One that names a rare note stays as typed, with the common name as a suggestion: "vanila" is a misspelt note.
   assert.deepEqual(searchNotes('vanila', ctx).suggested, [{ from: 'vanila', to: 'vanilla' }]);
   assert.deepEqual(parseNotes('vanilla', ctx).suggested, []);
