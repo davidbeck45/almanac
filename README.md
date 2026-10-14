@@ -26,7 +26,7 @@ node scripts/recommend.mjs --mix                   # the collection's scent styl
 node scripts/recommend.mjs --style "skin,clean,intimate" --all   # bottles to buy that are all three
 node scripts/recommend.mjs --more-like "Liquid Brun,Amber Empire"
 node scripts/recommend.mjs --notes "iris leather" --season winter
-node scripts/recommend.mjs --dupes "Aventus"       # its cheaper twins, clones and smell-alikes
+node scripts/recommend.mjs --dupes "Aventus"       # its original, cheaper alternatives and smell-alikes
 ```
 
 Live at **https://davidbeck45.github.io/scentcast/** (GitHub Pages from `main`; every push redeploys). Add it to your phone's home screen to use it like an app.
