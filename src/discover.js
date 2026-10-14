@@ -707,9 +707,9 @@ export function dupesOf(record, ctx, { more = null } = {}) {
   const familyOf = reverseLinks(ctx, 'family'), likeOf = reverseLinks(ctx, 'like');
   const seen = new Set([self, row?.id]);
   const entry = r => {
-    const v = votes.get(r.id), sig = signalsOf(r, ctx.byId);
+    const id = String(r.id), v = votes.get(id), sig = signalsOf(r, ctx.byId);
     return {
-      id: r.id,
+      id,
       record: r,
       name: r.name,
       brand: r.brand,
@@ -718,7 +718,7 @@ export function dupesOf(record, ctx, { more = null } = {}) {
       votes: r.ratingVotes ?? null,
       risk: riskOf(r, ctx.byId),
       sim: r.accords ? Math.round(1000 * similarity(record, r)) / 1000 : null,
-      owned: ctx.allowed.owned.has(r.id),
+      owned: ctx.allowed.owned.has(id),
       up: v?.up ?? null,
       down: v?.down ?? null,
     };
@@ -737,9 +737,10 @@ export function dupesOf(record, ctx, { more = null } = {}) {
 
   let original = null;
   if (record.original) {
-    const r = get(record.original.id);
-    seen.add(String(record.original.id));
-    original = { ...(r ? entry(r) : { ...record.original, id: String(record.original.id), record: null, sim: null, risk: riskOf(record.original) }), built: true };
+    // Its pool or r/ record, else the build's summary of it (no accords, so no similarity).
+    const r = get(record.original.id) ?? record.original;
+    seen.add(String(r.id));
+    original = { ...entry(r), built: true };
   } else {
     const [r] = [...s.family, ...s.like].map(get).filter(r => r && r.brand !== record.brand
       && (r.year ?? 0) <= (record.year ?? Infinity) && own != null && signalsOf(r, ctx.byId).value <= own - ORIGINAL_VALUE_GAP);
