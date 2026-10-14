@@ -16,7 +16,7 @@ import { OCCASIONS, occasionById } from '../../occasions.js';
 import { shiftISO } from '../../history.js';
 import { esc, cap, deg, plural, shortDate, weekdayShort } from '../../ui.js';
 import { icon, img, wxIconFor, slotIcon, segHTML, sectionHead, reasonsList } from '../../ui/components.js';
-import { state, rankedFragrances, storeContext, todayISO, byTime } from '../../app/state.js';
+import { state, rankedFragrances, storeContext, todayISO, deviceToday, byTime } from '../../app/state.js';
 import { datePillHTML, onPlace, samePlace, repaint } from './pickers.js';
 
 const KEY = 'scentcast.trip';
@@ -53,21 +53,26 @@ const datesOf = t => Array.from({ length: Math.max(0, tripDays(t)) }, (_, i) => 
  * The last trip: { place: { name, region, lat, lon }, fromISO, toISO,
  * events: [{ dateISO, slot, occasion: id }], max, windows, fetchedAt }, its
  * windows as tripWindows gave them (each `date` revived). Null when there's
- * none or it doesn't read.
+ * none or it doesn't read: no window left that packTrip can rank, or no
+ * time it was fetched.
  */
 export function loadTrip() {
   try {
     const t = JSON.parse(localStorage.getItem(KEY));
     const iso = x => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x);
+    const slot = x => x === 'day' || x === 'night';
     if (!t || !Number.isFinite(t.place?.lat) || !Number.isFinite(t.place?.lon) || !iso(t.fromISO) || !iso(t.toISO) || !Array.isArray(t.windows)) return null;
+    const windows = t.windows.filter(w => iso(w?.dateISO) && slot(w.slot) && Number.isFinite(w.feelsF));
+    const fetchedAt = Number(t.fetchedAt);
+    if (!windows.length || !(fetchedAt > 0)) return null;
     return {
       place: { name: String(t.place.name ?? 'Trip'), region: String(t.place.region ?? ''), lat: t.place.lat, lon: t.place.lon },
       fromISO: t.fromISO,
       toISO: t.toISO,
-      events: (Array.isArray(t.events) ? t.events : []).filter(e => iso(e?.dateISO) && ['day', 'night'].includes(e.slot) && occasionById(e.occasion)),
+      events: (Array.isArray(t.events) ? t.events : []).filter(e => iso(e?.dateISO) && slot(e.slot) && occasionById(e.occasion)),
       max: BOTTLE_CHOICES.includes(t.max) ? t.max : DEFAULT_MAX,
-      windows: t.windows.filter(w => iso(w?.dateISO) && Number.isFinite(w.feelsF)).map(w => ({ ...w, date: new Date(`${w.dateISO}T12:00:00`) })),
-      fetchedAt: Number(t.fetchedAt) || 0,
+      windows: windows.map(w => ({ ...w, date: new Date(`${w.dateISO}T12:00:00`) })),
+      fetchedAt,
     };
   } catch {
     return null;
@@ -340,7 +345,7 @@ function cellHTML(p, slot) {
 export function tripPlanHTML(result, { today } = {}) {
   const days = planDays(result.plan);
   const wx = weatherOf(result.plan.map(p => p.window), today);
-  const note = wx.some ? '≈ marks typical weather, past the forecast. Tap a bottle to see why.' : 'Tap a bottle to see why.';
+  const note = wx.some ? '≈ marks typical weather, past the forecast. Open a bottle to see why.' : 'Open a bottle to see why.';
   return `<section class="card trip-plan" aria-labelledby="trip-plan-title">
     ${sectionHead(`${icon.calendar}Day by day`, `<p>${esc(note)}</p>`, { id: 'trip-plan-title' })}
     <div class="trip-cols" aria-hidden="true"><span></span><span>${icon.sun}Day</span><span>${icon.moon}Night</span></div>
@@ -472,11 +477,15 @@ async function windowsFor(ask, old, today) {
   return fresh.length ? [...kept, ...fresh].sort(byTime) : [];
 }
 
+// A smooth scroll, unless motion is reduced (an explicit 'smooth' overrides
+// base.css's reduced-motion rule).
+const scrolling = () => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
+
 // The plan button, back in view (clear of the tab bar) with focus on it.
 function focusSubmit() {
   const btn = document.querySelector('.trip-form [type="submit"]');
   btn?.focus({ preventScroll: true });
-  btn?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  btn?.scrollIntoView({ block: 'center', behavior: scrolling() });
 }
 
 // The weather for a new place or dates, then the plan. Only the events or
@@ -503,7 +512,7 @@ async function pack(app) {
   app.renderPage();
   const sk = document.querySelector('#trip-sk');
   sk?.focus({ preventScroll: true });
-  sk?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  sk?.scrollIntoView({ block: 'nearest', behavior: scrolling() });
   try {
     const windows = await windowsFor(ask, old, today);
     if (mine !== packSeq) return;
@@ -532,6 +541,10 @@ function finish(app, trip) {
   head?.closest('.trip-head').scrollIntoView({ block: 'nearest' });
 }
 
+// When that refresh fails: the plan stands on the weather saved, on the
+// device's date it was saved (not UTC's, a day ahead by evening in the Americas).
+export const staleNote = fetchedAt => `Couldn’t update the weather, so this plan uses what was saved ${shortDate(deviceToday(new Date(fetchedAt)))}.`;
+
 // A saved trip's weather, hours old, fetched again while it shows (from
 // today on: the days gone by keep theirs).
 export async function freshenTrip(app) {
@@ -550,7 +563,7 @@ export async function freshenTrip(app) {
       ui.note = '';
     }
   } catch {
-    ui.note = `Couldn’t update the weather, so this plan uses what was saved ${shortDate(new Date(trip.fetchedAt).toISOString().slice(0, 10))}.`;
+    ui.note = staleNote(trip.fetchedAt);
   }
   ui.updating = false;
   if (onTrip()) repaint(app);

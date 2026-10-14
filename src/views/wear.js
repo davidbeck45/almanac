@@ -226,16 +226,24 @@ function weekPick(p, slot, dayName) {
   </button>`;
 }
 
+// Whether one bottle is planned for two windows in a row (a list of one or
+// two can't avoid it, nor can wears already logged).
+function repeats(days) {
+  const picks = days.flatMap(d => [d.day, d.night]).filter(Boolean).map(p => p.pick.fragrance.id);
+  return picks.some((id, i) => i > 0 && id === picks[i - 1]);
+}
+
 export function weekHTML(days) {
   const nudged = days.some(d => d.day?.pick.nudged || d.night?.pick.nudged);
   const rows = days.map(d => `
     <li class="wk-day${d.isToday ? ' today' : ''}">
       <div class="wk-date"><b>${esc(d.isToday ? 'Today' : weekdayShort(d.dateISO))}</b><small>${esc(shortDate(d.dateISO))}</small></div>
-      <div class="wk-wx">${wxIcon(d.category, d.condition)}<span class="wk-temps"><b>${deg(d.hiF)}</b><small>${deg(d.loF)}</small></span><span class="wk-pop"${d.pop >= 30 ? ` aria-label="${d.pop}% chance of rain">${d.pop}%` : ' aria-hidden="true">&nbsp;'}</span></div>
+      <div class="wk-wx">${wxIcon(d.category, d.condition)}<span class="wk-temps"><b>${deg(d.hiF)}</b><small>${deg(d.loF)}</small></span>${d.pop >= 30 ? `<span class="wk-pop">${d.pop}%<span class="visually-hidden"> chance of</span> rain</span>` : '<span class="wk-pop" aria-hidden="true">&nbsp;</span>'}</div>
       <div class="wk-picks">${weekPick(d.day, 'day', d.name)}${weekPick(d.night, 'night', d.name)}</div>
     </li>`).join('');
+  const how = repeats(days) ? 'Planned against the forecast.' : 'Planned against the forecast so nothing repeats back to back.';
   return `<section class="card week" aria-labelledby="week-title">
-    ${sectionHead(`${icon.calendar}The week ahead`, `<p>Planned against the forecast so nothing repeats back to back. Tap a bottle to see why.</p>${nudged ? `<p class="wk-legend">${icon.clock}<span>A bottle you haven’t worn in a while gets a turn.</span></p>` : ''}`, { id: 'week-title' })}
+    ${sectionHead(`${icon.calendar}The week ahead`, `<p>${how} Open a bottle to see why.</p>${nudged ? `<p class="wk-legend">${icon.clock}<span>A bottle you haven’t worn in a while gets a turn.</span></p>` : ''}`, { id: 'week-title' })}
     <ol class="wk-list${nudged ? ' nudged' : ''}" style="--days:${days.length}">${rows}</ol>
   </section>`;
 }
@@ -348,11 +356,13 @@ function nowPane() {
 }
 
 const occasionOf = route => occasionById(route.arg ?? state.occasion) ?? occasionById('casual');
+// "formal wear", "the office", "a night in": the occasion as the engine's reasons name it.
+const phraseOf = occasion => occasion.phrase ?? occasion.label.toLowerCase();
 
 // "Formal · Sat night in Chicago" once the window is known.
 function occasionHeading(route, ev = state.wx ? when.eventWindow(state.occasionSlot ?? occasionOf(route).slot) : null) {
   const occasion = occasionOf(route);
-  if (ev?.status !== 'ready') return `Picks for ${occasion.label.toLowerCase()}${when.when.place ? ` in ${when.when.place.name}` : ''}`;
+  if (ev?.status !== 'ready') return `Picks for ${phraseOf(occasion)}${when.when.place ? ` in ${when.when.place.name}` : ''}`;
   return when.occasionTitle(occasion, ev.win, { today: state.wx.todayISO, place: when.when.place });
 }
 
@@ -375,12 +385,12 @@ function occasionPane(app, route) {
   const ranked = rankContext('occ', win, occasion, { nudge: Boolean(ev.here) });
   const worn = wornId(win);
   // A nudged pick isn't the best for it (that one leads Also good).
-  const kicker = ranked[0].nudged ? 'Due a wear' : `Best for ${occasion.label.toLowerCase()}`;
+  const kicker = ranked[0].nudged ? 'Due a wear' : `Best for ${phraseOf(occasion)}`;
   return `${head}
     <section class="card slot" aria-labelledby="occ-title">
       ${slotHeadHTML(win, ev.here ? nowHour() : -1, { id: 'occ-title', thumb: true, title: occasionHeading(route, ev) })}
       ${pickHTML(ranked[0], 'occ', worn, { canWear: canWear(win), full: true, kicker })}
-      ${alsoHTML(ranked, ranked[0], 'occ', worn, `for ${occasion.label.toLowerCase()}`)}
+      ${alsoHTML(ranked, ranked[0], 'occ', worn, `for ${phraseOf(occasion)}`)}
     </section>`;
 }
 

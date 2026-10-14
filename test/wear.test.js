@@ -59,7 +59,7 @@ const saved = {
   events: [{ dateISO: third, slot: 'night', occasion: 'formal' }],
   max: 3,
   windows: tripWindows,
-  fetchedAt: 0,
+  fetchedAt: nowMs,
 };
 const packed = packTrip(bottles, withEvents(tripWindows, [{ dateISO: third, slot: 'night', occasion: occasionById('formal') }]), { max: 3 });
 
@@ -80,7 +80,7 @@ test('the trip, event and pick templates render clean: no undefined or NaN, name
     whenBar: when.whenBarHTML({ dateISO: third, place: saved.place, home: { name: EVIL }, today, slot: 'night', wx }),
     whenBarToday: when.whenBarHTML({ home: { name: EVIL }, today, slot: 'day', wx }),
     pick: wear.pickHTML(entry, 'day', null, { spray: sprayGuide(evil, wx.day) }),
-    pickFull: wear.pickHTML(entry, 'occ', null, { full: true, kicker: 'Best for formal' }),
+    pickFull: wear.pickHTML(entry, 'occ', null, { full: true, kicker: 'Best for formal wear' }),
     nextWindow: wear.nextWindowHTML({ win: wx.night, pick: entry }, null, 12),
     week: wear.weekHTML(week(forecast, nowMs).map(d => ({ ...d, day: plan(d.day, 'day'), night: plan(d.night, 'night') }))),
     slotHead: wear.slotHeadHTML({ ...wx.night, typical: true }, -1, { id: 'x', thumb: true, title: when.occasionTitle(occasionById('formal'), wx.night, { today, place: saved.place }) }),
@@ -95,6 +95,8 @@ test('the trip, event and pick templates render clean: no undefined or NaN, name
   assert.ok(!wear.weekHTML(week(forecast, nowMs).map(d => ({ ...d, day: null, night: null }))).includes('wk-legend'), 'only when a pick has it');
   assert.match(renders.slotHead, /Typical weather/);
   assert.match(renders.plan, /≈/, 'typical weather is marked in the plan');
+  assert.match(renders.plan, /Open a bottle to see why\./, 'not Tap: a mouse opens it too');
+  assert.ok(!/\bTap\b/.test(renders.plan + renders.week));
   assert.match(renders.pack, /data-action="trip-copy"/);
   assert.match(renders.pack, /data-action="trip-share"/);
   assert.ok(!trip.tripPackHTML(packed, saved).includes('data-action="trip-share"'), 'Share only where the browser can');
@@ -136,6 +138,29 @@ test('a trip is kept on the device and read back whole', () => {
   localStorage.setItem('scentcast.trip', JSON.stringify({ ...saved, max: 9, events: [...saved.events, { dateISO: third, slot: 'noon', occasion: 'formal' }, { dateISO: third, slot: 'day', occasion: 'gala' }] }));
   assert.equal(trip.loadTrip().max, 3);
   assert.equal(trip.loadTrip().events.length, 1);
+  // A window packTrip can't rank drops out, so the pane never crashes on it;
+  // with none left, or no time it was fetched, there's no trip.
+  const noon = { dateISO: third, feelsF: 60, slot: 'noon' };
+  localStorage.setItem('scentcast.trip', JSON.stringify({ ...saved, windows: [...tripWindows, noon] }));
+  const kept = trip.loadTrip();
+  assert.equal(kept.windows.length, tripWindows.length);
+  assert.doesNotThrow(() => packTrip(bottles, kept.windows, { max: kept.max }));
+  for (const bad of [{ windows: [noon] }, { windows: [] }, { fetchedAt: 0 }, { fetchedAt: 'x' }]) {
+    localStorage.setItem('scentcast.trip', JSON.stringify({ ...saved, ...bad }));
+    assert.equal(trip.loadTrip(), null, JSON.stringify(bad));
+  }
+});
+
+test('a trip whose weather couldn’t refresh says the day it was saved on this device, not in UTC', () => {
+  const tz = process.env.TZ;
+  process.env.TZ = 'America/New_York';
+  try {
+    // 8:30 pm in New York, already the next day in UTC.
+    assert.match(trip.staleNote(Date.parse('2026-10-14T20:30:00-04:00')), /uses what was saved Oct 14\.$/);
+  } finally {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  }
 });
 
 test('a trip’s dates are checked in plain words', () => {
@@ -247,6 +272,25 @@ test('a trip under way updates from the form: the open event is added, the days 
   }
 });
 
+test('the week board promises no repeats only when there are none, and says rain in words', () => {
+  const days = week(forecast, nowMs);
+  const one = bottles[1];
+  const pickOf = (f, ctx) => ({ pick: { fragrance: f, parts: {}, reasons: [] }, ctx, worn: false });
+  // Each window its own bottle, as the planner does with enough of them.
+  let i = 1;
+  const varied = days.map(d => ({ ...d, day: d.day && pickOf(bottles[i++], 'a'), night: d.night && pickOf(bottles[i++], 'b') }));
+  assert.match(wear.weekHTML(varied), /so nothing repeats back to back\. Open a bottle to see why\./);
+  // A list of one: the same bottle every window.
+  const same = days.map(d => ({ ...d, day: d.day && pickOf(one, 'a'), night: d.night && pickOf(one, 'b') }));
+  const html = wear.weekHTML(same);
+  assert.ok(!/repeats/.test(html), 'a list of one can’t keep that promise');
+  assert.match(html, /Planned against the forecast\. Open a bottle to see why\./);
+  // Rain: the chance and the word, the whole phrase for screen readers.
+  const wet = wear.weekHTML(varied.map((d, n) => ({ ...d, pop: n === 1 ? 87 : 10 })));
+  assert.match(wet, /<span class="wk-pop">87%<span class="visually-hidden"> chance of<\/span> rain<\/span>/);
+  assert.equal((wet.match(/% rain|chance of/g) ?? []).length, 1, 'only on the rainy day');
+});
+
 test('night windows draw the moon, days the sun', () => {
   assert.match(wxIconFor({ slot: 'night', category: 'clear' }), /class="mn"/);
   assert.match(wxIconFor({ slot: 'night', category: 'partly' }), /class="mn"/);
@@ -354,6 +398,7 @@ test('Occasion nudges only today here: an event on a later date gets the best fo
   assert.ok(state.contexts.occ.ranked[0].nudged);
   assert.match(nowHtml, /<p class="kicker">Due a wear<\/p>/, 'and the card doesn’t call it the best');
   assert.ok(!nowHtml.includes('Best for casual'));
+  assert.match(nowHtml, /Also good for casual wear/, 'the occasion as the reasons name it');
   // Five days on, the journal can't say what will be idle: the best leads.
   when.when.dateISO = shiftISO(today, 5);
   try {
@@ -361,7 +406,7 @@ test('Occasion nudges only today here: an event on a later date gets the best fo
     assert.equal(state.contexts.occ.win.dateISO, shiftISO(today, 5));
     assert.ok(!state.contexts.occ.ranked.some(r => r.nudged), 'never nudged on another date');
     assert.ok(!state.contexts.occ.ranked.some(r => r.reasons.some(x => /^Not worn/.test(x.text))));
-    assert.match(laterHtml, /Best for casual/);
+    assert.match(laterHtml, /<p class="kicker">Best for casual wear<\/p>/);
   } finally {
     when.when.dateISO = null;
   }
