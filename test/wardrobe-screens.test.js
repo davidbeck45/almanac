@@ -323,7 +323,7 @@ test('offline, a want with nothing loaded says so plainly instead of loading for
 });
 
 test('a Redundant check that ties to nothing you own reads Covered', () => {
-  const base = { verdict: 'Redundant', reasons: ['Nothing you own smells like it, but your Cedrus Blanc outdoes it even for Formal on warm nights, where it does best.'] };
+  const base = { verdict: 'Redundant', reasons: ['Nothing you own smells like it, but your Cedrus Blanc outdoes it even for Formal on warm nights, where it comes closest.'] };
   assert.equal(verdictOf({ ...base, overlap: { id: '1', name: 'Cedrus Blanc', via: null, sim: 0.42, link: null } }), 'Covered');
   assert.equal(verdictOf({ ...base, overlap: { id: '1', name: 'Liam', via: null, sim: 0.83, link: null } }), 'Redundant', 'too alike');
   assert.equal(verdictOf({ ...base, overlap: { id: '1', name: 'Liam', via: null, sim: 0.6, link: 'Voters call it a twin of your Liam' } }), 'Redundant', 'voters tie them');

@@ -622,11 +622,14 @@ async function main() {
     if (args.check) {
       const q = args.check.trim();
       const byNumber = async id => byId.get(id) ?? (await fragranticaLibrary(datasetFile).records([id])).get(id) ?? null;
-      // "id:1881" is an id; a bare number is a name when a bottle has it
-      // (1881, 4711, 212), else an id.
+      // "id:1881" is an id; a bare number is a name when a well-voted bottle
+      // has it (1881, 4711, 212: the pool's), else an id.
       const asId = /^id:\s*(\d+)$/i.exec(q)?.[1];
-      let record = asId ? await byNumber(asId) : await datasetBottle(q, records, byId) ?? matchBottles(wardrobe, q)[0] ?? null;
-      if (!asId && /^\d+$/.test(q)) {
+      const number = !asId && /^\d+$/.test(q);
+      let record = asId ? await byNumber(asId)
+        : number ? (matchBottles(records, q).length ? await datasetBottle(q, records, byId) : null)
+          : await datasetBottle(q, records, byId) ?? matchBottles(wardrobe, q)[0] ?? null;
+      if (number) {
         if (record) console.error(`Reading "${q}" as a name (${byLine(record)}); give id:${q} for the bottle with that id.`);
         else record = await byNumber(q);
       }

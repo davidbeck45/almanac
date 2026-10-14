@@ -51,7 +51,9 @@ test('--gaps and --check answer in the terminal', async () => {
 });
 
 test('--check reads a number a bottle is named as its name, and id: as an id', async () => {
-  const [named, id, four] = await Promise.all([cli('--check', '1881'), cli('--check', 'id:1881'), cli('--check', '212', '--json')]);
+  const [named, id, four, jadore] = await Promise.all([cli('--check', '1881'), cli('--check', 'id:1881'), cli('--check', '212', '--json'), cli('--check', '210')]);
+  assert.match(jadore.stdout, /^J'adore by Dior/, 'a number only an obscure bottle is named is an id');
+  assert.equal(jadore.stderr, '');
   assert.match(named.stdout, /^1881 by Cerruti/);
   assert.match(named.stderr, /Reading "1881" as a name .*give id:1881/);
   assert.match(id.stdout, /^DKNY To Go Women by Donna Karan/);

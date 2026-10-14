@@ -352,7 +352,7 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   // A new direction he doesn't need isn't called a duplicate: he's covered there.
   const dhi = buyCheck(records.find(r => r.name === 'Encre Noire'), ctx);
   assert.equal(dhi.verdict, 'Covered');
-  assert.match(dhi.reasons[0], /^It would barely beat your .+, where it does best\.$/);
+  assert.match(dhi.reasons[0], /^It would barely beat your .+, and nowhere by more\.$/);
   assert.equal(dhi.reasons[1], 'Nothing you own smells like it.');
   assert.ok(dhi.overlap.sim < 0.5 && !dhi.overlap.link);
   // Dior Homme Intense lasts the working day, so it edges his best for the office in the cold (by too little to
@@ -408,7 +408,7 @@ test('the buy check knows what he likes: more of a style he’s thin on is good,
   assert.equal(check(named('You', 'Glossier'), {}).verdict, 'Covered', 'without his styles it adds nothing');
   // Styles only guessed from the wardrobe's leanings are ones he reaches for, not ones he said he likes.
   assert.equal(check(named('You', 'Glossier'), { liked, stated: false }).reasons[0], 'More of the skin scents you reach for: you own 2.');
-  assert.equal(check(named('Acqua di Gio', 'Giorgio Armani'), { liked, stated: false }).reasons[1], 'It’s fresh citrus and aquatic, none of the styles you reach for.');
+  assert.equal(check(named('Acqua di Gio', 'Giorgio Armani'), { liked, stated: false }).reasons[1], 'It’s fresh citrus and aquatic, none of the scent styles you reach for.');
   // A twin of his Supremacy Collector's Edition is redundant, whatever he likes.
   const precieux = check('93272'); // Armaf Club de Nuit Precieux I
   assert.equal(precieux.verdict, 'Redundant');
@@ -416,7 +416,14 @@ test('the buy check knows what he likes: more of a style he’s thin on is good,
   // A fresh classic he's covered for, in no style he likes.
   const adg = check(named('Acqua di Gio', 'Giorgio Armani'));
   assert.equal(adg.verdict, 'Covered');
-  assert.equal(adg.reasons[1], 'It’s fresh citrus and aquatic, none of the styles you like.');
+  assert.equal(adg.reasons[1], 'It’s fresh citrus and aquatic, none of the scent styles you like.');
+  assert.equal(check(named('Acqua di Gio', 'Giorgio Armani'), { liked: ['skin', 'clean'] }).reasons[1], 'It’s fresh citrus and aquatic, none of the styles you like.', 'scent styles only');
+  // Bo wears close, which he likes, but it's woody: the line says so rather than "none of the styles you like".
+  const bo = check('69541');
+  assert.equal(bo.verdict, 'Covered');
+  assert.match(bo.reasons[1], /^It’s woody\b.* and wears close, but none of the scent styles you like\.$/);
+  // Where it comes closest to his best, not where it does best.
+  assert.match(check('210').reasons[0], /^Your .+ outdoes it even for .+, where it comes closest\.$/);
   // Risky and strong fit stand whatever he likes.
   assert.equal(check(records.find(r => r.name === 'Kouros')).verdict, 'Risky');
   assert.equal(check('124649').verdict, 'Strong fit', 'Riiffs Zenith');
