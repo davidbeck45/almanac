@@ -24,7 +24,7 @@ const ins = {
   key: null, // the inputs (inputsKey) the report answers or is being asked for
   report: null, // gapReport from the pool, null until the first lands
   error: '', // a sentence, when the report couldn't be worked out
-  libError: '',
+  libError: '', // a sentence, when the modules above didn't load (offline, first visit)
   busy: false, // a newer report is on its way (the old one stays, dimmed)
   fresh: false, // the first report since the pane opened: its map fills in
   climate: null, // 'local' | 'default' (no place set) | 'failed' (the archive didn't answer)

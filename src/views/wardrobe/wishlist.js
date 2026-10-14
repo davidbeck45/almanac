@@ -36,8 +36,9 @@ export function sortWants(items) {
 
 /** One want: photo, name, its verdict and reasons, what it would fill, today's match, I bought it and Remove. */
 export function wantCardHTML({ want, record, check, today }) {
-  const f = record ?? { id: want.id, name: check?.name ?? 'Loading…' };
-  const named = Boolean(record || check?.name);
+  const name = record?.name ?? check?.name ?? (check?.missing ? 'A bottle the library doesn’t have' : null);
+  const f = record ?? { id: want.id, name: name ?? 'Loading' };
+  const named = Boolean(name);
   const verdict = !check ? '<span class="sk sk-pill" aria-hidden="true"></span><span class="visually-hidden">Checking</span>'
     : check.missing ? '' : verdictBadge(check.verdict);
   const meta = [record?.brand ?? check?.brand, `added ${shortDate(want.added)}`].filter(Boolean).join(' · ');
@@ -61,7 +62,7 @@ export function wantCardHTML({ want, record, check, today }) {
       ${body}
       ${today ? `<p class="wish-today">${matchBadge(today.entry)}<span>${today.slot === 'day' ? 'today' : 'tonight'}</span></p>` : ''}
       <div class="action-row">
-        <button class="btn secondary compact" data-action="wish-bought" data-id="${id}"${named ? '' : ' disabled'}>${icon.check}<span>I bought it<span class="visually-hidden">: ${esc(f.name)}</span></span></button>
+        <button class="btn secondary compact" data-action="wish-bought" data-id="${id}"${record ? '' : ' disabled'}>${icon.check}<span>I bought it<span class="visually-hidden">: ${esc(f.name)}</span></span></button>
         <button class="btn tertiary compact" data-action="wish-remove" data-id="${id}">${icon.remove}<span>Remove<span class="visually-hidden"> ${esc(f.name)}</span></span></button>
       </div>
     </div>
