@@ -191,12 +191,16 @@ function ownedFor(cache, p, pool) {
   });
 }
 
-// A context with the switched-off bottles counted as owned wherever owned
-// ones are left out (`allowKey`'s owned and originals, the smells-like
-// family, the look-alike vectors), but not in what the wardrobe covers,
-// leans toward or likes: never suggested back, nor their twins, originals
-// or look-alikes, and checks call them owned.
-function excluding(ctx, allowKey, hidden) {
+/**
+ * A context with the switched-off bottles (`hidden`, records) counted as
+ * owned wherever owned ones are left out (`allowKey`'s owned and originals,
+ * the smells-like family, the look-alike vectors), but not in what the
+ * wardrobe covers, leans toward or likes: never suggested back, nor their
+ * twins, originals or look-alikes, and checks call them owned. `allowKey`
+ * is 'allow' for gapContext's, 'allowed' for discoverContext's. The CLI's
+ * --exclude goes through it too.
+ */
+export function excluding(ctx, allowKey, hidden) {
   if (!hidden.length) return ctx;
   const allowed = ctx[allowKey], owned = new Set(allowed.owned), originals = new Set(allowed.originals);
   for (const f of hidden) {

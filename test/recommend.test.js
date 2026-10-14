@@ -31,6 +31,68 @@ test('bottle names match exactly first, else by part', () => {
   assert.deepEqual(matchBottles(fragrances, 'zzz'), []);
 });
 
+test('names match as the app searches them: any apostrophe, whole words for a short part', () => {
+  const guerlain = [{ name: 'L’Homme Idéal Extrême', brand: 'Guerlain' }, { name: 'L’Homme Idéal', brand: 'Guerlain' }, { name: 'L’Homme Idéal Eau de Parfum', brand: 'Guerlain' }];
+  assert.deepEqual(matchBottles(guerlain, "L'Homme Ideal").map(f => f.name), ['L’Homme Idéal'], 'a straight apostrophe finds a curly one');
+  assert.equal(matchBottles(guerlain, 'lhomme ideal').length, 0);
+  assert.equal(matchBottles(guerlain, "l'homme ideal extreme").length, 1);
+  assert.equal(matchBottles(guerlain, 'ideal eau').length, 1);
+  // Under three letters a part matches whole words only.
+  assert.deepEqual(matchBottles(fragrances, 'a'), []);
+  assert.deepEqual(matchBottles(fragrances, 'e'), []);
+  assert.deepEqual(matchBottles(fragrances, 'ch').map(f => f.name), ['CH Men Prive']);
+  assert.deepEqual(matchBottles(fragrances, 'oud').map(f => f.name), ['Glorious Oud Royal Blanc']);
+});
+
+test('--exclude refuses a term that takes out most of the wardrobe, and an empty one stops plainly', () => {
+  const broad = cli('--loc', '40.7,-74', '--exclude', 'French Avenue', '--slot', 'night');
+  assert.equal(broad.status, 1);
+  assert.match(broad.stderr, /--exclude "French Avenue" matches 5 bottles \(Amber Empire, .+\); give more of the name/);
+  const letter = cli('--loc', '40.7,-74', '--exclude', 'a', '--slot', 'night', '--json');
+  assert.equal(letter.status, 0, letter.stderr);
+  assert.match(letter.stderr, /"a" matches no bottle/);
+  // A journal that switched every bottle off leaves nothing to rank, in every mode.
+  const dir = mkdtempSync(join(tmpdir(), 'scentcast-'));
+  const file = join(dir, 'journal.json');
+  writeFileSync(file, JSON.stringify({ app: 'scentcast-journal', history: [], hidden: fragrances.map(f => String(f.id)) }));
+  for (const extra of [['--slot', 'night'], ['--week'], ['--json'], ['--date', dayISO(1)], ['--layer', 'all'], ['--mix']]) {
+    const run = cli('--loc', '40.7,-74', '--journal', file, ...extra);
+    assert.equal(run.status, 1, extra.join(' '));
+    assert.match(run.stderr, /^Nothing left to rank: the journal leaves out all 25 bottles/);
+    assert.doesNotMatch(run.stderr, /at .*\.mjs:\d+/, 'no stack trace');
+  }
+});
+
+test('switched-off bottles are left out of picks but still owned for suggestions and checks, as in the app', () => {
+  const own = JSON.parse(cli('--check', 'Liquid Brun', '--exclude', 'Liquid Brun', '--json').stdout);
+  assert.deepEqual([own.verdict, own.reasons[0]], ['Redundant', 'You own it.']);
+  const original = JSON.parse(cli('--check', 'Althair', '--exclude', 'Liquid Brun', '--json').stdout);
+  assert.equal(original.verdict, 'Redundant', 'the original of a bottle he owns');
+  const style = JSON.parse(cli('--style', 'vanilla', '--exclude', 'Liquid Brun,Amber Empire,Cream Velvet', '--top', '12', '--json').stdout);
+  assert.ok(!style.results.some(r => ['Liquid Brun', 'Amber Empire', 'Cream Velvet'].includes(r.name)), style.results.map(r => r.name).join(', '));
+  const gaps = JSON.parse(cli('--gaps', '--exclude', 'Liquid Brun', '--json').stdout);
+  assert.equal(gaps.bottles, 24, 'covers nothing');
+  assert.match(cli('--gaps', '--top', '0').stderr, /--top takes 1 or more for --gaps/);
+});
+
+test('--journal leaves out the bottles the app switched off and tunes the use shares by its wears', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'scentcast-'));
+  const file = join(dir, 'journal.json');
+  const jake = fragrances.find(f => f.name === 'Jake');
+  const formal = Array.from({ length: 30 }, (_, i) => ({ id: String(fragrances[i % 5].id), date: dayISO(-i - 1), slot: 'night', occasion: 'formal' }));
+  writeFileSync(file, JSON.stringify({ app: 'scentcast-journal', history: formal, hidden: [String(jake.id)] }));
+  const run = cli('--loc', '40.7,-74', '--json', '--journal', file, '--slot', 'day');
+  assert.equal(run.status, 0, run.stderr);
+  assert.ok(!JSON.parse(run.stdout).slots[0].ranked.some(r => r.name === 'Jake'));
+  const shares = text => Number(text.match(/Formal (\d+)%/)[1]);
+  assert.ok(shares(cli('--gaps', '--journal', file, '--top', '1').stdout) > 2 * shares(cli('--gaps', '--top', '1').stdout));
+  const missing = cli('--loc', '40.7,-74', '--journal', join(dir, 'nope.json'));
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /^Can't read .*nope\.json/);
+  writeFileSync(file, '{"app":');
+  assert.match(cli('--loc', '40.7,-74', '--journal', file).stderr, /isn't a Scentcast journal export/);
+});
+
 test('bad arguments stop with a message before any request', () => {
   const slot = cli('--loc', '40.7,-74', '--slot', 'evening');
   assert.equal(slot.status, 1);
@@ -114,6 +176,8 @@ test('--events reads a date, an optional slot and an occasion', () => {
   const [late] = parseEvents('2026-10-15 formal night');
   assert.deepEqual([late.slot, late.occasion.id], ['night', 'formal'], 'the slot after the occasion too');
   assert.deepEqual([parseEvents('2026-10-15 date night')[0].slot, parseEvents('2026-10-15 office day')[0].occasion.id], ['night', 'office']);
+  assert.throws(() => parseEvents('2026-10-17 night formal; 2026-10-17 date'), /two events on the night of 2026-10-17/);
+  assert.equal(parseEvents('2026-10-17 night formal; 2026-10-17 office').length, 2, 'a day and a night');
 });
 
 test('--pack plans a trip: few bottles, every window, events on their night', () => {
@@ -159,6 +223,7 @@ test('--pack and --date stop on bad dates before any request', () => {
     [['--pack', '--loc', '40.7,-74', '--from', dayISO(1), '--to', dayISO(40)], /up to 31 days/],
     [['--pack', '--loc', '40.7,-74', '--from', dayISO(1), '--to', dayISO(2), '--max', '9'], /--max takes 1 to 6/],
     [['--pack', '--loc', '40.7,-74', '--from', dayISO(1), '--to', dayISO(2), '--events', `${dayISO(9)} night date`], /outside the trip/],
+    [['--pack', '--loc', '40.7,-74', '--from', dayISO(1), '--to', dayISO(2), '--slot', 'day', '--events', `${dayISO(1)} formal`], /--slot day packs for days only/],
     [['--pack', '--from', dayISO(1), '--to', dayISO(2)], /--pack needs a place/],
     [['--loc', '40.7,-74', '--date', '2026-02-30'], /--date takes a date like/],
     [['--loc', '40.7,-74', '--date', dayISO(2), '--week'], /leave out --week/],

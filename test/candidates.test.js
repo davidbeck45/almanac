@@ -46,6 +46,8 @@ test('a bottle the dataset lacks has no signals, and reads as unknown', () => {
   assert.equal(s.value, null);
   assert.deepEqual([s.like, s.family, s.alt, s.flags], [[], [], [], []]);
   assert.deepEqual(riskOf(mine), { level: 'unknown', reasons: ['There’s no crowd data on it yet.'], major: false });
+  // A bottle newer than the dataset has a rating, so it isn't told it has no crowd data.
+  assert.deepEqual(riskOf({ ...mine, rating: 3.6, ratingVotes: 140 }).reasons, ['No safety or value votes on it yet.']);
   assert.equal(genderLean(mine), 0);
   assert.equal(genderLean({ ...mine, gender: 'men' }), 0.68);
   // Without signals, Hawas Atlantis would pass for a safe buy.

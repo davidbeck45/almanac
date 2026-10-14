@@ -456,6 +456,8 @@ export function riskOf(record, byId = null) {
   const points = found.reduce((sum, r) => sum + r.points, 0);
   const reasons = found.sort((a, b) => b.points - a.points).map(r => r.text);
   const major = found.some(r => r.points >= 2);
-  if (!s.known) return { level: 'unknown', reasons: [...reasons, 'There’s no crowd data on it yet.'], major };
+  // A bottle newer than the dataset can carry a rating, just none of these.
+  const none = record.ratingVotes > 0 ? 'No safety or value votes on it yet.' : 'There’s no crowd data on it yet.';
+  if (!s.known) return { level: 'unknown', reasons: [...reasons, none], major };
   return { level: points >= RISK_HIGH ? 'high' : points >= RISK_MEDIUM ? 'medium' : 'low', reasons, major };
 }

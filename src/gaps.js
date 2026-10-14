@@ -691,6 +691,9 @@ const LIKE_SIM = 0.5;
 // The lean past the wardrobe's own extremes that earns "more masculine than anything you own".
 const LEAN_NOTE = 0.1;
 
+/** A rating as the buy check writes it: one decimal, two where one would round it up to MIN_RATING ("only 3.75★", not "3.8★"). */
+export const ratingText = rating => rating.toFixed(rating < MIN_RATING && rating.toFixed(1) >= MIN_RATING ? 2 : 1);
+
 // What a strong fit's real gain must reach for a wardrobe: STRONG_GAIN, or
 // the pool's top STRONG_TOP of gains, whichever is more. Once per context.
 const bars = new WeakMap();
@@ -825,8 +828,8 @@ export function buyCheck(record, ctx, { liked = null } = {}) {
   const lean = genderLean(scored, ctx.byId), [lo, hi] = ctx.leanRange ?? [-Infinity, Infinity];
   const leanLine = lean < lo - LEAN_NOTE ? 'Voters call it more feminine than anything you own.'
     : lean > hi + LEAN_NOTE ? 'Voters call it more masculine than anything you own.' : null;
-  const ratedLine = lowRated ? `Voters rate it only ${scored.rating.toFixed(scored.rating.toFixed(1) >= MIN_RATING ? 2 : 1)}★.`
-    : scored.ratingVotes ? `Rated ${scored.rating.toFixed(1)}★ by ${scored.ratingVotes.toLocaleString('en-US')} voters.`
+  const ratedLine = lowRated ? `Voters rate it only ${ratingText(scored.rating)}★.`
+    : scored.ratingVotes ? `Rated ${ratingText(scored.rating)}★ by ${scored.ratingVotes.toLocaleString('en-US')} voters.`
       : 'There’s no crowd data on it yet.';
   // What it adds to the styles you like ("More of the skin scents you like: you own 2."), or why not.
   const styleLabels = taste?.styles.map(id => styleById(id).label.toLowerCase());
