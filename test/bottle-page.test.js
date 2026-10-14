@@ -18,7 +18,7 @@ import { crowdHTML, riskLine } from '../src/views/bottle-crowd.js';
 import { reviewsHTML } from '../src/views/bottle-reviews.js';
 import { compareHTML, compareModel, relation, leader, verdictHTML, pickerLists, pickerHTML, pickerMatches, MAX_COMPARE } from '../src/views/compare.js';
 import { parseRoute, routeHash, compareIds } from '../src/app/router.js';
-import { shareToken } from '../src/custom.js';
+import { shareToken, customRecord } from '../src/custom.js';
 import { rank, comfortRange } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { summarize } from '../src/weather.js';
@@ -109,6 +109,24 @@ test('a whole page renders clean, owned or not', () => {
   assert.ok(other.indexOf('Main accords') < other.indexOf('How much to spray'), 'what it smells like before how to spray it');
   assert.match(other, /data-action="bp-want" data-id="9828" aria-pressed="true"/, 'Want shows as on');
   assert.match(other, /aria-busy="true"/, 'the pool-backed sections show a skeleton until they’re asked');
+});
+
+test('why it ranks here: the rating bar says whose rating it is, and a bottle nobody rated has none', () => {
+  const night = rec => rank([rec], wx.night, 'night', { history: [], todayISO: wx.night.dateISO })[0];
+  const why = rec => {
+    const html = bottlePageHTML(modelOf(rec, { entry: night(rec) }));
+    return html.slice(html.indexOf('data-section="why"'), html.indexOf('data-section="alts"'));
+  };
+  const f = byName('Liquid Brun');
+  assert.match(why(f), /bar-label">Rating</, 'the crowd’s rating');
+  assert.ok(!why(f).includes('Crowd rating'));
+  const yours = why({ ...f, personal: { rating: 1, longevity: 0, sillage: 0 } });
+  assert.match(yours, /bar-label">Your rating</, 'your stars lead it once you rate it');
+  assert.ok(!/bar-label">Rating</.test(yours));
+  const byHand = customRecord({ name: 'Rose', accords: ['rose', 'musky'] });
+  assert.match(why(byHand), /bar-label">Season</);
+  assert.ok(!/bar-label">(Your r|R)ating</.test(why(byHand)), 'no crowd, no rating bar');
+  assert.match(why({ ...byHand, personal: { rating: 5, longevity: 0, sillage: 0 } }), /bar-label">Your rating</);
 });
 
 // ---------- Pool answers ----------

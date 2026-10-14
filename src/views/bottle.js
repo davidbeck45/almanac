@@ -292,7 +292,7 @@ const FACTORS = [
   ['season', 'Season', '#9be39a'],
   ['weather', 'Weather', '#8fc7f0'],
   ['time', 'Time of day', '#f5c451'],
-  ['quality', 'Crowd rating', '#f2b264'],
+  ['quality', 'Rating', '#f2b264'],
 ];
 // Names longer than this step down a size, so they don't run to four lines.
 const LONG_NAME = 28;
@@ -381,8 +381,14 @@ function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned, inMine,
 function whySection({ entry, solo, win }) {
   if (!entry) return '';
   const p = entry.parts;
-  const bars = FACTORS.filter(([k]) => p[k] !== null && p[k] !== undefined)
-    .map(([k, label, color]) => bar(label, p[k] * 100, color, `${Math.round(p[k] * 100)}`)).join('');
+  // The rating bar is mostly your stars once you've rated it (engine
+  // quality()), and says so; with neither stars nor crowd votes (a bottle
+  // entered by hand) it would only read a neutral 50, so it stays out.
+  const f = entry.fragrance;
+  const yours = Number.isFinite(f.personal?.rating);
+  const crowd = f.source !== 'custom' && f.rating > 0 && f.ratingVotes > 0;
+  const bars = FACTORS.filter(([k]) => p[k] !== null && p[k] !== undefined && (k !== 'quality' || yours || crowd))
+    .map(([k, label, color]) => bar(k === 'quality' && yours ? 'Your rating' : label, p[k] * 100, color, `${Math.round(p[k] * 100)}`)).join('');
   const rotation = p.rotation > 0
     ? `<p class="why-note">−${Math.round(p.rotation * 100)} for rotation: ${esc(p.planned ? 'already in the plan nearby' : 'worn recently')}.</p>`
     : '';
