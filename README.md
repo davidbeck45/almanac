@@ -7,12 +7,14 @@ A quick look at what to wear from my own collection, based on today's weather, t
 - **Occasion** — Casual, Office, Date Night, Night Out, Formal, Outdoors, Cozy, for daytime or tonight.
 - **Bottle page** — every bottle has one (a sheet on phones, a panel beside the page on desktop): why it ranks where it does, what else fits, what to layer it with and which to spray first, its accords, seasons and notes.
 - **Wardrobe** — switch bottles in and out of rotation, and the wear journal: "Wear this" logs what you wore so picks rotate, fading over the next ten days, with a calendar, your most-worn bottles and the ones gathering dust.
+- **Insights** — what your wardrobe still needs. A map of every occasion against your climate's weather, by day and night, filled as far as your bottles cover it; where it's thin ("Formal on warm nights") and the bottles that would fill it, each against your best there, with a cheaper twin and blind-buy risk. Then your style mix, more of the styles you like (skin scent, clean, intimate…), a safe first bottle for each style you don't own, and any bottles you own that smell alike. Set how often you dress for each occasion, and whether to stick to great value.
+- **Wishlist** — bottles you want, each with a verdict on how it would fit your shelf (strong fit, good, covered, risky, redundant), what it would fill and how it would do today; "I bought it" moves it into your collection.
 - **Discover** — search every fragrance on Fragrantica (from [Le Decanteur's dataset](https://www.kaggle.com/datasets/ledecanteur/fragrantica-perfumes), CC BY-NC-SA 4.0) and see how any of them would do today.
 - **Your own collection** — add what you own from Discover, paste a list, or add a bottle no database has by picking its accords. Share it as a link. The demo shows my wardrobe.
 - **Trips and events** — the fewest bottles to pack for a city and dates, and which to wear when, with a dressier pick for a formal night; picks for any date ahead. Past the forecast's first ten days it plans on typical weather for the dates. In the terminal for now (`--pack`, `--date`); app screens are next.
 - **How much to spray** — a count and where for each pick, from how loud and lasting the bottle is, the weather and the occasion. In the terminal for now (`--spray`, and on every pick).
 - **Your own ratings** — your stars steer the picks (a bottle you rate 1★ sits out, a 5★ one wins near ties), and so does whether a bottle lasts longer or sits closer on your skin than the crowd says. The engine reads them; the app's controls are next.
-- **Gaps and buy check** — where your wardrobe is thin for your climate and how you wear it ("Formal on cool nights"), bottles that would fill it with a cheaper twin and blind-buy risk for each, and a verdict on any bottle you're eyeing: strong fit, good, redundant or risky. In the terminal for now.
+- **Gaps and buy check** in the terminal too: where your wardrobe is thin and what fills it (`--gaps`), and a verdict on any bottle you're eyeing (`--check`).
 - °F or °C (defaults from your locale), two themes, recent locations, links to every view, and home-screen shortcuts for Now, Week and Occasion.
 
 Picks come from Fragrantica community votes (season, day/night, and those of the bottles voters say it smells like), each bottle's main accords, how heavy they wear versus the temperature and humidity, and the occasion's accord profile.
@@ -28,6 +30,7 @@ node scripts/recommend.mjs --city "New York" --week
 node scripts/recommend.mjs --layer "Liquid Brun"   # or --layer all
 node scripts/recommend.mjs --city "New York" --journal scentcast-journal.json   # rotate out recent wears, nudge in neglected ones
 node scripts/recommend.mjs --mix                   # the collection's scent styles
+node scripts/recommend.mjs --doubles               # bottles you own that wear as one
 node scripts/recommend.mjs --pack --city London --from 2026-12-10 --to 2026-12-19 --events "2026-12-15 night formal"
 node scripts/recommend.mjs --city Miami --date 2026-10-24 --occasion date   # any date: forecast, else typical weather
 node scripts/recommend.mjs --spray "Liquid Brun" --occasion date             # how many sprays, and where
