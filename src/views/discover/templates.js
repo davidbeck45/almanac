@@ -352,14 +352,15 @@ export function filterButtonHTML(filters, { mists = true, value = false } = {}) 
   return `<button class="btn secondary compact filter-btn" data-action="disc-filters-open" aria-label="Filters${n ? `, ${n} on` : ''}">${icon.filter}<span>Filters</span>${n ? `<b class="count" aria-hidden="true">${n}</b>` : ''}</button>`;
 }
 
+// (data-part: what a change redraws; data-live: the status line, which keeps its node so it's heard.)
 export function filterSheetHTML(filters, { preferValue, mists, status }) {
   const n = filterCount(filters, { mists, value: Boolean(preferValue) });
   return `<h2 class="sheet-title" id="disc-filters-title">Filters</h2>
     <p class="lede muted">For the bottles by style, by bottle and by notes.</p>
-    ${filtersHTML(filters, { preferValue, mists, prefix: 'dfx' })}
+    <div data-part="filters">${filtersHTML(filters, { preferValue, mists, prefix: 'dfx' })}</div>
     <div class="sheet-bar spread">
-      <button class="btn tertiary" data-action="disc-filters-reset"${n ? '' : ' disabled'}>Reset</button>
-      <span class="muted" role="status">${esc(status)}</span>
+      <button class="btn tertiary" data-part="filters-reset" data-action="disc-filters-reset"${n ? '' : ' disabled'}>Reset</button>
+      <span class="muted" role="status" data-live="filter-status">${esc(status)}</span>
       <button class="btn primary" data-action="close-sheet">Done</button>
     </div>`;
 }

@@ -303,6 +303,11 @@ test('filters: radio groups with one stop each, the value toggle as answered, mi
   assert.match(T.filterSheetHTML(NO_FILTERS, { preferValue: true, mists: true, status: '' }), /data-action="disc-filters-reset">Reset/, 'and Reset can turn it off');
   assert.ok(!/class="count"/.test(T.filterButtonHTML(NO_FILTERS)));
   clean(T.filterSheetHTML(NO_FILTERS, { preferValue: false, mists: true, status: EVIL }), 'filter sheet');
+  // A change redraws the parts; the status line keeps its node (only its text changes), so it's heard.
+  const sheet = T.filterSheetHTML(NO_FILTERS, { preferValue: false, mists: true, status: '12 bottles fit' });
+  assert.match(sheet, /<div data-part="filters">/);
+  assert.match(sheet, /role="status" data-live="filter-status">12 bottles fit</);
+  assert.ok(sheet.indexOf('data-live=') > sheet.indexOf('class="sheet-bar'), 'the status sits outside what redraws');
 });
 
 test('search: names with where they are, the two readings, typos and nothing found', () => {
@@ -355,7 +360,10 @@ test('the seed picker: picked first, then the library’s hits, then yours', () 
   assert.match(html, /data-action="disc-seed-toggle" data-id="m2" aria-pressed="true"/);
   assert.match(html, /data-id="l1" aria-pressed="false"/);
   assert.equal((html.match(/data-id="m1"/g) ?? []).length, 1, 'an owned hit shows once, under yours');
-  assert.match(html, /1 of 5 picked/);
+  assert.match(html, /role="status" data-live="seed-status">1 of 5 picked</);
+  // Typing redraws the lists under the field, never the field (it keeps focus and the keyboard).
+  assert.ok(html.indexOf('data-field="disc-seed-q"') < html.indexOf('data-part="seed-lists"'));
+  assert.ok(html.indexOf('data-live=') > html.indexOf('class="sheet-bar'), 'nor the status line');
   assert.match(seedSheetHTML({ query: '' }, { owned: [], chosen: [] }), /Your wardrobe is empty/);
   // A library hit just picked shows under Picked while its record loads (the stub), and a lost one too.
   const stub = { id: 'l1', name: 'Brun Noir', brand: 'X', stub: true };

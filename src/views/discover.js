@@ -14,9 +14,10 @@ import {
   state, findBottles, fullRecords, ownedIn, findRecord, activeFragrances, viewingDemo, poolInputs, setPreferValue, todayISO,
   loadFullRecord, keepBottles,
 } from '../app/state.js';
-import { loadWants, hasWant, setWant } from '../wishlist.js';
+import { loadWants, saveWants, hasWant, setWant } from '../wishlist.js';
 import { occasionCounts } from '../history.js';
 import { normalize } from '../collections.js';
+import * as scentStyles from '../scent-styles.js';
 import { readQuery, writeQuery, poolFilters, filterCount, searchMode, namedToCheck, NO_FILTERS, SEED_MAX } from './discover/query.js';
 import * as T from './discover/templates.js';
 
@@ -30,18 +31,23 @@ const STYLES_KEY = 'scentcast.styles';
 const HOLD_MS = 450;
 
 // ---------- Modules loaded on demand ----------
-// The scent styles, src/discover.js (DEMO_LIKED, likedStyles, FILTERS) and
-// "How you wear" (src/uses.js) stay out of the boot graph, as Wardrobe's
-// panes keep them: the page shows skeletons until they're in. The pool's
-// worker loads its own copies.
+// src/discover.js (DEMO_LIKED, likedStyles, FILTERS) and "How you wear"
+// (src/uses.js) stay out of the boot graph, as Wardrobe's panes keep them:
+// the page shows skeletons until they're in. (The scent styles are in it
+// already: the bottle page and the spray guide import them.) The pool's
+// worker loads its own copies. A failed import stays failed for the page's
+// life, so after one the page says so with Reload, and never imports again.
 
-let lib = null, libLoading = null;
+let lib = null, libLoading = null, libFailed = false;
 function loadLib(app) {
-  libLoading ??= Promise.all([import('../discover.js'), import('../scent-styles.js'), import('../uses.js')]).then(([discover, styles, uses]) => {
-    lib = { ...discover, ...styles, loadUses: uses.loadUses };
+  if (libFailed) return;
+  libLoading ??= Promise.all([import('../discover.js'), import('../uses.js')]).then(([discover, uses]) => {
+    lib = { ...discover, ...scentStyles, loadUses: uses.loadUses };
     repaint(app);
-  }, () => { libLoading = null; });
-  return libLoading;
+  }, () => {
+    libFailed = true;
+    repaint(app);
+  });
 }
 // The logic knows body mists once src/discover.js FILTERS has the key.
 const hasMists = () => Boolean(lib && 'mists' in lib.FILTERS);
@@ -72,23 +78,30 @@ const slot = () => ({ key: null, owner: null, status: 'idle', result: null, erro
 const slots = { styles: slot(), like: slot(), notes: slot(), report: slot() };
 const ks = { styles: T.PAGE, like: T.PAGE, notes: T.PAGE };
 // "I own it" from a card keeps the lists as they are (the card says In Mine)
-// rather than asking again for the new wardrobe.
+// rather than asking again, while the same list is ranked. When owning it
+// switched lists (David's to Mine), the lists are asked again for the new
+// one, the old cards staying on screen, dimmed, until the answers land.
 let adopting = false;
 // After Show more, focus goes to the first new card.
 let focusAfter = null;
+// A want just taken away from a card or a row: { list: the want list before, id }, for Undo.
+let wantUndo = null;
 // Every style chip on show (a wide column shows the first ten and the chosen).
 let allStyles = false;
 
 // The wardrobe the lists are for: the ranked list and what's switched on in it.
-const ownedKey = () => `${state.shared ? `shared:${state.shared.name ?? ''}` : state.active}|${activeFragrances().map(f => f.id).join()}`;
+const listOf = () => (state.shared ? `shared:${state.shared.name ?? ''}` : state.active);
+const ownedKey = () => `${listOf()}|${activeFragrances().map(f => f.id).join()}`;
+// Nothing owned (an empty Mine, every bottle switched off): no gaps to fill.
+const ownsAny = () => activeFragrances().length > 0;
 
 function load(app, name, key, ask) {
   const s = slots[name], owner = ownedKey();
-  if (s.key === key && (s.owner === owner || adopting)) {
+  if (s.key === key && (s.owner === owner || (adopting && s.owner?.startsWith(`${listOf()}|`)))) {
     s.owner = owner;
     return;
   }
-  if (s.owner !== owner) s.result = null;
+  if (s.owner !== owner && !adopting) s.result = null;
   const ticket = {};
   Object.assign(s, { key, owner, status: 'loading', error: '', ticket });
   ask().then(r => {
@@ -190,8 +203,10 @@ function ensure(app, d) {
         askPool('styles', { ...(await inputs()), styles, mode: d.mode, k, filters }, { channel: 'disc-styles' }));
     }
   }
-  load(app, 'report', reportKey(), async () =>
-    askPool('report', { ...(await poolInputs()), k: 3 }, { channel: 'disc-report' }));
+  if (ownsAny()) {
+    load(app, 'report', reportKey(), async () =>
+      askPool('report', { ...(await poolInputs()), k: 3 }, { channel: 'disc-report' }));
+  }
 }
 
 // ---------- Is it a name, or notes? ----------
@@ -297,9 +312,12 @@ function emptyHTML(d, what) {
   return messageHTML({ glyph: icon.discover, title, body, action: all ? anyOf : '' });
 }
 
+// "Fill a gap": none for a wardrobe with nothing in it (Insights has nothing to look at either).
+const teaserHTML = () => (ownsAny() ? T.teaserHTML(slots.report, { wantedOf: wantedOf() }) : '');
+
 function listHTML(d, name, empty, { teaser = false } = {}) {
   return T.picksHTML(slots[name], {
-    insert: teaser ? T.teaserHTML(slots.report, { wantedOf: wantedOf() }) : '',
+    insert: teaser ? teaserHTML() : '',
     name,
     k: ks[name],
     ownedOf: ownedLabel,
@@ -344,7 +362,16 @@ function seedModel(d) {
   return { seeds, from: d.seeds ? 'given' : s.result?.from, chosen: Boolean(d.seeds), loading };
 }
 
+// The lib didn't load (offline before the service worker had it): only a reload asks again.
+const libFailedHTML = () => messageHTML({
+  glyph: icon.cloud,
+  title: 'Discover didn’t load',
+  body: 'It needs a connection the first time it opens. Reconnect, then reload.',
+  action: '<button class="btn primary" data-action="disc-reload">Reload</button>',
+});
+
 function browseHTML(d) {
+  if (libFailed) return `<div class="disc-layout solo"><div class="disc-main">${libFailedHTML()}</div></div>`;
   // Until the wardrobe and the lib are in, the shapes of what's coming (not "Pick a style").
   if (!wardrobeIn() || !lib) {
     return `<div class="disc-layout"><div class="disc-main" aria-busy="true">
@@ -376,7 +403,7 @@ function browseHTML(d) {
   } else {
     const labels = selected.map(id => lib.STYLES.find(x => x.id === id)?.label ?? id);
     head = `${T.stylePickerHTML({ styles: lib.STYLES, order: chipOrder(d), selected, mode: d.mode, owned: t.owned, all: allStyles })}${selected.length ? listHeadHTML(T.stylesTitle(labels, d.mode)) : ''}`;
-    list = selected.length ? listHTML(d, 'styles', emptyHTML(d, d.mode === 'all' && selected.length > 1 ? 'all' : 'styles'), { teaser: true }) : T.teaserHTML(slots.report, { wantedOf: wantedOf() });
+    list = selected.length ? listHTML(d, 'styles', emptyHTML(d, d.mode === 'all' && selected.length > 1 ? 'all' : 'styles'), { teaser: true }) : teaserHTML();
   }
   return `<div class="disc-layout">
       ${sideHTML(d)}
@@ -422,7 +449,7 @@ function searchHTML(d) {
   } else if (names.error && notesSlot.status !== 'loading') {
     // Offline with nothing on this device: one message, and the way to try again.
     results = T.searchErrorHTML(names.error);
-  } else if (names.results && (notesSlot.status === 'done' || notesSlot.status === 'error')) {
+  } else if (names.results && (notesSlot.status === 'done' || notesSlot.status === 'error' || libFailed)) {
     results = T.noMatchHTML(d.q);
   } else {
     results = `<p class="disc-count muted">Searching…</p>`;
@@ -446,7 +473,10 @@ function spoken(d) {
     if (mode === 'notes') return slots.notes.status === 'loading' ? 'Searching…' : `${plural(notes?.picks?.length ?? 0, 'bottle')} with ${notes?.terms?.join(' and ') ?? 'these notes'}${valueOn() ? ', great value only' : ''}`;
     return T.statusHTML(state.discover).replace(/<[^>]+>/g, '');
   }
-  const s = slots[d.tab === 'like' ? 'like' : 'styles'];
+  if (!lib || !wardrobeIn()) return '';
+  const like = d.tab === 'like', s = slots[like ? 'like' : 'styles'];
+  // Nothing to start from (no bottles, no styles): no list was asked for, so no count.
+  if (like ? (d.seeds ? !d.seeds.length : s.result?.seeds?.length === 0) : !selectedStyles(d).length) return '';
   if (s.status === 'loading') return 'Finding bottles…';
   if (s.status === 'error') return s.error;
   return s.result ? `${plural(s.result.picks.length, 'bottle')}${valueOn() ? ', great value only' : ''}` : '';
@@ -471,14 +501,41 @@ function repaint(app) {
   ensure(app, d);
   const strip = body.querySelector('.style-chips');
   const left = strip?.scrollLeft ?? 0;
-  app.keepingFocus(document.activeElement, '#disc-body', () => { body.innerHTML = bodyHTML(d); });
+  const focused = document.activeElement, inside = body.contains(focused);
+  app.keepingFocus(focused, '#disc-body', () => { body.innerHTML = bodyHTML(d); });
+  // The control went with the old list (a card the new answer left out): the list's title.
+  if (inside && !body.contains(document.activeElement)) focusTitle();
   const next = body.querySelector('.style-chips');
   if (next) next.scrollLeft = left;
   after(app);
   // The sheets show what the page has: how many bottles fit, the seeds
   // (a default landing, a picked bottle's record); their focus stays put.
-  if (state.sheet?.kind === 'disc-filters' || state.sheet?.kind === 'disc-seeds') {
-    app.keepingFocus(document.activeElement, '#sheet', () => app.renderSheet({ keepScroll: true }));
+  patchSheet(app);
+}
+
+// Redraws an open Discover sheet in parts: the pieces marked data-part are
+// replaced, and the live line (data-live) only changes its text, so it stays
+// the same node and screen readers hear the change (a status inserted
+// already filled says nothing). The seed picker's search field isn't a part:
+// it keeps focus, caret and a word being composed while its lists redraw.
+function patchSheet(app) {
+  if (state.sheet?.kind !== 'disc-filters' && state.sheet?.kind !== 'disc-seeds') return;
+  const el = document.getElementById('sheet');
+  const parts = [...(el?.querySelectorAll('[data-part]') ?? [])];
+  const html = parts.length && sheets[state.sheet.kind](state.sheet);
+  // (Not drawn yet, or nothing to show: the whole sheet, which closes itself then.)
+  if (!html) return app.keepingFocus(document.activeElement, '#sheet', () => app.renderSheet({ keepScroll: true }));
+  const fresh = document.createElement('template');
+  fresh.innerHTML = html;
+  app.keepingFocus(document.activeElement, '#sheet', () => {
+    for (const part of parts) {
+      const next = fresh.content.querySelector(`[data-part="${part.dataset.part}"]`);
+      if (next) part.replaceWith(next);
+    }
+  });
+  for (const live of el.querySelectorAll('[data-live]')) {
+    const text = fresh.content.querySelector(`[data-live="${live.dataset.live}"]`)?.textContent ?? '';
+    if (live.textContent !== text) live.textContent = text;
   }
 }
 
@@ -635,10 +692,14 @@ function watchSheets() {
 // ---------- Style chip tips ----------
 // A long press (touch) or a short hover (mouse) on a style chip says what
 // the style is and which owned bottles are it; keyboard focus too. Screen
-// readers hear the same as the chip's description.
+// readers hear the same as the chip's description. As WCAG 1.4.13 asks,
+// Escape puts it away (focus stays on the chip), and the pointer can move
+// onto it: it goes a moment after the pointer leaves both.
 
 let held = null; // { id, until }: a long press just showed a chip's tip, so its click doesn't toggle it
 let quietUntil = 0; // a chip was just toggled: the pointer resting on it doesn't bring up its tip
+// How long the tip waits for the pointer to cross from the chip onto it.
+const TIP_LEAVE_MS = 300;
 function wireTips() {
   const box = document.querySelector('#disc-body .disc-styles');
   if (!box || box.dataset.wired) return;
@@ -658,6 +719,7 @@ function wireTips() {
   };
   const hide = () => { clearTimeout(timer); tip.hidden = true; };
   const chipOf = e => e.target.closest?.('.style-chip');
+  const onTip = node => Boolean(node && tip.contains(node));
   box.addEventListener('pointerdown', e => {
     const chip = chipOf(e);
     if (!chip || e.pointerType === 'mouse') return;
@@ -672,12 +734,27 @@ function wireTips() {
     });
   }
   box.addEventListener('pointerover', e => {
+    if (e.pointerType !== 'mouse') return;
+    // Onto the tip: it stays.
+    if (onTip(e.target)) return clearTimeout(timer);
     const chip = chipOf(e);
-    if (!chip || e.pointerType !== 'mouse' || Date.now() < quietUntil) return;
+    if (!chip || Date.now() < quietUntil) return;
     clearTimeout(timer);
     timer = setTimeout(() => show(chip), 350);
   });
-  box.addEventListener('pointerout', e => { if (e.pointerType === 'mouse' && chipOf(e)) hide(); });
+  box.addEventListener('pointerout', e => {
+    if (e.pointerType !== 'mouse' || (!chipOf(e) && !onTip(e.target)) || onTip(e.relatedTarget)) return;
+    // (Moving within the tip, or within the chip, isn't leaving.)
+    if (e.relatedTarget && (e.target.closest('.style-chip, .disc-tip')?.contains(e.relatedTarget))) return;
+    clearTimeout(timer);
+    timer = setTimeout(hide, tip.hidden ? 0 : TIP_LEAVE_MS);
+  });
+  box.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || tip.hidden) return;
+    // The tip's, not the shell's (which would close a sheet or a bottle page).
+    e.stopPropagation();
+    hide();
+  });
   box.addEventListener('focusin', e => { const chip = chipOf(e); if (chip?.matches(':focus-visible')) show(chip); });
   box.addEventListener('focusout', hide);
   box.addEventListener('contextmenu', e => { if (chipOf(e)) e.preventDefault(); });
@@ -715,7 +792,11 @@ export const fields = {
   'disc-seed-q'(el, app) {
     clearTimeout(typing);
     const query = el.value;
-    app.updateSheet({ query });
+    // Kept in the sheet's state (a whole redraw writes it back); only the
+    // lists under the field redraw, so it keeps focus, caret and the keyboard.
+    if (state.sheet?.kind !== 'disc-seeds') return;
+    state.sheet.query = query;
+    patchSheet(app);
     typing = setTimeout(() => seedSearch(app, query.trim()), TYPING_MS);
   },
 };
@@ -791,16 +872,38 @@ export const actions = {
     else repaint(app);
     focusTitle();
   },
+  // Want / Wanted, as the kit's wish-toggle does it, but knowing a name
+  // search's hits (stubs) by name.
   'disc-want'(el, app) {
     const id = el.dataset.id;
     const hit = (state.discover.results ?? []).find(r => r.id === id);
     const record = findRecord(id) ?? hit;
+    const before = loadWants();
     // A name-search hit is a stub: keep only its id (the list loads it).
     const wants = setWant(record && !record.stub ? record : id);
-    const on = hasWant(wants, id);
-    repaint(app);
-    if (on) app.showToast(`<span>${esc(record?.name ?? 'Bottle')} is on your wishlist</span><a class="btn secondary compact" href="#/wardrobe/wishlist">See it</a>`);
-    else app.hideToast();
+    // Everything redraws: a bottle page docked beside the card has its own Want.
+    app.keepingFocus(el, '#app', app.render);
+    const name = esc(record?.name ?? 'Bottle');
+    if (hasWant(wants, id)) {
+      wantUndo = null;
+      return app.showToast(`<span class="note">${name} is on your wishlist.</span><a class="btn secondary compact" href="#/wardrobe/wishlist">See it</a>`);
+    }
+    wantUndo = { list: before, id };
+    app.showToast(`<span class="note">${name} removed from your wishlist.</span><button class="btn primary compact" data-action="disc-want-undo">Undo</button>`);
+  },
+  // The want list as it was; focus back on the heart that took it away.
+  'disc-want-undo'(el, app) {
+    if (!wantUndo) return;
+    const { list, id } = wantUndo;
+    wantUndo = null;
+    saveWants(list);
+    app.render();
+    app.hideToast();
+    (document.querySelector(`#disc-body [data-action="disc-want"][data-id="${CSS.escape(id)}"]`) ?? document.getElementById('page-title'))?.focus();
+  },
+  // The modules didn't load, and a failed import stays failed: only a reload asks again.
+  'disc-reload'() {
+    location.reload();
   },
   async 'disc-own'(el, app) {
     const id = el.dataset.id;
@@ -951,14 +1054,20 @@ export const actions = {
 // ---------- Sheets ----------
 
 // The seed picker's search: owned bottles by name, then the whole library.
+// Its answers redraw the lists, not the field (patchSheet).
 async function seedSearch(app, query) {
   const sheet = state.sheet;
   if (sheet?.kind !== 'disc-seeds') return;
-  if (query.length < MIN_QUERY) return app.updateSheet({ results: null, busy: false, error: '' });
-  app.updateSheet({ busy: true });
+  if (query.length < MIN_QUERY) {
+    Object.assign(sheet, { results: null, busy: false, error: '' });
+    return patchSheet(app);
+  }
+  sheet.busy = true;
+  patchSheet(app);
   const { results, error } = await findBottles(query);
-  if (state.sheet?.kind !== 'disc-seeds' || state.sheet.query.trim() !== query) return;
-  app.updateSheet({ results, busy: false, error: results.length ? '' : error });
+  if (state.sheet !== sheet || sheet.query.trim() !== query) return;
+  Object.assign(sheet, { results, busy: false, error: results.length ? '' : error });
+  patchSheet(app);
 }
 
 function seedRow(r, on, { disabled = false } = {}) {
@@ -988,12 +1097,14 @@ export function seedSheetHTML(sheet, { owned, chosen, picked = [], loading = fal
     <form class="search-form" data-form="disc-seed-search" role="search">
       <label class="filter">${icon.search}<input type="search" name="q" data-field="disc-seed-q" placeholder="Search any bottle" value="${esc(sheet.query ?? '')}" autocomplete="off" aria-label="Search bottles to start from"></label>
     </form>
-    ${picked.some(Boolean) ? `<p class="list-title">Picked</p><ul class="rows seed-rows">${picked.filter(Boolean).map(r => row(r, true)).join('')}</ul>` : ''}
-    ${more.length ? `<p class="list-title">From the library</p><ul class="rows seed-rows">${more.map(r => row(r, false)).join('')}</ul>` : ''}
-    <p class="list-title">${q ? 'Yours that match' : 'Yours'}</p>
-    ${mine.length ? `<ul class="rows seed-rows${loading ? ' loading' : ''}">${mine.map(r => row(r, false)).join('')}</ul>` : `<p class="muted small">${q ? 'None of yours match. Search finds any bottle.' : owned.length ? 'Every one of yours is picked.' : 'Your wardrobe is empty. Search for any bottle.'}</p>`}
+    <div data-part="seed-lists">
+      ${picked.some(Boolean) ? `<p class="list-title">Picked</p><ul class="rows seed-rows">${picked.filter(Boolean).map(r => row(r, true)).join('')}</ul>` : ''}
+      ${more.length ? `<p class="list-title">From the library</p><ul class="rows seed-rows">${more.map(r => row(r, false)).join('')}</ul>` : ''}
+      <p class="list-title">${q ? 'Yours that match' : 'Yours'}</p>
+      ${mine.length ? `<ul class="rows seed-rows${loading ? ' loading' : ''}">${mine.map(r => row(r, false)).join('')}</ul>` : `<p class="muted small">${q ? 'None of yours match. Search finds any bottle.' : owned.length ? 'Every one of yours is picked.' : 'Your wardrobe is empty. Search for any bottle.'}</p>`}
+    </div>
     <div class="sheet-bar spread">
-      <span class="muted" role="status">${esc(status || `${chosen.length} of ${SEED_MAX} picked`)}</span>
+      <span class="muted" role="status" data-live="seed-status">${esc(status || `${chosen.length} of ${SEED_MAX} picked`)}</span>
       <button class="btn primary" data-action="close-sheet">Done</button>
     </div>`;
 }

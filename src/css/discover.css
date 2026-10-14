@@ -13,7 +13,7 @@ body[data-route='discover'] .page > :is(#main, #foot) { --disc-col: 1120px; max-
 /* The field sticks to the top. Once it has (.stuck, from the view), a band
    of the page's color fills in behind it, across the column and its
    gutters, so the cards scrolling under it don't show above or through it. */
-.discover-search, .disc-search {
+.disc-search {
   position: sticky;
   top: -1px;
   z-index: 10;
@@ -31,7 +31,8 @@ body[data-route='discover'] .page > :is(#main, #foot) { --disc-col: 1120px; max-
   pointer-events: none;
 }
 .disc-search.stuck::before { opacity: 1; }
-@container page (min-width: 600px) { .disc-search::before { inset-inline: calc(-1 * var(--s-6)); } }
+/* Out to the page's edges: its padding grows at 720px of window (shell.css). */
+@media (min-width: 720px) { .disc-search::before { inset-inline: calc(-1 * var(--s-6)); } }
 .disc-search .filter { background: color-mix(in srgb, var(--surface-2) 92%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: 0 10px 24px -14px rgb(var(--shade) / 0.8); }
 @media (prefers-reduced-transparency: reduce) { .disc-search .filter { background: var(--surface-2); } }
 
@@ -175,7 +176,8 @@ body[data-route='discover'] .page > :is(#main, #foot) { --disc-col: 1120px; max-
 .style-chip.on::after { display: none; }
 .style-chip.on svg { display: block; }
 
-/* What a style is: over the chip held (touch) or hovered (mouse). */
+/* What a style is: over the chip held (touch) or hovered (mouse). The
+   pointer can move onto it (it stays while it's there), WCAG 1.4.13. */
 .disc-tip {
   position: absolute;
   z-index: 20;
@@ -190,7 +192,6 @@ body[data-route='discover'] .page > :is(#main, #foot) { --disc-col: 1120px; max-
   box-shadow: var(--e-float);
   font-size: var(--fs-footnote);
   line-height: var(--lh-footnote);
-  pointer-events: none;
   transform: translate(-50%, calc(-100% - var(--s-2)));
   animation: tip-in var(--dur-2) var(--ease-out);
 }
