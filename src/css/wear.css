@@ -299,11 +299,12 @@
 .wk-temps small { color: var(--text-tertiary); font-size: var(--fs-caption); }
 .wk-pop { color: var(--info); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; font-variant-numeric: tabular-nums; }
 .wk-picks { display: grid; gap: var(--s-1); min-width: 0; }
-/* A pick: its time of day as a glyph (a check once worn), the photo, the name. */
+/* A pick: the photo with its time of day as a badge (a check once worn),
+   then the name, which gets the rest of the row. */
 .wk-pick {
   position: relative;
   display: grid;
-  grid-template-columns: 16px 26px minmax(0, 1fr);
+  grid-template-columns: 30px minmax(0, 1fr);
   align-items: center;
   gap: var(--s-2);
   min-width: 0;
@@ -319,19 +320,41 @@
 @media (hover: hover) { .wk-pick:hover { border-color: var(--border-strong); background: var(--surface-3); } }
 .wk-pick img { width: 26px; height: 32px; object-fit: contain; }
 .wk-pick.worn { border-color: color-mix(in srgb, var(--positive) 45%, transparent); }
-.wk-slot { display: grid; place-items: center; color: var(--text-tertiary); }
-.wk-slot svg { width: 14px; height: 14px; }
+/* The badge sits on the photo's lower right, cut out of it by the card's
+   own color (inherited, so it follows the hover). */
+.wk-slot {
+  position: absolute;
+  left: calc(var(--s-2) + 19px);
+  bottom: var(--s-1);
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-round);
+  background: inherit;
+  box-shadow: 0 0 0 1px var(--border-subtle);
+  color: var(--text-secondary);
+}
+.wk-slot svg { width: 10px; height: 10px; }
 .wk-pick.worn .wk-slot { color: var(--positive); }
 .wk-text { display: grid; min-width: 0; }
 .wk-text b { overflow: hidden; font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .wk-nudge { display: flex; align-items: center; gap: var(--s-1); overflow: hidden; color: var(--ambient); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 500; white-space: nowrap; }
 .wk-nudge svg { width: 11px; height: 11px; flex: none; }
+.wk-nudge span { overflow: hidden; text-overflow: ellipsis; }
+.wk-nudge .wk-short { display: none; }
+/* The note under the head says what the clock means. */
+.wk-legend { display: flex; align-items: center; gap: var(--s-1); margin-top: var(--s-1); color: var(--ambient); }
+.wk-legend svg { width: 13px; height: 13px; flex: none; }
 .wk-pick.empty { grid-template-columns: 16px 1fr; background: transparent; border-style: dashed; color: var(--text-tertiary); font-size: var(--fs-caption); }
+.wk-pick.empty .wk-slot { position: static; width: auto; height: auto; background: none; box-shadow: none; color: var(--text-tertiary); }
+.wk-pick.empty .wk-slot svg { width: 14px; height: 14px; }
 @media (max-width: 374px) {
   .wk-day { grid-template-columns: 40px 44px 1fr; gap: var(--s-2); }
   .wk-temps { flex-direction: column; align-items: center; gap: 0; line-height: 1.2; }
-  .wk-pick { grid-template-columns: 14px 22px minmax(0, 1fr); padding-right: var(--s-2); }
+  .wk-pick { grid-template-columns: 26px minmax(0, 1fr); padding-right: var(--s-2); }
   .wk-pick img { width: 22px; height: 28px; }
+  .wk-slot { left: calc(var(--s-2) + 15px); }
 }
 /* Room for the whole week side by side: a column a day, the day's pick
    over the night's. */
@@ -358,14 +381,18 @@
   .wk-pop[aria-hidden='true'] { display: none; }
   .wk-picks { width: 100%; align-self: end; }
   .wk-pick { grid-template-columns: 1fr; justify-items: center; gap: var(--s-1); padding: var(--s-2) var(--s-1); text-align: center; }
-  .wk-pick .wk-slot { position: absolute; top: var(--s-2); left: var(--s-2); }
+  .wk-pick .wk-slot { top: var(--s-2); left: var(--s-2); bottom: auto; width: auto; height: auto; background: none; box-shadow: none; color: var(--text-tertiary); }
+  .wk-pick .wk-slot svg { width: 14px; height: 14px; }
+  .wk-pick.worn .wk-slot { color: var(--positive); }
   .wk-pick img { width: 40px; height: 48px; }
   .wk-text { justify-items: center; max-width: 100%; }
   .wk-text b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; min-height: calc(2 * var(--lh-footnote)); }
-  /* The nudge as a glyph in the corner; the button's label says it. */
-  .wk-nudge { position: absolute; top: var(--s-2); right: var(--s-2); }
-  .wk-nudge span { display: none; }
-  .wk-nudge svg { width: 13px; height: 13px; }
+  /* The nudge in the column's words: the clock and "34 days", on a line
+     every cell keeps while one has it, so the days' cells stay in rows. */
+  .wk-list.nudged .wk-text { align-content: start; min-height: calc(2 * var(--lh-footnote) + var(--lh-caption)); }
+  .wk-nudge { justify-content: center; max-width: 100%; }
+  .wk-nudge .wk-long { display: none; }
+  .wk-nudge .wk-short { display: inline; }
   .wk-pick.empty { grid-template-columns: 1fr; min-height: 104px; place-content: center; }
 }
 
@@ -401,7 +428,7 @@
   border: 1px solid var(--border-subtle);
   box-shadow: var(--e2);
   text-align: center;
-  scroll-snap-align: start;
+  scroll-snap-align: center;
   transition: transform var(--dur-1) var(--ease-out), background-color var(--dur-2), border-color var(--dur-2);
 }
 .occ:active { transform: scale(0.97); }
@@ -539,6 +566,8 @@
 .trip-select svg { position: absolute; right: var(--s-3); width: 14px; height: 14px; color: var(--text-tertiary); transform: rotate(90deg); pointer-events: none; }
 .trip-select select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .trip-error { margin: 0; }
+/* While the weather loads the fields are inert: they say so. */
+.trip-fields[inert] .trip-field { opacity: 0.5; transition: opacity var(--dur-2); }
 .trip-submit { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
 
 /* The trip at a glance. */
@@ -554,7 +583,7 @@
 .trip-tag { display: inline-flex; align-items: center; gap: var(--s-1); padding: var(--s-0) var(--s-2); border-radius: var(--r-pill); background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; white-space: nowrap; }
 .trip-tag svg { width: 12px; height: 12px; }
 .trip-wx { display: flex; align-items: center; gap: var(--s-2); margin-top: var(--s-3); padding-top: var(--s-3); border-top: 1px solid var(--border-subtle); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
-.trip-wx .wx svg { width: 18px; height: 18px; }
+.trip-wx > svg { width: 18px; height: 18px; flex: none; color: var(--ambient); }
 .trip-wx.updating span::after { content: ''; display: inline-block; width: 6px; height: 6px; margin-left: var(--s-2); border-radius: var(--r-round); background: currentColor; animation: breathe 1.4s ease-in-out infinite; }
 .trip-note { margin-top: var(--s-2); color: var(--negative); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 
@@ -619,12 +648,14 @@ button.trip-cell:active { transform: scale(0.98); }
 .trip-wx-cell .wx svg { width: 18px; height: 18px; }
 .trip-temp i { margin-right: 1px; font-style: normal; color: var(--text-tertiary); }
 .trip-cell img { width: 24px; height: 30px; object-fit: contain; }
-.trip-name { display: grid; min-width: 0; overflow: hidden; font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.trip-name { display: grid; justify-items: start; min-width: 0; font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
+.trip-name-text { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trip-name small { display: flex; align-items: center; gap: var(--s-1); color: var(--accent); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; }
 .trip-name small svg { width: 12px; height: 12px; flex: none; }
-.trip-cell.off .trip-name { color: var(--text-secondary); }
+.trip-cell.off .trip-name-text { color: var(--text-secondary); }
 .trip-cell.off img { opacity: 0.55; }
-.trip-cell.off .trip-slot { color: var(--negative); }
+/* Not ideal: a dashed tag in words, so it doesn't rest on color. */
+.trip-name .trip-off { margin-top: var(--s-0); padding: 0 var(--s-2); border: 1px dashed currentColor; border-radius: var(--r-pill); color: var(--negative); font-weight: 600; }
 .trip-cell.none { grid-template-columns: 16px 1fr; color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
 @container page (min-width: 560px) {
   .trip-cols { display: grid; grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr); gap: var(--s-3); margin-bottom: var(--s-1); color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; }
@@ -638,6 +669,13 @@ button.trip-cell:active { transform: scale(0.98); }
   .trip-cell.none { grid-template-columns: 1fr; }
 }
 
+/* Packing again: the last plan stays, dimmed, until the new one is in. */
+.trip-out { display: grid; gap: inherit; transition: opacity var(--dur-2); }
+.trip-out.refreshing { opacity: 0.55; }
+/* Scrolled to after packing: clear of the sticky sub-navigation above and
+   the tab bar below. */
+.trip-head, .trip-sk { scroll-margin: calc(var(--s-2) + var(--head-bar) + var(--s-4)) 0 calc(var(--tabbar) + var(--s-4)); }
+.trip-sk:focus { outline: none; } /* focused while the weather loads, for screen readers */
 .trip-sk-bags { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-4); margin-top: var(--s-4); }
 .trip-sk-bags .sk { height: 120px; border-radius: var(--r-inset); }
 .trip-sk .sk-line.w40 { margin-bottom: var(--s-3); }

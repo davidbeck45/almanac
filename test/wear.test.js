@@ -12,6 +12,7 @@ import * as wear from '../src/views/wear.js';
 import * as trip from '../src/views/wear/trip.js';
 import * as when from '../src/views/wear/when.js';
 import { placeSheetHTML, datePillHTML } from '../src/views/wear/pickers.js';
+import { wxIconFor } from '../src/ui/components.js';
 import * as app from '../src/app/state.js';
 import { syntheticForecast } from './fixtures.js';
 
@@ -89,6 +90,9 @@ test('the trip, event and pick templates render clean: no undefined or NaN, name
   assert.equal((renders.pick.match(/Not worn in 34 days/g) ?? []).length, 1, 'not again among the reasons');
   assert.match(renders.pick, /data-action="spray-open"[^>]*>.*\d spray/s, 'the spray line opens the spray section');
   assert.match(renders.week, /wk-nudge/, 'the week marks a nudged pick');
+  assert.match(renders.week, /class="wk-short">34 days</, 'in a word or two on the board');
+  assert.match(renders.week, /class="wk-legend"/, 'and the note says what the clock means');
+  assert.ok(!wear.weekHTML(week(forecast, nowMs).map(d => ({ ...d, day: null, night: null }))).includes('wk-legend'), 'only when a pick has it');
   assert.match(renders.slotHead, /Typical weather/);
   assert.match(renders.plan, /≈/, 'typical weather is marked in the plan');
   assert.match(renders.pack, /data-action="trip-copy"/);
@@ -141,8 +145,11 @@ test('the packing list says what to pack and what to wear each day', () => {
   const lines = text.split('\n');
   assert.equal(lines[0], `Packing for ${EVIL}, ${trip.datesText(saved.fromISO, saved.toISO)}`);
   for (const b of packed.bottles) assert.ok(text.includes(`${b.record.name} (${b.record.brand}): `), b.record.name);
-  assert.equal(lines.filter(l => /: .* (by day|at night)/.test(l)).length, new Set(tripWindows.map(w => w.dateISO)).size, 'a line a day');
-  assert.match(text, /\(formal\) at night/, 'the event says so');
+  assert.equal(lines.filter(l => /^\w{3}, \w{3} \d+: /.test(l)).length, new Set(tripWindows.map(w => w.dateISO)).size, 'a line a day');
+  const formal = packed.plan.find(p => p.occasion);
+  assert.ok(lines.includes(`${trip.windowName(third, 'day').split(',')[0]}, ${trip.datesText(third, third)}: ${packed.plan.find(p => p.window.dateISO === third && p.window.slot === 'day').pick.name} by day; formal at night: ${formal.pick.name}`), 'the event names itself, then its bottle');
+  assert.match(text, /formal wear on [A-Z][a-z]{2}\b/, 'weekdays keep their capitals');
+  assert.ok(!/\(formal\)|\bon (mon|tue|wed|thu|fri|sat|sun)\b/.test(text), text);
   assert.match(text, /Typical weather from/, 'and where the forecast ends');
   // Roles read as words.
   const roles = packed.bottles.map(b => trip.roleOf(b.record, packed.plan));
@@ -150,6 +157,106 @@ test('the packing list says what to pack and what to wear each day', () => {
   assert.ok(roles.some(r => /formal wear on \w{3}/.test(r)), roles.join(' / '));
   assert.equal(trip.datesText('2026-10-16', '2026-10-19'), 'Oct 16–19');
   assert.equal(trip.datesText('2026-10-30', '2026-11-02'), 'Oct 30 – Nov 2');
+});
+
+test('a trip under way keeps its start: events and the end can still change', () => {
+  const started = { ...saved, fromISO: shiftISO(today, -2), toISO: shiftISO(today, 3) };
+  const draft = { place: started.place, fromISO: started.fromISO, toISO: started.toISO, events: [], max: 3 };
+  assert.equal(trip.checkTrip(draft, today, started), '', 'its own start has passed, and that’s fine');
+  assert.equal(trip.checkTrip({ ...draft, toISO: shiftISO(today, 6) }, today, started), '', 'a longer stay');
+  assert.match(trip.checkTrip({ ...draft, fromISO: shiftISO(today, -1) }, today, started), /starts on a date that has passed/, 'a new start can’t be in the past');
+  assert.match(trip.checkTrip({ ...draft, toISO: shiftISO(today, -1) }, today, started), /ends on a date that has passed/);
+  // The form: the start may stay where it was; events go on days to come.
+  const html = trip.tripFormHTML(draft, { today, adding: { dateISO: today, slot: 'night', occasion: 'date' }, editing: true, packed: true, startedOn: started.fromISO });
+  assert.match(html, new RegExp(`data-field="trip-from"[^>]*min="${started.fromISO}"`));
+  assert.match(html, new RegExp(`data-field="trip-to"[^>]*min="${today}"`));
+  const days = [...html.matchAll(/<option value="(\d{4}-\d{2}-\d{2})"/g)].map(m => m[1]);
+  assert.deepEqual(days, Array.from({ length: 4 }, (_, i) => shiftISO(today, i)), 'the event’s day: today on');
+  // Whose weather: the days gone by don't count, and typical weather starts
+  // after the last forecast window.
+  const w = (dateISO, typical = false) => ({ dateISO, slot: 'day', typical });
+  const past = [w(shiftISO(today, -2), true), w(shiftISO(today, -1), true), w(today), w(shiftISO(today, 1)), w(shiftISO(today, 2), true)];
+  assert.deepEqual(trip.weatherOf(past, today), { all: false, some: true, from: shiftISO(today, 2) });
+  assert.deepEqual(trip.weatherOf(past.slice(0, 4), today), { all: false, some: false, from: null });
+  assert.deepEqual(trip.weatherOf([w(today, true), w(shiftISO(today, 1)), w(shiftISO(today, 2))], today), { all: false, some: false, from: null }, 'today’s daytime gone from the forecast isn’t “typical from today”');
+  assert.equal(trip.weatherOf([w(today, true), w(shiftISO(today, 1), true)], today).all, true);
+  const summary = trip.tripSummaryHTML({ ...started, windows: past }, { today });
+  assert.match(summary, new RegExp(`typical weather from ${trip.datesText(shiftISO(today, 2), shiftISO(today, 2))}\\.`));
+});
+
+test('a trip under way updates from the form: the open event is added, the days gone keep their weather, and a date changed mid-fetch isn’t saved', async () => {
+  // The pane's handlers with no page: the shell's calls do nothing, and the
+  // weather comes from the synthetic forecast a moment later.
+  const { state } = app;
+  const live = syntheticForecast(10, { start: new Date(Date.now() - 4 * 3600e3 - 86_400_000).toISOString().slice(0, 10) });
+  state.wx = summarize(live);
+  const today = state.wx.todayISO;
+  state.demo = { fetched: today, fragrances };
+  Object.assign(state, { shared: null, active: 'demo', route: { dest: 'wear', pane: 'trip' } });
+  const realFetch = globalThis.fetch, realDoc = globalThis.document;
+  const asked = [];
+  globalThis.fetch = async url => {
+    const u = new URL(String(url));
+    asked.push(u);
+    await new Promise(r => setTimeout(r, 20));
+    const body = u.hostname.startsWith('archive')
+      ? syntheticForecast(Math.round((Date.parse(u.searchParams.get('end_date')) - Date.parse(u.searchParams.get('start_date'))) / 864e5) + 1, { start: u.searchParams.get('start_date') })
+      : live;
+    return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+  };
+  globalThis.document = { querySelector: () => null, getElementById: () => null, activeElement: null };
+  const ui = { renderPage() {}, refocus() { return false; }, keepingFocus(el, scope, f) { f(); } };
+  try {
+    // Started two days ago; those days' weather is marked to tell it apart.
+    const past = [-2, -1].flatMap(d => ['day', 'night'].map(slot => ({ ...wx[slot], slot, dateISO: shiftISO(today, d), label: 'x', feelsF: 40 })));
+    trip.saveTrip({ place: { name: 'Lisbon', region: '', lat: 38.7, lon: -9.1 }, fromISO: shiftISO(today, -2), toISO: shiftISO(today, 2), events: [], max: 3, windows: [...past, ...windows.filter(w => w.dateISO >= today).slice(0, 6)], fetchedAt: Date.now() });
+    trip.actions['trip-edit'](null, ui);
+    trip.actions['trip-ev-add'](null, ui); // filled in (formal, the first night to come) but never Added
+    trip.changes['trip-to']({ value: shiftISO(today, 4) }, ui);
+    const packing = trip.forms['trip-pack'](null, ui);
+    trip.changes['trip-to']({ value: shiftISO(today, 9) }, ui); // while the weather loads
+    await packing;
+    const back = trip.loadTrip();
+    assert.equal(back.fromISO, shiftISO(today, -2), 'the start stays');
+    assert.equal(back.toISO, shiftISO(today, 4), 'the dates asked for, not the ones picked meanwhile');
+    assert.equal(back.windows.at(-1).dateISO, shiftISO(today, 4), 'and weather for those dates');
+    assert.deepEqual(back.events, [{ dateISO: today, slot: 'night', occasion: 'formal' }], 'the open event, on the first night still to come');
+    assert.deepEqual(back.windows.filter(w => w.dateISO < today).map(w => w.feelsF), [40, 40, 40, 40], 'the days gone keep the weather saved for them');
+    assert.ok(asked.every(u => !u.hostname.startsWith('archive') || u.searchParams.get('start_date') >= today), 'nothing fetched for them');
+    // An event on the same trip: no fetch at all.
+    asked.length = 0;
+    trip.actions['trip-edit'](null, ui);
+    trip.actions['trip-ev-add'](null, ui);
+    trip.changes['trip-ev-date']({ value: shiftISO(today, 1) });
+    trip.changes['trip-ev-occ']({ value: 'date' });
+    await trip.forms['trip-pack'](null, ui);
+    assert.equal(asked.length, 0);
+    assert.deepEqual(trip.loadTrip().events.map(e => `${e.dateISO} ${e.slot} ${e.occasion}`), [`${today} night formal`, `${shiftISO(today, 1)} night date`]);
+  } finally {
+    globalThis.fetch = realFetch;
+    globalThis.document = realDoc;
+    state.route = null;
+  }
+});
+
+test('night windows draw the moon, days the sun', () => {
+  assert.match(wxIconFor({ slot: 'night', category: 'clear' }), /class="mn"/);
+  assert.match(wxIconFor({ slot: 'night', category: 'partly' }), /class="mn"/);
+  assert.match(wxIconFor({ slot: 'day', category: 'clear' }), /class="sn"/);
+  assert.match(wxIconFor({ slot: 'night', category: 'rain' }), /data-cat="rain"/, 'clouds and rain look the same either way');
+  const nightHead = wear.slotHeadHTML({ ...wx.night, category: 'clear' }, 20, { id: 'x' });
+  assert.match(nightHead, /class="mn"/);
+  assert.ok(!/class="sn"/.test(nightHead));
+  assert.ok(!/class="sn"/.test(trip.tripPlanHTML({ ...packed, plan: packed.plan.filter(p => p.window.slot === 'night').map(p => ({ ...p, window: { ...p.window, category: 'clear' } })) }, { today })), 'nor the trip’s nights');
+});
+
+test('“When and where?” says Day and Night, and the date of the window shown', () => {
+  const later = { ...wx, day: { ...wx.day, dateISO: shiftISO(today, 1) } };
+  const bar = slot => when.whenBarHTML({ home: { name: 'Here' }, today, slot, wx: later });
+  for (const slot of ['day', 'night']) assert.match(bar(slot), /aria-label="Time of day"[^]*>Day<[^]*>Night</);
+  assert.ok(!/Tonight|Tomorrow night/.test(bar('night')));
+  assert.match(bar('day'), /Date: Tomorrow\. Change/, 'today’s daytime over: Day is tomorrow’s, and the pill says so');
+  assert.match(bar('night'), /Date: Today\. Change/);
 });
 
 test('an event’s heading says what, when and where', () => {
@@ -208,6 +315,40 @@ test('rankings take your ratings and the rotation nudge; the cache follows the s
   assert.ok(state.today[next.slot].ranked.find(r => r.fragrance.id === top).reasons.some(r => r.text === 'You rate it 1★'));
   assert.ok(!fragrances.find(f => f.id === top).personal, 'the records themselves stay as they were');
   assert.ok(!app.activeFragrances().find(f => f.id === top).personal, 'and the pool’s questions keep the crowd’s footing');
+});
+
+test('Occasion nudges only today here: an event on a later date gets the best for it', () => {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  const wx = summarize(live);
+  const today = wx.todayISO;
+  Object.assign(state, { demo: { fetched: today, fragrances }, forecast: live, wx, loc: { name: 'Here', lat: 40, lon: -74 }, shared: null, active: 'demo', occasionSlot: null });
+  const casual = occasionById('casual');
+  const pane = wear.wear.panes.find(p => p.id === 'occasion');
+  const route = { dest: 'wear', pane: 'occasion', arg: 'casual' };
+  const win = when.eventWindow(casual.slot).win;
+  // A journal where the one bottle within reach of the top has sat a month
+  // (the rest worn 12 to 19 days back, too long ago to count against them).
+  const plain = rank(app.rankedFragrances(), win, win.slot, { occasion: casual, todayISO: win.dateISO });
+  const idle = plain.find((r, i) => i > 0 && plain[0].score - r.score <= PLAN_MARGIN && r.tier === plain[0].tier).fragrance;
+  state.history = app.activeFragrances().filter(f => f.id !== idle.id).map((f, i) => ({ id: f.id, date: shiftISO(today, -12 - (i % 8)), slot: 'day' }))
+    .concat({ id: idle.id, date: shiftISO(today, -40), slot: 'night' });
+  const nowHtml = pane.render({}, route);
+  assert.equal(state.contexts.occ.ranked[0].fragrance.id, idle.id, 'today here, the idle bottle takes its turn');
+  assert.ok(state.contexts.occ.ranked[0].nudged);
+  assert.match(nowHtml, /<p class="kicker">Due a wear<\/p>/, 'and the card doesn’t call it the best');
+  assert.ok(!nowHtml.includes('Best for casual'));
+  // Five days on, the journal can't say what will be idle: the best leads.
+  when.when.dateISO = shiftISO(today, 5);
+  try {
+    const laterHtml = pane.render({}, route);
+    assert.equal(state.contexts.occ.win.dateISO, shiftISO(today, 5));
+    assert.ok(!state.contexts.occ.ranked.some(r => r.nudged), 'never nudged on another date');
+    assert.ok(!state.contexts.occ.ranked.some(r => r.reasons.some(x => /^Not worn/.test(x.text))));
+    assert.match(laterHtml, /Best for casual/);
+  } finally {
+    when.when.dateISO = null;
+  }
 });
 
 test('a wear from the Occasion pane keeps its occasion; from Now, daily', () => {

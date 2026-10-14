@@ -13,7 +13,7 @@ import { toggleWear, wornIn, journalStats, shiftISO } from '../history.js';
 import { routeHash } from '../app/router.js';
 import { esc, temp, deg, plural, shortDate, weekdayShort, windowRange, feelWords, displayReasons } from '../ui.js';
 import {
-  icon, img, slotIcon, wxIcon, messageHTML, skeletonHTML, reasonsList, chips, matchBadge, shelfHTML,
+  icon, img, slotIcon, wxIcon, wxIconFor, messageHTML, skeletonHTML, reasonsList, chips, matchBadge, shelfHTML,
   wearButton, segHTML, sharedBannerHTML, accordColor, sectionHead,
 } from '../ui/components.js';
 import {
@@ -119,7 +119,7 @@ export function slotHeadHTML(win, hour, { id, thumb = false, title = null } = {}
     ${scene}
     <div class="slot-title">
       <h2${id ? ` id="${id}"` : ''}>${slotIcon(win.slot)}<span>${esc(title ?? win.label)}</span></h2>
-      <p class="slot-line"><span class="slot-time">${esc(windowRange(win, hour))}</span><span class="slot-wx">${wxIcon(win.category)}<span>${esc(weather)}</span></span>${win.typical ? '<span class="slot-typical">Typical weather</span>' : ''}</p>
+      <p class="slot-line"><span class="slot-time">${esc(windowRange(win, hour))}</span><span class="slot-wx">${wxIconFor(win)}<span>${esc(weather)}</span></span>${win.typical ? '<span class="slot-typical">Typical weather</span>' : ''}</p>
     </div>
   </header>`;
 }
@@ -209,21 +209,25 @@ function alsoHTML(ranked, pick, ctx, worn, label) {
 
 // ---------- Week ----------
 
-// A window's pick: its time of day as a glyph, the bottle, and marks for a
-// logged wear and for a bottle the rotation nudge brought back.
+// A window's pick: the bottle with its time of day as a badge on the photo,
+// and marks for a logged wear and for a bottle the rotation nudge brought
+// back ("Not worn in 34 days" in a row, "34 days" under the clock in the
+// board's narrow columns, which the board's note explains).
 function weekPick(p, slot, dayName) {
   if (!p) return `<span class="wk-pick empty"><span class="wk-slot">${slotIcon(slot)}</span><span class="wk-none">Done for today</span></span>`;
   const f = p.pick.fragrance;
   const nudge = nudgeOf(p.pick);
+  const short = p.pick.parts?.unworn ? 'Unworn' : plural(p.pick.parts?.idle ?? 0, 'day');
   const spoken = [`${dayName} ${slot === 'day' ? 'daytime' : 'night'}: ${f.name}`, p.worn && 'wearing', nudge].filter(Boolean).join(', ');
-  return `<button class="wk-pick${p.worn ? ' worn' : ''}" data-action="open" data-ctx="${esc(p.ctx)}" data-id="${esc(f.id)}" aria-label="${esc(spoken)}">
-    <span class="wk-slot">${p.worn ? icon.check : slotIcon(slot)}</span>
+  return `<button class="wk-pick${p.worn ? ' worn' : ''}" data-action="open" data-ctx="${esc(p.ctx)}" data-id="${esc(f.id)}" aria-label="${esc(spoken)}"${nudge ? ` title="${esc(nudge)}"` : ''}>
     ${img(f)}
-    <span class="wk-text"><b>${esc(f.name)}</b>${nudge ? `<small class="wk-nudge">${icon.clock}<span>${esc(nudge)}</span></small>` : ''}</span>
+    <span class="wk-slot">${p.worn ? icon.check : slotIcon(slot)}</span>
+    <span class="wk-text"><b>${esc(f.name)}</b>${nudge ? `<small class="wk-nudge">${icon.clock}<span class="wk-long">${esc(nudge)}</span><span class="wk-short">${esc(short)}</span></small>` : ''}</span>
   </button>`;
 }
 
 export function weekHTML(days) {
+  const nudged = days.some(d => d.day?.pick.nudged || d.night?.pick.nudged);
   const rows = days.map(d => `
     <li class="wk-day${d.isToday ? ' today' : ''}">
       <div class="wk-date"><b>${esc(d.isToday ? 'Today' : weekdayShort(d.dateISO))}</b><small>${esc(shortDate(d.dateISO))}</small></div>
@@ -231,8 +235,8 @@ export function weekHTML(days) {
       <div class="wk-picks">${weekPick(d.day, 'day', d.name)}${weekPick(d.night, 'night', d.name)}</div>
     </li>`).join('');
   return `<section class="card week" aria-labelledby="week-title">
-    ${sectionHead(`${icon.calendar}The week ahead`, '<p>Planned against the forecast so nothing repeats back to back. Tap a bottle to see why.</p>', { id: 'week-title' })}
-    <ol class="wk-list" style="--days:${days.length}">${rows}</ol>
+    ${sectionHead(`${icon.calendar}The week ahead`, `<p>Planned against the forecast so nothing repeats back to back. Tap a bottle to see why.</p>${nudged ? `<p class="wk-legend">${icon.clock}<span>A bottle you haven’t worn in a while gets a turn.</span></p>` : ''}`, { id: 'week-title' })}
+    <ol class="wk-list${nudged ? ' nudged' : ''}" style="--days:${days.length}">${rows}</ol>
   </section>`;
 }
 
@@ -366,24 +370,30 @@ function occasionPane(app, route) {
       action: `<button class="btn primary" data-action="occ-when-retry">${icon.refresh}<span>Try again</span></button>` });
   }
   const { win } = ev;
-  const ranked = rankContext('occ', win, occasion);
+  // The rotation nudge only for today here: on another date the journal
+  // can't say what will have been worn by then, and a wedding wants the best.
+  const ranked = rankContext('occ', win, occasion, { nudge: Boolean(ev.here) });
   const worn = wornId(win);
+  // A nudged pick isn't the best for it (that one leads Also good).
+  const kicker = ranked[0].nudged ? 'Due a wear' : `Best for ${occasion.label.toLowerCase()}`;
   return `${head}
     <section class="card slot" aria-labelledby="occ-title">
       ${slotHeadHTML(win, ev.here ? nowHour() : -1, { id: 'occ-title', thumb: true, title: occasionHeading(route, ev) })}
-      ${pickHTML(ranked[0], 'occ', worn, { canWear: canWear(win), full: true, kicker: `Best for ${occasion.label.toLowerCase()}` })}
+      ${pickHTML(ranked[0], 'occ', worn, { canWear: canWear(win), full: true, kicker })}
       ${alsoHTML(ranked, ranked[0], 'occ', worn, `for ${occasion.label.toLowerCase()}`)}
     </section>`;
 }
 
-// Keeps the chosen occasion in view in the sideways strip on phones. A card
-// cut off at either edge moves to the start, where the strip snaps anyway.
+// Keeps the chosen occasion in view in the sideways strip on phones: in the
+// middle, so tiles peek out at both edges and the strip reads as one that
+// scrolls. Only when it's cut off, so a tap doesn't jolt the strip.
 function showChosenOccasion() {
   const strip = document.querySelector('.occasions');
   const card = strip?.querySelector('[aria-checked="true"]');
   if (!card || strip.scrollWidth <= strip.clientWidth) return;
   const s = strip.getBoundingClientRect(), c = card.getBoundingClientRect(), pad = 16, fade = 28;
-  if (c.left < s.left + pad || c.right > s.right - fade) strip.scrollLeft += c.left - s.left - pad;
+  if (c.left >= s.left + pad && c.right <= s.right - fade) return;
+  strip.scrollLeft += c.left + c.width / 2 - (s.left + s.width / 2);
 }
 
 function weekPane() {
@@ -391,10 +401,10 @@ function weekPane() {
 }
 
 // Packing for a trip (wear/trip.js): no forecast of your own needed, only bottles.
-function tripPane() {
+function tripPane(app) {
   if (!state.demo && !state.shared && state.active === 'demo') return skeletonHTML(1);
   if (!activeFragrances().length) return banner() + emptyState();
-  return banner() + trip.renderTrip();
+  return banner() + trip.renderTrip(app);
 }
 
 const place = () => state.loc?.name ?? 'your area';

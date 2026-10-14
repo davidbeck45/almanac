@@ -166,8 +166,10 @@ export function storeContext(key, win, occasion, ranked) {
 
 // Rankings put a bottle left on the shelf a month first when it's within
 // reach of the top (the engine's rotation nudge: "Not worn in 34 days").
-export function rankContext(key, win, occasion) {
-  const ranked = rank(rankedFragrances(), win, win.slot, { occasion, history: state.history, todayISO: win.dateISO, nudge: true });
+// Only for a window you're about to wear in: `nudge: false` for a later date
+// or another place (an event), where the journal can't say what's idle then.
+export function rankContext(key, win, occasion, { nudge = true } = {}) {
+  const ranked = rank(rankedFragrances(), win, win.slot, { occasion, history: state.history, todayISO: win.dateISO, nudge });
   storeContext(key, win, occasion, ranked);
   return ranked;
 }
@@ -225,7 +227,10 @@ export function nowHour() {
   return new Date(Date.now() + offset * 1000).getUTCHours();
 }
 
-export const todayISO = () => state.wx?.todayISO ?? new Date().toISOString().slice(0, 10);
+// The place's date once its forecast is in, else the device's (not UTC's,
+// a day ahead by evening in the Americas).
+export const deviceToday = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+export const todayISO = () => state.wx?.todayISO ?? deviceToday();
 
 // ---------- Wear journal ----------
 

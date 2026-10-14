@@ -86,21 +86,21 @@ export function eventWindow(slot, app = null) {
   return { status: 'ready', win: entry[slot] ?? entry.day ?? entry.night };
 }
 
-// The control: the date, the place, and day or night. On today, the
-// windows' own names (Today, Tonight); on another date, Day and Night.
+// The control: the date, the place, and Day or Night. On today here the
+// date is the shown window's: once today's daytime is over, Day is
+// tomorrow's, and the pill says Tomorrow while it's chosen.
 export function whenBarHTML({ dateISO = null, place = null, home, today, slot, wx }) {
   const nowHere = !dateISO && !place;
-  const order = !nowHere
-    ? [{ slot: 'day', label: 'Day' }, { slot: 'night', label: 'Night' }]
-    : [wx.day, wx.night].filter(Boolean).sort((a, b) => a.dateISO.localeCompare(b.dateISO) || (a.slot === 'day' ? -1 : 1));
+  const shown = nowHere ? (wx[slot] ?? wx.day ?? wx.night)?.dateISO ?? today : null;
+  const text = dateISO ? `${weekdayShort(dateISO)}, ${shortDate(dateISO)}` : shown > today ? 'Tomorrow' : 'Today';
   const where = place ?? home;
   return `<div class="occ-when" role="group" aria-labelledby="occ-when-label">
     <span class="occ-when-label" id="occ-when-label">When and where?</span>
     <div class="occ-when-controls">
-      ${datePillHTML({ field: 'occ-date', value: dateISO ?? today, min: today, max: shiftISO(today, AHEAD_DAYS), text: dateISO ? `${weekdayShort(dateISO)}, ${shortDate(dateISO)}` : 'Today', label: 'Date' })}
+      ${datePillHTML({ field: 'occ-date', value: dateISO ?? shown ?? today, min: today, max: shiftISO(today, AHEAD_DAYS), text, label: 'Date' })}
       <button class="place-pill" data-action="occ-place" aria-label="${esc(`Place: ${where?.name ?? 'not set'}. Change it`)}">${icon.pin}<span>${esc(where?.name ?? 'Choose a place')}</span></button>
       ${nowHere ? '' : `<button class="icon-btn ghosted occ-when-reset" data-action="occ-when-reset" aria-label="${esc(`Back to today${home ? ` in ${home.name}` : ''}`)}">${icon.close}</button>`}
-      ${segHTML(order.map(w => ({ value: w.slot, label: w.label, icon: slotIcon(w.slot), on: w.slot === slot })), { action: 'occ-slot', label: 'Time of day', cls: 'occ-slots' })}
+      ${segHTML(['day', 'night'].map(s => ({ value: s, label: s === 'day' ? 'Day' : 'Night', icon: slotIcon(s), on: s === slot })), { action: 'occ-slot', label: 'Time of day', cls: 'occ-slots' })}
     </div>
   </div>`;
 }
@@ -120,10 +120,12 @@ export const actions = {
     app.renderPage();
     document.querySelector('.occ-when [data-for="occ-date"]')?.focus({ preventScroll: true });
   },
-  // Asks again for a date and place whose weather didn't come.
+  // Asks again for a date and place whose weather didn't come. The button
+  // gives way to a skeleton, so focus goes to the place it's for.
   'occ-when-retry'(el, app) {
     for (const [key, entry] of fetched) if (entry.status === 'error') fetched.delete(key);
     app.renderPage();
+    document.querySelector('.occ-when [data-action="occ-place"]')?.focus({ preventScroll: true });
   },
 };
 

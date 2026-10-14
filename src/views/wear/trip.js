@@ -6,16 +6,18 @@
 // (src/weather.js tripWindows). The last trip stays on this device (KEY):
 // its place, dates, events, bottle count and the weather fetched, so it opens
 // at once, packs again without the network when only the events or the
-// count change, and refreshes its weather when it's hours old.
+// count change, and refreshes its weather when it's hours old. A trip under
+// way keeps its start and the weather saved for the days gone by (the
+// forecast has no past days); its events and its end can still change.
 import { packTrip, withEvents } from '../../pack.js';
 import { rank, daysBetween } from '../../engine.js';
 import { tripWindows, forecastError } from '../../weather.js';
 import { OCCASIONS, occasionById } from '../../occasions.js';
 import { shiftISO } from '../../history.js';
 import { esc, cap, deg, plural, shortDate, weekdayShort } from '../../ui.js';
-import { icon, img, wxIcon, slotIcon, segHTML, sectionHead, reasonsList } from '../../ui/components.js';
-import { state, rankedFragrances, storeContext, todayISO } from '../../app/state.js';
-import { datePillHTML, onPlace, repaint } from './pickers.js';
+import { icon, img, wxIconFor, slotIcon, segHTML, sectionHead, reasonsList } from '../../ui/components.js';
+import { state, rankedFragrances, storeContext, todayISO, byTime } from '../../app/state.js';
+import { datePillHTML, onPlace, samePlace, repaint } from './pickers.js';
 
 const KEY = 'scentcast.trip';
 // As the CLI (scripts/recommend.mjs --pack): up to 31 days, within a year.
@@ -25,7 +27,13 @@ const BOTTLE_CHOICES = [2, 3, 4];
 const DEFAULT_MAX = 3;
 // Saved weather older than this is fetched again when the trip opens.
 const REFRESH_AFTER = 6 * 60 * 60 * 1000;
+// Packing ranks every bottle for every window: a few milliseconds for a
+// wardrobe of 25 over a week, a fifth of a second for 120 bottles over a
+// month. Past this many bottle-windows it runs after the page has painted.
+const INLINE_WORK = 1000;
 
+const later = (a, b) => (a > b ? a : b);
+const uncap = t => t.charAt(0).toLowerCase() + t.slice(1);
 const listOf = items => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
 const dayName = iso => `${weekdayShort(iso)}, ${shortDate(iso)}`;
 // "Sat, Oct 17" or "Sat night, Oct 17".
@@ -74,12 +82,17 @@ export function saveTrip(trip) {
 
 // ---------- Checking the form ----------
 
-/** What's wrong with a draft, as a sentence for the form, or ''. */
-export function checkTrip(draft, today) {
+/**
+ * What's wrong with a draft, as a sentence for the form, or ''. `saved` is
+ * the trip it changes: one already under way keeps its start, though that
+ * date has passed.
+ */
+export function checkTrip(draft, today, saved = null) {
   if (!draft.place) return 'Choose where you’re going.';
   if (!draft.fromISO || !draft.toISO) return 'Pick the dates of the trip.';
-  if (draft.fromISO < today) return 'The trip starts on a date that has passed. Pick today or later.';
   if (draft.toISO < draft.fromISO) return 'The trip ends before it starts. Check the dates.';
+  if (draft.toISO < today) return 'The trip ends on a date that has passed. Pick today or later.';
+  if (draft.fromISO < today && draft.fromISO !== saved?.fromISO) return 'The trip starts on a date that has passed. Pick today or later.';
   if (tripDays(draft) > MAX_TRIP_DAYS) return `Plan up to ${MAX_TRIP_DAYS} days at a time.`;
   if (daysBetween(today, draft.toISO) > AHEAD_DAYS) return 'Pick dates within a year from today.';
   return '';
@@ -126,23 +139,38 @@ export function planDays(plan) {
   return [...days.values()];
 }
 
-// Forecast, typical weather, or both: { typical: all | some | none, from: first typical date }.
-function weatherOf(windows) {
-  const typical = windows.filter(w => w.typical);
-  return { all: typical.length && typical.length === windows.length, some: typical.length > 0, from: typical[0]?.dateISO ?? null };
+// Whose weather a plan runs on, from today on (the days gone by don't
+// matter): { all: typical weather throughout, some: typical weather past
+// the forecast, from: the first typical date after the last forecast one }.
+export function weatherOf(windows, today = '') {
+  const ahead = windows.filter(w => w.dateISO >= today);
+  const wins = ahead.length ? ahead : windows;
+  const last = wins.findLastIndex(w => !w.typical);
+  const past = wins.slice(last + 1);
+  return { all: wins.length > 0 && last < 0, some: past.length > 0, from: past[0]?.dateISO ?? null };
 }
 
-/** The packing list as plain text, for the clipboard or a share sheet. */
-export function packingText(result, trip) {
+// An event in the packing list: "date night", "formal at night".
+const eventWords = (occasion, slot) => {
+  const name = occasion.label.toLowerCase();
+  return /night/.test(name) ? name : `${name} ${slot === 'day' ? 'by day' : 'at night'}`;
+};
+
+/**
+ * The packing list as plain text, for the clipboard or a share sheet: the
+ * bottles and their roles, then a line a day ("Sun, Oct 25: Terra by day;
+ * date night: Sticky Fingers").
+ */
+export function packingText(result, trip, { today = '' } = {}) {
   const lines = [`Packing for ${trip.place.name}, ${datesText(trip.fromISO, trip.toISO)}`, ''];
-  for (const b of result.bottles) lines.push(`${b.record.name} (${b.record.brand}): ${roleOf(b.record, result.plan).toLowerCase()}`);
+  for (const b of result.bottles) lines.push(`${b.record.name} (${b.record.brand}): ${uncap(roleOf(b.record, result.plan))}`);
   lines.push('');
   for (const d of planDays(result.plan)) {
-    const say = p => p && `${p.pick.name}${p.occasion ? ` (${p.occasion.label.toLowerCase()})` : ''}`;
-    const day = say(d.day), night = say(d.night);
-    lines.push(`${dayName(d.dateISO)}: ${[day && `${day} by day`, night && `${night} at night`].filter(Boolean).join(', ')}`);
+    const say = (p, slot) => p && (p.occasion ? `${eventWords(p.occasion, slot)}: ${p.pick.name}` : `${p.pick.name} ${slot === 'day' ? 'by day' : 'at night'}`);
+    const parts = [say(d.day, 'day'), say(d.night, 'night')].filter(Boolean);
+    lines.push(`${dayName(d.dateISO)}: ${parts.join(d.day?.occasion || d.night?.occasion ? '; ' : ', ')}`);
   }
-  const wx = weatherOf(result.plan.map(p => p.window));
+  const wx = weatherOf(result.plan.map(p => p.window), today);
   if (wx.all) lines.push('', 'Planned on typical weather for these dates.');
   else if (wx.some) lines.push('', `Typical weather from ${shortDate(wx.from)}, past the forecast.`);
   return lines.join('\n');
@@ -173,22 +201,26 @@ function addEventHTML(adding, dates) {
 
 /**
  * The trip's form. draft = { place, fromISO, toISO, events, max };
- * opts = { today, busy, error, adding, editing, packed }: `packed` when a
- * trip is already planned (the button updates it).
+ * opts = { today, busy, error, adding, editing, packed, startedOn }:
+ * `packed` when a trip is already planned (the button updates it),
+ * `startedOn` the saved trip's start (one under way keeps it). While `busy`
+ * the fields are inert, so the dates can't change under the weather fetch.
  */
-export function tripFormHTML(draft, { today, busy = false, error = '', adding = null, editing = false, packed = false } = {}) {
+export function tripFormHTML(draft, { today, busy = false, error = '', adding = null, editing = false, packed = false, startedOn = null } = {}) {
   const max = shiftISO(today, AHEAD_DAYS);
   const place = draft.place;
-  const dates = draft.fromISO && draft.toISO && draft.toISO >= draft.fromISO ? datesOf(draft).slice(0, MAX_TRIP_DAYS) : [];
+  // Events go on the days still to come.
+  const dates = draft.fromISO && draft.toISO && draft.toISO >= draft.fromISO ? datesOf(draft).slice(0, MAX_TRIP_DAYS).filter(d => d >= today) : [];
+  const minFrom = startedOn && startedOn < today ? startedOn : today;
   return `<section class="card trip-form" aria-labelledby="trip-form-title">
     ${sectionHead(`${icon.suitcase}${packed ? 'Change the trip' : 'Plan a trip'}`, packed ? '' : '<p>Pick a place and dates, and get the fewest bottles that cover every day and night there.</p>', { id: 'trip-form-title' })}
-    <form class="trip-fields" data-form="trip-pack" novalidate>
+    <form class="trip-fields" data-form="trip-pack" novalidate${busy ? ' inert' : ''}>
       <div class="trip-field where">
         <span class="trip-label" id="trip-where">Where</span>
         <button type="button" class="trip-place${place ? '' : ' empty'}" data-action="trip-place" aria-labelledby="trip-where trip-place-name">${icon.pin}<span class="trip-place-text"><b id="trip-place-name">${esc(place?.name ?? 'Choose a city')}</b>${place?.region ? `<small>${esc(place.region)}</small>` : ''}</span>${icon.chevron}</button>
       </div>
-      <div class="trip-field"><span class="trip-label">From</span>${datePillHTML({ field: 'trip-from', name: 'from', value: draft.fromISO, min: today, max, text: draft.fromISO ? dayName(draft.fromISO) : 'Pick a day', label: 'From' })}</div>
-      <div class="trip-field"><span class="trip-label">To</span>${datePillHTML({ field: 'trip-to', name: 'to', value: draft.toISO, min: draft.fromISO || today, max, text: draft.toISO ? dayName(draft.toISO) : 'Pick a day', label: 'To' })}</div>
+      <div class="trip-field"><span class="trip-label">From</span>${datePillHTML({ field: 'trip-from', name: 'from', value: draft.fromISO, min: minFrom, max, text: draft.fromISO ? dayName(draft.fromISO) : 'Pick a day', label: 'From' })}</div>
+      <div class="trip-field"><span class="trip-label">To</span>${datePillHTML({ field: 'trip-to', name: 'to', value: draft.toISO, min: later(draft.fromISO || today, today), max, text: draft.toISO ? dayName(draft.toISO) : 'Pick a day', label: 'To' })}</div>
       <div class="trip-field bottles"><span class="trip-label">Bottles at most</span>${maxSeg(draft.max)}</div>
       <div class="trip-field events">
         <span class="trip-label">Events</span>
@@ -207,7 +239,7 @@ export function tripFormHTML(draft, { today, busy = false, error = '', adding = 
 
 // The trip at a glance, over its plan: where, when, events, and whose weather.
 export function tripSummaryHTML(trip, { today, note = '', updating = false } = {}) {
-  const wx = weatherOf(trip.windows);
+  const wx = weatherOf(trip.windows, today);
   const tags = trip.events.map(e => {
     const occ = occasionById(e.occasion);
     return `<li class="trip-tag">${icon[occ.icon] ?? ''}${esc(`${occ.label}, ${e.slot === 'night' ? `${weekdayShort(e.dateISO)} night` : weekdayShort(e.dateISO)}`)}</li>`;
@@ -227,7 +259,7 @@ export function tripSummaryHTML(trip, { today, note = '', updating = false } = {
       <button class="btn secondary compact" data-action="trip-edit">${icon.pen}Change</button>
       ${tags.length ? `<ul class="trip-tags" aria-label="Events">${tags.join('')}</ul>` : ''}
     </div>
-    <p class="trip-wx${updating ? ' updating' : ''}">${wxIcon(wx.all ? 'cloudy' : 'partly')}<span>${esc(status)}</span></p>
+    <p class="trip-wx${updating ? ' updating' : ''}">${icon.thermo}<span>${esc(status)}</span></p>
     ${note ? `<p class="trip-note">${esc(note)}</p>` : ''}
   </section>`;
 }
@@ -286,23 +318,25 @@ export function tripPackHTML(result, trip, { canShare = false } = {}) {
   </section>`;
 }
 
+// A window of the plan. One nothing packed suits well says "Not ideal" in
+// words (the notice over the plan names what would suit it).
 function cellHTML(p, slot) {
   if (!p) return `<span class="trip-cell none" data-slot="${slot}"><span class="trip-slot">${slotIcon(slot)}</span><span class="trip-none">Before the trip</span></span>`;
   const f = p.pick, w = p.window;
   const occ = p.occasion;
-  const spoken = [windowName(w.dateISO, slot), f.name, `feels ${deg(w.feelsF)}${w.typical ? ', typical weather' : ''}`, occ && occ.label, !p.covered && 'not a close fit'].filter(Boolean).join(', ');
+  const spoken = [windowName(w.dateISO, slot), f.name, `feels ${deg(w.feelsF)}${w.typical ? ', typical weather' : ''}`, occ && occ.label, !p.covered && 'not ideal'].filter(Boolean).join(', ');
   return `<button class="trip-cell${p.covered ? '' : ' off'}" data-slot="${slot}" data-action="open" data-ctx="${esc(ctxKey(w))}" data-id="${esc(f.id)}" aria-label="${esc(spoken)}">
     <span class="trip-slot">${slotIcon(slot)}</span>
-    <span class="trip-wx-cell">${wxIcon(w.category)}<span class="trip-temp">${w.typical ? '<i>≈</i>' : ''}${deg(w.feelsF)}</span></span>
+    <span class="trip-wx-cell">${wxIconFor(w)}<span class="trip-temp">${w.typical ? '<i>≈</i>' : ''}${deg(w.feelsF)}</span></span>
     ${img(f)}
-    <span class="trip-name">${esc(f.name)}${occ ? `<small>${icon[occ.icon] ?? ''}${esc(occ.label)}</small>` : ''}</span>
+    <span class="trip-name"><span class="trip-name-text">${esc(f.name)}</span>${occ ? `<small>${icon[occ.icon] ?? ''}${esc(occ.label)}</small>` : ''}${p.covered ? '' : '<small class="trip-off">Not ideal</small>'}</span>
   </button>`;
 }
 
 /** Which packed bottle to wear when, a row a day. */
 export function tripPlanHTML(result, { today } = {}) {
   const days = planDays(result.plan);
-  const wx = weatherOf(result.plan.map(p => p.window));
+  const wx = weatherOf(result.plan.map(p => p.window), today);
   const note = wx.some ? '≈ marks typical weather, past the forecast. Tap a bottle to see why.' : 'Tap a bottle to see why.';
   return `<section class="card trip-plan" aria-labelledby="trip-plan-title">
     ${sectionHead(`${icon.calendar}Day by day`, `<p>${esc(note)}</p>`, { id: 'trip-plan-title' })}
@@ -315,8 +349,10 @@ export function tripPlanHTML(result, { today } = {}) {
   </section>`;
 }
 
-// While the weather loads: the shelf and the rows, as shapes.
-const skeleton = () => `<div class="stack trip-sk" aria-busy="true" aria-label="Planning the trip">
+// While the weather loads (or a big list packs): the shelf and the rows, as
+// shapes. It takes focus while the form is inert, and says what's going on.
+const skeleton = (text = 'Checking the weather there…') => `<div class="stack trip-sk" id="trip-sk" tabindex="-1" role="status">
+    <span class="visually-hidden">${esc(text)}</span>
     <div class="card"><span class="sk sk-line w40"></span><div class="trip-sk-bags">${'<span class="sk"></span>'.repeat(3)}</div></div>
     <div class="card"><span class="sk sk-line w40"></span>${'<span class="sk trip-sk-row"></span>'.repeat(4)}</div>
   </div>`;
@@ -325,7 +361,7 @@ const skeleton = () => `<div class="stack trip-sk" aria-busy="true" aria-label="
 
 const ui = {
   saved: undefined, // the packed trip (loadTrip), read on first use
-  draft: null, // the form: { place, fromISO, toISO, events, max }
+  draft: null, // the form: { place, fromISO, toISO, events, max, auto }
   editing: false, // the form open over a packed trip
   adding: null, // an event being added: { dateISO, slot, occasion }
   busy: false, // fetching the weather for a new place or dates
@@ -340,17 +376,32 @@ const savedTrip = () => {
   return ui.saved;
 };
 
+// `auto`: the default dates, from that day, until someone picks their own.
 function draftFrom(trip, today) {
-  if (trip) return { place: trip.place, fromISO: trip.fromISO, toISO: trip.toISO, events: trip.events.map(e => ({ ...e })), max: trip.max };
-  return { place: null, fromISO: shiftISO(today, 1), toISO: shiftISO(today, 4), events: [], max: DEFAULT_MAX };
+  if (trip) return { place: trip.place, fromISO: trip.fromISO, toISO: trip.toISO, events: trip.events.map(e => ({ ...e })), max: trip.max, auto: null };
+  return { place: null, fromISO: shiftISO(today, 1), toISO: shiftISO(today, 4), events: [], max: DEFAULT_MAX, auto: today };
 }
-const draft = () => (ui.draft ??= draftFrom(savedTrip(), todayISO()));
+// The form's draft. Default dates follow today (the device's until the
+// forecast says the place's), so a page left open overnight still offers
+// tomorrow.
+function draft() {
+  const today = todayISO();
+  const d = (ui.draft ??= draftFrom(savedTrip(), today));
+  if (d.auto && d.auto !== today) {
+    Object.assign(d, { fromISO: shiftISO(today, 1), toISO: shiftISO(today, 4), auto: today });
+    d.events = d.events.filter(e => e.dateISO >= d.fromISO && e.dateISO <= d.toISO);
+  }
+  return d;
+}
+
+const sameDates = (a, b) => Boolean(a && b) && samePlace(a.place, b.place) && a.fromISO === b.fromISO && a.toISO === b.toISO;
 
 // A packed trip's plan, packed again only when the trip or the bottles
 // change, with a ranked context per window for the bottle pages it opens.
-let memo = null;
-function packed(trip) {
-  const frags = rankedFragrances();
+let memo = null; // { trip, frags, result, contexts }
+let queued = null; // { trip, frags } to pack once the page has painted
+
+function packNow(trip, frags = rankedFragrances()) {
   if (memo?.trip === trip && memo.frags === frags) return memo.result;
   const events = trip.events.map(e => ({ ...e, occasion: occasionById(e.occasion) }));
   const result = packTrip(frags, withEvents(trip.windows, events), { max: trip.max });
@@ -359,44 +410,109 @@ function packed(trip) {
   return result;
 }
 
+// The plan for the pane: at once when it's done or cheap; else null, and it
+// packs after a frame (the page paints first, so a tap answers at once) and
+// draws the pane again.
+function packFor(trip, app) {
+  const frags = rankedFragrances();
+  if ((memo?.trip === trip && memo.frags === frags) || !app || frags.length * trip.windows.length <= INLINE_WORK) return packNow(trip, frags);
+  if (queued?.trip !== trip || queued.frags !== frags) {
+    const job = (queued = { trip, frags });
+    requestAnimationFrame(() => setTimeout(() => {
+      if (queued !== job) return;
+      queued = null;
+      packNow(trip, frags);
+      if (onTrip() && ui.saved === trip) repaint(app);
+    }));
+  }
+  return null;
+}
+
 export const tripHeading = () => (savedTrip() ? `Packing for ${savedTrip().place.name}` : 'Pack for a trip');
 
-export function renderTrip() {
+export function renderTrip(app = null) {
   const trip = savedTrip();
   const today = todayISO();
-  const form = (packedAlready, editing) => tripFormHTML(draft(), { today, busy: ui.busy, error: ui.error, adding: ui.adding, editing, packed: packedAlready });
+  const form = (packedAlready, editing) => tripFormHTML(draft(), { today, busy: ui.busy, error: ui.error, adding: ui.adding, editing, packed: packedAlready, startedOn: trip?.fromISO });
   if (!trip) return form(false, false) + (ui.busy ? skeleton() : '');
-  const result = packed(trip);
+  const head = ui.editing ? form(true, true) : tripSummaryHTML(trip, { today, note: ui.note, updating: ui.updating });
+  if (ui.busy) return head + skeleton();
+  // Packing again (another bottle count, a new rating): the last plan for
+  // the same place and dates stays, dimmed, until the new one is in.
+  const result = packFor(trip, app);
+  const shown = result ?? (sameDates(memo?.trip, trip) ? memo.result : null);
+  if (!shown) return head + skeleton('Planning what to pack…');
   for (const [key, win, occasion, ranked] of memo.contexts) storeContext(key, win, occasion, ranked);
   const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
-  return `${ui.editing ? form(true, true) : tripSummaryHTML(trip, { today, note: ui.note, updating: ui.updating })}
-    ${ui.busy ? skeleton() : `${tripPackHTML(result, trip, { canShare })}${tripPlanHTML(result, { today })}`}`;
+  return `${head}
+    <div class="trip-out${result ? '' : ' refreshing'}"${result ? '' : ' aria-busy="true"'}>${tripPackHTML(shown, trip, { canShare })}${tripPlanHTML(shown, { today })}</div>`;
+}
+
+// An event filled in but not added yet counts: Plan adds it first. One
+// event a window: a new one replaces what was there.
+function commitAdding() {
+  const e = ui.adding;
+  if (!e) return;
+  const d = draft();
+  d.events = [...d.events.filter(x => !(x.dateISO === e.dateISO && x.slot === e.slot)), { ...e }]
+    .sort((a, b) => a.dateISO.localeCompare(b.dateISO) || (a.slot === 'day' ? -1 : 1));
+  ui.adding = null;
+}
+
+// The weather for a trip's dates: fetched from today on, with the saved
+// trip's own windows for the days gone by when it's the same place (the
+// forecast has none for them; another place gets typical weather there).
+async function windowsFor(ask, old, today) {
+  const start = later(ask.fromISO, today);
+  const kept = old && samePlace(old.place, ask.place) ? old.windows.filter(w => w.dateISO >= ask.fromISO && w.dateISO < start) : [];
+  const fresh = await tripWindows(ask.place, start > ask.fromISO && !kept.length ? ask.fromISO : start, ask.toISO);
+  return fresh.length ? [...kept, ...fresh].sort(byTime) : [];
+}
+
+// The plan button, back in view (clear of the tab bar) with focus on it.
+function focusSubmit() {
+  const btn = document.querySelector('.trip-form [type="submit"]');
+  btn?.focus({ preventScroll: true });
+  btn?.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
 // The weather for a new place or dates, then the plan. Only the events or
-// the bottle count changed: packs again from the saved weather.
+// the bottle count changed: packs again from the saved weather. The draft
+// is read once, before the fetch, so what's saved is what was asked.
+let packSeq = 0;
 async function pack(app) {
+  if (ui.busy) return;
+  commitAdding();
   const d = draft();
   const today = todayISO();
-  ui.error = checkTrip(d, today);
-  if (ui.error) return repaint(app);
   const old = savedTrip();
-  const same = old && old.place.lat === d.place.lat && old.place.lon === d.place.lon && old.fromISO === d.fromISO && old.toISO === d.toISO;
+  ui.error = checkTrip(d, today, old);
+  if (ui.error) {
+    app.renderPage();
+    return focusSubmit();
+  }
   // Events outside the dates drop out.
-  const events = d.events.filter(e => e.dateISO >= d.fromISO && e.dateISO <= d.toISO);
-  if (same) return finish(app, { ...old, place: d.place, events, max: d.max });
+  const events = d.events.filter(e => e.dateISO >= d.fromISO && e.dateISO <= d.toISO).map(e => ({ ...e }));
+  const ask = { place: d.place, fromISO: d.fromISO, toISO: d.toISO, events, max: d.max };
+  if (sameDates(old, ask)) return finish(app, { ...old, ...ask });
+  const mine = ++packSeq;
   ui.busy = true;
   app.renderPage();
+  const sk = document.querySelector('#trip-sk');
+  sk?.focus({ preventScroll: true });
+  sk?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   try {
-    const windows = await tripWindows(d.place, d.fromISO, d.toISO);
+    const windows = await windowsFor(ask, old, today);
+    if (mine !== packSeq) return;
     if (!windows.length) throw Object.assign(new Error('no windows'), { status: 'empty' });
-    finish(app, { place: d.place, fromISO: d.fromISO, toISO: d.toISO, events, max: d.max, windows, fetchedAt: Date.now() });
+    finish(app, { ...ask, windows, fetchedAt: Date.now() });
   } catch (err) {
+    if (mine !== packSeq) return;
     ui.busy = false;
     ui.error = err.status === 'empty' ? 'No weather came back for those dates. Try again.' : forecastError(err);
     if (!onTrip()) return;
     app.renderPage();
-    document.querySelector('.trip-form [type="submit"]')?.focus({ preventScroll: true });
+    focusSubmit();
   }
 }
 
@@ -413,17 +529,20 @@ function finish(app, trip) {
   head?.closest('.trip-head').scrollIntoView({ block: 'nearest' });
 }
 
-// A saved trip's weather, hours old, fetched again while it shows.
+// A saved trip's weather, hours old, fetched again while it shows (from
+// today on: the days gone by keep theirs).
 export async function freshenTrip(app) {
   const trip = savedTrip();
-  if (!trip || ui.busy || ui.updating || trip.toISO < todayISO() || Date.now() - trip.fetchedAt < REFRESH_AFTER || ui.refreshed === trip.fetchedAt) return;
+  const today = todayISO();
+  if (!trip || ui.busy || ui.updating || trip.toISO < today || Date.now() - trip.fetchedAt < REFRESH_AFTER || ui.refreshed === trip.fetchedAt) return;
   ui.refreshed = trip.fetchedAt;
   ui.updating = true;
   repaint(app);
   try {
-    const windows = await tripWindows(trip.place, trip.fromISO, trip.toISO);
-    if (windows.length && ui.saved === trip) {
-      ui.saved = { ...trip, windows, fetchedAt: Date.now() };
+    const windows = await windowsFor(trip, trip, today);
+    // A new bottle count meanwhile keeps the new weather; new dates don't.
+    if (windows.length && sameDates(ui.saved, trip)) {
+      ui.saved = { ...ui.saved, windows, fetchedAt: Date.now() };
       saveTrip(ui.saved);
       ui.note = '';
     }
@@ -456,13 +575,15 @@ async function copyText(text) {
   }
 }
 
-// Moving the start keeps the trip's length; events outside the dates drop out.
+// Moving the start keeps the trip's length; events outside the dates drop
+// out, and one being added moves to a day still to come.
 function setDates(fromISO, toISO) {
   const d = draft();
-  d.fromISO = fromISO;
-  d.toISO = toISO;
+  Object.assign(d, { fromISO, toISO, auto: null });
   d.events = d.events.filter(e => e.dateISO >= fromISO && e.dateISO <= toISO);
-  if (ui.adding && (ui.adding.dateISO < fromISO || ui.adding.dateISO > toISO)) ui.adding.dateISO = fromISO;
+  const first = later(fromISO, todayISO());
+  if (ui.adding && first > toISO) ui.adding = null;
+  else if (ui.adding && (ui.adding.dateISO < first || ui.adding.dateISO > toISO)) ui.adding.dateISO = first;
   ui.error = '';
 }
 
@@ -494,10 +615,13 @@ export const actions = {
     }
     app.keepingFocus(el, '#app', app.renderPage);
   },
+  // A new event starts on the first free night still to come.
   'trip-ev-add'(el, app) {
     const d = draft();
+    const days = datesOf(d).filter(iso => iso >= todayISO());
+    if (!days.length) return;
     const taken = new Set(d.events.map(e => `${e.dateISO}:${e.slot}`));
-    const free = datesOf(d).find(iso => !taken.has(`${iso}:night`)) ?? d.fromISO;
+    const free = days.find(iso => !taken.has(`${iso}:night`)) ?? days[0];
     ui.adding = { dateISO: free, slot: 'night', occasion: 'formal' };
     app.renderPage();
     document.querySelector('[data-field="trip-ev-date"]')?.focus();
@@ -508,13 +632,8 @@ export const actions = {
     app.keepingFocus(el, '#app', app.renderPage);
   },
   'trip-ev-save'(el, app) {
-    const e = ui.adding;
-    if (!e) return;
-    const d = draft();
-    // One event a window: a new one replaces what was there.
-    d.events = [...d.events.filter(x => !(x.dateISO === e.dateISO && x.slot === e.slot)), { ...e }]
-      .sort((a, b) => a.dateISO.localeCompare(b.dateISO) || (a.slot === 'day' ? -1 : 1));
-    ui.adding = null;
+    if (!ui.adding) return;
+    commitAdding();
     app.renderPage();
     document.querySelector('[data-action="trip-ev-add"]')?.focus();
   },
@@ -533,14 +652,14 @@ export const actions = {
   async 'trip-copy'(el, app) {
     const trip = savedTrip();
     if (!trip) return;
-    const ok = await copyText(packingText(packed(trip), trip));
+    const ok = await copyText(packingText(packNow(trip), trip, { today: todayISO() }));
     app.showToast(ok ? '<span>Packing list copied</span>' : '<span class="note">This browser won’t let the page copy. Try Share instead.</span>');
   },
   async 'trip-share'(el, app) {
     const trip = savedTrip();
     if (!trip) return;
     try {
-      await navigator.share({ title: `Packing for ${trip.place.name}`, text: packingText(packed(trip), trip) });
+      await navigator.share({ title: `Packing for ${trip.place.name}`, text: packingText(packNow(trip), trip, { today: todayISO() }) });
     } catch (err) {
       if (err?.name !== 'AbortError') app.showToast('<span>Couldn’t open sharing. Copy the list instead.</span>');
     }

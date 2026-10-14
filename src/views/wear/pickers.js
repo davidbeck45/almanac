@@ -87,12 +87,14 @@ function take(place, app) {
 
 /**
  * Renders the pane again after an await (weather that arrived), keeping
- * keyboard focus on the control it was on, as render() does.
+ * keyboard focus on the control it was on, as render() does, or on the
+ * element with its id (a heading that took focus).
  */
 export function repaint(app) {
   const focused = document.activeElement;
   app.renderPage();
-  if (focused && focused !== document.body && !focused.isConnected) app.refocus(focused, '#app');
+  if (!focused || focused === document.body || focused.isConnected) return;
+  if (!app.refocus(focused, '#app') && focused.id) document.getElementById(focused.id)?.focus({ preventScroll: true });
 }
 
 // ---------- Dates ----------

@@ -88,6 +88,16 @@ const WX_GLYPH = {
 export const wxIcon = (category, label = '') =>
   `<span class="wx" data-cat="${esc(category)}"${label ? ` role="img" aria-label="${esc(label)}"` : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${WX_GLYPH[category] ?? WX_GLYPH.cloudy}</svg></span>`;
 
+// The moon where the sun would be: a clear or partly cloudy night.
+const NIGHT_GLYPH = {
+  clear: '<g class="mn"><path d="M19.5 14.6A8 8 0 0 1 9.4 4.5a8 8 0 1 0 10.1 10.1Z" fill="currentColor"/><path d="M17.5 3v3M16 4.5h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></g>',
+  partly: `<g class="mn"><path d="M13 9.75A4.25 4.25 0 0 1 7.75 4.5 4.25 4.25 0 1 0 13 9.75Z" fill="currentColor"/></g><path class="cl-fill" d="${CLOUD_MID}"/>${cloudPath(CLOUD_MID)}`,
+};
+/** A window's weather glyph: wxIcon by day, the moon for a clear or partly cloudy night. */
+export const wxIconFor = (win, label = '') => (win?.slot === 'night' && NIGHT_GLYPH[win.category]
+  ? `<span class="wx" data-cat="${esc(win.category)}" data-night${label ? ` role="img" aria-label="${esc(label)}"` : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${NIGHT_GLYPH[win.category]}</svg></span>`
+  : wxIcon(win?.category, label));
+
 // ---------- Messages and loading ----------
 
 // An empty or error state: what happened and the one thing to do about it.
