@@ -2,11 +2,15 @@
 // and a night window. Open-Meteo returns wall-clock times for the location
 // ("2026-09-28T13:00"); we parse them as UTC and shift "now" by the
 // location's UTC offset so all comparisons happen in the location's time.
-import { describe, SEVERITY } from './wmo.js';
+import { describe, SEVERITY, isWet } from './wmo.js';
 import { dewPointF } from './engine.js';
 
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
+const ARCHIVE_URL = 'https://archive-api.open-meteo.com/v1/archive';
 export const WINDOWS = { day: [10, 17], night: [19, 23] };
+// How far Open-Meteo forecasts, today included. Past it, trips and events
+// get typical weather for the dates (typicalWindow).
+export const FORECAST_DAYS = 16;
 
 const CACHE_KEY = 'scentcast.weather';
 const CACHE_VERSION = 3; // bump when the request shape changes
@@ -60,7 +64,8 @@ export function blendModels(raw) {
   return { ...raw, hourly, daily };
 }
 
-export async function fetchForecast({ lat, lon }) {
+// `days` of forecast, today first: 7 for the app, up to FORECAST_DAYS for a trip.
+export async function fetchForecast({ lat, lon }, { days = 7 } = {}) {
   const params = new URLSearchParams({
     latitude: lat,
     longitude: lon,
@@ -69,7 +74,7 @@ export async function fetchForecast({ lat, lon }) {
     daily: 'sunrise,sunset,temperature_2m_max,temperature_2m_min',
     temperature_unit: 'fahrenheit',
     timezone: 'auto',
-    forecast_days: 7,
+    forecast_days: days,
     models: [DEFAULT_MODEL, ...BLEND_MODELS].join(','),
   });
   const res = await fetch(`${FORECAST_URL}?${params}`);
@@ -198,6 +203,121 @@ function slotWindow(hours, slot, dateISO, fromHour, ctx) {
 // date from Open-Meteo's archive (scripts/journal-check.mjs).
 export function windowOn(forecast, dateISO, slot) {
   return slotWindow(hourlyRows(forecast), slot, dateISO, 0, { todayISO: null, tomorrowISO: null, lat: forecast.latitude });
+}
+
+// Typical weather for dates past the forecast: the same dates, give or take
+// TYPICAL_SPREAD days, in each of the last TYPICAL_YEARS years of Open-Meteo's
+// archive (ERA5 reanalysis, about five days behind). One cold snap in one year
+// moves 21 windows' average a little, not the whole answer.
+const TYPICAL_YEARS = 3;
+const TYPICAL_SPREAD = 3;
+const ARCHIVE_LAG_DAYS = 7;
+const TYPICAL_HOURLY = 'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code';
+
+const shiftDays = (iso, days) => new Date(Date.parse(`${iso}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+// The same month and day `years` earlier; February 29 falls back to the 28th.
+function yearsBefore(iso, years) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return `${y - years}-${String(m).padStart(2, '0')}-${String(m === 2 && d === 29 ? 28 : d).padStart(2, '0')}`;
+}
+
+/**
+ * Archived hourly weather around fromISO..toISO in each of the last `years`
+ * years the archive has whole: { latitude, years: [{ ago, data }] }, `data`
+ * shaped like a forecast's hourly block (windowOn reads it). Plain fetch, so
+ * it runs in Node and the browser alike.
+ */
+export async function fetchTypical({ lat, lon }, fromISO, toISO, { years = TYPICAL_YEARS, nowMs = Date.now() } = {}) {
+  const archived = shiftDays(new Date(nowMs).toISOString().slice(0, 10), -ARCHIVE_LAG_DAYS);
+  let first = 1;
+  while (shiftDays(yearsBefore(toISO, first), TYPICAL_SPREAD) > archived) first++;
+  const get = async ago => {
+    const params = new URLSearchParams({
+      latitude: lat,
+      longitude: lon,
+      start_date: shiftDays(yearsBefore(fromISO, ago), -TYPICAL_SPREAD),
+      end_date: shiftDays(yearsBefore(toISO, ago), TYPICAL_SPREAD),
+      hourly: TYPICAL_HOURLY,
+      temperature_unit: 'fahrenheit',
+      timezone: 'auto',
+    });
+    const res = await fetch(`${ARCHIVE_URL}?${params}`);
+    if (!res.ok) throw Object.assign(new Error(`Weather archive request failed (${res.status})`), { status: res.status });
+    return { ago, data: await res.json() };
+  };
+  const out = await Promise.all(Array.from({ length: years }, (_, i) => get(first + i)));
+  return { latitude: out[0]?.data.latitude ?? lat, years: out };
+}
+
+const mode = xs => {
+  const counts = new Map();
+  for (const x of xs) counts.set(x, (counts.get(x) ?? 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+};
+
+/**
+ * The typical day or night window on dateISO, from fetchTypical's data:
+ * feels-like, humidity and dew point averaged over every archived window
+ * within TYPICAL_SPREAD days of the date, `pop` the share of them that were
+ * wet, and the commonest condition (a wet one only when most were wet).
+ * Shaped like a forecast window, with `typical: true`; null without data.
+ */
+export function typicalWindow(climate, dateISO, slot) {
+  const wins = [];
+  for (const { ago, data } of climate.years) {
+    const past = { ...data, latitude: climate.latitude };
+    for (let k = -TYPICAL_SPREAD; k <= TYPICAL_SPREAD; k++) {
+      const w = windowOn(past, shiftDays(yearsBefore(dateISO, ago), k), slot);
+      if (w) wins.push(w);
+    }
+  }
+  if (!wins.length) return null;
+  const mean = key => avg(wins.map(w => w[key]));
+  const wet = wins.filter(w => isWet(w.category));
+  const usual = wet.length * 2 >= wins.length ? wet : wins.filter(w => !isWet(w.category));
+  const category = mode(usual.map(w => w.category));
+  const cond = describe(mode(usual.filter(w => w.category === category).map(w => w.code)));
+  return {
+    slot,
+    label: slotLabel(slot, dateISO, null, null),
+    dateISO,
+    date: new Date(`${dateISO}T12:00:00`),
+    lat: climate.latitude,
+    feelsF: mean('feelsF'),
+    hiF: mean('hiF'),
+    loF: mean('loF'),
+    humidity: mean('humidity'),
+    dewF: mean('dewF'),
+    pop: Math.round((100 * wet.length) / wins.length),
+    code: cond.code,
+    condition: cond.label,
+    category: cond.category,
+    typical: true,
+    samples: wins.length,
+  };
+}
+
+/**
+ * The `slots` windows of every date from fromISO to toISO, in time order:
+ * the forecast's as far as it reaches, typical weather past it (`typical`).
+ * Fetches only what the dates need.
+ */
+export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'], nowMs = Date.now() } = {}) {
+  const dates = [];
+  for (let d = fromISO; d <= toISO; d = shiftDays(d, 1)) dates.push(d);
+  const found = new Map();
+  const key = (d, s) => `${d} ${s}`;
+  // The location's date can be a day off UTC's; windowOn finds what's there.
+  if (fromISO <= shiftDays(new Date(nowMs).toISOString().slice(0, 10), FORECAST_DAYS)) {
+    const forecast = await fetchForecast(loc, { days: FORECAST_DAYS });
+    for (const d of dates) for (const s of slots) found.set(key(d, s), windowOn(forecast, d, s));
+  }
+  const missing = dates.filter(d => slots.some(s => !found.get(key(d, s))));
+  if (missing.length) {
+    const climate = await fetchTypical(loc, missing[0], missing.at(-1), { nowMs });
+    for (const d of missing) for (const s of slots) if (!found.get(key(d, s))) found.set(key(d, s), typicalWindow(climate, d, s));
+  }
+  return dates.flatMap(d => slots.map(s => found.get(key(d, s))).filter(Boolean));
 }
 
 function clock(forecast, nowMs) {
