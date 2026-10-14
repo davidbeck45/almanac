@@ -1,0 +1,106 @@
+/* Base: reset, the page, focus, type helpers and the weather scene's motion.
+   Every size, space, radius, color and duration comes from src/tokens.css
+   (linked first). Then components.css (the shared kit), shell.css (layout,
+   nav, settings), and one file per view: wear, wardrobe, discover, bottle.
+   Per-element variables templates set: --accord (top accord color), --c
+   (chip or bar color), --tc (tier color, from [data-tier]), --p (match %),
+   --days (week columns), --dx (fog drift), --x/--y/--rim* (the hero bottle). */
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background:
+    radial-gradient(1200px 560px at 50% -180px, color-mix(in srgb, var(--tint-mid) 42%, transparent), transparent 72%),
+    var(--surface-0);
+  color: var(--text-primary);
+  font-family: var(--sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+body.sheet-open { overflow: hidden; }
+
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+button:disabled { opacity: 0.55; cursor: default; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+svg { display: block; }
+img { display: block; }
+h1, h2, h3, h4, p { margin: 0; }
+ul, ol { margin: 0; padding: 0; list-style: none; }
+input, textarea { font: inherit; }
+::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  font-size: var(--fs-body);
+  white-space: nowrap;
+}
+
+/* Shows on the first Tab. */
+.skip-link {
+  position: fixed;
+  top: calc(var(--s-2) + env(safe-area-inset-top));
+  left: var(--s-2);
+  z-index: 70;
+  min-height: var(--hit);
+  padding: 0 var(--s-4);
+  border-radius: var(--r-pill);
+  background: var(--text-primary);
+  color: var(--surface-0);
+  font-weight: 600;
+  transform: translateY(-200%);
+}
+.skip-link:focus-visible { transform: none; }
+
+.muted { color: var(--text-secondary); }
+.muted.small, .small { font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.muted.small { margin-top: var(--s-3); }
+.error { margin-top: var(--s-3); color: var(--negative); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+
+/* ---------- The weather scene's motion ---------- */
+
+.scene .drift { animation: drift ease-in-out infinite alternate; }
+@keyframes drift { from { transform: translateX(calc(var(--dx) * -1)); } to { transform: translateX(var(--dx)); } }
+.scene .twinkle { animation: twinkle 3.2s ease-in-out infinite; }
+@keyframes twinkle { 50% { opacity: 0.15; } }
+.scene .rain line { animation: fall linear infinite; }
+@keyframes fall { from { transform: translateY(-230px); } to { transform: translateY(230px); } }
+.scene .snow circle { animation: snowfall linear infinite; }
+@keyframes snowfall {
+  0% { transform: translate(0, -230px); }
+  50% { transform: translate(9px, 0); }
+  100% { transform: translate(-5px, 230px); }
+}
+.scene .smoke circle { opacity: 0; transform-box: fill-box; transform-origin: center; animation: smoke 3.9s ease-out infinite; }
+@keyframes smoke {
+  0% { opacity: 0.55; transform: translate(0, 0) scale(0.6); }
+  100% { opacity: 0; transform: translate(10px, -26px) scale(1.9); }
+}
+.scene .flash { opacity: 0; animation: flash 7s infinite; }
+.scene .bolt { opacity: 0; animation: bolt 7s infinite; }
+@keyframes flash { 0%, 91%, 95%, 100% { opacity: 0; } 92% { opacity: 0.5; } 93% { opacity: 0.08; } 94% { opacity: 0.35; } }
+@keyframes bolt { 0%, 91%, 95.5%, 100% { opacity: 0; } 92%, 95% { opacity: 1; } }
+
+@keyframes breathe { 50% { opacity: 0.25; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { from { background-position: 100% 50%; } to { background-position: 0 50%; } }
+@keyframes sweep { from { background-position: -100% 0; } to { background-position: 200% 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  .scene .flash, .scene .bolt { opacity: 0; }
+  .scene .smoke circle { opacity: 0.35; }
+}

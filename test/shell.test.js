@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname, join, normalize } from 'node:path';
 import vm from 'node:vm';
 
 const root = new URL('../', import.meta.url);
@@ -9,25 +10,30 @@ const sw = read('sw.js');
 const html = read('index.html');
 const SHELL = JSON.parse(sw.match(/const SHELL = (\[[\s\S]*?\]);/)[1].replace(/'/g, '"').replace(/,\s*\]/, ']'));
 
-// The modules main.js loads, following static imports.
-function moduleGraph(file = 'main.js', seen = new Set()) {
+// The modules main.js loads, following static imports (paths from the repo root).
+function moduleGraph(file = 'src/main.js', seen = new Set()) {
   if (seen.has(file)) return seen;
   seen.add(file);
-  for (const [, dep] of read(`src/${file}`).matchAll(/^\s*import\s[^'"]*['"]\.\/([\w-]+\.js)['"]/gm)) moduleGraph(dep, seen);
+  for (const [, dep] of read(file).matchAll(/^\s*import\s[^'"]*['"](\.{1,2}\/[\w/.-]+\.js)['"]/gm)) moduleGraph(normalize(join(dirname(file), dep)), seen);
   return seen;
 }
 
+// Every app file under src/, subfolders included.
+const appFiles = (dir = 'src') => readdirSync(new URL(`${dir}/`, root), { withFileTypes: true })
+  .flatMap(e => (e.isDirectory() ? appFiles(`${dir}/${e.name}`) : /\.(js|css)$/.test(e.name) ? [`${dir}/${e.name}`] : []));
+const stylesheets = [...html.matchAll(/<link rel="stylesheet" href="(src\/[\w/.-]+\.css)">/g)].map(m => m[1]);
+
 test('the service worker precaches every app file, and they all exist', () => {
-  const src = readdirSync(new URL('src/', root)).filter(f => /\.(js|css)$/.test(f)).map(f => `src/${f}`);
+  const src = appFiles();
   for (const file of src) assert.ok(SHELL.includes(file), `${file} is missing from SHELL in sw.js (bump CACHE too)`);
   for (const path of SHELL) if (path !== './') assert.ok(existsSync(new URL(path, root)), `${path} is in SHELL but not on disk`);
   assert.ok(!SHELL.some(p => p.startsWith('data/fragrantica/')), 'dataset files load on demand, not at install');
 });
 
 test('index.html preloads the whole module graph and the self-hosted fonts', () => {
-  const preloaded = new Set([...html.matchAll(/<link rel="modulepreload" href="src\/([\w-]+\.js)">/g)].map(m => m[1]));
+  const preloaded = new Set([...html.matchAll(/<link rel="modulepreload" href="(src\/[\w/.-]+\.js)">/g)].map(m => m[1]));
   const graph = moduleGraph();
-  graph.delete('main.js');
+  graph.delete('src/main.js');
   assert.deepEqual([...preloaded].sort(), [...graph].sort(), 'modulepreload links match what main.js imports');
 
   const fonts = [...html.matchAll(/<link rel="preload" href="(fonts\/[\w-]+\.woff2)" as="font" type="font\/woff2" crossorigin>/g)].map(m => m[1]);
@@ -38,18 +44,26 @@ test('index.html preloads the whole module graph and the self-hosted fonts', () 
     assert.ok(read('src/tokens.css').includes(`url('../${font}')`), `${font} has an @font-face`);
   }
   assert.ok(!/fonts\.(googleapis|gstatic)\.com/.test(html + sw), 'no third-party font requests');
-  assert.ok(html.indexOf('src/tokens.css') < html.indexOf('src/styles.css'), 'tokens load before the components that use them');
 });
 
-test('the stylesheet takes its colors from the tokens, so every theme follows', () => {
-  const css = read('src/styles.css').replace(/\/\*[\s\S]*?\*\//g, '');
-  // Raw colors left in components: black at an alpha for shadows goes
-  // through --shade, and the masks need opaque #000.
-  const literals = css.match(/#[0-9a-f]{3,8}\b|rgba?\((?!var\()[^)]*\)/gi) ?? [];
-  const allowed = literals.filter(c => !/^#000$|%23000/.test(c));
-  assert.deepEqual(allowed, [], 'use a color role from src/tokens.css');
-  const sizes = new Set([...css.matchAll(/font-size:\s*([^;}]+)/g)].map(m => m[1].trim()));
-  for (const size of sizes) assert.match(size, /^var\(--fs-[\w-]+\)$/, `font-size ${size} is not on the type scale`);
+test('index.html links every stylesheet, tokens first', () => {
+  const css = appFiles().filter(f => f.endsWith('.css'));
+  assert.deepEqual([...stylesheets].sort(), css.sort(), 'each stylesheet under src/ is linked once');
+  assert.equal(stylesheets[0], 'src/tokens.css', 'tokens load before the components that use them');
+  assert.equal(stylesheets[1], 'src/css/base.css');
+});
+
+test('the stylesheets take their colors from the tokens, so every theme follows', () => {
+  for (const file of stylesheets.filter(f => f !== 'src/tokens.css')) {
+    const css = read(file).replace(/\/\*[\s\S]*?\*\//g, '');
+    // Raw colors left in components: black at an alpha for shadows goes
+    // through --shade, and the masks need opaque #000.
+    const literals = css.match(/#[0-9a-f]{3,8}\b|rgba?\((?!var\()[^)]*\)/gi) ?? [];
+    const allowed = literals.filter(c => !/^#000$|%23000/.test(c));
+    assert.deepEqual(allowed, [], `${file}: use a color role from src/tokens.css`);
+    const sizes = new Set([...css.matchAll(/font-size:\s*([^;}]+)/g)].map(m => m[1].trim()));
+    for (const size of sizes) assert.match(size, /^var\(--fs-[\w-]+\)$/, `${file}: font-size ${size} is not on the type scale`);
+  }
 });
 
 // Runs sw.js against an in-memory Cache Storage and a fake network.

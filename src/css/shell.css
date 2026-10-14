@@ -1,0 +1,310 @@
+/* The shell: the app's grid, the nav (a floating glass tab bar under 1100px,
+   a left rail from there), the page head with its sub-navigation, the
+   footer, where the bottle page sits (sheet, drawer or inspector), and the
+   settings page and location sheet.
+
+   Widths: phones (under 720px) get the tab bar and the bottle page as a
+   bottom sheet. Tablets (720–1099px, a portrait iPad at 768) keep the tab
+   bar: a rail would take 88–232px of 768 and leave a column narrower than a
+   big phone's, while the bar sits under the thumbs of a tablet held in two
+   hands. Their bottle page slides in from the right as a drawer, where it
+   docks from 1100px, so it lives in the same place at every width that has
+   room for it. From 1100px: the rail (icons over labels until 1280px), the
+   page column, and the bottle page beside it, not over it. */
+
+.app { min-height: 100vh; min-height: 100dvh; }
+.page {
+  container: page / inline-size;
+  min-width: 0;
+  padding: 0 var(--s-4) calc(var(--tabbar) + var(--s-8) + env(safe-area-inset-bottom));
+}
+.page > * { max-width: var(--col); margin-inline: auto; }
+.page > .hero { max-width: none; }
+@media (min-width: 720px) { .page { padding-inline: var(--s-6); } .page > .hero { max-width: var(--col); } }
+
+#main { position: relative; }
+#main:focus { outline: none; }
+#main.enter .pane { animation: view-in var(--dur-3) var(--ease-out); }
+@keyframes view-in { from { opacity: 0; transform: translateY(6px); } }
+.pane { display: grid; gap: var(--s-4); }
+@container page (min-width: 600px) { .pane { gap: var(--s-5); } }
+/* A cached forecast on screen while a fresh one loads. Text keeps its
+   contrast: photos and scenes fade, and a line sweeps under the head. */
+#main img, #main .slot-thumb { transition: opacity var(--dur-3); }
+#main.updating img, #main.updating .slot-thumb { opacity: 0.45; }
+#main.updating::before {
+  content: '';
+  position: absolute;
+  left: 15%;
+  right: 15%;
+  top: calc(-1 * var(--s-2));
+  height: 2px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, transparent, var(--accent), transparent) 0 0 / 50% 100% no-repeat;
+  animation: sweep 1.4s ease-in-out infinite;
+}
+
+/* ---------- Page head ---------- */
+
+.page-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin: var(--s-6) 0 var(--s-3); padding-top: env(safe-area-inset-top); }
+.page-head.quiet { margin: 0; padding: 0; }
+.page-head h1 { font-family: var(--display); font-size: var(--fs-title-1); line-height: var(--lh-title-1); font-weight: 600; letter-spacing: -0.015em; }
+/* Focus lands on the heading after each navigation, for screen readers and
+   so Tab carries on from the top; it isn't a control, so no ring. */
+.page-head h1:focus { outline: none; }
+.gear-link { color: var(--text-secondary); }
+
+/* The sub-navigation sticks under the top edge while the page scrolls. */
+.head-bar {
+  position: sticky;
+  top: calc(var(--s-2) + env(safe-area-inset-top));
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: var(--s-4) 0;
+}
+.subnav {
+  flex: 1;
+  border-color: transparent;
+  background: rgb(var(--ink-panel) / 0.72);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  box-shadow: inset 0 0 0 1px var(--border-subtle), 0 10px 24px -14px rgb(var(--shade) / 0.8);
+}
+.subnav a { flex: 1 1 auto; padding: 0 var(--s-3); }
+.head-bar .gear-link::after { inset: 2px; background: rgb(var(--ink-panel) / 0.72); box-shadow: inset 0 0 0 1px var(--border-subtle); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+@media (prefers-reduced-transparency: reduce) { .subnav, .head-bar .gear-link::after { background: var(--surface-2); } }
+@container page (min-width: 600px) { .subnav { flex: 0 1 480px; } .head-bar { justify-content: space-between; } }
+@media (min-width: 1100px) { .gear-link { display: none; } }
+
+/* ---------- Footer: credits ---------- */
+
+[data-route='settings'] .foot { display: none; }
+.foot { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-1) var(--s-4); margin-top: var(--s-8); color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); text-align: center; }
+.foot a, .set-credits a { position: relative; z-index: 1; padding: calc((var(--hit) - 1.25em) / 2) 0; color: var(--text-secondary); text-underline-offset: 2px; }
+
+/* ---------- Nav: tab bar ---------- */
+
+.nav {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--s-2) + env(safe-area-inset-bottom));
+  z-index: 30;
+  width: min(100vw - 2 * var(--s-3), 400px);
+  height: var(--tabbar);
+  padding: var(--s-1);
+  border-radius: var(--r-pill);
+  transform: translateX(-50%);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--on-scene) 10%, transparent), transparent 60%),
+    rgb(var(--ink-panel) / 0.66);
+  backdrop-filter: blur(22px) saturate(1.8);
+  -webkit-backdrop-filter: blur(22px) saturate(1.8);
+  box-shadow:
+    inset 0 1px 1px color-mix(in srgb, var(--on-scene) 18%, transparent),
+    inset 0 0 0 1px var(--border-subtle),
+    0 18px 40px -12px rgb(var(--shade) / 0.85);
+}
+@media (prefers-reduced-transparency: reduce) { .nav { background: var(--surface-2); } }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .nav { background: rgb(var(--ink-panel) / 0.97); } }
+.nav .wordmark, .nav-foot { display: none; }
+.nav-items { display: flex; height: 100%; }
+.nav-items li { display: flex; flex: 1; }
+.nav-item {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-0);
+  min-width: var(--hit);
+  border-radius: var(--r-pill);
+  color: var(--text-secondary);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: 600;
+  text-decoration: none;
+}
+.nav-item svg { width: 24px; height: 24px; }
+@media (hover: hover) { .nav-item:hover { color: var(--text-primary); } }
+.nav-item[aria-current='page'] {
+  background: color-mix(in srgb, var(--ambient) 16%, transparent);
+  color: var(--text-primary);
+}
+.nav-item[aria-current='page'] svg { color: var(--ambient); }
+
+/* ---------- Nav: rail ---------- */
+
+@media (min-width: 1100px) {
+  .app { display: grid; grid-template-columns: 88px minmax(0, 1fr); }
+  .app.has-bottle { grid-template-columns: 88px minmax(0, 1fr) var(--inspector); }
+  .page { padding: 0 var(--s-6) var(--s-8); }
+  .nav {
+    position: sticky;
+    top: 0;
+    left: auto;
+    bottom: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-4);
+    width: auto;
+    height: 100vh;
+    height: 100dvh;
+    padding: var(--s-5) var(--s-2);
+    border-radius: 0;
+    transform: none;
+    background: color-mix(in srgb, var(--surface-1) 70%, transparent);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: inset -1px 0 0 var(--border-subtle);
+  }
+  .nav .wordmark {
+    display: block;
+    padding: var(--s-1) 0 var(--s-3);
+    overflow: hidden;
+    color: var(--text-primary);
+    font-family: var(--display);
+    font-size: var(--fs-footnote);
+    font-style: italic;
+    font-weight: 600;
+    text-align: center;
+    text-decoration: none;
+    text-overflow: ellipsis;
+  }
+  .nav-items { flex-direction: column; gap: var(--s-1); height: auto; }
+  .nav-item { min-height: 56px; border-radius: var(--r-inset); }
+  .nav-foot { display: grid; gap: var(--s-1); margin-top: auto; }
+  .nav-loc { display: grid; justify-items: center; gap: var(--s-0); min-height: 56px; padding: var(--s-2) var(--s-1); border-radius: var(--r-inset); color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
+  .nav-loc svg { width: 20px; height: 20px; color: var(--ambient); }
+  .nav-loc span { display: grid; min-width: 0; max-width: 100%; text-align: center; }
+  .nav-loc b { overflow: hidden; color: var(--text-primary); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  .nav-loc small { display: none; }
+  @media (hover: hover) { .nav-loc:hover { background: var(--fill-faint); color: var(--text-primary); } }
+  /* The hero's own location chip moves to the rail. */
+  .hero .loc-btn { display: none; }
+}
+@media (min-width: 1280px) {
+  .app { grid-template-columns: var(--rail) minmax(0, 1fr); }
+  .app.has-bottle { grid-template-columns: var(--rail) minmax(0, 1fr) var(--inspector); }
+  .nav { padding: var(--s-6) var(--s-4); }
+  .nav .wordmark { padding: 0 var(--s-3) var(--s-4); font-size: var(--fs-title-2); line-height: var(--lh-title-2); font-weight: 500; text-align: left; }
+  .nav-item { flex-direction: row; justify-content: flex-start; gap: var(--s-3); min-height: var(--hit); padding: 0 var(--s-3); font-size: var(--fs-body); line-height: var(--lh-body); }
+  .nav-item svg { width: 20px; height: 20px; }
+  .nav-loc { grid-template-columns: 20px 1fr; justify-items: start; align-items: center; gap: var(--s-3); padding: var(--s-2) var(--s-3); text-align: left; }
+  .nav-loc span { text-align: left; }
+  .nav-loc b { font-size: var(--fs-body); line-height: var(--lh-body); }
+  .nav-loc small { display: block; color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+}
+
+/* ---------- The bottle page's frame ----------
+   Its content is src/css/bottle.css. A dialog under 1100px, docked after. */
+
+.bottle { position: fixed; inset: 0; z-index: 40; }
+.bp-panel {
+  --sheet-px: var(--s-5);
+  container: bottle / inline-size;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 94vh;
+  max-height: 94dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--s-6) var(--sheet-px) calc(var(--s-7) + env(safe-area-inset-bottom));
+  border-radius: var(--r-surface) var(--r-surface) 0 0;
+  border-top: 1px solid var(--border-strong);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--ambient) 5%, transparent), transparent 220px), var(--surface-1);
+  box-shadow: 0 -20px 60px -20px rgb(var(--shade) / 0.7);
+  transform: translateY(100%);
+  transition: transform var(--dur-4) var(--ease-sheet);
+}
+.bottle.open .bp-backdrop { opacity: 1; }
+.bottle.open .bp-panel { transform: none; }
+.bp-close { position: absolute; top: var(--s-2); right: var(--s-2); z-index: 3; }
+@media (min-width: 720px) {
+  .bp-panel {
+    --sheet-px: var(--s-6);
+    top: 0;
+    left: auto;
+    max-height: none;
+    width: min(var(--inspector), 92vw);
+    padding-top: calc(var(--s-6) + env(safe-area-inset-top));
+    border-top: 0;
+    border-left: 1px solid var(--border-strong);
+    border-radius: var(--r-surface) 0 0 var(--r-surface);
+    box-shadow: var(--e3);
+    transform: translateX(100%);
+  }
+  .bottle.open .bp-panel { transform: none; }
+  .bottle .sheet-grip { display: none; }
+}
+@media (min-width: 1100px) {
+  .bottle:not(.modal) { position: sticky; top: 0; z-index: 5; inset: auto; height: 100vh; height: 100dvh; }
+  .bottle:not(.modal) .bp-panel {
+    position: relative;
+    width: auto;
+    height: 100%;
+    border-radius: 0;
+    box-shadow: inset 1px 0 0 var(--border-subtle);
+    border-left: 0;
+    transform: none;
+    transition: none;
+    animation: dock-in var(--dur-3) var(--ease-out);
+  }
+}
+@keyframes dock-in { from { opacity: 0; transform: translateX(24px); } }
+
+/* ---------- Settings ---------- */
+
+.set-group { display: grid; gap: var(--s-2); }
+.set-group h2 { padding: 0 var(--s-1); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
+.set-rows { display: grid; overflow: hidden; border-radius: var(--r-surface); border: 1px solid var(--border-subtle); background: var(--surface-1); }
+.set-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2) var(--s-3); min-height: 60px; padding: var(--s-2) var(--s-4); }
+.set-row + .set-row { border-top: 1px solid var(--border-subtle); }
+.set-label { display: flex; align-items: center; gap: var(--s-3); min-width: 0; }
+.set-label > svg { width: 18px; height: 18px; flex: none; color: var(--ambient); }
+.set-label span { display: grid; min-width: 0; }
+.set-label small { display: block; color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.set-link { color: var(--text-primary); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
+.set-rows > .notice { margin: var(--s-3) var(--s-4) 0; }
+.set-credits { padding: var(--s-3) var(--s-4); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.set-credits + .set-credits { padding-top: 0; }
+.set-credits span { display: block; }
+
+/* ---------- Location sheet ---------- */
+
+.city-results { display: grid; gap: var(--s-0); margin: var(--s-3) 0 0; }
+.city-results button { display: grid; grid-template-columns: 18px auto 1fr; align-items: center; gap: var(--s-3); width: 100%; min-height: var(--hit); padding: var(--s-2) var(--s-3); border-radius: var(--r-control); text-align: left; }
+@media (hover: hover) { .city-results button:hover { background: var(--surface-2); } }
+.city-results button:focus-visible { background: var(--surface-2); }
+.city-results svg { width: 16px; height: 16px; color: var(--text-tertiary); }
+.city-results span { overflow: hidden; color: var(--text-secondary); font-size: var(--fs-footnote); text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- The toast over the tab bar ---------- */
+
+.toast { bottom: calc(var(--tabbar) + var(--s-5) + env(safe-area-inset-bottom)); }
+body:has(#sheet:not([hidden]) .sheet-bar) .toast, body:has(#bottle.modal:not([hidden])) .toast { bottom: calc(var(--s-4) + env(safe-area-inset-bottom)); }
+@media (max-width: 719px) {
+  /* On phones a sheet's sticky footer sits where the toast would; lift it. */
+  body:has(#sheet:not([hidden]) .sheet-bar) .toast { bottom: calc(80px + env(safe-area-inset-bottom)); }
+}
+@media (min-width: 1100px) { .toast { bottom: calc(var(--s-5) + env(safe-area-inset-bottom)); } }
+
+/* View transitions: the bottle flies between its list and its page, and the
+   page rises a little and fades in place so the bottle lands on it. Both
+   ends show the same photo, so only the destination is drawn. */
+.bp-panel { view-transition-name: sc-page; }
+::view-transition-group(sc-bottle) { z-index: 1; animation-duration: var(--dur-4); animation-timing-function: var(--ease-sheet); }
+::view-transition-old(sc-bottle) { display: none; }
+::view-transition-new(sc-bottle) { animation: none; height: 100%; object-fit: contain; }
+::view-transition-new(sc-page):only-child { animation: vt-page-in var(--dur-4) var(--ease-sheet) both; }
+::view-transition-old(sc-page):only-child { animation: vt-page-out var(--dur-3) var(--ease-out) both; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--dur-3); }
+@keyframes vt-page-in { from { opacity: 0; transform: translateY(48px); } }
+@keyframes vt-page-out { to { opacity: 0; transform: translateY(48px); } }
+@media (min-width: 720px) {
+  @keyframes vt-page-in { from { opacity: 0; transform: translateX(48px); } }
+  @keyframes vt-page-out { to { opacity: 0; transform: translateX(48px); } }
+}
