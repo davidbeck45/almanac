@@ -29,7 +29,7 @@ MOCK=1 node worker/dev.mjs   # the old Fragella API on :8787, from saved respons
 node scripts/recommend.mjs --city "New York" --occasion date
 node scripts/recommend.mjs --city "New York" --week
 node scripts/recommend.mjs --layer "Liquid Brun"   # or --layer all
-node scripts/recommend.mjs --city "New York" --journal scentcast-journal.json   # rotate out recent wears, nudge in neglected ones
+node scripts/recommend.mjs --city "New York" --journal scentcast-journal-2026-10-14.json   # rotate out recent wears, nudge in neglected ones
 node scripts/recommend.mjs --mix                   # the collection's scent styles
 node scripts/recommend.mjs --doubles               # bottles you own that wear as one
 node scripts/recommend.mjs --pack --city London --from 2026-12-10 --to 2026-12-19 --events "2026-12-15 night formal"
@@ -47,7 +47,7 @@ Live at **https://davidbeck45.github.io/scentcast/** (GitHub Pages from `main`; 
 
 ## Collection
 
-`data/collection.jsonl` holds my Fragrantica wardrobe ("Have" shelf), scraped with `scripts/fragrantica-extract.js`. `npm run build:data` turns it into `data/collection.json`.
+`data/collection.jsonl` holds my Fragrantica wardrobe ("Have" shelf), a line per bottle from the dataset below (`python3 scripts/decant.py add collection <id>`) or, for a bottle newer than it, scraped from its page with `scripts/fragrantica-extract.js`. `npm run build:data` turns it into `data/collection.json`.
 
 `data/catalog.jsonl` holds other people's Fragrantica bottles that need more than the dataset has (Parfumo's ratings and layering votes, or bottles newer than it). `npm run build:data` builds both.
 
