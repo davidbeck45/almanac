@@ -8,10 +8,10 @@
 //   node scripts/recommend.mjs --ideal "Amber Empire"     (the temperatures it wears best in)
 //   node scripts/recommend.mjs --mix                       (the collection's scent styles, bottle by bottle)
 //   node scripts/recommend.mjs --styles "Prada L'Homme"   (one bottle's style scores; any Fragrantica bottle)
-//   node scripts/recommend.mjs --style "skin,clean,intimate" [--all]   (bottles to buy that are those styles)
+//   node scripts/recommend.mjs --style "skin,clean,intimate" [--all] [--lean masculine]   (bottles to buy that are those styles)
 //   node scripts/recommend.mjs --more-like "Liquid Brun,Amber Empire"   (bottles to buy that smell like them)
-//   node scripts/recommend.mjs --notes "iris leather" [--season winter] [--slot night] [--lean unisex] [--min-value 3.8]
-//   node scripts/recommend.mjs --dupes "Aventus"           (its original, cheaper twins, clones and smell-alikes)
+//   node scripts/recommend.mjs --notes "iris leather" [--season winter] [--slot night] [--lean unisex] [--min-value 3.8] [--min-rating 3.6]
+//   node scripts/recommend.mjs --dupes "Aventus"           (its original, cheaper alternatives and smell-alikes)
 // --journal FILE takes the app's journal export (Export in the wear journal), so
 // recent wears rotate out as they do in the app. --top N gives reasons for the
 // first N picks. Every bottle in the wardrobe counts, Jake included (these
@@ -31,7 +31,7 @@ import { STYLES, STYLE_STRONG, WEARS_CLOSE, styleById, styleScores, topOf, leanO
 import { fragranticaLibrary, loadPool, loadPoolStyles, loadAbout } from '../src/fragrantica.js';
 import {
   DEMO_LIKED, LEAN_WINDOWS, discoverContext, findStyles, likedStyles, moreOfStyles, defaultSeeds, moreLike, searchNotes,
-  dupeIds, dupesOf, whyLine,
+  dupeIds, dupesOf, whyLine, addCloneVotes,
 } from '../src/discover.js';
 
 const SLOTS = ['day', 'night'];
@@ -93,6 +93,7 @@ async function main() {
         season: { type: 'string' },
         lean: { type: 'string' },
         'min-value': { type: 'string' },
+        'min-rating': { type: 'string' },
       },
     }));
   } catch (err) {
@@ -311,6 +312,7 @@ async function main() {
 
   if (args.style || args['more-like'] || args.notes || args.dupes) {
     const count = process.argv.some(a => /^--top(=|$)/.test(a)) ? top : 10;
+    if (count < 1) fail('--top takes 1 or more for --style, --more-like, --notes and --dupes');
     await discover(args, fragrances, { slot, count, history });
     return;
   }
@@ -418,7 +420,10 @@ async function discover(args, fragrances, { slot, count, history }) {
   if (lean && !LEAN_WINDOWS[lean]) fail(`--lean takes ${Object.keys(LEAN_WINDOWS).join(', ')}, not "${args.lean}"`);
   const minValue = args['min-value'] == null ? null : Number(args['min-value']);
   if (minValue != null && !(minValue >= 1 && minValue <= 5)) fail(`--min-value takes a value-for-money score from 1 to 5, not "${args['min-value']}"`);
-  const filters = { seasons, slot: slot ?? null, lean: lean ?? null, minValue };
+  const minRating = args['min-rating'] == null ? undefined : Number(args['min-rating']);
+  if (minRating !== undefined && !(minRating >= 0 && minRating <= 5)) fail(`--min-rating takes a Fragrantica rating from 0 to 5, not "${args['min-rating']}"`);
+  // A style query sets its own rating floor (the style's), unless one is given.
+  const filters = { seasons, slot: slot ?? null, lean: lean ?? null, minValue, ...(minRating !== undefined && { minRating }) };
 
   const [pool, styles] = await Promise.all([loadPool(fromDisk), loadPoolStyles(fromDisk)]);
   const ctx = discoverContext(pool, fragrances, { styles });
@@ -436,6 +441,7 @@ async function discover(args, fragrances, { slot, count, history }) {
 
   const line = (r, extra) => [r.name, r.brand, r.year, r.rating ? `${r.rating.toFixed(2)}★` : null,
     extra.value != null ? `value ${extra.value.toFixed(1)}` : null].filter(Boolean).join(' · ');
+  const named = r => ({ id: r.id, name: r.name, brand: r.brand });
   const pickJSON = p => ({
     id: p.id,
     name: p.record.name,
@@ -448,15 +454,21 @@ async function discover(args, fragrances, { slot, count, history }) {
     score: +p.score.toFixed(3),
     styles: p.styles.map(s => s.label),
     wearsClose: p.close,
+    ...(p.via && { via: p.via }),
     ...(p.matched && { matched: p.matched }),
     ...(p.shares && { shares: p.shares }),
+    ...(p.alsoLiked != null && { alsoLiked: p.alsoLiked }),
+    smellsLike: p.clonesOf && { ...named(p.clonesOf), smellsLikeVotes: p.clonesOf.up == null ? null : [p.clonesOf.up, p.clonesOf.down] },
     closestOwned: p.nearest && { name: p.nearest.name, through: p.nearest.through, similarity: +p.nearest.sim.toFixed(2), shares: p.nearest.traits },
     family: p.family,
     risk: p.risk,
     cheaperTwin: p.twin ? `${p.twin.record.name} (${p.twin.record.brand})` : null,
+    twins: (p.alike ?? []).map(named),
     why: whyLine(p),
   });
-  const print = (title, picks, json) => {
+  const print = async (title, picks, json) => {
+    // What each clone pick copies, with the votes saying so.
+    for (const p of picks) if (p.clonesOf) addCloneVotes(p, await loadAbout(p.id, fromDisk));
     if (args.json) return console.log(JSON.stringify({ ...json, results: picks.map(pickJSON) }, null, 2));
     console.log(title);
     if (!picks.length) console.log('  Nothing in the pool passes. Try fewer filters.');
@@ -466,16 +478,20 @@ async function discover(args, fragrances, { slot, count, history }) {
 
   if (args.style) {
     let ids;
-    if (args.style.trim().toLowerCase() === 'liked') ids = likedStyles(fragrances, { stated: DEMO_LIKED }).map(s => s.id);
-    else {
+    if (args.style.trim().toLowerCase() === 'liked') {
+      // The styles David loves, else (none of them left in the wardrobe) what it leans toward.
+      ids = likedStyles(fragrances, { stated: DEMO_LIKED }).map(s => s.id);
+      if (!ids.length) ids = likedStyles(fragrances).map(s => s.id);
+    } else {
       const found = findStyles(args.style);
       if (found.unknown.length) fail(`No style called ${found.unknown.map(u => `"${u}"`).join(', ')}. Styles: ${STYLES.map(s => s.label).join(', ')}, or "liked"`);
       ids = found.ids;
     }
+    if (!ids.length) fail(`Name a style: ${STYLES.map(s => s.label).join(', ')}, or "liked"`);
     const mode = args.all ? 'all' : 'any';
     const picks = moreOfStyles(ids, ctx, { mode, k: count, filters });
     const labels = ids.map(id => styleById(id).label);
-    print(`More ${labels.join(args.all ? ' + ' : ', ')}${ids.length > 1 ? ` (${mode === 'all' ? 'all at once' : 'any of them'})` : ''}:`, picks, { styles: ids, mode, filters });
+    await print(`More ${labels.join(args.all ? ' + ' : ', ')}${ids.length > 1 ? ` (${mode === 'all' ? 'all at once' : 'any of them'})` : ''}:`, picks, { styles: ids, mode, filters });
     return;
   }
 
@@ -492,15 +508,19 @@ async function discover(args, fragrances, { slot, count, history }) {
         seeds.push(seed);
       }
     }
+    if (!seeds.length) fail('Name a bottle to find more like it, or "favorites"');
     const picks = moreLike(seeds, ctx, { k: count, filters });
-    print(`More like ${seeds.map(s => s.name).join(' + ')}:`, picks, { seeds: seeds.map(s => s.name), filters });
+    await print(`More like ${seeds.map(s => s.name).join(' + ')}:`, picks, { seeds: seeds.map(s => s.name), filters });
     return;
   }
 
   if (args.notes) {
-    const { terms, unknown, results } = searchNotes(args.notes, ctx, filters, { k: count });
+    const { terms, unknown, corrected, suggested, results } = searchNotes(args.notes, ctx, filters, { k: count });
     if (unknown.length) fail(`No note or accord called ${unknown.map(u => `"${u}"`).join(', ')}`);
-    print(`Bottles with ${terms.join(' + ')}:`, results, { query: args.notes, terms, filters });
+    if (!terms.length) fail('Name a note or accord, like "iris leather" or "fig"');
+    for (const c of corrected) console.error(`Reading "${c.from}" as "${c.to}".`);
+    for (const c of suggested) console.error(`Few bottles list "${c.from}"; did you mean "${c.to}"?`);
+    await print(`Bottles with ${terms.join(' + ')}:`, results, { query: args.notes, terms, corrected, suggested, filters });
     return;
   }
 
@@ -510,14 +530,17 @@ async function discover(args, fragrances, { slot, count, history }) {
   const more = await library.records(dupeIds(record, ctx));
   for (const r of more.values()) r.about = await loadAbout(r.id, fromDisk);
   const family = dupesOf(record, ctx, { more });
-  const entryJSON = e => e && ({ id: e.id, name: e.name, brand: e.brand, rating: e.rating, votes: e.votes, value: e.value, similarity: e.sim, risk: e.risk.level, owned: e.owned, smellsLikeVotes: e.up == null ? null : [e.up, e.down] });
+  const entryJSON = e => e && ({ id: e.id, name: e.name, brand: e.brand, rating: e.rating, votes: e.votes, value: e.value, similarity: e.sim, risk: e.risk.level,
+    owned: e.owned, smellsLikeVotes: e.up == null ? null : [e.up, e.down], why: e.why, ...(e.notesDiffer && { notesDiffer: true }), ...(e.built != null && { built: e.built }) });
   if (args.json) {
     console.log(JSON.stringify({ name: record.name, brand: record.brand, original: entryJSON(family.original),
-      cheaper: family.cheaper.map(entryJSON), clones: family.clones.map(entryJSON), siblings: family.siblings.map(entryJSON) }, null, 2));
+      cheaper: family.cheaper.map(entryJSON), siblings: family.siblings.map(entryJSON) }, null, 2));
     return;
   }
-  const entryLine = e => `${line(e, e)}${e.sim != null ? ` · ${Math.round(100 * e.sim)}% alike` : ''}${e.up != null ? ` · ${e.up} say it smells like it, ${e.down} not` : ''}`
-    + `${e.risk.level !== 'low' ? ` · ${e.risk.level} risk` : ''}${e.owned ? ' · you own it' : ''}`;
+  const says = n => (n === 1 ? 'says' : 'say');
+  const entryLine = e => `${line(e, e)}${e.sim != null ? ` · ${Math.round(100 * e.sim)}% alike` : ''}`
+    + `${e.up != null ? ` · ${e.up} ${says(e.up)} it smells like it, ${e.down} not` : ''}${e.why === 'notes' ? ' · alike by notes' : ''}`
+    + `${e.notesDiffer ? ' · notes differ' : ''}${e.risk.level !== 'low' ? ` · ${e.risk.level} risk` : ''}${e.owned ? ' · you own it' : ''}`;
   const section = (title, list) => {
     if (!list.length) return;
     console.log(`\n${title}:`);
@@ -526,9 +549,8 @@ async function discover(args, fragrances, { slot, count, history }) {
   console.log(`${record.name} (${record.brand})`);
   if (family.original) console.log(`Inspired by: ${entryLine(family.original)}${family.original.built ? '' : ' (going by the votes)'}`);
   section('Smells like it for far less', family.cheaper);
-  section('Its clones', family.clones);
-  section('Voters also say smell like it', family.siblings);
-  if (!family.original && !family.cheaper.length && !family.clones.length && !family.siblings.length) console.log('No smells-like votes for it.');
+  section('Voters say these smell like it', family.siblings);
+  if (!family.original && !family.cheaper.length && !family.siblings.length) console.log('No smells-like votes for it.');
   console.log('\nFrom Le Decanteur\'s Fragrantica dataset (CC BY-NC-SA 4.0).');
 }
 
@@ -537,7 +559,7 @@ const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,N
        node scripts/recommend.mjs --ideal NAME [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --mix [--exclude NAME,NAME] [--demo] [--json]
        node scripts/recommend.mjs --styles NAME [--json]
-       node scripts/recommend.mjs (--style STYLE,STYLE|liked [--all] | --more-like NAME,NAME|favorites | --notes "NOTE NOTE") [--season S,S] [--slot day|night] [--lean feminine|unisex|masculine] [--min-value V] [--top N] [--exclude NAME,NAME] [--json]
+       node scripts/recommend.mjs (--style STYLE,STYLE|liked [--all] | --more-like NAME,NAME|favorites | --notes "NOTE NOTE") [--season S,S] [--slot day|night] [--lean feminine|unisex|masculine] [--min-value V] [--min-rating R] [--top N] [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --dupes NAME [--top N] [--json]`;
 
 if (import.meta.main) await main();

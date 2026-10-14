@@ -161,12 +161,13 @@ export function poolKey(pool) {
 
 /**
  * The pool's style scores (data/fragrantica/pool-styles.json, written by
- * scripts/fit-pool-styles.mjs), fetched once: { styles: [ids], min, s: per
- * pool row [style index, score × 100, …] }, or null when there's no file or
- * it was made for another pool (score the records live then).
+ * scripts/fit-pool-styles.mjs), fetched once: { styles: [ids], min, check, s:
+ * per pool row [style index, score × 100, …] }, or null when there's no file,
+ * it can't be fetched or it was made for another pool (score the records live
+ * then). Rejects only when the pool itself can't load.
  */
 export async function loadPoolStyles(load = defaultLoad) {
-  const [pool, styles] = await Promise.all([loadPool(load), cached(load)('pool-styles.json', JSON.parse)]);
+  const [pool, styles] = await Promise.all([loadPool(load), cached(load)('pool-styles.json', JSON.parse).catch(() => null)]);
   return styles?.count === pool.count && styles.key === poolKey(pool) ? styles : null;
 }
 
