@@ -37,14 +37,26 @@ export function brandCase(brand) {
 }
 const thumbOf = id => `https://fimgs.net/mdimg/perfume-thumbs/dark-m.${id}.2x.webp`;
 
+// Words a note keeps in lowercase past its first ("Fleur de Sel").
+const SMALL_WORDS = new Set('de of la le du des and the et di da'.split(' '));
+/**
+ * A note written all in lowercase ("oak moss", "elemi", "ylang-ylang") in
+ * title case, as Fragrantica writes most ("Oak Moss"), as
+ * scripts/build_collection.py note_case does; others stay as they are.
+ */
+export function noteCase(note) {
+  if (typeof note !== 'string' || note !== note.toLowerCase()) return note;
+  return note.split(/([ -])/).map((w, i) => (i && SMALL_WORDS.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join('');
+}
+
 /** One row of data/fragrantica/r/*.json -> engine record (same shape as data/collection.json). */
 export function fromFragrantica(id, row) {
   const accords = Object.fromEntries(Object.entries(row.a).map(([a, s]) => [a, barWidth(s)]));
   const like = row.k ? { season: Object.fromEntries(SEASONS.map((s, i) => [s, row.k[i]])), night: row.k[4] } : null;
   const notes = {}, weights = {};
   for (const [tier, list] of Object.entries(row.no ?? {})) {
-    notes[NOTE_TIERS[tier]] = Object.keys(list);
-    Object.assign(weights, list);
+    notes[NOTE_TIERS[tier]] = Object.keys(list).map(noteCase);
+    for (const [note, w] of Object.entries(list)) weights[noteCase(note)] = w;
   }
   const record = {
     id: String(id),

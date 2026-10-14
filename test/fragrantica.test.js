@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { fromFragrantica, fragranticaLibrary, loadPool, fromPool, brandCase } from '../src/fragrantica.js';
+import { fromFragrantica, fragranticaLibrary, loadPool, fromPool, brandCase, noteCase } from '../src/fragrantica.js';
 import { performanceRating, steadyShares } from '../src/engine.js';
 import { DATASET_VERSION } from '../src/profiles.js';
 import { nameMatches } from '../src/collections.js';
@@ -57,6 +57,16 @@ test('a famous bottle leads its 0-vote namesakes, whatever year the dataset puts
   for (const [q, brand] of [['ombre leather', 'Tom Ford'], ['opium', 'Yves Saint Laurent']]) {
     assert.equal((await library.search(q)).find(h => nameMatches(q, h))?.brand, brand, q);
   }
+});
+
+test('notes written in lowercase read in title case, in records and the built wardrobe', () => {
+  assert.deepEqual(['oak moss', 'elemi', 'ylang-ylang', 'fleur de sel', 'Tonka Bean', 'iso E Super'].map(noteCase),
+    ['Oak Moss', 'Elemi', 'Ylang-Ylang', 'Fleur de Sel', 'Tonka Bean', 'iso E Super']);
+  const lower = r => Object.values(r.notes ?? {}).flat().filter(n => n === n.toLowerCase());
+  const rows = Object.entries(JSON.parse(readFileSync(new URL('r/0.json', dir)))).map(([id, row]) => fromFragrantica(id, row));
+  assert.deepEqual(rows.flatMap(lower), []);
+  for (const r of rows) for (const n of Object.keys(r.noteVotes ?? {})) assert.ok(Object.values(r.notes).flat().includes(n), `${r.name}: ${n}`);
+  assert.deepEqual(wardrobe.flatMap(lower), [], 'npm run build:data writes them so');
 });
 
 test('brands written in capitals read in title case, as the build writes them; short acronyms stay', async () => {
