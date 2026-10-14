@@ -204,8 +204,7 @@
 .nudge svg { width: 14px; height: 14px; flex: none; }
 .pick.full .nudge { margin-top: calc(-1 * var(--s-1)); }
 .next-window .nudge { align-self: flex-start; margin: 0; }
-/* How much to spray, beside Wear this: one line that opens the bottle
-   page's spray section. */
+/* How much to spray: one line that opens the bottle page's spray section. */
 .spray-hint {
   position: relative;
   display: inline-flex;
@@ -224,12 +223,10 @@
 .spray-hint svg { width: 16px; height: 16px; flex: none; color: var(--ambient); }
 .spray-hint svg:last-child { width: 14px; height: 14px; color: var(--text-tertiary); }
 @media (hover: hover) { .spray-hint:hover { color: var(--text-primary); background: var(--fill); } }
-/* On a phone it can't sit beside Wear this: it goes above it, in line
-   with the reasons. */
-@container page (max-width: 559px) {
-  .pick-actions .spray-hint { order: -1; width: calc(100% + var(--s-2)); margin: calc(-1 * var(--s-3)) 0 0 calc(-1 * var(--s-2)); }
-  .spray-hint svg:last-child { margin-left: auto; }
-}
+/* It sits above Wear this, in line with the reasons (beside it, a long
+   count wrapped under the button on all but the widest cards). */
+.pick-actions .spray-hint { order: -1; width: calc(100% + var(--s-2)); margin: calc(-1 * var(--s-3)) 0 0 calc(-1 * var(--s-2)); }
+.spray-hint svg:last-child { margin-left: auto; }
 /* Elsewhere the card shows the bottle too. */
 .pick.full { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: var(--s-1) var(--s-4); }
 .pick.full .pick-actions { grid-column: 1 / -1; }
