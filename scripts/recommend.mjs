@@ -649,7 +649,9 @@ async function main() {
     const report = gapReport(ctx, { k });
     if (args.json) {
       const picks = report.picks.map(({ record, ...p }) => ({ ...p, fills: p.fills.filter(f => f.matters) }));
-      console.log(JSON.stringify({ climate: where, bottles: fragrances.length, ...report, picks }, null, 2));
+      // `climate` names the place, as in --check; the report's own is each slot × band's share.
+      const { climate: bands, ...rest } = report;
+      console.log(JSON.stringify({ climate: where, bands, bottles: fragrances.length, ...rest, picks }, null, 2));
       return;
     }
     const STATUS = { gap: 'gap', thin: 'thin', room: 'room to grow' };
