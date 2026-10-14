@@ -25,7 +25,11 @@ export function loadPrefs() {
 }
 
 export function savePrefs() {
-  try { localStorage.setItem(PREFS_KEY, JSON.stringify({ occasion: state.occasion, units: state.units, theme: theme(), preferValue: state.preferValue })); } catch {}
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({
+      occasion: state.occasion, units: state.units, theme: theme(), preferValue: state.preferValue, likedStyles: state.likedStyles,
+    }));
+  } catch {}
 }
 
 function defaultUnits() {
@@ -66,6 +70,12 @@ export const state = {
   // "Prefer great value" as set (true / false; setPreferValue), or null for the
   // wardrobe's default. Pool questions send it (poolInputs).
   preferValue: typeof prefs.preferValue === 'boolean' ? prefs.preferValue : null,
+  // The scent styles someone says they like (style ids, src/scent-styles.js),
+  // picked on Insights' style mix; [] when they unpicked every one; null
+  // until they pick, when David's wardrobe starts on DEMO_LIKED and anyone
+  // else's on what most of its bottles lean toward (likedStyles in
+  // src/discover.js). setLikedStyles.
+  likedStyles: Array.isArray(prefs.likedStyles) ? prefs.likedStyles.filter(s => typeof s === 'string') : null,
   // Discover's search: `draft` is the field as typed, `query` what was last
   // searched; `offline` the library's error when only local matches came back.
   discover: { draft: null, query: '', results: null, busy: false, error: '', offline: '' },
@@ -324,6 +334,13 @@ export async function loadFullRecord(id) {
 // say which they used (`preferValue`), so the toggle can show it.
 export function setPreferValue(on) {
   state.preferValue = typeof on === 'boolean' ? on : null;
+  savePrefs();
+}
+
+// The styles someone likes, saved in prefs: an empty list means none, null
+// goes back to the default (state.likedStyles).
+export function setLikedStyles(ids) {
+  state.likedStyles = Array.isArray(ids) ? [...new Set(ids.map(String))] : null;
   savePrefs();
 }
 

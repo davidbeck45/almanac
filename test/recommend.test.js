@@ -209,3 +209,12 @@ test('--journal applies the ratings and skin nudges it carries', () => {
   const after = JSON.parse(cli('--loc', '40.7,-74', '--json', '--slot', 'day', '--journal', file).stdout).slots[0];
   assert.ok(after.ranked.find(r => r.name === runnerUp.name).reasons.includes('+ You rate it 5★'));
 });
+
+test('--doubles names pairs that wear as one, or the closest pair', () => {
+  const run = cli('--doubles', '--json');
+  assert.equal(run.status, 0, run.stderr);
+  const out = JSON.parse(run.stdout);
+  assert.deepEqual(out.doubles, [], 'nothing in David’s wardrobe doubles another');
+  assert.ok(out.closest.alike > 50 && out.closest.alike < 85, `closest ${out.closest.a} and ${out.closest.b}`);
+  assert.match(cli('--doubles').stdout, /^No doubles in \d+ bottles: every one smells its own way\.\nClosest pair: .+ and .+, \d+% alike \(/);
+});

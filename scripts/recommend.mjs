@@ -7,6 +7,7 @@
 //   node scripts/recommend.mjs --layer "Liquid Brun" --city "New York" [--slot night]   (for that weather)
 //   node scripts/recommend.mjs --ideal "Amber Empire"     (the temperatures it wears best in)
 //   node scripts/recommend.mjs --mix                       (the collection's scent styles, bottle by bottle)
+//   node scripts/recommend.mjs --doubles                   (bottles in the collection that wear as one)
 //   node scripts/recommend.mjs --styles "Prada L'Homme"   (one bottle's style scores; any Fragrantica bottle)
 //   node scripts/recommend.mjs --city Miami --date 2026-10-24 [--occasion date]   (any date: forecast, else typical weather)
 //   node scripts/recommend.mjs --pack --city London --from 2026-12-10 --to 2026-12-19 [--max 3] [--events "2026-12-15 night formal"]
@@ -42,6 +43,7 @@ import { fragranticaLibrary, loadPool, fromPool, loadPoolStyles, loadAbout } fro
 import { applySkin } from '../src/skin.js';
 import { packTrip, withEvents, picksFor, tripOccasion } from '../src/pack.js';
 import { sprayGuide } from '../src/spray.js';
+import { doubles } from '../src/doubles.js';
 import { gapContext, gapReport, buyCheck, checkJSON, cellLabel, DEFAULT_CLIMATE, USES, useLabel } from '../src/gaps.js';
 import { fetchClimate } from '../src/climate.js';
 import { parseUses, sharesFrom } from '../src/uses.js';
@@ -148,6 +150,7 @@ async function main() {
         demo: { type: 'boolean', default: false },
         top: { type: 'string' },
         mix: { type: 'boolean', default: false },
+        doubles: { type: 'boolean', default: false },
         styles: { type: 'string' },
         date: { type: 'string' },
         pack: { type: 'boolean', default: false },
@@ -357,6 +360,23 @@ async function main() {
         const styles = b.styles.length ? b.styles.map(s => `${s.label} ${s.score.toFixed(2)}`).join(', ') : 'no clear style';
         console.log(`${b.name} (${b.brand}): ${styles}${b.wearsClose ? ' · wears close' : ''}`);
       }
+    }
+    return;
+  }
+
+  // Doubles: pairs in the collection that smell alike, or voters tie (src/doubles.js).
+  if (args.doubles) {
+    const { pairs, closest } = doubles(fragrances);
+    const pct = x => Math.round(x * 100);
+    const pair = p => p && { a: p.a.name, b: p.b.name, ...(p.why && { why: p.why, reason: p.reason }), ...(p.original && { original: p.original.name }), alike: pct(p.sim), sharing: p.traits };
+    if (args.json) {
+      console.log(JSON.stringify({ total: fragrances.length, doubles: pairs.map(pair), closest: pair(closest) }, null, 2));
+    } else if (!pairs.length) {
+      console.log(`No doubles in ${fragrances.length} bottles: every one smells its own way.`);
+      if (closest) console.log(`Closest pair: ${closest.a.name} and ${closest.b.name}, ${pct(closest.sim)}% alike (${closest.traits.join(', ')}).`);
+    } else {
+      console.log(`Doubles in ${fragrances.length} bottles:`);
+      for (const p of pairs) console.log(`  ${p.a.name} and ${p.b.name}: ${p.reason} (${pct(p.sim)}% alike; ${p.traits.join(', ')})`);
     }
     return;
   }
@@ -904,6 +924,7 @@ const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,N
        node scripts/recommend.mjs --layer NAME|all [--city NAME | --loc LAT,LON[,NAME]] [--slot day|night] [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --ideal NAME [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --mix [--exclude NAME,NAME] [--demo] [--json]
+       node scripts/recommend.mjs --doubles [--exclude NAME,NAME] [--demo] [--json]
        node scripts/recommend.mjs --styles NAME [--json]
        node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,NAME]) --date YYYY-MM-DD [--occasion ID] [--slot day|night] [--journal FILE] [--json]
        node scripts/recommend.mjs --pack (--city NAME | --loc LAT,LON[,NAME]) --from YYYY-MM-DD --to YYYY-MM-DD [--max N] [--events "DATE [day|night] OCCASION; …"] [--json]
