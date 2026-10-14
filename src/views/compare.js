@@ -474,26 +474,38 @@ const pickRow = f => `<li class="row"><button class="row-main" data-action="cmp-
 const FEW = 5;
 
 /**
+ * Whether a bottle answers what's typed: every word of it is somewhere in
+ * its name and brand, in any order ("dior sauvage", "baccarat 540"), as
+ * localMatches reads a search (one-letter words count only when nothing
+ * longer was typed).
+ */
+export function pickerMatches(query, f) {
+  const typed = normalize(query).split(' ').filter(Boolean);
+  const words = typed.some(w => w.length > 1) ? typed.filter(w => w.length > 1) : typed;
+  if (!words.length) return true;
+  const hay = normalize(`${f.name} ${f.brand ?? ''}`);
+  return words.every(w => hay.includes(w));
+}
+
+/**
  * The picker's lists for a sheet { base: [ids], ctx, query, results, busy,
  * error }: [{ title, records }], the bottle's smells-like family first, then
  * the list it was opened from, then your own; filtered by the query, with
- * the library's matches after. Each bottle shows once, in the first list it
+ * the library's matches after (as the library found them: it matched them
+ * already, by its own rules). Each bottle shows once, in the first list it
  * makes; the family and the list it came from show their first five, so the
  * rest of your bottles stay under "Your bottles".
  */
 export function pickerLists(sheet, { family = null, context = [], owned = [] } = {}) {
   const seen = new Set(sheet.base ?? []);
-  const q = normalize(sheet.query ?? '');
-  const ok = f => {
-    const id = String(f?.id ?? '');
-    return Boolean(f?.name) && !seen.has(id) && (!q || normalize(`${f.name} ${f.brand ?? ''}`).includes(q));
-  };
-  // The first n that match, each marked as listed (the rest stay free for later lists).
-  const keep = (list, n = Infinity) => {
+  const q = sheet.query ?? '';
+  const typed = normalize(q) !== '';
+  // The first n that fit, each marked as listed (the rest stay free for later lists).
+  const keep = (list, n = Infinity, match = f => pickerMatches(q, f)) => {
     const out = [];
     for (const f of list) {
       if (out.length >= n) break;
-      if (!ok(f)) continue;
+      if (!f?.name || seen.has(String(f.id ?? '')) || !match(f)) continue;
       seen.add(String(f.id));
       out.push(f);
     }
@@ -505,7 +517,7 @@ export function pickerLists(sheet, { family = null, context = [], owned = [] } =
     { title: 'From the same list', records: keep(context, FEW) },
     { title: 'Your bottles', records: keep([...owned].sort((a, b) => a.name.localeCompare(b.name))) },
   ];
-  if (q) lists.push({ title: 'From Fragrantica', records: keep(sheet.results ?? []) });
+  if (typed) lists.push({ title: 'From Fragrantica', records: keep(sheet.results ?? [], Infinity, () => true) });
   return lists.filter(l => l.records.length);
 }
 

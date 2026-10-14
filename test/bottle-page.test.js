@@ -16,7 +16,7 @@ import { stylesHTML } from '../src/views/bottle-styles.js';
 import { dupesHTML } from '../src/views/bottle-dupes.js';
 import { crowdHTML, riskLine } from '../src/views/bottle-crowd.js';
 import { reviewsHTML } from '../src/views/bottle-reviews.js';
-import { compareHTML, compareModel, relation, leader, verdictHTML, pickerLists, pickerHTML, MAX_COMPARE } from '../src/views/compare.js';
+import { compareHTML, compareModel, relation, leader, verdictHTML, pickerLists, pickerHTML, pickerMatches, MAX_COMPARE } from '../src/views/compare.js';
 import { parseRoute, routeHash, compareIds } from '../src/app/router.js';
 import { shareToken } from '../src/custom.js';
 import { rank, comfortRange } from '../src/engine.js';
@@ -586,6 +586,18 @@ test('compare with… lists its family, the list it came from and your bottles, 
   assert.deepEqual(all.map(l => l.records.length), [5, fragrances.length - 6]);
   const typed = pickerLists({ base: [], query: 'origin', results: [{ id: '77', name: 'Original Musk', brand: 'X', stub: true }] }, { family, owned: fragrances });
   assert.deepEqual(typed.map(l => l.title), ['Smells like it', 'From Fragrantica']);
+  // Brand first, or the words out of order, as the Add sheet teaches ("e.g. Dior Sauvage").
+  const sauvage = byName('Sauvage');
+  const dior = pickerLists({ base: [a.id], query: 'dior sauvage', results: [] }, { owned: fragrances });
+  assert.deepEqual(dior.map(l => [l.title, l.records.map(r => r.id)]), [['Your bottles', [sauvage.id]]], 'brand then name finds your Sauvage');
+  assert.deepEqual(pickerLists({ base: [], query: 'SAUVAGE  Dior' }, { owned: fragrances })[0].records.map(r => r.id), [sauvage.id]);
+  // The library's matches stand as it found them: "baccarat 540" isn't a substring of "Baccarat Rouge 540".
+  const br540 = [{ id: '33519', name: 'Baccarat Rouge 540', brand: 'Maison Francis Kurkdjian' }, { id: '45178', name: 'Baccarat Rouge 540 Extrait de Parfum', brand: 'Maison Francis Kurkdjian' }];
+  const library = pickerLists({ base: [a.id], query: 'baccarat 540', results: br540 }, { owned: fragrances, context: [{ ...br540[0] }] });
+  assert.deepEqual(library.map(l => [l.title, l.records.map(r => r.id)]), [['From the same list', ['33519']], ['From Fragrantica', ['45178']]], 'every word in any order, and each bottle once');
+  assert.equal(pickerLists({ base: [], query: 'creed aventus', results: [] }, { owned: fragrances }).length, 0, 'a word that names nothing here: no local match');
+  assert.ok(pickerMatches('chanel n 5', { name: 'N°5', brand: 'Chanel' }) && pickerMatches('n 5', { name: 'N°5', brand: 'Chanel' }), 'one-letter words count when nothing longer was typed');
+  assert.ok(!pickerMatches('n 5', { name: 'Sauvage', brand: 'Dior' }));
   const html = clean(pickerHTML({ base: [a.id], query: EVIL }, []), 'picker');
   assert.match(html, /No bottles match/);
   assert.match(html, /data-field="cmp-query"/);
