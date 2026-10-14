@@ -5,7 +5,7 @@
 // fill, the closest bottle you own and a cheaper twin to want instead. Each
 // thing is said once: a reason the chips or rows below show drops out.
 import { styleById } from '../scent-styles.js';
-import { esc, valueWord as valueWords } from '../ui.js';
+import { esc, valueWord } from '../ui.js';
 import { icon, rowHTML } from '../ui/components.js';
 import { addSection, pooled, likedTaste, likedStatedNow } from './bottle.js';
 import { state, collectionLabel, findRecord, viewingDemo } from '../app/state.js';
@@ -43,8 +43,6 @@ const checks = pooled('check', 'bp-check', payload, {
 const pct = x => `${Math.round(x * 100)}%`;
 // collectionLabel() as the end of "Would it suit …?".
 const whose = label => (label === 'My collection' ? 'your collection' : label === 'Shared collection' ? 'this shared collection' : label);
-// Value for money in words, as every screen says it.
-const valueWord = v => valueWords(v)?.toLowerCase() ?? '';
 
 /** A heart toggle for a bottle in a row: Want it, or stop wanting it. */
 export const wantToggle = (f, on) =>
@@ -97,6 +95,7 @@ function overlapRow(o, ctx) {
 
 function twinRow(t, ctx, wants) {
   const record = t.record ?? findRecord(t.id) ?? t;
+  // Value for money in words, as every screen says it ("Great value").
   const meta = t.owned ? 'You own its twin' : ['Smells like it, for less', valueWord(t.value)].filter(Boolean).join(' · ');
   return rowHTML(record, { meta: esc(meta), open: { ctx }, trailing: t.owned ? '' : wantToggle(record, hasWant(wants, t.id)) });
 }

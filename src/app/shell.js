@@ -322,29 +322,23 @@ const askedFull = new Set(); // pool records whose every note was asked for
 // load stays undefined, marked in state.aboutFailed (the sections say so)
 // until Try again or the connection comes back. A record
 // a pool answer brought (its 8 strongest notes) swaps for its r/ record, all
-// its notes, keeping its signals.
+// its notes, keeping its signals. What a page asks for at once loads
+// together and the page draws once when all of it is in (the sections'
+// skeletons stand meanwhile): each draw rebuilds every section while the
+// sheet slides up.
 function bottleModelFor(r) {
   const id = r.arg;
   const model = bottleView.bottleModel(r);
+  const showing = () => state.route?.dest === 'bottle' && state.route.arg === id;
   if (model) {
+    const loads = [];
     // The wardrobe's and catalog's records carry theirs (`f.about`, the build's).
-    if (/^\d+$/.test(id) && !model.f.about && !askedAbout.has(id) && !state.aboutFailed.has(id)) {
-      askedAbout.add(id);
-      loadAbout(id).then(about => {
-        state.about.set(id, about);
-        if (state.route?.dest === 'bottle' && state.route.arg === id) renderBottle();
-      }, () => {
-        askedAbout.delete(id);
-        state.aboutFailed.add(id);
-        if (state.route?.dest === 'bottle' && state.route.arg === id) renderBottle();
-      });
-    }
+    if (/^\d+$/.test(id) && !model.f.about) loads.push(aboutLoad(id));
     if (model.f.source === 'fragrantica' && model.f.extras && state.bottles.get(id) === model.f && !askedFull.has(id)) {
       askedFull.add(id);
-      loadFullRecord(id).then(() => {
-        if (state.route?.dest === 'bottle' && state.route.arg === id) renderBottle();
-      }, () => askedFull.delete(id));
+      loads.push(loadFullRecord(id).then(() => true, () => { askedFull.delete(id); return false; }));
     }
+    drawWhenIn(loads.filter(Boolean), showing);
     return model;
   }
   if (missing.has(id)) return null;
@@ -360,16 +354,16 @@ function bottleModelFor(r) {
   }
   if (!loadingBottles.has(id)) {
     loadingBottles.add(id);
-    library.records([id]).then(found => {
+    // A bottle in no list has no build's about data: it loads beside the
+    // record. (At boot, before the lists are in, it may be one of theirs.)
+    const record = library.records([id]).then(found => {
       // keepBottles: a pool answer landing meanwhile keeps its signals.
       if (found.get(id)) {
         keepBottles([found.get(id)]);
         askedFull.add(id);
       } else missing.add(id);
-    }, () => fromPool(id).catch(() => failed.add(id))).finally(() => {
-      loadingBottles.delete(id);
-      if (state.route?.dest === 'bottle' && state.route.arg === id) renderBottle();
-    });
+    }, () => fromPool(id).catch(() => failed.add(id))).finally(() => loadingBottles.delete(id));
+    drawWhenIn([record, state.demo && aboutLoad(id)].filter(Boolean), showing);
   }
   return undefined;
 }
@@ -382,6 +376,25 @@ async function fromPool(id) {
   await askPool('warm');
   const { records } = await askPool('records', { ids: [id], poolOnly: true });
   if (!records?.some(r => String(r.id) === id)) throw new Error('Not in the pool');
+}
+
+// Loads a dataset bottle's about data into state.about, unless it's there
+// (Compare may have loaded it), on its way or failed (state.aboutFailed).
+// -> a promise that never rejects, or null when there's nothing to load.
+function aboutLoad(id) {
+  if (state.about.has(id) || askedAbout.has(id) || state.aboutFailed.has(id)) return null;
+  askedAbout.add(id);
+  return loadAbout(id).then(about => { state.about.set(id, about); }, () => {
+    askedAbout.delete(id);
+    state.aboutFailed.add(id);
+  });
+}
+
+// Draws the bottle page again once every load has settled, if it's still on
+// screen. A load that resolves false (a full record that failed, asked again
+// on the next draw) draws nothing by itself, or offline it would ask forever.
+function drawWhenIn(loads, showing) {
+  if (loads.length) Promise.all(loads).then(done => { if (done.some(d => d !== false) && showing()) renderBottle(); });
 }
 
 function setModal(on) {

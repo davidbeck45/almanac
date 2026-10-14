@@ -32,7 +32,8 @@
 //   moreLike { owned, exclude?, seeds? (ids or records; else the most worn: history, todayISO), k?, filters?, preferValue?, cloneVotes? }
 //            -> { seeds, from: 'given' | 'worn' | 'rated', picks }
 //   notes    { owned, exclude?, query, filters?, k?, preferValue?, cloneVotes? } -> searchNotes' fields, its results as `picks`
-//   dupes    { owned, exclude?, id | record } -> { record, original, cheaper, siblings }
+//   dupes    { owned, exclude?, id | record, about? (the bottle's, when the asker has it; null: none) }
+//            -> { record, original, cheaper, siblings }
 //   records  { ids, poolOnly? } -> { records (pool rows once the pool is in, else r/), missing }; poolOnly
 //            waits for the pool and sends only its rows, the rest missing (no r/ loads: rating votes
 //            for a bottle the pool lacks are under 500, so a miss is never well known)
@@ -368,8 +369,10 @@ const TASKS = {
     const { ctx, pool } = await discoverFor(cache, p, ms);
     const found = await recordFor(cache, p, pool, ctx.owned);
     if (!found) throw new Error('That bottle isn’t in the fragrance library.');
-    // Its own smells-like votes, and the bottles they name outside the pool.
-    const record = found.about ? found : { ...found, about: await aboutOf(cache, found.id) };
+    // Its own smells-like votes (the about data the asker sent, when it had
+    // it: a bottle page has loaded it already), and the bottles they name
+    // outside the pool.
+    const record = found.about ? found : { ...found, about: p.about !== undefined ? p.about : await aboutOf(cache, found.id) };
     const more = await cache.library.records(dupeIds(record, ctx));
     await Promise.all([...more.values()].map(async r => { r.about = await aboutOf(cache, r.id); }));
     const family = await timed(ms, 'task', () => dupesOf(record, ctx, { more }));
