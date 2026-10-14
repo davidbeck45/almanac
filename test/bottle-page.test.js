@@ -93,7 +93,7 @@ test('the sections take their slots in the page', () => {
 
 test('a whole page renders clean, owned or not', () => {
   const owned = clean(bottlePageHTML(modelOf(evil, { skin: { rating: 4, longevity: 1, sillage: 0 } })), 'an owned bottle');
-  assert.match(owned, /On my skin/);
+  assert.match(owned, /On your skin/);
   assert.match(owned, /How much to spray/);
   assert.match(owned, /What voters say/);
   assert.match(owned, /Pros and cons/);
@@ -105,7 +105,7 @@ test('a whole page renders clean, owned or not', () => {
   assert.match(owned, /id="bp-spray"/, 'Now’s spray line finds the spray guide');
 
   const other = clean(bottlePageHTML(modelOf(stranger, { owned: false, active: false, entry: null, solo: true, wanted: true })), 'a bottle you don’t own');
-  assert.ok(!other.includes('On my skin'), 'no skin section for a bottle you don’t own');
+  assert.ok(!other.includes('On your skin'), 'no skin section for a bottle you don’t own');
   assert.ok(other.indexOf('Main accords') < other.indexOf('How much to spray'), 'what it smells like before how to spray it');
   assert.match(other, /data-action="bp-want" data-id="9828" aria-pressed="true"/, 'Want shows as on');
   assert.match(other, /aria-busy="true"/, 'the pool-backed sections show a skeleton until they’re asked');
@@ -127,6 +127,16 @@ test('why it ranks here: the rating bar says whose rating it is, and a bottle no
   assert.match(why(byHand), /bar-label">Season</);
   assert.ok(!/bar-label">(Your r|R)ating</.test(why(byHand)), 'no crowd, no rating bar');
   assert.match(why({ ...byHand, personal: { rating: 5, longevity: 0, sillage: 0 } }), /bar-label">Your rating</);
+});
+
+test('notes listed flat show under their heading alone, and estimated seasons say so in words', () => {
+  const section = (html, id) => html.slice(html.indexOf(`data-section="${id}"`), html.indexOf('</section>', html.indexOf(`data-section="${id}"`)));
+  const flat = section(bottlePageHTML(modelOf({ ...byName('Liquid Brun'), notes: { all: ['Vanilla', 'Musk'] } })), 'notes');
+  assert.match(flat, /<h3>Notes<\/h3><div class="notes">/);
+  assert.ok(!flat.includes('layer-label'), 'no "Notes" under "Notes"');
+  assert.match(section(bottlePageHTML(modelOf(byName('Liquid Brun'))), 'notes'), /layer-label">Top</);
+  const byHand = customRecord({ name: 'Rose', accords: ['rose', 'musky'] });
+  assert.match(bottlePageHTML(modelOf(byHand, { entry: null })), /Time of day, estimated/);
 });
 
 test('also good: only today, tonight and tomorrow go lower case in its heading', () => {
@@ -305,7 +315,7 @@ test('the spray guide counts sprays, lights the spots and says why', () => {
   assert.deepEqual([sprayCount({ sprays: [1, 1] }), sprayCount({ sprays: [2, 3] })], ['1 spray', '2–3 sprays']);
 });
 
-// ---------- On my skin ----------
+// ---------- On your skin ----------
 
 test('on my skin: stars, nudges and where the bottle moved', () => {
   assert.equal(skinHTML(modelOf(stranger, { owned: false })), '');
@@ -317,6 +327,10 @@ test('on my skin: stars, nudges and where the bottle moved', () => {
   assert.match(html, /data-action="bp-skin-lasts" data-value="-1" aria-pressed="true"/);
   assert.match(html, /data-action="bp-skin-projects" data-value="1" aria-pressed="true"/);
   assert.ok(!html.includes('role="status"'), 'the line is drawn anew each time; #bp-status, which outlasts the page, says it');
+  // One person throughout: what you see is what a screen reader hears.
+  assert.match(html, /How long it lasts on you<\/span>[^]*aria-label="How long it lasts on you"/);
+  assert.match(html, /How far it projects on you<\/span>[^]*aria-label="How far it projects on you"/);
+  assert.ok(!/\bon me\b|On my skin/.test(html));
   const unrated = skinHTML(modelOf(evil));
   assert.ok(!unrated.includes('bp-skin-clear'));
   assert.match(unrated, /tabindex="0" data-action="bp-skin-rate" data-value="1"/, 'one tab stop, on the first star');

@@ -1,4 +1,4 @@
-// The bottle page's "On my skin" (order 260), for a bottle you own: your own
+// The bottle page's "On your skin" (order 260), for a bottle you own: your own
 // stars and how it wears on you against the crowd's votes (src/skin.js).
 // Stars move it in picks and the nudges tune its spray guide; saving ranks
 // everything again and says what changed: where the bottle moved in the list
@@ -46,15 +46,15 @@ export function skinHTML(m, change = '') {
   const stars = STARS.map(n => `<button type="button" class="skin-star${rating && n <= rating ? ' lit' : ''}" role="radio" aria-checked="${n === rating}" tabindex="${n === (rating ?? 1) ? 0 : -1}" data-action="bp-skin-rate" data-value="${n}" aria-label="${n} star${n === 1 ? '' : 's'}">${icon.star}</button>`).join('');
   const seg = (items, now, action, label) => segHTML(items.map(([value, text]) => ({ value, label: text, on: value === now })), { action, label, cls: 'wide' });
   return `<section class="bp-section" aria-labelledby="skin-title">
-    <h3 id="skin-title" tabindex="-1">On my skin</h3>
+    <h3 id="skin-title" tabindex="-1">On your skin</h3>
     <div class="skin-box">
       <div class="skin-row">
         <span class="skin-label" id="skin-stars-label">Your rating</span>
         <div class="skin-stars" role="radiogroup" aria-labelledby="skin-stars-label">${stars}</div>
         ${rating ? `<button class="link-btn skin-clear" data-action="bp-skin-clear" data-id="${id}">Clear</button>` : ''}
       </div>
-      <div class="skin-row stacked"><span class="skin-label">How long it lasts on me</span>${seg(LASTS, m.skin?.longevity ?? 0, 'bp-skin-lasts', 'How long it lasts on you')}</div>
-      <div class="skin-row stacked"><span class="skin-label">How far it projects on me</span>${seg(PROJECTS, m.skin?.sillage ?? 0, 'bp-skin-projects', 'How far it projects on you')}</div>
+      <div class="skin-row stacked"><span class="skin-label">How long it lasts on you</span>${seg(LASTS, m.skin?.longevity ?? 0, 'bp-skin-lasts', 'How long it lasts on you')}</div>
+      <div class="skin-row stacked"><span class="skin-label">How far it projects on you</span>${seg(PROJECTS, m.skin?.sillage ?? 0, 'bp-skin-projects', 'How far it projects on you')}</div>
       <p class="skin-change">${esc(change)}</p>
       <p class="skin-help">Your stars move it up or down in picks. How it wears on you tunes the spray guide.</p>
     </div>

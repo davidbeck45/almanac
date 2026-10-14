@@ -180,7 +180,7 @@
 .spray-where { margin-top: var(--s-1); font-size: var(--fs-body); line-height: var(--lh-body); }
 .spray-note { margin-top: var(--s-2); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 
-/* ---------- On my skin ---------- */
+/* ---------- On your skin ---------- */
 
 .skin-box { display: grid; gap: var(--s-3); }
 .skin-row { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: var(--s-2) var(--s-3); }

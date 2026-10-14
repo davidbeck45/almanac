@@ -306,7 +306,7 @@ function headSection({ f, entry, ctxLabel, solo }) {
     : !f.rating ? 'Unrated'
     : `★ ${f.rating.toFixed(2)} <span>${esc(f.source === 'fragella' ? 'Fragella rating' : `${f.ratingVotes.toLocaleString()} votes`)}</span>`;
   // Parfumo's 0–10 ratings when we have them, else Fragrantica's votes, else
-  // Fragella's words; Lasts and Projects, as compare and On my skin say it.
+  // Fragella's words; Lasts and Projects, as compare and On your skin say it.
   const pf = f.parfumo, fv = f.performance;
   const performance = pf
     ? `Lasts ${pf.longevity.toFixed(1)} · Projects ${pf.sillage.toFixed(1)} <span>of 10 on <a href="${esc(pf.url)}" target="_blank" rel="noopener" data-focus="bp-parfumo">Parfumo</a></span>`
@@ -439,16 +439,19 @@ function seasonsSection({ f }) {
   const dnBars = ['day', 'night'].map(s => bar(s, (f.dayNight[s] / dnPeak) * 100, SEASON_COLORS[s], `${Math.round(f.dayNight[s] * 100)}%`)).join('');
   return `<section class="bp-section two-col">
     <div><h3>${estimated ? 'Season fit' : 'Seasons voted'}</h3><div class="bars">${seasonBars}</div></div>
-    <div><h3>${estimated ? 'Time of day (est.)' : 'Time of day'}</h3><div class="bars">${dnBars}</div></div>
+    <div><h3>${estimated ? 'Time of day, estimated' : 'Time of day'}</h3><div class="bars">${dnBars}</div></div>
   </section>`;
 }
 
+// The pyramid by layer; a bottle listed flat (only `all`) shows its notes
+// under the heading alone, not a "Notes" label under "Notes".
 function notesSection({ f }) {
-  const layers = [['top', 'Top'], ['mid', 'Heart'], ['base', 'Base'], ['all', 'Notes']]
-    .filter(([k]) => f.notes?.[k]?.length)
-    .map(([k, label]) => `<div class="layer"><span class="layer-label">${label}</span><div class="notes">${f.notes[k].map(n => `<span class="note-chip">${esc(n)}</span>`).join('')}</div></div>`)
-    .join('');
-  return layers ? `<section class="bp-section"><h3>Notes</h3><div class="pyramid">${layers}</div></section>` : '';
+  const chips = list => `<div class="notes">${list.map(n => `<span class="note-chip">${esc(n)}</span>`).join('')}</div>`;
+  const layers = [['top', 'Top'], ['mid', 'Heart'], ['base', 'Base'], ['all', 'Notes']].filter(([k]) => f.notes?.[k]?.length);
+  if (!layers.length) return '';
+  const body = layers.length === 1 && layers[0][0] === 'all' ? chips(f.notes.all)
+    : `<div class="pyramid">${layers.map(([k, label]) => `<div class="layer"><span class="layer-label">${label}</span>${chips(f.notes[k])}</div>`).join('')}</div>`;
+  return `<section class="bp-section"><h3>Notes</h3>${body}</section>`;
 }
 
 // Orders leave room between them for wave 4's sections (shell-map.md lists
