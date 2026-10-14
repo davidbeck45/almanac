@@ -4,12 +4,13 @@ A quick look at what to wear from my own collection, based on today's weather, t
 
 - **Today** — live local weather (Open-Meteo, no key), a scene drawn for the conditions, and S/A/B/C tiers for daytime and tonight. Each pick shows a match score and, in its detail sheet, why it ranks where it does and what else fits.
 - **Week** — a day and night pick for each of the next 7 days, planned against the forecast so nothing repeats back to back.
-- **Occasion** — Everyday, Office, Date Night, Night Out, Formal, Outdoors, Cozy, for daytime or tonight.
+- **Occasion** — Casual, Office, Date Night, Night Out, Formal, Outdoors, Cozy, for daytime or tonight.
 - **Layering** — each bottle's detail sheet suggests which of your other bottles to layer it with, names the notes that complement each other, and says which to spray first.
 - **Wear this** — logs what you wore so picks rotate, fading over the next ten days. The wear journal shows a calendar, your most-worn bottles and the ones gathering dust.
 - **Trips and events** — the fewest bottles to pack for a city and dates, and which to wear when, with a dressier pick for a formal night; picks for any date ahead. Past the forecast's first ten days it plans on typical weather for the dates. In the terminal for now (`--pack`, `--date`); app screens are next.
 - **How much to spray** — a count and where for each pick, from how loud and lasting the bottle is, the weather and the occasion. In the terminal for now (`--spray`, and on every pick).
 - **Your own ratings** — your stars steer the picks (a bottle you rate 1★ sits out, a 5★ one wins near ties), and so does whether a bottle lasts longer or sits closer on your skin than the crowd says. The engine reads them; the app's controls are next.
+- **Gaps and buy check** — where your wardrobe is thin for your climate and how you wear it ("Formal on cool nights"), bottles that would fill it with a cheaper twin and blind-buy risk for each, and a verdict on any bottle you're eyeing: strong fit, good, redundant or risky. In the terminal for now.
 - °F or °C (defaults from your locale), recent locations, and home-screen shortcuts for Today, Week and Occasion.
 - **Your own collection** — search every fragrance on Fragrantica (from [Le Decanteur's dataset](https://www.kaggle.com/datasets/ledecanteur/fragrantica-perfumes), CC BY-NC-SA 4.0), paste a list, or add a bottle no database has by picking its accords. Share it as a link. The demo shows my wardrobe.
 
@@ -29,6 +30,8 @@ node scripts/recommend.mjs --mix                   # the collection's scent styl
 node scripts/recommend.mjs --pack --city London --from 2026-12-10 --to 2026-12-19 --events "2026-12-15 night formal"
 node scripts/recommend.mjs --city Miami --date 2026-10-24 --occasion date   # any date: forecast, else typical weather
 node scripts/recommend.mjs --spray "Liquid Brun" --occasion date             # how many sprays, and where
+node scripts/recommend.mjs --gaps --city Houston    # what the wardrobe is missing there, and what fills it
+node scripts/recommend.mjs --check "Le Male Le Parfum"   # worth buying?
 ```
 
 Live at **https://davidbeck45.github.io/scentcast/** (GitHub Pages from `main`; every push redeploys). Add it to your phone's home screen to use it like an app.

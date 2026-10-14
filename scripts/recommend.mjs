@@ -11,6 +11,9 @@
 //   node scripts/recommend.mjs --city Miami --date 2026-10-24 [--occasion date]   (any date: forecast, else typical weather)
 //   node scripts/recommend.mjs --pack --city London --from 2026-12-10 --to 2026-12-19 [--max 3] [--events "2026-12-15 night formal"]
 //   node scripts/recommend.mjs --spray "Liquid Brun" [--city X] [--occasion date]   (how many sprays, and where)
+//   node scripts/recommend.mjs --gaps [--city X] [--uses "office=often,formal=never"] [--value | --no-value] [--top N]
+//                                                         (what the wardrobe is missing, and bottles that fill it)
+//   node scripts/recommend.mjs --check "Shalimar Millesime Tonka"   (whether a bottle is worth buying; name or id)
 // --journal FILE takes the app's journal export (Export in the wear journal), so
 // recent wears rotate out as they do in the app. --top N gives reasons for the
 // first N picks. Every bottle in the wardrobe counts, Jake included (these
@@ -29,18 +32,21 @@ import { parseJournal } from '../src/history.js';
 import { fetchForecast, summarize, week, tripWindows } from '../src/weather.js';
 import { searchCities } from '../src/location.js';
 import { STYLES, STYLE_STRONG, WEARS_CLOSE, styleById, styleScores, topOf, leanOf, closeOf, styleMix } from '../src/scent-styles.js';
-import { fragranticaLibrary } from '../src/fragrantica.js';
+import { fragranticaLibrary, loadPool, fromPool, loadAbout } from '../src/fragrantica.js';
 import { applySkin } from '../src/skin.js';
 import { packTrip, withEvents, picksFor, tripOccasion } from '../src/pack.js';
 import { sprayGuide } from '../src/spray.js';
+import { gapContext, gapReport, buyCheck, checkJSON, cellLabel, DEFAULT_CLIMATE, USES, useLabel } from '../src/gaps.js';
+import { fetchClimate } from '../src/climate.js';
+import { parseUses, sharesFrom } from '../src/uses.js';
 
 const SLOTS = ['day', 'night'];
 const squash = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
 
-/** An occasion by id or label, any case or spacing ("date", "Date Night", "night out"), or null. */
+/** An occasion by id, label or a former label, any case or spacing ("date", "Date Night", "night out", "everyday"), or null. */
 export function findOccasion(text) {
   const q = squash(text);
-  return OCCASIONS.find(o => squash(o.id) === q || squash(o.label) === q) ?? null;
+  return OCCASIONS.find(o => [o.id, o.label, ...(o.aliases ?? [])].some(n => squash(n) === q)) ?? null;
 }
 
 /**
@@ -60,6 +66,13 @@ const byTime = (a, b) => a.dateISO.localeCompare(b.dateISO) || SLOTS.indexOf(a.s
 const sign = r => `${r.tone === 'good' ? '+' : '-'} ${r.text}`;
 // "Althaïr (Parfums de Marly)" for a dupe; undefined drops out of the JSON.
 const inspiredBy = f => f.original ? `${f.original.name} (${f.original.brand})` : undefined;
+
+// data/fragrantica/ from disk, for the dataset's loaders.
+const DATASET = new URL('../data/fragrantica/', import.meta.url);
+const datasetFile = async path => {
+  const file = new URL(path, DATASET);
+  return existsSync(file) ? readFileSync(file, 'utf8') : null;
+};
 
 function fail(message) {
   console.error(message);
@@ -123,7 +136,7 @@ async function main() {
         ideal: { type: 'string' },
         journal: { type: 'string' },
         demo: { type: 'boolean', default: false },
-        top: { type: 'string', default: '1' },
+        top: { type: 'string' },
         mix: { type: 'boolean', default: false },
         styles: { type: 'string' },
         date: { type: 'string' },
@@ -133,6 +146,11 @@ async function main() {
         max: { type: 'string', default: '3' },
         events: { type: 'string' },
         spray: { type: 'string' },
+        gaps: { type: 'boolean', default: false },
+        check: { type: 'string' },
+        uses: { type: 'string' },
+        value: { type: 'boolean', default: false },
+        'no-value': { type: 'boolean', default: false },
       },
     }));
   } catch (err) {
@@ -145,7 +163,7 @@ async function main() {
   if (args.occasion && !occasion) {
     fail(`Unknown occasion "${args.occasion}". Pick one of: ${OCCASIONS.map(o => `${o.id} (${o.label})`).join(', ')}`);
   }
-  const top = Number(args.top);
+  const top = Number(args.top ?? 1);
   if (!Number.isInteger(top) || top < 0) fail(`--top takes a whole number, not "${args.top}"`);
   const today = localToday();
   for (const key of ['date', 'from', 'to']) {
@@ -464,6 +482,115 @@ async function main() {
     return;
   }
 
+  // What the wardrobe is missing and what would fill it (src/gaps.js), or
+  // whether one bottle is worth buying. The climate is the place's (--city or
+  // --loc: one archive call) or, without one, the ten temperate cities'.
+  if (args.gaps || args.check) {
+    if (args.value && args['no-value']) fail('Pass --value or --no-value, not both');
+    let shares = null;
+    if (args.uses) {
+      try {
+        shares = sharesFrom(parseUses(args.uses));
+      } catch (err) {
+        fail(`--uses: ${err.message}`);
+      }
+    }
+    let summary = DEFAULT_CLIMATE, where = 'the ten temperate cities (default)';
+    if (args.city || args.loc) {
+      const place = await resolvePlace();
+      const climate = await fetchClimate(place.lat, place.lon);
+      if (climate.local) [summary, where] = [climate.summary, place.name];
+      else console.error(`Couldn't get the climate for ${place.name} (${climate.error}); using the default climate.`);
+    }
+    const parsed = await loadPool(datasetFile);
+    const records = Array.from({ length: parsed.count }, (_, i) => fromPool(parsed, i));
+    const byId = new Map(records.map(r => [r.id, r]));
+    const preferValue = args.value ? true : args['no-value'] ? false : null;
+    const ctx = gapContext({ owned: fragrances, records, byId, summary, shares, preferValue });
+    const pct = x => `${Math.round(x * 100)}%`;
+    const stars = r => `${r.rating.toFixed(1)}★ from ${r.ratingVotes.toLocaleString('en-US')} votes`;
+    const byLine = r => `${r.name} by ${r.brand}${r.year ? ` (${r.year})` : ''}`;
+    // The bottle a fill beats or backs up: owned, or an earlier suggestion.
+    const whose = f => (f.beatsPick ? `${f.beats.name} (suggested above)` : `your ${f.beats.name}`);
+    const fillLine = f => (!f.beats ? `${f.title}: ${pct(f.to)}`
+      : f.first ? `${f.title}: ${pct(f.to)}, over ${whose(f)} at ${pct(f.from)}`
+        : `${f.title}: ${pct(f.to)} as a second pick, behind ${whose(f)} at ${pct(f.from)}`);
+    const valueText = `prefer great value: ${ctx.preferValue ? 'on (only bottles voters value 3.8+)' : 'off'}`;
+
+    if (args.check) {
+      const q = args.check.trim();
+      let record = null;
+      if (/^\d+$/.test(q)) record = byId.get(q) ?? (await fragranticaLibrary(datasetFile).records([q])).get(q) ?? null;
+      else {
+        const hits = matchBottles(records, q).sort((a, b) => b.ratingVotes - a.ratingVotes);
+        if (hits.length > 1) {
+          console.error(`"${q}" matches ${hits.length} bottles (${hits.slice(0, 4).map(byLine).join('; ')}${hits.length > 4 ? '…' : ''}); checking the most voted. Give more of the name, or its id, for another.`);
+        }
+        record = hits[0] ?? null;
+        if (!record) {
+          const library = fragranticaLibrary(datasetFile);
+          const [hit] = await library.search(q, 1);
+          record = hit ? (await library.records([hit.id])).get(hit.id) : matchBottles(fragrances, q)[0] ?? null;
+        }
+      }
+      if (!record) fail(`No bottle matches "${q}"`);
+      // Outside the pool, a bottle's signals come from its about data.
+      if (!record.extras && /^\d+$/.test(record.id) && !byId.has(record.id)) {
+        const about = await loadAbout(record.id, datasetFile);
+        if (about) record = { ...record, about };
+      }
+      const check = buyCheck(record, ctx);
+      if (args.json) {
+        console.log(JSON.stringify({ climate: where, preferValue: ctx.preferValue, ...checkJSON(record, check) }, null, 2));
+        return;
+      }
+      console.log(`${byLine(record)} · ${stars(record)}`);
+      console.log(`${check.verdict}`);
+      for (const r of check.reasons) console.log(`  ${r}`);
+      if (check.fills.length) console.log(`Fills:\n${check.fills.slice(0, 5).map(f => `  ${fillLine({ ...f, title: cellLabel(f.cell) })}`).join('\n')}`);
+      if (check.overlap) {
+        const o = check.overlap;
+        console.log(`Closest: ${o.bottle === o.via ? `your ${o.via.name}` : `${o.bottle.name}, the original of your ${o.via.name}`} (${o.sim.toFixed(2)} alike)${o.link ? `. ${o.link}.` : ''}`);
+      }
+      console.log(`Risk: ${check.risk.level}${check.risk.reasons.length ? ` (${check.risk.reasons.join(' ')})` : ''}`);
+      if (check.twin) console.log(`Twin: ${check.twin.text}`);
+      console.log(`\nClimate: ${where} · ${valueText}`);
+      return;
+    }
+
+    const k = args.top === undefined ? 5 : top;
+    const report = gapReport(ctx, { k });
+    if (args.json) {
+      const picks = report.picks.map(({ record, ...p }) => ({ ...p, fills: p.fills.filter(f => f.matters) }));
+      console.log(JSON.stringify({ climate: where, bottles: fragrances.length, ...report, picks }, null, 2));
+      return;
+    }
+    const STATUS = { gap: 'gap', thin: 'thin', room: 'room to grow' };
+    const shareText = USES.map(u => `${useLabel(u)} ${pct(shares?.[u.id] ?? u.share)}`).join(', ');
+    console.log(`${fragrances.length} bottles · climate: ${where} · ${valueText}`);
+    console.log(`How you wear: ${shareText}`);
+    console.log('\nStrengths');
+    for (const s of report.strengths) console.log(`  ${s.text}`);
+    if (!report.strengths.length) console.log('  Nothing is deep yet.');
+    console.log(`\n${report.overview.text}`);
+    for (const g of report.gaps) console.log(`  ${g.title} (${STATUS[g.status]})\n    ${g.text}`);
+    if (!report.gaps.length) console.log('  None worth naming.');
+    console.log('\nTo fill them (each counts as owned before the next)');
+    report.picks.forEach((p, i) => {
+      const facts = [stars(p), p.quality.value != null && `value ${p.quality.value.toFixed(1)}`, `${p.risk.level} risk`].filter(Boolean);
+      console.log(`  ${i + 1}. ${byLine(p)} · ${facts.join(' · ')}`);
+      for (const f of p.fills.filter(f => f.matters).slice(0, 4)) console.log(`     ${fillLine(f)}`);
+      const near = p.nearest;
+      if (p.dupe) console.log(`     ${p.dupe}.`);
+      else if (near) console.log(`     Closest: ${near.via ? `${near.name}, the original of your ${near.via.name}` : `your ${near.name}`} (${near.sim.toFixed(2)} alike)${p.shared.length ? `, sharing ${p.shared.join(', ')}` : ''}`);
+      if (p.twin) console.log(`     Twin: ${p.twin.text}`);
+      if (p.risk.reasons.length) console.log(`     Risk: ${p.risk.reasons.join(' ')}`);
+    });
+    if (!report.picks.length) console.log('  Nothing in the pool would add enough.');
+    else if (report.picks.length < k) console.log('  Nothing else would fill these gaps by enough.');
+    return;
+  }
+
   if (!args.city && !args.loc) fail(USAGE);
 
   const place = await resolvePlace();
@@ -600,6 +727,8 @@ const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,N
        node scripts/recommend.mjs --styles NAME [--json]
        node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,NAME]) --date YYYY-MM-DD [--occasion ID] [--slot day|night] [--journal FILE] [--json]
        node scripts/recommend.mjs --pack (--city NAME | --loc LAT,LON[,NAME]) --from YYYY-MM-DD --to YYYY-MM-DD [--max N] [--events "DATE [day|night] OCCASION; …"] [--json]
-       node scripts/recommend.mjs --spray NAME [--city NAME | --loc LAT,LON[,NAME]] [--date YYYY-MM-DD] [--occasion ID] [--slot day|night] [--json]`;
+       node scripts/recommend.mjs --spray NAME [--city NAME | --loc LAT,LON[,NAME]] [--date YYYY-MM-DD] [--occasion ID] [--slot day|night] [--json]
+       node scripts/recommend.mjs --gaps [--city NAME | --loc LAT,LON[,NAME]] [--uses USE=never|sometimes|often,…] [--value | --no-value] [--top N] [--exclude NAME,NAME] [--demo] [--json]
+       node scripts/recommend.mjs --check NAME|ID [--city NAME | --loc LAT,LON[,NAME]] [--uses …] [--value | --no-value] [--json]`;
 
 if (import.meta.main) await main();

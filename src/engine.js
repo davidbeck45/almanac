@@ -50,7 +50,7 @@ export const ROTATION_PENALTY = Object.freeze([0.2, 0.12, 0.08, 0.06, 0.045, 0.0
 const RAIN_ACCORDS = ['green', 'earthy', 'woody', 'aromatic', 'mossy', 'aquatic'];
 
 // Reasons name accords as nouns ("Warm spice for the cold", "Woods & aromatics
-// suit everyday wear"), never as raw labels ("Warm warm spicy"). An accord not
+// suit casual wear"), never as raw labels ("Warm warm spicy"). An accord not
 // listed reads as its own name (vanilla, leather, iris).
 const ACCORD_NOUN = {
   woody: 'woods', 'warm spicy': 'warm spice', 'fresh spicy': 'crisp spice', 'soft spicy': 'soft spice',
@@ -332,7 +332,7 @@ export function performanceFit(frag, occasion) {
 // Leisure, Business, Night Out, Evening and Sport), where a category matches
 // an occasion: [category, its mean share and spread over the 45 bottles in
 // data/ with 50+ votes]. There they agree with the accord profiles (r 0.54 to
-// 0.74) and add what the accords miss; Everyday, Formal and Cozy have no clean
+// 0.74) and add what the accords miss; Casual, Formal and Cozy have no clean
 // match (r below 0.25). A share one spread above the mean adds half a spread
 // of a typical occasion fit; few votes lean toward the mean.
 const VOTED_OCCASIONS = {
