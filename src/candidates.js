@@ -446,7 +446,8 @@ export function riskOf(record, byId = null) {
   const add = (points, text) => found.push({ points, text });
   if (s.flags.includes('brigaded')) add(2, 'Its rating looks inflated by a voting campaign.');
   if (s.flags.includes('notBlindBuy')) add(s.safe >= SAFE_TRUSTED ? 1 : 2, 'Reviewers say it isn’t a safe blind buy.');
-  if (s.flags.includes('polarizing')) add(2, 'It divides people: many voters hate it.');
+  // Polarizing is a hate share in the pool's top tenth, from about 5%: more than most, not many.
+  if (s.flags.includes('polarizing')) add(2, 'It divides people: more voters hate it than most.');
   else if (s.safe != null && s.safe < SAFE_LOW) add(s.safe < SAFE_VERY_LOW ? 2 : 1, 'Fewer voters love it than most.');
   if (s.keep != null && s.keep < KEEP_LOW) add(1, 'Owners often let it go.');
   if (s.flags.includes('discontinued')) add(1, 'Reviewers say it’s discontinued.');

@@ -81,10 +81,13 @@ const EXCLUDE_MAX = 3;
 export function matchBottles(fragrances, text) {
   const q = normalize(text);
   if (!q) return [];
-  const exact = fragrances.filter(f => normalize(f.name) === q);
+  // A year the dataset puts after a name ("Opium (1977)") isn't part of it.
+  const nameOf = f => normalize(String(f.name).replace(/\s*\(\d{4}\)\s*$/, ''));
+  const exact = fragrances.filter(f => nameOf(f) === q);
   if (exact.length) return exact;
-  const has = q.replace(/ /g, '').length >= PART_MIN ? hay => hay.includes(q) : hay => ` ${hay} `.includes(` ${q} `);
-  return fragrances.filter(f => has(normalize(f.name)) || has(normalize(`${f.name} ${f.brand}`)));
+  // A number matches whole: "212" isn't "2121", nor "21" "212".
+  const has = q.replace(/ /g, '').length >= PART_MIN && !/^\d+$/.test(q) ? hay => hay.includes(q) : hay => ` ${hay} `.includes(` ${q} `);
+  return fragrances.filter(f => has(nameOf(f)) || has(`${nameOf(f)} ${normalize(f.brand)}`));
 }
 
 // "The week ahead" and "Today" both run in time order: tonight before tomorrow's daytime.
@@ -103,6 +106,38 @@ const datasetFile = async path => {
 function fail(message) {
   console.error(message);
   process.exit(1);
+}
+
+const byLine = r => `${r.name} by ${r.brand}${r.year ? ` (${r.year})` : ''}`;
+// Answers built on the dataset's ratings and votes say where they're from.
+const CREDIT = 'From Le Decanteur\'s Fragrantica dataset (CC BY-NC-SA 4.0)';
+
+/**
+ * A dataset bottle by name, as --check, --styles, --more-like and --dupes
+ * find one: the suggestion pool's (`records`, `byId`; an exact name first,
+ * else every name holding it, the most voted used), else the dataset's
+ * search, a pool bottle it finds as its pool row. -> record or null.
+ */
+export async function datasetBottle(name, records, byId) {
+  const hits = matchBottles(records, name).sort((a, b) => b.ratingVotes - a.ratingVotes);
+  if (hits.length > 1) {
+    console.error(`"${name}" matches ${hits.length} bottles (${hits.slice(0, 4).map(byLine).join('; ')}${hits.length > 4 ? '…' : ''}); using the most voted. Give more of the name, or its id, for another.`);
+  }
+  if (hits.length) return hits[0];
+  const library = fragranticaLibrary(datasetFile);
+  const [hit] = await library.search(name, 1);
+  return hit ? byId.get(hit.id) ?? (await library.records([hit.id])).get(hit.id) ?? null : null;
+}
+
+// The suggestion pool's records, made once.
+let poolRecords = null;
+async function poolBottles() {
+  if (!poolRecords) {
+    const parsed = await loadPool(datasetFile);
+    const records = Array.from({ length: parsed.count }, (_, i) => fromPool(parsed, i));
+    poolRecords = { records, byId: new Map(records.map(r => [r.id, r])) };
+  }
+  return poolRecords;
 }
 
 const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s ?? '') && !Number.isNaN(Date.parse(`${s}T12:00:00Z`))
@@ -151,7 +186,7 @@ const SPRAY_SITUATIONS = [
   { label: 'Mild day', slot: 'day', feelsF: 66, humidity: 55, dewF: 50, category: 'clear' },
   { label: 'Cold night', slot: 'night', feelsF: 32, humidity: 65, dewF: 22, category: 'clear' },
 ];
-const sprayJSON = g => ({ sprays: g.sprays, where: g.where, text: g.text, why: g.why, ...(g.note && { note: g.note }) });
+const sprayJSON = g => ({ sprays: g.sprays, ...(g.unit !== 'spray' && { unit: g.unit }), where: g.where, text: g.text, why: g.why, ...(g.note && { note: g.note }) });
 
 async function main() {
   let args;
@@ -249,8 +284,13 @@ async function main() {
     fail(`Nothing left to rank: ${by} ${by.includes(' and ') ? 'leave' : 'leaves'} out all ${wardrobe.length} bottles`);
   }
 
+  // A bottle by name: switched-on ones first, then switched-off ones (said on stderr).
   const findBottle = name => {
-    const hits = matchBottles(fragrances, name);
+    let hits = matchBottles(fragrances, name);
+    if (!hits.length) {
+      hits = matchBottles(hidden, name);
+      if (hits.length) console.error(`${hits[0].name} is switched off; answering for it anyway.`);
+    }
     if (!hits.length) fail(`No bottle matches "${name}"`);
     if (hits.length > 1) console.error(`"${name}" matches ${hits.map(f => f.name).join(', ')}; using ${hits[0].name}. Give more of the name for another.`);
     return hits[0];
@@ -335,10 +375,14 @@ async function main() {
   // whatever the time of year, like the range itself).
   if (args.ideal) {
     const f = findBottle(args.ideal);
+    // A switched-off bottle is ranked among the rest as if switched on.
+    const pool = fragrances.includes(f) ? fragrances : [...fragrances, f];
     const SCAN = [0, 105];
+    // Runs of degrees; spans GAP_F or fewer degrees apart join (a one-degree hole says nothing).
+    const GAP_F = 2;
     const runs = temps => temps.reduce((out, t) => {
       const last = out.at(-1);
-      if (last && last[1] === t - 1) last[1] = t;
+      if (last && t - last[1] <= GAP_F + 1) last[1] = t;
       else out.push([t, t]);
       return out;
     }, []).map(([lo, hi]) => ({ lowF: lo === SCAN[0] ? null : lo, highF: hi === SCAN[1] ? null : hi }));
@@ -346,7 +390,7 @@ async function main() {
     for (const s of SLOTS) {
       const temps = [];
       for (let feelsF = SCAN[0]; feelsF <= SCAN[1]; feelsF++) {
-        const ranked = rank(fragrances, { feelsF, humidity: 50, dewF: 55, category: 'clear', date: null }, s, { todayISO: '2000-01-01' });
+        const ranked = rank(pool, { feelsF, humidity: 50, dewF: 55, category: 'clear', date: null }, s, { todayISO: '2000-01-01' });
         if (ranked.slice(0, 3).some(r => r.fragrance.id === f.id)) temps.push(feelsF);
       }
       topPick[s] = runs(temps);
@@ -356,7 +400,7 @@ async function main() {
       console.log(JSON.stringify({ name: f.name, brand: f.brand, inspiredBy: inspiredBy(f), range, topPick }, null, 2));
     } else {
       const span = ({ lowF, highF }) => lowF === null && highF === null ? 'any temperature'
-        : lowF === null ? `${highF}°F and colder` : highF === null ? `${lowF}°F and warmer` : `${lowF}–${highF}°F`;
+        : lowF === null ? `${highF}°F and colder` : highF === null ? `${lowF}°F and warmer` : lowF === highF ? `${lowF}°F` : `${lowF}–${highF}°F`;
       console.log(`${f.name} (${f.brand}) wears best at ${span(range)} feels-like${range.bestF !== null ? `, peaking around ${range.bestF}°F` : ''}.`);
       for (const s of SLOTS) {
         console.log(`  Top 3 in this collection by ${s}: ${topPick[s].length ? topPick[s].map(span).join(', ') : 'never'}`);
@@ -415,15 +459,10 @@ async function main() {
 
   // One bottle's style scores: the collection first, then the Fragrantica dataset.
   if (args.styles) {
-    let [f] = matchBottles(fragrances, args.styles);
+    let [f] = matchBottles(wardrobe, args.styles);
     if (!f) {
-      const dir = new URL('../data/fragrantica/', import.meta.url);
-      const library = fragranticaLibrary(async path => {
-        const file = new URL(path, dir);
-        return existsSync(file) ? readFileSync(file, 'utf8') : null;
-      });
-      const [hit] = await library.search(args.styles, 1);
-      if (hit) f = (await library.records([hit.id])).get(hit.id);
+      const { records, byId } = await poolBottles();
+      f = await datasetBottle(args.styles, records, byId);
     }
     if (!f) fail(`No bottle matches "${args.styles}"`);
     const scores = styleScores(f);
@@ -579,14 +618,11 @@ async function main() {
       if (climate.local) [summary, where] = [climate.summary, place.name];
       else console.error(`Couldn't get the climate for ${place.name} (${climate.error}); using the default climate.`);
     }
-    const parsed = await loadPool(datasetFile);
-    const records = Array.from({ length: parsed.count }, (_, i) => fromPool(parsed, i));
-    const byId = new Map(records.map(r => [r.id, r]));
+    const { records, byId } = await poolBottles();
     const preferValue = args.value ? true : args['no-value'] ? false : null;
     const ctx = excluding(gapContext({ owned: fragrances, records, byId, summary, shares, preferValue, mists: args.mists }), 'allow', hidden);
     const pct = x => `${Math.round(x * 100)}%`;
     const stars = r => (r.ratingVotes ? `${ratingText(r.rating)}★ from ${r.ratingVotes.toLocaleString('en-US')} votes` : 'no ratings yet');
-    const byLine = r => `${r.name} by ${r.brand}${r.year ? ` (${r.year})` : ''}`;
     // The bottle a fill beats or backs up: owned, or an earlier suggestion.
     const whose = f => (f.beatsPick ? `${f.beats.name} (suggested above)` : `your ${f.beats.name}`);
     const fillLine = f => (!f.beats ? `${f.title}: ${pct(f.to)}`
@@ -596,21 +632,17 @@ async function main() {
 
     if (args.check) {
       const q = args.check.trim();
-      let record = null;
-      if (/^\d+$/.test(q)) record = byId.get(q) ?? (await fragranticaLibrary(datasetFile).records([q])).get(q) ?? null;
-      else {
-        const hits = matchBottles(records, q).sort((a, b) => b.ratingVotes - a.ratingVotes);
-        if (hits.length > 1) {
-          console.error(`"${q}" matches ${hits.length} bottles (${hits.slice(0, 4).map(byLine).join('; ')}${hits.length > 4 ? '…' : ''}); checking the most voted. Give more of the name, or its id, for another.`);
-        }
-        record = hits[0] ?? null;
-        if (!record) {
-          // The dataset's search forgives more (a word missed, a brand typed);
-          // a pool bottle it finds checks as its pool row.
-          const library = fragranticaLibrary(datasetFile);
-          const [hit] = await library.search(q, 1);
-          record = hit ? byId.get(hit.id) ?? (await library.records([hit.id])).get(hit.id) : matchBottles(wardrobe, q)[0] ?? null;
-        }
+      const byNumber = async id => byId.get(id) ?? (await fragranticaLibrary(datasetFile).records([id])).get(id) ?? null;
+      // "id:1881" is an id; a bare number is a name when a well-voted bottle
+      // has it (1881, 4711, 212: the pool's), else an id.
+      const asId = /^id:\s*(\d+)$/i.exec(q)?.[1];
+      const number = !asId && /^\d+$/.test(q);
+      let record = asId ? await byNumber(asId)
+        : number ? (matchBottles(records, q).length ? await datasetBottle(q, records, byId) : null)
+          : await datasetBottle(q, records, byId) ?? matchBottles(wardrobe, q)[0] ?? null;
+      if (number) {
+        if (record) console.error(`Reading "${q}" as a name (${byLine(record)}); give id:${q} for the bottle with that id.`);
+        else record = await byNumber(q);
       }
       if (!record) fail(`No bottle matches "${q}"`);
       // Outside the pool, a bottle's signals come from its about data.
@@ -641,6 +673,7 @@ async function main() {
       console.log(`Risk: ${check.risk.level}${check.risk.reasons.length ? ` (${check.risk.reasons.join(' ')})` : ''}`);
       if (check.twin) console.log(`Twin: ${check.twin.text}`);
       console.log(`\nClimate: ${where} · ${valueText} · styles you like: ${liked.map(id => styleById(id).label).join(', ')}`);
+      console.log(`${CREDIT}.`);
       return;
     }
 
@@ -675,6 +708,7 @@ async function main() {
     });
     if (!report.picks.length) console.log('  Nothing in the pool would add enough.');
     else if (report.picks.length < k) console.log('  Nothing else would fill these gaps by enough.');
+    console.log(`\n${CREDIT}.`);
     return;
   }
 
@@ -834,15 +868,13 @@ async function discover(args, fragrances, { slot, count, history, hidden }) {
   const ctx = excluding(discoverContext(pool, fragrances, { styles }), 'allowed', hidden);
   const library = fragranticaLibrary(datasetFile);
   // A typed name: the wardrobe first (switched-off bottles too), then the
-  // pool, then the whole dataset (with its about data).
+  // pool by votes, then the whole dataset (with its about data), as --check.
   const findAny = async name => {
     const mine = matchBottles([...fragrances, ...hidden], name);
     if (mine.length > 1) console.error(`"${name}" matches ${mine.map(f => f.name).join(', ')}; using ${mine[0].name}. Give more of the name for another.`);
     if (mine.length) return mine[0];
-    const [hit] = await library.search(name, 1);
-    if (!hit) return null;
-    const record = ctx.byId.get(hit.id) ?? (await library.records([hit.id])).get(hit.id);
-    return record && { ...record, about: await loadAbout(hit.id, datasetFile) };
+    const record = await datasetBottle(name, ctx.records, ctx.byId);
+    return record && { ...record, about: await loadAbout(record.id, datasetFile) };
   };
 
   const line = (r, extra) => [r.name, r.brand, r.year, r.rating ? `${r.rating.toFixed(2)}★` : null,
@@ -859,6 +891,7 @@ async function discover(args, fragrances, { slot, count, history, hidden }) {
     value: p.value,
     score: +p.score.toFixed(3),
     styles: p.styles.map(s => s.label),
+    ...(p.leans && { leansOnly: p.leans.map(id => styleById(id).label) }),
     wearsClose: p.close,
     ...(p.via && { via: p.via }),
     ...(p.matched && { matched: p.matched }),
@@ -879,7 +912,7 @@ async function discover(args, fragrances, { slot, count, history, hidden }) {
     console.log(title);
     if (!picks.length) console.log('  Nothing in the pool passes. Try fewer filters.');
     picks.forEach((p, i) => console.log(`${String(i + 1).padStart(2)}. ${line(p.record, p)} · ${whyLine(p)}`));
-    console.log('\nFrom Le Decanteur\'s Fragrantica dataset (CC BY-NC-SA 4.0), 9,600 well-voted bottles.');
+    console.log(`\n${CREDIT}, 9,600 well-voted bottles.`);
   };
 
   if (args.style) {
@@ -897,7 +930,10 @@ async function discover(args, fragrances, { slot, count, history, hidden }) {
     const mode = args.all ? 'all' : 'any';
     const picks = moreOfStyles(ids, ctx, { mode, k: count, filters });
     const labels = ids.map(id => styleById(id).label);
-    await print(`More ${labels.join(args.all ? ' + ' : ', ')}${ids.length > 1 ? ` (${mode === 'all' ? 'all at once' : 'any of them'})` : ''}:`, picks, { styles: ids, mode, filters });
+    // Too few bottles are every style at once: the rest lean toward some, and say which.
+    const whole = picks.filter(p => !p.leans).length;
+    const leaning = whole < picks.length ? `\n${whole ? `Only ${whole} ${whole === 1 ? 'is' : 'are'}` : 'None is'} all of them at once; the rest lean toward some.` : '';
+    await print(`More ${labels.join(args.all ? ' + ' : ', ')}${ids.length > 1 ? ` (${mode === 'all' ? 'all at once' : 'any of them'})` : ''}:${leaning}`, picks, { styles: ids, mode, filters });
     return;
   }
 
@@ -957,7 +993,7 @@ async function discover(args, fragrances, { slot, count, history, hidden }) {
   section('Smells like it for far less', family.cheaper);
   section('Voters say these smell like it', family.siblings);
   if (!family.original && !family.cheaper.length && !family.siblings.length) console.log('No smells-like votes for it.');
-  console.log('\nFrom Le Decanteur\'s Fragrantica dataset (CC BY-NC-SA 4.0).');
+  console.log(`\n${CREDIT}.`);
 }
 
 const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,NAME]) [--occasion ${OCCASIONS.map(o => o.id).join('|')}] [--slot day|night] [--week] [--journal FILE] [--exclude NAME,NAME] [--demo] [--top N] [--json]

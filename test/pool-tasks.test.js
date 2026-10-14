@@ -83,7 +83,7 @@ test('report takes a climate, shares or "How you wear" settings, and a changed r
 
 test('check says whether a bottle is worth buying, by id or record, one or several', async () => {
   const tonka = await ask('check', { owned, id: '76063', liked: ['skin', 'gourmand', 'vanilla', 'nope'] });
-  assert.equal(tonka.verdict, 'Strong fit');
+  assert.equal(tonka.verdict, 'Good', 'a gourmand he likes the style of, though he’s covered');
   assert.equal(tonka.record.name, 'Shalimar Millésime Tonka');
   assert.ok(isRecord(tonka.record) && tonka.reasons.length >= 2 && tonka.preferValue === true);
   assert.ok(tonka.styles.some(s => s.id === 'vanilla'));
@@ -245,7 +245,7 @@ test('a download that stalls fails as out of reach, and a refused one says so', 
     assert.equal((await answer).error, 'Can’t reach the fragrance library. Check your connection.');
     assert.ok(aborted > 0);
     status = 503;
-    assert.equal((await handlePool({ id: 2, type: 'warm' }, newPoolCache())).error, 'The fragrance library didn’t load (503).');
+    assert.equal((await handlePool({ id: 2, type: 'warm' }, newPoolCache())).error, 'The fragrance library didn’t load. Try again.', 'no status code in the sentence');
   } finally {
     globalThis.fetch = real;
   }
@@ -435,8 +435,6 @@ test('a newer question on a channel replaces the older, which answers stale and 
 
 test('the pool’s status follows the worker, for skeletons', async () => {
   const client = fakeClient();
-  const heard = [];
-  const stop = client.onStatus((status, error) => heard.push(error ? `${status}: ${error}` : status));
   assert.equal(client.status(), 'idle');
   client.ask('liked', { owned: [] }).catch(() => {});
   client.ask('records', { ids: [] }).catch(() => {});
@@ -453,9 +451,9 @@ test('the pool’s status follows the worker, for skeletons', async () => {
   client.ask('styles', { owned: [] }).catch(() => {});
   assert.equal(client.status(), 'ready');
   w.reply({ type: 'status', status: 'error', error: 'Can’t reach the fragrance library.' });
-  stop();
+  assert.equal(client.status(), 'error');
   w.reply({ type: 'status', status: 'ready' });
-  assert.deepEqual(heard, ['loading', 'ready', 'error: Can’t reach the fragrance library.']);
+  assert.equal(client.status(), 'ready');
 });
 
 test('the clock runs from when a question starts, and stops while the pool downloads', async t => {

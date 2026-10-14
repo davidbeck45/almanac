@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { fromFragrantica, fragranticaLibrary, loadPool, fromPool, brandCase } from '../src/fragrantica.js';
+import { fromFragrantica, fragranticaLibrary, loadPool, fromPool, brandCase, noteCase } from '../src/fragrantica.js';
 import { performanceRating, steadyShares } from '../src/engine.js';
 import { DATASET_VERSION } from '../src/profiles.js';
+import { nameMatches } from '../src/collections.js';
 
 const dir = new URL('../data/fragrantica/', import.meta.url);
 const library = fragranticaLibrary(async path => {
@@ -44,6 +45,28 @@ test('search finds a bottle by brand and name, whole names first', async () => {
   assert.equal(brx.name, 'Baccarat Rouge 540', 'a word the bottle lacks is forgiven when nothing has them all');
   assert.deepEqual(await library.search('qqqxzzv'), []);
   assert.deepEqual(await library.search('a'), []);
+});
+
+test('a famous bottle leads its 0-vote namesakes, whatever year the dataset puts after its name', async () => {
+  const first = async q => (await library.search(q))[0];
+  assert.deepEqual([(await first('ombre leather')).name, (await first('ombre leather')).brand], ['Ombré Leather (2018)', 'Tom Ford']);
+  assert.equal((await first('baccarat rouge')).name, 'Baccarat Rouge 540', 'Nish Parfum’s clone named Baccarat Rouge follows');
+  assert.equal((await first('opium')).name, 'Opium (1977)', 'the whole name typed leads Black Opium');
+  assert.equal((await first('khamrah')).name, 'Khamrah');
+  // A pasted list ticks the hit whose name was typed: the famous one.
+  for (const [q, brand] of [['ombre leather', 'Tom Ford'], ['opium', 'Yves Saint Laurent']]) {
+    assert.equal((await library.search(q)).find(h => nameMatches(q, h))?.brand, brand, q);
+  }
+});
+
+test('notes written in lowercase read in title case, in records and the built wardrobe', () => {
+  assert.deepEqual(['oak moss', 'elemi', 'ylang-ylang', 'fleur de sel', 'Tonka Bean', 'iso E Super'].map(noteCase),
+    ['Oak Moss', 'Elemi', 'Ylang-Ylang', 'Fleur de Sel', 'Tonka Bean', 'iso E Super']);
+  const lower = r => Object.values(r.notes ?? {}).flat().filter(n => n === n.toLowerCase());
+  const rows = Object.entries(JSON.parse(readFileSync(new URL('r/0.json', dir)))).map(([id, row]) => fromFragrantica(id, row));
+  assert.deepEqual(rows.flatMap(lower), []);
+  for (const r of rows) for (const n of Object.keys(r.noteVotes ?? {})) assert.ok(Object.values(r.notes).flat().includes(n), `${r.name}: ${n}`);
+  assert.deepEqual(wardrobe.flatMap(lower), [], 'npm run build:data writes them so');
 });
 
 test('brands written in capitals read in title case, as the build writes them; short acronyms stay', async () => {
@@ -109,4 +132,14 @@ test('season and day/night votes steady on their own when a row has only one', (
   assert.equal(seasonOnly.timeVotes, undefined);
   assert.ok(steadyShares(seasonOnly).season.winter < 0.9);
   assert.equal(steadyShares(seasonOnly).dayNight, seasonOnly.dayNight);
+});
+
+test('a library file the server won’t give fails as a sentence without its status code', async () => {
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => new Response('busy', { status: 503 });
+  try {
+    await assert.rejects(fragranticaLibrary().search('sauvage'), err => err.message === 'The fragrance library didn’t load. Try again.' && err.detail === 'HTTP 503');
+  } finally {
+    globalThis.fetch = real;
+  }
 });

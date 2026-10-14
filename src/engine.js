@@ -1,6 +1,6 @@
 // Recommendation engine. Pure functions only: fragrances + conditions in,
 // ranked tiers with reasons out.
-import { ACCORDS, heaviness } from './accords.js';
+import { ACCORDS, heaviness, accordNoun } from './accords.js';
 import { isWet } from './wmo.js';
 import { predictedShares } from './custom.js';
 import { PRIOR_VOTES } from './profiles.js';
@@ -49,21 +49,15 @@ export const ROTATION_PENALTY = Object.freeze([0.2, 0.12, 0.08, 0.06, 0.045, 0.0
 
 const RAIN_ACCORDS = ['green', 'earthy', 'woody', 'aromatic', 'mossy', 'aquatic'];
 
-// Reasons name accords as nouns ("Warm spice for the cold", "Woods & aromatics
-// suit casual wear"), never as raw labels ("Warm warm spicy"). An accord not
-// listed reads as its own name (vanilla, leather, iris).
-const ACCORD_NOUN = {
-  woody: 'woods', 'warm spicy': 'warm spice', 'fresh spicy': 'crisp spice', 'soft spicy': 'soft spice',
-  aromatic: 'aromatics', sweet: 'sweetness', fresh: 'fresh notes', green: 'green notes', aquatic: 'aquatic notes',
-  marine: 'marine notes', ozonic: 'airy notes', earthy: 'earthy notes', musky: 'musk', powdery: 'powder',
-  fruity: 'fruit', floral: 'florals', 'white floral': 'white florals', 'yellow floral': 'yellow florals',
-  balsamic: 'resins', animalic: 'animalic notes', smoky: 'smoke', lactonic: 'milky notes', herbal: 'herbs',
-  mossy: 'moss', tropical: 'tropical fruit', salty: 'sea salt', metallic: 'metallic notes', soapy: 'soap',
-  mineral: 'mineral notes', terpenic: 'terpenes', savory: 'savory notes', nutty: 'nuts', gourmand: 'gourmand notes',
-  'coca-cola': 'cola', aldehydic: 'aldehydes', conifer: 'pine', bitter: 'bitter notes', sour: 'sour notes',
-  alcohol: 'boozy notes', anis: 'anise', camphor: 'camphor notes',
-};
-const nounOf = accord => ACCORD_NOUN[accord] ?? accord.toLowerCase();
+// Reasons name accords as nouns (accordNoun: "Warm spice for the cold", never
+// "Warm warm spicy").
+const nounOf = accordNoun;
+// Accords a reason names one of, not both ("Aquatic notes & marine notes").
+const NEAR_SAME = [
+  ['aquatic', 'marine', 'salty', 'ozonic'], ['warm spicy', 'soft spicy', 'fresh spicy', 'cinnamon'], ['fruity', 'tropical'],
+  ['nutty', 'almond'], ['floral', 'white floral', 'yellow floral', 'tuberose'],
+];
+const kinOf = accord => NEAR_SAME.find(group => group.includes(accord)) ?? [accord];
 const isPlural = noun => /s$/.test(noun) && !/(ss|us|is)$/.test(noun);
 const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
 // What cuts the heat. A light bottle without one of these (fruity, musky,
@@ -124,14 +118,18 @@ export function targetSeasonWeights(feelsF, date, lat = 40) {
 // slot) drew FLAT_TURNOUT of the raters or more and the shares sit within
 // FLAT_SPREAD (most raters ticked everything: Elyon Dubai's 2025 releases),
 // or 3 seasons, or both slots, carry one identical count of FLAT_SAME or
-// more (some Louis Vuitton pages: 765 on every season and both slots).
-// Read as votes, they make a perfect all-rounder of a rose-oud, so
-// steadyShares reads them as none. A page shows counts from 1,000 rounded
-// ("2.4k"), so scraped ties there are no sign.
+// more (some Louis Vuitton pages: 765 on every season and both slots), or
+// FLAT_ACROSS of the six boxes, seasons and slots together, do (Shalimar
+// Millésime Tonka: 432 on winter, fall, day and night). Read as votes, they
+// make a perfect all-rounder of a rose-oud, so steadyShares reads them as
+// none. A page shows counts from 1,000 rounded ("2.4k"), so scraped ties
+// there are no sign.
 const FLAT_SPREAD = 0.03;
 const FLAT_TURNOUT = 0.5;
 const FLAT_SAME = 50;
+const FLAT_ACROSS = 4;
 const exactCount = c => c < 1000 || c % 100 !== 0;
+const sameCount = (counts, times) => counts.some(c => c >= FLAT_SAME && exactCount(c) && counts.filter(x => x === c).length >= times);
 
 /** Whether vote counts ([winter, spring, summer, fall] or [day, night]) from `raters` raters say nothing. */
 export function flatVotes(counts, raters) {
@@ -139,7 +137,7 @@ export function flatVotes(counts, raters) {
   if (!n) return false;
   const lo = Math.min(...counts), hi = Math.max(...counts);
   if ((hi - lo) / n < FLAT_SPREAD && lo >= FLAT_TURNOUT * raters) return true;
-  return counts.some(c => c >= FLAT_SAME && exactCount(c) && counts.filter(x => x === c).length >= Math.min(3, counts.length));
+  return sameCount(counts, Math.min(3, counts.length));
 }
 
 /**
@@ -151,6 +149,7 @@ export function flatVotes(counts, raters) {
  */
 export function votedShares(frag) {
   const sv = frag.seasonVotes, tv = frag.timeVotes, raters = frag.ratingVotes ?? 0;
+  if (sv && tv && sameCount([sv.winter, sv.spring, sv.summer, sv.fall, tv.day, tv.night], FLAT_ACROSS)) return { season: false, time: false };
   const season = Boolean(sv) && !flatVotes([sv.winter, sv.spring, sv.summer, sv.fall], raters);
   const time = Boolean(tv) && !(sv && !season && flatVotes([tv.day, tv.night], raters));
   return { season, time };
@@ -563,8 +562,11 @@ function reasonsFor(frag, parts, ctx) {
   else if (comfort >= 0.85) good(`Fits ${nowSeason} weather`, W.season * 0.5);
   else if (comfort < 0.55) bad(voted ? `Voted for ${fragSeason}, not ${nowSeason}` : `Better in ${fragSeason} than ${nowSeason}`, W.season * (1 - comfort));
 
-  const share = dayNight[slot];
-  if (share >= 0.62) good(slot === 'night' ? 'Built for nighttime' : 'Daytime favorite', W.time * share);
+  // As for seasons: "a favorite" only when voters said so.
+  const share = dayNight[slot], timeVoted = votedShares(frag).time;
+  if (share >= 0.62) {
+    good(slot === 'night' ? (timeVoted ? 'Built for nighttime' : 'A night scent') : (timeVoted ? 'Daytime favorite' : 'A daytime scent'), W.time * share);
+  }
   else if (share <= 0.38) bad(slot === 'night' ? 'Better in daylight' : 'More of a night scent', W.time * (1 - share));
 
   const h = heaviness(frag.accords);
@@ -587,7 +589,8 @@ function reasonsFor(frag, parts, ctx) {
     const contrib = Object.entries(frag.accords)
       .map(([a, s]) => [a, s * (occasion.profile[a] ?? 0)])
       .sort((x, y) => y[1] - x[1]);
-    const fits = contrib.filter(c => c[1] > 20).slice(0, 2).map(c => nounOf(c[0]));
+    const fits = contrib.filter(c => c[1] > 20).map(c => c[0])
+      .filter((a, i, list) => !list.slice(0, i).some(b => kinOf(b).includes(a))).slice(0, 2).map(nounOf);
     const clash = contrib.filter(c => c[1] < -20).at(-1)?.[0];
     const phrase = occasion.phrase ?? occasion.label.toLowerCase();
     const plural = fits.length > 1 || (fits.length && isPlural(fits[0]));
@@ -705,13 +708,21 @@ export function planWindows(fragrances, windows, opts = {}) {
   return windows.map(win => {
     const logged = history.find(h => h.date === win.dateISO && h.slot === win.slot);
     const canNudge = nudge && !logged && (nudgedOn === null || daysBetween(nudgedOn, win.dateISO) >= NUDGE_EVERY);
-    const ranked = rank(fragrances, win, win.slot, { occasion: win.occasion ?? occasion, history: planned, todayISO: win.dateISO, nudge: canNudge });
+    let ranked = rank(fragrances, win, win.slot, { occasion: win.occasion ?? occasion, history: planned, todayISO: win.dateISO, nudge: canNudge });
     // A nudged bottle leads the list, and is new to the plan. A bottle you
     // rate DISLIKED or lower never counts as the fresh one, so it's planned
     // only where it ranks first and nothing new to the plan comes close.
     const fresh = ranked.find(r => !used.has(r.fragrance.id) && !(r.fragrance.personal?.rating <= DISLIKED));
     let pick = logged && ranked.find(r => r.fragrance.id === logged.id);
     if (!pick) pick = fresh && ranked[0].score - fresh.score <= PLAN_MARGIN ? fresh : ranked[0];
+    // A repeat of the plan that tops the list anyway (the only bottle, or
+    // nothing else close) keeps its match: the plan's repeat penalty changed
+    // nothing, so it neither lowers it nor leads its reasons.
+    if (pick && !logged && pick === ranked[0] && pick.parts.planned) {
+      const id = pick.fragrance.id;
+      ranked = rank(fragrances, win, win.slot, { occasion: win.occasion ?? occasion, history: planned.filter(h => !(h.planned && h.id === id)), todayISO: win.dateISO, nudge: canNudge });
+      pick = ranked.find(r => r.fragrance.id === id);
+    }
     if (pick?.nudged) nudgedOn = win.dateISO;
     if (pick) {
       used.add(pick.fragrance.id);

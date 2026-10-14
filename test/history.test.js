@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { journalStats, journalCalendar, journalExport, toggleWear, parseJournal, occasionCounts } from '../src/history.js';
+import { journalStats, journalCalendar, journalExport, toggleWear, parseJournal, occasionCounts, loadHistory } from '../src/history.js';
 import { windowOn, week } from '../src/weather.js';
 import { syntheticForecast } from './fixtures.js';
 
@@ -85,4 +85,22 @@ test('the export carries ratings when there are some, and older files still read
   assert.deepEqual(old.skin, {});
   assert.equal(old.history[0].occasion, 'office');
   assert.equal(old.history[0].id, '4310');
+});
+
+test('the stored log keeps only wears it can read: a real date, day or night', () => {
+  const real = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const store = new Map();
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)) } });
+  try {
+    store.set('scentcast.history', JSON.stringify([
+      { id: 1, date: 20261013, slot: 'day' }, { id: 2, date: '2026-10-13', slot: 'evening' }, null, 'x',
+      { id: 3, date: '2026-10-12', slot: 'night', occasion: 'date' },
+    ]));
+    assert.deepEqual(loadHistory(), [{ id: '3', date: '2026-10-12', slot: 'night', occasion: 'date' }]);
+    store.set('scentcast.history', JSON.stringify({ not: 'a list' }));
+    assert.deepEqual(loadHistory(), []);
+  } finally {
+    if (real) Object.defineProperty(globalThis, 'localStorage', real);
+    else delete globalThis.localStorage;
+  }
 });

@@ -148,8 +148,8 @@ function reasonsOf(entry, n) {
 
 // "2 sprays · chest", from src/spray.js's guide, for the pick card.
 const SPOT_WORDS = { 'collar or scarf': 'collar', 'back of the neck': 'nape' };
-export function sprayLine({ sprays: [lo, hi], where }) {
-  const count = lo === hi ? plural(lo, 'spray') : `${lo}–${hi} sprays`;
+export function sprayLine({ sprays: [lo, hi], where, unit = 'spray' }) {
+  const count = lo === hi ? plural(lo, unit) : `${lo}–${hi} ${unit}s`;
   return `${count} · ${where.map(w => SPOT_WORDS[w] ?? w).join(', ')}`;
 }
 

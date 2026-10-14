@@ -14,7 +14,7 @@
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { rank } from '../src/engine.js';
-import { windowOn, forecastError } from '../src/weather.js';
+import { windowOn, forecastError, requestError } from '../src/weather.js';
 import { parseJournal } from '../src/history.js';
 import { occasionById } from '../src/occasions.js';
 import { applySkin } from '../src/skin.js';
@@ -23,9 +23,14 @@ const HOURLY = 'temperature_2m,apparent_temperature,relative_humidity_2m,weather
 const DAY_MS = 86_400_000;
 const isoDaysAgo = n => new Date(Date.now() - n * DAY_MS).toISOString().slice(0, 10);
 
-async function getJSON(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw Object.assign(new Error(`Open-Meteo request failed (${res.status})`), { status: res.status });
+async function getJSON(url, service) {
+  let res;
+  try {
+    res = await fetch(url);
+  } catch {
+    throw Object.assign(new Error('fetch failed'), { service });
+  }
+  if (!res.ok) throw await requestError(res, service);
   return res.json();
 }
 
@@ -35,13 +40,13 @@ async function getJSON(url) {
 async function hourlyAt(lat, lon, from, to) {
   const base = { latitude: lat, longitude: lon, hourly: HOURLY, temperature_unit: 'fahrenheit', timezone: 'auto' };
   const parts = [], errors = [];
-  const get = url => getJSON(url).then(p => parts.push(p), err => errors.push(err));
+  const get = (url, service) => getJSON(url, service).then(p => parts.push(p), err => errors.push(err));
   const archiveEnd = to < isoDaysAgo(5) ? to : isoDaysAgo(5);
   if (from <= archiveEnd) {
-    await get(`https://archive-api.open-meteo.com/v1/archive?${new URLSearchParams({ ...base, start_date: from, end_date: archiveEnd })}`);
+    await get(`https://archive-api.open-meteo.com/v1/archive?${new URLSearchParams({ ...base, start_date: from, end_date: archiveEnd })}`, 'archive');
   }
   if (to > isoDaysAgo(8)) {
-    await get(`https://api.open-meteo.com/v1/forecast?${new URLSearchParams({ ...base, past_days: 10, forecast_days: 1 })}`);
+    await get(`https://api.open-meteo.com/v1/forecast?${new URLSearchParams({ ...base, past_days: 10, forecast_days: 1 })}`, 'forecast');
   }
   // Merge by hour, keeping the first source with a value.
   const rows = new Map();
@@ -149,7 +154,7 @@ async function main() {
   const failed = new Set();
   for (const p of places.values()) {
     p.weather = await hourlyAt(p.lat, p.lon, p.from, p.to);
-    for (const err of p.weather.errors) failed.add(err.status ? forecastError(err) : 'Can’t reach Open-Meteo. Check your connection and try again.');
+    for (const err of p.weather.errors) failed.add(forecastError(err));
   }
   for (const message of failed) console.error(`${message} Wears it would cover are skipped.`);
 
@@ -164,6 +169,10 @@ async function main() {
     console.log(`${r.date} ${r.slot.padEnd(5)} ${String(r.feelsF).padStart(3)}°F dew ${String(r.dewF).padStart(2)}  ${r.worn.padEnd(24)} #${r.rank}/${r.of} ${r.tier}${r.rank > 1 ? `   (top: ${r.top})` : ''}${occasion}`);
   }
   const s = summary;
+  if (!s.wears) {
+    console.log(`No wears to check (${s.skipped.notInDemo} outside the demo, ${s.skipped.noPlace} without a place, ${s.skipped.noWeather} without weather).`);
+    return;
+  }
   console.log(`\n${s.wears} wears checked (skipped: ${s.skipped.notInDemo} outside the demo, ${s.skipped.noPlace} without a place, ${s.skipped.noWeather} without weather)`);
   console.log(`worn bottle's average rank ${s.meanRank} (random would be ${s.randomMeanRank}); the top pick ${s.topPickPct}% of the time, S tier ${s.tierSPct}%, S or A ${s.tierSorAPct}%`);
 }

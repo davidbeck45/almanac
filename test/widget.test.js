@@ -36,6 +36,9 @@ test('the widget hides the site defaults unless told otherwise', () => {
 test('a coordinate setting or Omarchy\'s weather location resolves without a lookup', async () => {
   assert.deepEqual(await resolvePlace('32.93,-97.08,Grapevine, TX'), { name: 'Grapevine, TX', lat: 32.93, lon: -97.08 });
   assert.deepEqual(await resolvePlace(' 51.5 , -0.12 '), { name: '51.5,-0.12', lat: 51.5, lon: -0.12 });
+  for (const bad of ['999,999', '91,0', '0,-181']) {
+    await assert.rejects(resolvePlace(bad), /^Error: Set a latitude between -90 and 90 and a longitude between -180 and 180\.$/, bad);
+  }
 
   const stateFile = join(mkdtempSync(join(tmpdir(), 'scentcast-')), 'weather.json');
   writeFileSync(stateFile, JSON.stringify({ name: 'Malibu', latitude: 34.03, longitude: -118.78 }));

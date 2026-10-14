@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { blendModels, week, windowOn, summarize, cachedForecast, forecastError } from '../src/weather.js';
+import { blendModels, week, windowOn, summarize, cachedForecast, forecastError, requestError } from '../src/weather.js';
 import { syntheticForecast } from './fixtures.js';
 
 // Two days of a multi-model response, variables suffixed by model as Open-Meteo returns them.
@@ -82,6 +82,19 @@ test('forecast failures read as sentences, never "Failed to fetch"', () => {
   assert.match(forecastError({ status: 429 }), /busy/);
   assert.match(forecastError({ status: 503 }), /down/);
   for (const err of [new TypeError('Failed to fetch'), { status: 400 }, { status: 502 }]) assert.match(forecastError(err), /^[A-Z].*\.$/);
+  // Open-Meteo's own reason tells a minute's burst from the day's requests used up, and which service said so.
+  const daily = 'Daily API request limit exceeded. Please try again tomorrow.';
+  assert.equal(forecastError({ status: 429, reason: daily }), 'The forecast service’s daily limit is used up. Try again tomorrow.');
+  assert.equal(forecastError({ status: 429, reason: daily, service: 'archive' }), 'The weather archive’s daily limit is used up. Try again tomorrow.');
+  assert.equal(forecastError({ status: 429, reason: 'Minutely API request limit exceeded.' }), 'The forecast service is busy. Try again in a minute.');
+});
+
+test('a refused request carries its status, Open-Meteo’s reason and the service', async () => {
+  const res = { status: 429, json: async () => ({ error: true, reason: 'Daily API request limit exceeded.' }) };
+  const err = await requestError(res, 'archive');
+  assert.deepEqual([err.status, err.reason, err.service], [429, 'Daily API request limit exceeded.', 'archive']);
+  const bare = await requestError({ status: 502, json: async () => { throw new SyntaxError('not json'); } });
+  assert.deepEqual([bare.status, bare.reason, bare.service], [502, '', 'forecast']);
 });
 
 test('a saved forecast hours old reads now from its hourly row, not the reading at fetch time', () => {

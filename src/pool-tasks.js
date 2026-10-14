@@ -36,14 +36,15 @@
 //   records  { ids, poolOnly? } -> { records (pool rows once the pool is in, else r/), missing }; poolOnly
 //            waits for the pool and sends only its rows, the rest missing (no r/ loads: rating votes
 //            for a bottle the pool lacks are under 500, so a miss is never well known)
-//   warm     {} -> { count }: loads the pool
+//   warm     { summary? } -> { count }: loads the pool, then the gap finder's
+//            table for that climate (the default) while nothing else is asked
 // Picks are src/discover.js's (record, styles, nearest, clonesOf, twin,
 // alike, risk, …) with `why`, the line whyLine writes. cloneVotes: true adds
 // the smells-like votes behind each `clonesOf` (addCloneVotes; one about
 // shard per cloning pick), which nothing the app shows reads.
 import { loadPool, fromPool, loadPoolStyles, loadAbout, fragranticaLibrary } from './fragrantica.js';
 import { poolRowOf, preferValueDefault, familyIndex, ownedVectors, PREFER_VALUE } from './candidates.js';
-import { gapContext, gapReport, buyCheck, checkJSON, DEFAULT_CLIMATE } from './gaps.js';
+import { gapContext, gapReport, buyCheck, checkJSON, warmPoolTable, DEFAULT_CLIMATE } from './gaps.js';
 import { sharesFrom } from './uses.js';
 import {
   discoverContext, likedStyles, moreOfStyles, defaultSeeds, moreLike, searchNotes, dupeIds, dupesOf, whyLine, addCloneVotes, scoresOf,
@@ -88,7 +89,7 @@ async function fetchLoad(path) {
     clearTimeout(timer);
   }
   if (res.status === 404) return null;
-  throw new Error(`The fragrance library didn’t load (${res.status}).`);
+  throw Object.assign(new Error(UNREADABLE), { detail: `HTTP ${res.status}` });
 }
 
 /**
@@ -389,6 +390,9 @@ const TASKS = {
 
   async warm(p, cache, ms) {
     const pool = await timed(ms, 'pool', () => poolOf(cache));
+    // The gap finder's table for the climate (the default, or `summary`), in
+    // slices while nothing else is asked, so the first report doesn't wait for it.
+    warmPoolTable(pool.records, p.summary ?? DEFAULT_CLIMATE).catch(() => {});
     return { count: pool.records.length };
   },
 };

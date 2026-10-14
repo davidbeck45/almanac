@@ -4,7 +4,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { ACCORDS } from '../src/accords.js';
 import { customRecord } from '../src/custom.js';
 import { fragranticaLibrary } from '../src/fragrantica.js';
-import { STYLES, STYLE_MIN, WEARS_CLOSE, styleScores, topOf, leanOf, closeOf, topStyles, wearsClose, styleMix } from '../src/scent-styles.js';
+import { STYLES, STYLE_MIN, WEARS_CLOSE, styleScores, topOf, shownOf, leanOf, closeOf, topStyles, wearsClose, styleMix } from '../src/scent-styles.js';
 import { EXEMPLARS, HOLDOUT } from './style-exemplars.js';
 
 const dir = new URL('../data/fragrantica/', import.meta.url);
@@ -93,6 +93,16 @@ test('a hand-entered bottle gets styles from its accords alone and never wears c
   assert.ok(styleScores(mine).intimate < WEARS_CLOSE);
   assert.ok(!wearsClose(mine));
   assert.deepEqual(topStyles({ name: 'Empty', accords: {}, notes: {} }), []);
+});
+
+test('a bottle no style clears shows its nearest as a lean, from a tenth under the line', () => {
+  const zero = Object.fromEntries(STYLES.map(s => [s.id, 0]));
+  assert.deepEqual(shownOf({ ...zero, skin: 0.54, whiteFloral: 0.53 }), [{ id: 'skin', label: 'Leans skin scent', score: 0.54, leans: true }]);
+  assert.deepEqual(shownOf({ ...zero, skin: 0.44 }), [], 'too far under says nothing');
+  assert.deepEqual(shownOf({ ...zero, skin: 0.6, clean: 0.5 }), topOf({ ...zero, skin: 0.6, clean: 0.5 }), 'a clear style needs no lean');
+  // Pages and Compare read topStyles, which leans the same way.
+  const vetiver = { name: 'Vetiver', accords: { woody: 100, earthy: 70, citrus: 50 }, notes: {} };
+  assert.deepEqual(topStyles(vetiver), shownOf(styleScores(vetiver)));
 });
 
 test('the rules read stored scores like live ones', () => {

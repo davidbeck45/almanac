@@ -7,7 +7,7 @@
 import { summarize, getForecast, cachedForecast, forecastError } from '../weather.js';
 import { saveLocation } from '../location.js';
 import { parseShare } from '../collections.js';
-import { apiReady, fetchFragrances } from '../api.js';
+import { fetchFragrances } from '../api.js';
 import { isFragellaId } from '../fragella.js';
 import { isCustomId, fromShareToken } from '../custom.js';
 import { loadAbout } from '../fragrantica.js';
@@ -631,7 +631,7 @@ async function openSharedLink(link) {
   const legacy = unknown.filter(isFragellaId); // Fragella bottles from older links, via the Worker
   await Promise.all([
     library.records(unknown).then(found => found.forEach((r, id) => remote.set(id, r))).catch(() => {}),
-    legacy.length && apiReady()
+    legacy.length
       ? fetchFragrances(legacy).then(({ records }) => records.forEach(r => remote.set(r.id, r))).catch(() => {})
       : null,
   ]);

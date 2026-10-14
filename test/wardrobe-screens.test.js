@@ -52,9 +52,10 @@ function hostile(report) {
   return r;
 }
 
+// Without Supremacy Collector's Edition his warm nights fall short: a report with real gaps.
 let report;
 test('Insights renders the report clean: the map, thin spots, strengths and suggestions', async () => {
-  report = await ask('report', { owned, k: 5 });
+  report = await ask('report', { owned: owned.filter(f => f.name !== 'Supremacy Collector\'s Edition Pour Homme'), k: 5 });
   const r = hostile(report);
   const mix = styles.styleMix(owned);
   const model = {
@@ -150,7 +151,9 @@ test('the headline reads plainly, and the thin spots name what fills them', () =
 test('a suggestion card shows its fills against your best, its facts and its actions', () => {
   const p = report.picks[0];
   const html = clean(insights.pickCardHTML(p, { wanted: false }), 'pick card');
-  for (const f of p.fills.filter(x => x.matters)) assert.ok(html.includes(placeOf(f.title)), f.title);
+  const fills = p.fills.filter(x => x.matters);
+  for (const f of fills.slice(0, 3)) assert.ok(html.includes(placeOf(f.title)), f.title);
+  if (fills.length > 3) assert.ok(html.includes(`And ${fills.length - 3} more situation`), 'the rest counted');
   assert.match(html, /★ \d\.\d\d · [\d,]+ votes/);
   assert.match(html, /Great value/, 'a value-filtered pick is great value');
   assert.match(html, /data-action="wish-toggle"[^>]*aria-pressed="false"/);
@@ -201,6 +204,16 @@ test('doubles: dupes of one original, a dupe and its original, or none and the c
   assert.deepEqual(insights.needsSignals(owned), [], 'David’s records carry their signals');
   assert.match(insights.doublesHTML(undefined), /sk-rows/, 'a wardrobe whose signals are loading waits');
   assert.match(insights.doublesHTML({ ...none, partial: true }), /compares notes and accords only/);
+});
+
+test('an owned dupe’s original ties it to what voters link the original to: Supremacy and Aventus', async () => {
+  const pool = await loadPool(load);
+  const byId = new Map(Array.from({ length: pool.count }, (_, i) => fromPool(pool, i)).map(r => [r.id, r]));
+  const supremacy = named('Supremacy Collector\'s Edition Pour Homme'), aventus = byId.get('9828');
+  for (const list of [[supremacy, aventus], [aventus, supremacy]]) {
+    const [pair] = doubles(list).pairs;
+    assert.equal(pair?.why, 'voters', list.map(f => f.name).join(' + '));
+  }
 });
 
 test('doubles on anyone’s wardrobe read voters’ links from the pool: Aventus and Club de Nuit Intense Man', async () => {
@@ -272,13 +285,13 @@ test('David starts on the styles he says he loves; liking some replaces them, an
 });
 
 test('the wishlist puts the best fits first and says what each would add', async () => {
-  const { checks } = await ask('check', { owned, records: ['76063', '98242', '9828', 'nope'], liked: discover.DEMO_LIKED });
+  const { checks } = await ask('check', { owned, records: ['124649', '98242', '9828', 'nope'], liked: discover.DEMO_LIKED });
   const wants = checks.map((c, i) => ({ id: String(c.id), added: `2026-10-0${i + 1}` }));
   const items = wishlist.sortWants([
     { want: { id: 'loading', added: '2026-10-09' }, record: null, check: undefined },
     ...checks.map((check, i) => ({ want: wants[i], record: check.record ?? null, check })),
   ]);
-  assert.equal(items[0].check.name, 'Shalimar Millésime Tonka', 'the strong fit leads');
+  assert.equal(items[0].check.name, 'Zenith', 'the strong fit leads');
   const ranks = items.filter(i => i.check && !i.check.missing).map(i => verdictRank(i.check.verdict));
   assert.deepEqual(ranks, [...ranks].sort((a, b) => a - b));
   assert.deepEqual(items.slice(-2).map(i => i.want.id), ['loading', 'nope'], 'unchecked and unknown ones wait at the end, as added');
@@ -320,7 +333,7 @@ test('offline, a want with nothing loaded says so plainly instead of loading for
 });
 
 test('a Redundant check that ties to nothing you own reads Covered', () => {
-  const base = { verdict: 'Redundant', reasons: ['Nothing you own smells like it, but your Cedrus Blanc outdoes it even for Formal on warm nights, where it does best.'] };
+  const base = { verdict: 'Redundant', reasons: ['Nothing you own smells like it, but your Cedrus Blanc outdoes it even for Formal on warm nights, where it comes closest.'] };
   assert.equal(verdictOf({ ...base, overlap: { id: '1', name: 'Cedrus Blanc', via: null, sim: 0.42, link: null } }), 'Covered');
   assert.equal(verdictOf({ ...base, overlap: { id: '1', name: 'Liam', via: null, sim: 0.83, link: null } }), 'Redundant', 'too alike');
   assert.equal(verdictOf({ ...base, overlap: { id: '1', name: 'Liam', via: null, sim: 0.6, link: 'Voters call it a twin of your Liam' } }), 'Redundant', 'voters tie them');

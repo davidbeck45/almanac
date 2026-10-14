@@ -17,6 +17,11 @@ const GENDER = { f: 'women', m: 'men', u: 'women and men' };
 const NOTE_TIERS = { t: 'top', m: 'mid', b: 'base', f: 'all' };
 const NOTE_TIER_KEYS = ['t', 'm', 'b', 'f'];
 const SEASONS = ['winter', 'spring', 'summer', 'fall'];
+// Search: a bottle whose whole name was typed ranks as if it had WHOLE_LIFT
+// times its votes plus WHOLE_FLOOR: a new bottle typed exactly still leads
+// hits with a few dozen votes, a 0-vote clone none with more.
+const WHOLE_LIFT = 50;
+const WHOLE_FLOOR = 1;
 
 const round3 = x => Math.round(x * 1000) / 1000;
 
@@ -32,14 +37,26 @@ export function brandCase(brand) {
 }
 const thumbOf = id => `https://fimgs.net/mdimg/perfume-thumbs/dark-m.${id}.2x.webp`;
 
+// Words a note keeps in lowercase past its first ("Fleur de Sel").
+const SMALL_WORDS = new Set('de of la le du des and the et di da'.split(' '));
+/**
+ * A note written all in lowercase ("oak moss", "elemi", "ylang-ylang") in
+ * title case, as Fragrantica writes most ("Oak Moss"), as
+ * scripts/build_collection.py note_case does; others stay as they are.
+ */
+export function noteCase(note) {
+  if (typeof note !== 'string' || note !== note.toLowerCase()) return note;
+  return note.split(/([ -])/).map((w, i) => (i && SMALL_WORDS.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join('');
+}
+
 /** One row of data/fragrantica/r/*.json -> engine record (same shape as data/collection.json). */
 export function fromFragrantica(id, row) {
   const accords = Object.fromEntries(Object.entries(row.a).map(([a, s]) => [a, barWidth(s)]));
   const like = row.k ? { season: Object.fromEntries(SEASONS.map((s, i) => [s, row.k[i]])), night: row.k[4] } : null;
   const notes = {}, weights = {};
   for (const [tier, list] of Object.entries(row.no ?? {})) {
-    notes[NOTE_TIERS[tier]] = Object.keys(list);
-    Object.assign(weights, list);
+    notes[NOTE_TIERS[tier]] = Object.keys(list).map(noteCase);
+    for (const [note, w] of Object.entries(list)) weights[noteCase(note)] = w;
   }
   const record = {
     id: String(id),
@@ -222,8 +239,11 @@ export function fragranticaLibrary(load = defaultLoad) {
 
   // Matches as light records for the result list ({ id, name, brand, year,
   // thumb, stub }): bottles whose whole name was typed first, then the most
-  // voted. Without a bottle matching every word, ones missing a single word
-  // ("MFK Baccarat Rouge 540", a typo). `records` loads the full ones.
+  // voted. A whole-name hit far less voted than another hit doesn't lead (it
+  // counts WHOLE_LIFT times its votes): a 0-vote clone named "Baccarat Rouge"
+  // follows MFK's Baccarat Rouge 540. Without a bottle matching every word,
+  // ones missing a single word ("MFK Baccarat Rouge 540", a typo). `records`
+  // loads the full ones.
   async function search(query, limit = 8) {
     const words = normalize(query).split(' ').filter(w => w.length > 1);
     if (!words.length) return [];
@@ -234,16 +254,18 @@ export function fragranticaLibrary(load = defaultLoad) {
     const full = [], near = [];
     for (const line of text.split('\n')) {
       if (!line) continue;
-      const [id, name, brand, year] = line.split('\t');
+      const [id, name, brand, year, votes] = line.split('\t');
       const hay = normalize(`${name} ${brand}`);
       const missed = words.filter(w => !hay.includes(w)).length;
       if (!missed || (missed === 1 && words.length > 1)) {
-        (missed ? near : full).push({ id, name, brand: brandCase(brand), year: Number(year) || null, thumb: thumbOf(id), stub: true });
+        const hit = { id, name, brand: brandCase(brand), year: Number(year) || null, thumb: thumbOf(id), stub: true };
+        (missed ? near : full).push({ hit, votes: Number(votes) || 0 });
       }
     }
-    const hits = full.length ? full : near;
-    const whole = hits.filter(h => nameMatches(query, h));
-    return [...whole, ...hits.filter(h => !whole.includes(h))].slice(0, limit);
+    const rankOf = ({ hit, votes }) => (nameMatches(query, hit) ? (votes + WHOLE_FLOOR) * WHOLE_LIFT : votes);
+    return (full.length ? full : near).map(h => ({ ...h, rank: rankOf(h) }))
+      .sort((a, b) => b.rank - a.rank || b.votes - a.votes)
+      .slice(0, limit).map(h => h.hit);
   }
 
   // Map of id -> record for the ids the dataset has.
@@ -274,6 +296,7 @@ async function defaultLoad(path) {
     throw new Error('Can’t reach the fragrance library. Check your connection.');
   }
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`The fragrance library didn’t load (${res.status}).`);
+  // The status is for debugging, not for the sentence people read.
+  if (!res.ok) throw Object.assign(new Error('The fragrance library didn’t load. Try again.'), { detail: `HTTP ${res.status}` });
   return res.text();
 }

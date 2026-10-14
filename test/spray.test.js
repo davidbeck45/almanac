@@ -146,3 +146,46 @@ test('plain sentences, never a temperature', () => {
     }
   }
 });
+
+test('why reads the way the count went: a reason pushing against it says "though", never "and"', () => {
+  // Clauses that add sprays; the rest take them off.
+  const RAISES = /^(it stays close to the skin|it projects less than most|it sits closer on you|it fades early|it fades faster on you|cold air mutes it|a night out can take more|open air thins it out|it’s (cologne strength|an eau de toilette|a light body mist))$/;
+  const catalog = JSON.parse(readFileSync(new URL('../data/catalog.json', import.meta.url))).fragrances;
+  let though = 0;
+  for (const f of [...fragrances, ...catalog, BEAST, BREEZE, MIDDLE, SKIN, LOUD]) {
+    for (const conditions of [HOT_STICKY, HOT_DRY, MILD, COOL, COLD]) {
+      for (const occasion of [null, ...OCCASIONS]) {
+        const g = sprayGuide(f, conditions, occasion);
+        const why = g.text.split(/(?<=\.)\s/)[1];
+        if (!why) continue;
+        const [along, against] = why.replace(/\.$/, '').split(', though ');
+        const clauses = along.split(' and ').map(c => c.charAt(0).toLowerCase() + c.slice(1));
+        const ups = clauses.map(c => RAISES.test(c));
+        assert.ok(ups.every(u => u === ups[0]), `${f.name}: ${g.text}`);
+        if (against) {
+          though++;
+          assert.notEqual(RAISES.test(against), ups[0], `${f.name}: ${g.text}`);
+        }
+      }
+    }
+  }
+  assert.ok(though > 20, 'some reasons push the other way');
+  const mooncake = sprayGuide(catalog.find(f => f.name === 'Mooncake'), HOT_STICKY, 'office');
+  assert.match(mooncake.text, /^1 spray, on the chest, under your shirt\. Sticky heat makes rich notes cloying, though it stays close to the skin\.$/);
+  assert.match(sprayGuide(byName('Jake'), MILD, 'office').text, /The office wants it quiet, though it stays close to the skin\.$/, 'the office caps it');
+});
+
+test('a body mist reads as one by its flag, and a perfume oil gets dabs', () => {
+  const beach = { id: 'b', name: 'At the Beach', brand: 'Bath & Body Works', accords: { aquatic: 100, citrus: 70, musky: 50 }, extras: { flags: ['mist'] } };
+  const mist = sprayGuide(beach, MILD);
+  assert.ok(mist.why.includes('A light body mist'), mist.text);
+  assert.ok(mist.sprays[0] > sprayGuide({ ...beach, extras: { flags: [] } }, MILD).sprays[0], 'lighter than a perfume, so more of it');
+  for (const name of ['Madagascar Vanilla Perfume Oil', 'Amber Fragrance Oil', 'Musk Attar']) {
+    const oil = sprayGuide({ id: 'o', name, brand: 'Test', accords: { vanilla: 100, amber: 60 } }, MILD);
+    assert.equal(oil.unit, 'dab', name);
+    assert.match(oil.text, /^A dab or two, on the wrists and the neck\. A perfume oil goes on by touch/);
+    assert.doesNotMatch(oil.text, /spray/);
+  }
+  assert.equal(sprayGuide({ id: 'o', name: 'Oil Fiction', brand: 'Test', accords: { musky: 100 } }, MILD).unit, 'spray', 'a spray named for oil is a spray');
+  assert.equal(sprayGuide(MIDDLE, MILD).unit, 'spray');
+});

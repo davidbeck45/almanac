@@ -9,6 +9,7 @@ import { setHidden } from '../hidden.js';
 import { saveMine, shareURL, localMatches, nameMatches, importLines, MAX_IMPORT_LINES } from '../collections.js';
 import { customRecord, MAX_CUSTOM_ACCORDS } from '../custom.js';
 import { clearHistory, journalExport } from '../history.js';
+import { loadSkin } from '../skin.js';
 import { esc, plural, shortDate, relativeDay, accordLabel } from '../ui.js';
 import {
   icon, img, messageHTML, rowHTML, switchHTML, segHTML, sheetFrame, sharedBannerHTML, accordColor, sectionHead,
@@ -524,8 +525,9 @@ async function share(app) {
   const records = activeFragrances();
   if (!records.length) return;
   const name = state.shared?.name ?? (state.active === 'mine' ? state.mine.name.trim() : 'David');
-  const url = shareURL(records, name);
+  let url;
   try {
+    url = shareURL(records, name);
     if (navigator.share) {
       await navigator.share({ title: 'Scentcast', text: name ? `${name}’s fragrance picks` : 'Fragrance picks', url });
       return;
@@ -533,7 +535,8 @@ async function share(app) {
     await navigator.clipboard.writeText(url);
     app.showToast('<span>Share link copied</span>');
   } catch (err) {
-    if (err?.name !== 'AbortError') app.showToast(`<span>Copy this link: ${esc(url)}</span>`);
+    if (!url) app.showToast('<span>Couldn’t make a share link</span>');
+    else if (err?.name !== 'AbortError') app.showToast(`<span>Copy this link: ${esc(url)}</span>`);
   }
 }
 
@@ -682,8 +685,7 @@ export const actions = {
     app.render();
   },
   // With your own ratings and skin nudges (src/skin.js), for journal-check.
-  async 'journal-export'() {
-    const { loadSkin } = await import('../skin.js');
+  'journal-export'() {
     const data = journalExport(state.history, state.loc, hiddenIn(true), { skin: loadSkin() });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
