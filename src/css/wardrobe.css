@@ -211,11 +211,13 @@
 .ins-subhead { margin: var(--s-6) 0 var(--s-2); font-size: var(--fs-headline); line-height: var(--lh-headline); font-weight: 600; }
 .ins-error .message { padding: var(--s-5) var(--s-3); border: 0; background: none; box-shadow: none; }
 .ins-empty-line { padding: var(--s-1) 0; }
+.ins-failed .link-btn { color: var(--text-primary); }
 
 /* The vial: a situation's coverage as a fill level, one sky hue darker as it
    fills, so it reads by shape as much as shade. A gap is empty with a coral
    rim and a mark at its foot; Never is struck through; a cell that rarely
-   comes up is faded. */
+   comes up is faded. The rim and the thinnest fill clear 3:1 on the card in
+   both themes (a faded cell doesn't; its detail says it in words). */
 .vial {
   --lvl: 0;
   --liquid: var(--ambient);
@@ -226,7 +228,7 @@
   height: 28px;
   overflow: hidden;
   border-radius: 7px 7px 8px 8px;
-  border: 1.5px solid color-mix(in srgb, var(--ambient) 42%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--ambient) 62%, transparent);
   background: var(--fill-faint);
 }
 .vial-fill {
@@ -242,12 +244,12 @@
 .vial[data-status='plenty'] { --lvl: 1; border-color: color-mix(in srgb, var(--ambient) 80%, transparent); }
 .vial[data-status='covered'] { --lvl: 0.7; --liquid: color-mix(in srgb, var(--ambient) 80%, transparent); }
 .vial[data-status='room'] { --lvl: 0.45; --liquid: color-mix(in srgb, var(--ambient) 62%, transparent); }
-.vial[data-status='thin'] { --lvl: 0.2; --liquid: color-mix(in srgb, var(--ambient) 50%, transparent); }
+.vial[data-status='thin'] { --lvl: 0.2; --liquid: color-mix(in srgb, var(--ambient) 58%, transparent); }
 .vial[data-status='gap'] { border-color: var(--negative); background: color-mix(in srgb, var(--negative) 12%, transparent); }
 .vial[data-status='gap']::after { content: ''; position: absolute; left: 50%; bottom: 4px; width: 8px; height: 2px; margin-left: -4px; border-radius: var(--r-pill); background: var(--negative); }
 .vial[data-status='off'] { border-color: var(--border-strong); background: none; }
 .vial[data-status='off']::after { content: ''; position: absolute; left: -4px; right: -4px; top: 50%; height: 1.5px; background: var(--border-strong); transform: rotate(-52deg); }
-.vial.rare { opacity: 0.42; }
+.vial.rare { opacity: 0.5; }
 .cov.fill-in .vial-fill { animation: rise 0.7s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 10ms); }
 @keyframes rise { from { transform: scaleY(0); } }
 
@@ -385,6 +387,10 @@
 .ins-styles { display: grid; gap: var(--s-4); }
 @container page (min-width: 600px) { .ins-styles { gap: var(--s-5); } }
 .ins-more + .ins-more { margin-top: var(--s-4); padding-top: var(--s-4); border-top: 1px solid var(--border-subtle); }
+@container page (min-width: 680px) {
+  .ins-more-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-5) var(--s-6); }
+  .ins-more + .ins-more { margin-top: 0; padding-top: 0; border-top: 0; }
+}
 .ins-more-head { font-size: var(--fs-headline); line-height: var(--lh-headline); font-weight: 600; }
 .more-rows, .starter-rows { margin: var(--s-1) calc(-1 * var(--s-2)) 0; }
 .more-rows .row-text b, .starter-rows .row-text b { font-family: var(--display); font-style: italic; letter-spacing: -0.005em; }

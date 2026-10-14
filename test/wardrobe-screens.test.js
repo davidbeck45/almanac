@@ -67,7 +67,7 @@ test('Insights renders the report clean: the map, thin spots, strengths and sugg
       stated: true, open: 'skin', all: false,
       groups: [{ ids: ['skin', 'intimate'], title: EVIL, href: '#/discover?styles=skin,intimate', picks: undefined }],
       starters: [{ style: styles.styleById('oud'), pick: null }, { style: styles.styleById('chypre'), pick: undefined }],
-      moreStarters: 2, error: EVIL,
+      moreStarters: 2, error: '',
       doubles: doubles(owned),
     },
   };
@@ -81,6 +81,9 @@ test('Insights renders the report clean: the map, thin spots, strengths and sugg
   assert.ok(html.includes(`data-action="wish-toggle" data-id="${r.picks[0].id}" aria-pressed="true"`), 'wanted ones say so');
   for (const g of report.gaps) assert.ok(html.includes(insights.STATUS_WORD[g.status]), `the status of ${g.title} is a word`);
   assert.ok(!/<h4/.test(html), 'no h4');
+  const failed = clean(insights.stylesHTML({ ...model.styles, error: EVIL }), 'styles, failed');
+  assert.equal((failed.match(/data-action="ins-retry"/g) ?? []).length, 2, 'Try again in place of each list');
+  assert.ok(!failed.includes('ins-more-head'));
 });
 
 test('the map opens on the worst gap, and a cell’s detail names who covers it and who would beat them', () => {

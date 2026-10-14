@@ -307,15 +307,15 @@ const pickMeta = p => [p.record.brand, ratingText(p.rating)?.split(' · ')[0], v
 /** "More skin scents": per group of liked styles, its top picks (undefined while loading, null when it failed). */
 export function moreHTML(groups, { wants = new Set() } = {}) {
   if (!groups.length) return '<p class="muted">Heart a style above and the best bottles in it show here.</p>';
-  return groups.map(g => {
+  return `<div class="ins-more-groups">${groups.map(g => {
     const list = g.picks === undefined ? skeletonRows(MORE_PICKS)
-      : !g.picks?.length ? `<p class="muted small">${g.picks === null ? 'These didn’t load. Try again in a moment.' : 'Nothing new to suggest here: you have the best of it.'}</p>`
+      : !g.picks?.length ? '<p class="muted small">Nothing new to suggest here: you have the best of it.</p>'
         : `<ul class="rows more-rows">${g.picks.map(p => rowHTML(p.record, { meta: pickMeta(p), open: { ctx: '' }, trailing: wantButton(p.record, wants.has(p.id), { iconOnly: true }) })).join('')}</ul>`;
     return `<section class="ins-more" aria-label="${esc(g.title)}">
       <h3 class="ins-more-head">${esc(g.title)}</h3>
       ${list}
     </section>`;
-  }).join('');
+  }).join('')}</div>`;
 }
 
 const skeletonRows = n => `<ul class="rows sk-rows" aria-hidden="true">${'<li class="row"><span class="sk sk-dot"></span><span class="sk-lines"><span class="sk sk-line w40"></span><span class="sk sk-line w70"></span></span></li>'.repeat(n)}</ul>`;
@@ -417,21 +417,21 @@ export function insightsHTML(m) {
 
 /** The styles half (re-rendered on its own as its answers land). */
 export function stylesHTML(s, wants = new Set()) {
-  const liked = s.groups.length ? s.groups.map(g => g.ids).flat() : [];
-  const all = [...new Set(liked)];
+  const all = [...new Set(s.groups.flatMap(g => g.ids))];
+  // When the pool couldn't answer, one line says so in place of each list.
+  const failed = s.error && `<p class="error ins-failed">${esc(s.error)} <button class="link-btn" data-action="ins-retry">Try again</button></p>`;
   return `<section class="card ins-mix" aria-labelledby="mix-title">
       ${sectionHead('Your style mix', '', { id: 'mix-title' })}
       ${styleMixHTML(s.rows, { open: s.open, stated: s.stated, all: s.all })}
     </section>
     <section class="card ins-more-card" aria-labelledby="more-title">
       ${sectionHead(s.stated ? 'More of what you like' : 'More of what you reach for', '', { id: 'more-title' })}
-      ${s.error ? `<p class="error">${esc(s.error)}</p>` : ''}
-      ${moreHTML(s.groups, { wants })}
+      ${failed || moreHTML(s.groups, { wants })}
       ${all.length ? `<a class="btn secondary compact more-link" href="#/discover?styles=${esc(all.join(','))}">${icon.discover}<span>See more in Discover</span></a>` : ''}
     </section>
     <section class="card ins-start" aria-labelledby="start-title">
       ${sectionHead('Styles you don’t own yet', '<p>One well-rated, safe, good-value bottle to start each.</p>', { id: 'start-title' })}
-      ${startersHTML(s.starters, { wants, more: s.moreStarters })}
+      ${failed || startersHTML(s.starters, { wants, more: s.moreStarters })}
     </section>
     <section class="card ins-doubles" aria-labelledby="doubles-title">
       ${sectionHead('Doubles', '', { id: 'doubles-title' })}
