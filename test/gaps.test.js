@@ -12,6 +12,7 @@ import {
 } from '../src/gaps.js';
 import { customRecord, predictedShares } from '../src/custom.js';
 import { applySkin } from '../src/skin.js';
+import { DEMO_LIKED } from '../src/discover.js';
 import { sharesFrom, parseUses, LEVELS } from '../src/uses.js';
 import { archiveWindows, fetchClimate, climateYears } from '../src/climate.js';
 import { fragranticaLibrary } from '../src/fragrantica.js';
@@ -289,12 +290,13 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   const sauvage = verdict('31861');
   assert.deepEqual([sauvage.verdict, sauvage.reasons, sauvage.fills], ['Redundant', ['You own it.'], []]);
   const tobacco = buyCheck(records.find(r => r.name === 'Tobacco Vanille'), ctx);
-  assert.equal(tobacco.verdict, 'Redundant', 'one point better than Terra fills nothing');
-  assert.match(tobacco.reasons[0], /^It adds little: it would barely beat your /);
-  // A new direction he doesn't need isn't called a duplicate.
+  assert.equal(tobacco.verdict, 'Covered', 'one point better than Terra fills nothing');
+  assert.match(tobacco.reasons[0], /^It would barely beat your Terra for /);
+  // A new direction he doesn't need isn't called a duplicate: he's covered there.
   const dhi = buyCheck(records.find(r => r.name === 'Encre Noire'), ctx);
-  assert.equal(dhi.verdict, 'Redundant');
-  assert.match(dhi.reasons[0], /^Nothing you own smells like it, but /);
+  assert.equal(dhi.verdict, 'Covered');
+  assert.match(dhi.reasons[0], /^It would barely beat your .+, where it does best\.$/);
+  assert.equal(dhi.reasons[1], 'Nothing you own smells like it.');
   assert.ok(dhi.overlap.sim < 0.5 && !dhi.overlap.link);
   // Dior Homme Intense lasts the working day, so it edges his best for the office in the cold; its clone doesn't.
   const dior = buyCheck(records.find(r => r.name === 'Dior Homme Intense 2011'), ctx);
@@ -321,6 +323,51 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   }
   const json = checkJSON(byId.get('76063'), tonka);
   assert.equal(JSON.parse(JSON.stringify(json)).verdict, 'Strong fit');
+});
+
+test('the buy check knows what he likes: more of a style he’s thin on is good, overlap redundant, the rest covered', () => {
+  const liked = DEMO_LIKED; // Skin scent, Clean, Intimate
+  const check = (r, opts = { liked }) => buyCheck(typeof r === 'string' ? byId.get(r) : r, ctx, opts);
+  const named = (name, brand) => records.find(r => r.name === name && r.brand === brand);
+  // Glossier You: a skin scent, and he owns two; it fills no gap, and nothing he owns smells like it.
+  const you = check(named('You', 'Glossier'));
+  assert.equal(you.verdict, 'Good');
+  assert.deepEqual(you.reasons.slice(0, 2), ['More of the skin scents you like: you own 2.', 'Nothing you own smells like it.']);
+  assert.deepEqual([you.taste.style, you.taste.owned, you.taste.thin], ['skin', 2, true]);
+  assert.equal(check(named('You', 'Glossier'), {}).verdict, 'Covered', 'without his styles it adds nothing');
+  // A twin of his Supremacy Collector's Edition is redundant, whatever he likes.
+  const precieux = check('93272'); // Armaf Club de Nuit Precieux I
+  assert.equal(precieux.verdict, 'Redundant');
+  assert.match(precieux.reasons[0], /twin of your Supremacy Collector's Edition Pour Homme/);
+  // A fresh classic he's covered for, in no style he likes.
+  const adg = check(named('Acqua di Gio', 'Giorgio Armani'));
+  assert.equal(adg.verdict, 'Covered');
+  assert.equal(adg.reasons[1], 'It’s fresh citrus and aquatic, none of the styles you like.');
+  // Risky and strong fit stand whatever he likes.
+  assert.equal(check(records.find(r => r.name === 'Kouros')).verdict, 'Risky');
+  assert.equal(check('76063').verdict, 'Strong fit', 'Shalimar Millésime Tonka');
+  // A low-rated skin scent is risky, at its real rating.
+  const nap = check(named('Not A Perfume', 'Juliette Has A Gun'));
+  assert.equal(nap.verdict, 'Risky');
+  assert.equal(nap.reasons[0], 'Voters rate it only 3.75★.');
+  // A style he owns plenty of adds nothing new.
+  const tv = check(records.find(r => r.name === 'Tobacco Vanille'), { liked: ['vanilla'] });
+  assert.deepEqual([tv.verdict, tv.reasons[1]], ['Covered', 'You own 8 vanilla scents already.']);
+  // A body mist says so, and is never a strong fit.
+  const mist = check('87258'); // Phlur Vanilla Skin Fragrance Mist
+  assert.ok(mist.reasons.includes('It’s a body mist: lighter and shorter-lived than a perfume.'));
+  for (const c of [you, precieux, adg, nap, tv, mist]) {
+    assert.ok(c.reasons.length >= 2 && c.reasons.length <= 3, c.reasons.join(' | '));
+    for (const r of c.reasons) assert.doesNotMatch(r, /°|\d+ ?F\b|undefined|null|NaN|severity|deficit/);
+  }
+  // Over the pool, his styles turn some covered bottles good, and nothing else.
+  const sample = records.filter((_, i) => i % 9 === 0), shift = {};
+  for (const r of sample) {
+    const [a, b] = [check(r, {}).verdict, check(r).verdict];
+    if (a !== b) shift[`${a} → ${b}`] = (shift[`${a} → ${b}`] ?? 0) + 1;
+  }
+  assert.ok(Object.keys(shift).every(k => ['Covered → Good', 'Covered → Risky'].includes(k)) && shift['Covered → Good'] > 10, JSON.stringify(shift));
+  assert.deepEqual(checkJSON(named('You', 'Glossier'), you).taste, { styles: ['powdery', 'skin'], style: 'skin', label: 'Skin scent', owned: 2, thin: true });
 });
 
 test('the buy check reads a bottle the same way whatever form it comes in', () => {
@@ -441,6 +488,8 @@ test('the worker answers reports and checks by message', async () => {
     assert.deepEqual(structuredClone(answer).report.gaps, report.gaps);
     const check = await handle({ id: 2, type: 'check', record: { id: '84109' } });
     assert.equal(check.check.verdict, 'Redundant');
+    const you = records.find(r => r.name === 'You' && r.brand === 'Glossier');
+    assert.equal((await handle({ id: 9, type: 'check', record: { id: you.id }, liked: DEMO_LIKED })).check.verdict, 'Good', 'liked styles ride along');
     // No local climate yet (null) is the default climate; "How you wear" settings work as shares.
     const plain = await handle({ id: 5, type: 'report', owned: raw, summary: null, uses: { office: 'never' }, k: 1 });
     assert.equal(plain.type, 'report', plain.message);
@@ -483,6 +532,11 @@ test('--gaps and --check answer in the terminal', () => {
   assert.equal(JSON.parse(check.stdout).verdict, 'Redundant');
   const byNumber = cli('--check', '76063');
   assert.match(byNumber.stdout, /^Shalimar Millésime Tonka by Guerlain \(2022\).*\nStrong fit\n/);
+  // His styles by default, others when named.
+  const you = JSON.parse(cli('--check', 'Glossier You', '--json').stdout);
+  assert.deepEqual([you.verdict, you.liked], ['Good', DEMO_LIKED]);
+  assert.equal(JSON.parse(cli('--check', 'Glossier You', '--style', 'vanilla', '--json').stdout).verdict, 'Covered');
+  assert.match(cli('--check', 'Glossier You', '--style', 'xqzw').stderr, /--style: name styles from/);
 
   assert.match(cli('--gaps', '--uses', 'gym=often').stderr, /--uses: Unknown use "gym"/);
   assert.match(cli('--gaps', '--uses', 'daily=never').stderr, /--uses: Daily picks always count/);

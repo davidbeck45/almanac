@@ -2,12 +2,13 @@
 // URL('./gaps-worker.js', import.meta.url), { type: 'module' })). It loads the
 // suggestion pool once, keeps its records and drops the parsed file, and
 // answers two messages, each echoing the request's `id`:
-//   { type: 'report', owned, summary, shares | uses, preferValue, k }
+//   { type: 'report', owned, summary, shares | uses, preferValue, mists, k }
 //     -> { type: 'report', report } (gapReport in src/gaps.js: overview, gaps,
 //        strengths, the coverage grid, picks with fills, twins and risk), plus
 //        `ms` timings
-//   { type: 'check', record, owned?, summary?, shares? | uses?, preferValue? }
-//     -> { type: 'check', check } (checkJSON: the buy check's verdict and reasons)
+//   { type: 'check', record, liked?, owned?, summary?, shares? | uses?, preferValue?, mists? }
+//     -> { type: 'check', check } (checkJSON: the buy check's verdict and
+//        reasons; `liked`, the style ids someone likes, makes it taste-aware)
 // A check without a wardrobe uses the last report's. Errors come back as
 // { type: 'error', message }. owned are the wardrobe's engine records;
 // summary a climate summary (src/climate.js; DEFAULT_CLIMATE when null or
@@ -70,15 +71,15 @@ const UNSCORED = new Set(['layeredWith', 'sentiment', 'description', 'url', 'thu
 const ownedKey = owned => JSON.stringify(owned, (k, v) => (UNSCORED.has(k) ? undefined : v));
 
 let last = null; // { key, ctx }
-async function contextFor({ owned, summary, shares = null, uses = null, preferValue = null }, timings) {
+async function contextFor({ owned, summary, shares = null, uses = null, preferValue = null, mists = false }, timings) {
   summary ??= DEFAULT_CLIMATE;
   shares ??= uses ? sharesFrom(uses) : null;
-  const key = JSON.stringify([ownedKey(owned), summary, shares, preferValue]);
+  const key = JSON.stringify([ownedKey(owned), summary, shares, preferValue, Boolean(mists)]);
   if (last?.key === key) return last.ctx;
   const t0 = performance.now();
   const { records, byId } = await poolRecords();
   const t1 = performance.now();
-  const ctx = gapContext({ owned: await withAbout(owned, byId), records, byId, summary, shares, preferValue });
+  const ctx = gapContext({ owned: await withAbout(owned, byId), records, byId, summary, shares, preferValue, mists: Boolean(mists) });
   Object.assign(timings, { pool: t1 - t0, context: performance.now() - t1 });
   last = { key, ctx };
   return ctx;
@@ -101,7 +102,7 @@ export async function handle(data) {
       if (!ctx) throw new Error('Run a report first, or send the wardrobe with the check.');
       // A pool bottle checks as the suggestions see it, with its signals.
       const [record] = await withAbout([ctx.byId.get(String(data.record.id)) ?? data.record], ctx.byId);
-      return { id, type, check: checkJSON(record, buyCheck(record, ctx)), ms };
+      return { id, type, check: checkJSON(record, buyCheck(record, ctx, { liked: data.liked ?? null })), ms };
     }
     throw new Error(`Unknown message type "${type}".`);
   } catch (err) {

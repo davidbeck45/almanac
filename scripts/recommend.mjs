@@ -13,7 +13,7 @@
 //   node scripts/recommend.mjs --spray "Liquid Brun" [--city X] [--occasion date]   (how many sprays, and where)
 //   node scripts/recommend.mjs --gaps [--city X] [--uses "office=often,formal=never"] [--value | --no-value] [--top N]
 //                                                         (what the wardrobe is missing, and bottles that fill it)
-//   node scripts/recommend.mjs --check "Shalimar Millesime Tonka"   (whether a bottle is worth buying; name or id)
+//   node scripts/recommend.mjs --check "Shalimar Millesime Tonka" [--style "skin,clean"]   (whether a bottle is worth buying; name or id)
 //   node scripts/recommend.mjs --style "skin,clean,intimate" [--all] [--lean masculine]   (bottles to buy that are those styles)
 //   node scripts/recommend.mjs --more-like "Liquid Brun,Amber Empire"   (bottles to buy that smell like them)
 //   node scripts/recommend.mjs --notes "iris leather" [--season winter] [--slot night] [--lean unisex] [--min-value 3.8] [--min-rating 3.6]
@@ -559,9 +559,16 @@ async function main() {
         const about = await loadAbout(record.id, datasetFile);
         if (about) record = { ...record, about };
       }
-      const check = buyCheck(record, ctx);
+      // The styles David loves (Discover's chips), or the ones named with --style.
+      let liked = DEMO_LIKED;
+      if (args.style) {
+        const found = findStyles(args.style);
+        if (found.unknown.length || !found.ids.length) fail(`--style: name styles from ${STYLES.map(s => s.label).join(', ')}`);
+        liked = found.ids;
+      }
+      const check = buyCheck(record, ctx, { liked });
       if (args.json) {
-        console.log(JSON.stringify({ climate: where, preferValue: ctx.preferValue, ...checkJSON(record, check) }, null, 2));
+        console.log(JSON.stringify({ climate: where, preferValue: ctx.preferValue, liked, ...checkJSON(record, check) }, null, 2));
         return;
       }
       console.log(`${byLine(record)} · ${stars(record)}`);
@@ -574,7 +581,7 @@ async function main() {
       }
       console.log(`Risk: ${check.risk.level}${check.risk.reasons.length ? ` (${check.risk.reasons.join(' ')})` : ''}`);
       if (check.twin) console.log(`Twin: ${check.twin.text}`);
-      console.log(`\nClimate: ${where} · ${valueText}`);
+      console.log(`\nClimate: ${where} · ${valueText} · styles you like: ${liked.map(id => styleById(id).label).join(', ')}`);
       return;
     }
 
@@ -901,7 +908,7 @@ const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,N
        node scripts/recommend.mjs --pack (--city NAME | --loc LAT,LON[,NAME]) --from YYYY-MM-DD --to YYYY-MM-DD [--max N] [--events "DATE [day|night] OCCASION; …"] [--json]
        node scripts/recommend.mjs --spray NAME [--city NAME | --loc LAT,LON[,NAME]] [--date YYYY-MM-DD] [--occasion ID] [--slot day|night] [--json]
        node scripts/recommend.mjs --gaps [--city NAME | --loc LAT,LON[,NAME]] [--uses USE=never|sometimes|often,…] [--value | --no-value] [--mists] [--top N] [--exclude NAME,NAME] [--demo] [--json]
-       node scripts/recommend.mjs --check NAME|ID [--city NAME | --loc LAT,LON[,NAME]] [--uses …] [--value | --no-value] [--json]
+       node scripts/recommend.mjs --check NAME|ID [--city NAME | --loc LAT,LON[,NAME]] [--uses …] [--value | --no-value] [--style STYLE,STYLE] [--json]
        node scripts/recommend.mjs (--style STYLE,STYLE|liked [--all] | --more-like NAME,NAME|favorites | --notes "NOTE NOTE") [--season S,S] [--slot day|night] [--lean feminine|unisex|masculine] [--min-value V] [--min-rating R] [--mists] [--top N] [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --dupes NAME [--top N] [--json]`;
 
