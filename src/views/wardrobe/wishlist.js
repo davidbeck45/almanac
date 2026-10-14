@@ -110,7 +110,7 @@ export function wishlistHTML({ items, busy = false, error = '', reload = false, 
     return messageHTML({
       glyph: icon.heart,
       title: 'Nothing on your wishlist yet',
-      body: 'Tap Want on a suggestion, and it lands here with a verdict on how it would fit your shelf.',
+      body: 'Choose Want on a suggestion, and it lands here with a verdict on how it would fit your shelf.',
       action: `<div class="message-actions">
         <a class="btn primary" href="#/wardrobe/insights">${icon.chart}<span>See what would fill your gaps</span></a>
         <a class="btn secondary" href="#/discover">${icon.discover}<span>Discover bottles</span></a>

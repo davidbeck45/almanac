@@ -3,7 +3,9 @@
 // Insights and the Wishlist are test/wardrobe-screens.test.js.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import * as wardrobe from '../src/views/wardrobe.js';
+import { localMatches } from '../src/collections.js';
 import { ACCORDS } from '../src/accords.js';
 import { insightsSkeletonHTML } from '../src/views/wardrobe/insights.js';
 import { wishlistHTML } from '../src/views/wardrobe/wishlist.js';
@@ -56,6 +58,63 @@ test('a pasted line already in Mine is marked, not ticked, and the count leaves 
   assert.equal(wardrobe.importSheetStatus({ rows }), 'Found 4 of 5 lines. 1 already in Mine.');
   assert.equal(wardrobe.importSheetStatus({ rows, busy: true }), 'Looking up 5 lines…');
   assert.match(html, /id="import-title" class="sheet-title" tabindex="-1"/, 'the title can take focus when the text box goes');
+});
+
+test('a pasted line ticks a bottle only when its whole name was typed', () => {
+  const demo = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url))).fragrances;
+  const elixir = demo.find(f => f.name === 'Hawas Elixir');
+  const forHim = bottle('31862', 'Hawas for Him', 'Rasasi');
+  // "Hawas" finds Hawas Elixir on the shelf, but doesn't name it: offered, unticked.
+  assert.equal(localMatches('Hawas', demo, 1)[0], elixir);
+  assert.deepEqual(wardrobe.lineMatch('Hawas', elixir, []), { match: elixir, checked: false, weak: true });
+  // The library's best guess comes first when it has one, unticked too.
+  assert.deepEqual(wardrobe.lineMatch('Hawas', elixir, [forHim, elixir]), { match: forHim, checked: false, weak: true });
+  assert.deepEqual(wardrobe.lineMatch('Hawas Elixir', elixir, [forHim]), { match: elixir, checked: true, weak: false });
+  assert.deepEqual(wardrobe.lineMatch('Hawas for Him Rasasi', null, [forHim]), { match: forHim, checked: true, weak: false });
+  assert.deepEqual(wardrobe.lineMatch('Some Made Up Perfume', null, []), { match: null, checked: false, weak: false });
+});
+
+test('Paste a list says when lines wait for another round, and the box keeps them', () => {
+  const rows = Array.from({ length: 15 }, (_, i) => ({ line: `Bottle ${i + 1}`, status: 'done', match: many[i % 10], checked: true }));
+  assert.equal(wardrobe.importSheetStatus({ rows, more: 3 }), 'Found 15 of 15 lines. 3 more lines left for the next round.');
+  assert.equal(wardrobe.importSheetStatus({ rows, busy: true, more: 1 }), 'Looking up 15 lines… 1 more line left for the next round.');
+  const html = wardrobe.importSheetHTML({ rows, more: 3 }, 15);
+  assert.match(html, /<p class="notice">Only the first 15 lines\. Add these, and the other 3 come back here for another round\.<\/p>/);
+  assert.match(wardrobe.importSheetHTML({ rows, more: 1 }, 15), /the last line comes back here/);
+  assert.ok(!wardrobe.importSheetHTML({ rows }, 15).includes('class="notice"'));
+  const box = wardrobe.importSheetHTML({ text: 'A\nB\nC', carried: 3 }, 15);
+  assert.match(box, /The last 3 lines of your list, ready for another round/);
+  assert.match(box, /data-field="import-text"[^>]*>A\nB\nC<\/textarea>/, 'saved as typed, so a render keeps it');
+});
+
+test('Add bottles keeps the search field as typed through a redraw', () => {
+  const html = wardrobe.addSheetHTML({ query: 'aventus', draft: 'dior sau', results: [aventus] }, new Set());
+  assert.match(html, /id="add-q" name="q" data-field="add-q"[^>]*value="dior sau"/);
+  assert.match(html, /1 match for “aventus”/, 'the results still say what was searched');
+  assert.match(wardrobe.addSheetHTML({ query: 'aventus' }, new Set()), /value="aventus"/);
+});
+
+test('a share link that can’t go to the clipboard shows whole, to copy by hand', () => {
+  const url = `https://example.com/scentcast/?c=${Array.from({ length: 24 }, (_, i) => 90000 + i).join(',')}&n=David`;
+  const html = wardrobe.shareSheetHTML({ url, name: 'David' });
+  assert.ok(html.includes(`id="share-url" data-action="share-select" value="${url.replace(/&/g, '&amp;')}" readonly`), 'the whole link, in a field');
+  assert.match(html, /data-action="share-copy"/);
+  assert.match(html, /David’s bottles/);
+  assert.match(wardrobe.shareSheetHTML({ url, copied: true }), /<span>Copied<\/span>/);
+  assert.match(wardrobe.shareSheetHTML({ url, copied: 'Couldn’t copy' }), /<p class="muted small">Couldn’t copy<\/p>/);
+});
+
+test('the journal says it covers every list when the ranked one isn’t all it holds', () => {
+  const data = {
+    stats: { wears: 2, bottles: 2, top: [[mango.id, 1], [aventus.id, 1]], lastWorn: new Map([[mango.id, '2026-10-01'], [aventus.id, '2026-10-01']]) },
+    calendar: [], dusty: [{ f: nish, last: null }], todayISO: '2026-10-02',
+  };
+  const resolve = id => [mango, aventus, nish].find(f => f.id === id);
+  const mixed = wardrobe.wornHTML(data, resolve, { list: 'Mine' });
+  assert.match(mixed, /Every wear logged on this device, from any list\./);
+  assert.match(mixed, /<h3>Gathering dust<\/h3><p class="muted small journal-scope">From Mine: in rotation, not worn in 30 days\.<\/p>/);
+  assert.ok(!wardrobe.wornHTML(data, resolve).includes('journal-scope'), 'one list: nothing to say');
+  assert.match(wardrobe.wornHTML(data, resolve, { confirmClear: true }), /Press again to clear/, 'no Tap on a desktop');
 });
 
 test('the accord chips are one Tab stop, and a chosen chip says its rank in words', () => {

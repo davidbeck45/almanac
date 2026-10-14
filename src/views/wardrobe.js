@@ -16,7 +16,7 @@ import {
 } from '../ui/components.js';
 import {
   state, activeFragrances, hiddenIn, viewingDemo, knownBottles, findRecord, journalData, library, findBottles,
-  fullRecords, collectionLabel,
+  fullRecords, collectionLabel, deviceToday, sourceRecords,
 } from '../app/state.js';
 import { warmPool } from '../app/pool.js';
 import { liveHTML, say, speak } from './wardrobe/parts.js';
@@ -129,9 +129,14 @@ function watchFilter() {
 
 // ---------- Worn (the journal) ----------
 
-export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confirmClear = false } = {}) {
+/**
+ * The journal. It keeps every wear on this device, whichever list was ranked;
+ * Gathering dust reads the ranked list's rotation. `list`: that list's name,
+ * given when the month's wears include bottles outside it, so both say so.
+ */
+export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confirmClear = false, list = null } = {}) {
   if (!stats.wears && !stats.lastWorn.size) {
-    return messageHTML({ glyph: icon.journal, title: 'Nothing logged yet', body: 'Tap Wear this on a pick and it shows up here, on a calendar with your most-worn bottles.',
+    return messageHTML({ glyph: icon.journal, title: 'Nothing logged yet', body: 'Choose Wear this on a pick and it shows up here, on a calendar with your most-worn bottles.',
       action: '<a class="btn primary" href="#/wear/now"><span>See today’s picks</span></a>' });
   }
   const top = stats.top.map(([id, n]) => [resolve(id), n]).filter(([f]) => f).slice(0, 5);
@@ -165,16 +170,26 @@ export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confir
     : '<p class="muted small">Every bottle in rotation got worn this month. Nice.</p>';
   return `<section class="card journal" aria-labelledby="journal-title">
     ${sectionHead('Last 30 days', '', { id: 'journal-title' })}
+    ${list ? '<p class="muted small journal-scope">Every wear logged on this device, from any list.</p>' : ''}
     ${tiles}
     <section><h3>Calendar</h3><div class="calendar">${weekdays}${cells}</div></section>
     <section><h3>Most worn</h3>${mostList}</section>
-    <section><h3>Gathering dust</h3>${dustList}</section>
+    <section><h3>Gathering dust</h3>${list ? `<p class="muted small journal-scope">From ${esc(list)}: in rotation, not worn in 30 days.</p>` : ''}${dustList}</section>
     <div class="action-row end">
       <button class="btn secondary" data-action="journal-export">${icon.download}Export</button>
-      <button class="btn ${confirmClear ? 'secondary danger' : 'tertiary'}" data-action="journal-clear">${icon.remove}${confirmClear ? 'Tap again to clear' : 'Clear history'}</button>
+      <button class="btn ${confirmClear ? 'secondary danger' : 'tertiary'}" data-action="journal-clear">${icon.remove}${confirmClear ? 'Press again to clear' : 'Clear history'}</button>
     </div>
     <p class="muted small">Logged with “Wear this”. History stays on this device; Export saves it as a file.</p>
   </section>`;
+}
+
+// The list being ranked, named when the month's wears reach past it.
+function wornPane() {
+  const data = journalData();
+  const ranked = new Set(sourceRecords().map(f => f.id));
+  const mixed = data.stats.top.some(([id]) => !ranked.has(id));
+  const list = !mixed ? null : state.shared ? collectionLabel() : state.active === 'mine' ? 'Mine' : 'David’s wardrobe';
+  return wornHTML(data, findRecord, { confirmClear: state.armed === 'journal-clear', list });
 }
 
 // Each pane has its own heading, so a screen reader landing on it hears where
@@ -193,7 +208,7 @@ export const wardrobe = {
     wishlist.wishlistPaneDef,
     {
       id: 'worn', label: 'Worn', title: () => 'Worn', heading: () => 'Wear journal',
-      render: () => wornHTML(journalData(), findRecord, { confirmClear: state.armed === 'journal-clear' }), after: () => warmPool(),
+      render: wornPane, after: () => warmPool(),
     },
     insights.insightsPaneDef,
   ],
@@ -219,7 +234,11 @@ export function addSheetStatus({ query = '', results = null, busy = false, error
   return [found, error].filter(Boolean).join(' ');
 }
 
-export function addSheetHTML({ query = '', results = null, busy = false, error = '' }, ownedIds) {
+/**
+ * Add bottles. `query`: what was searched; `draft`: the field as typed since
+ * (kept on every keystroke, so a render, like coming back to the tab, keeps it).
+ */
+export function addSheetHTML({ query = '', draft = null, results = null, busy = false, error = '' }, ownedIds) {
   const list = results === null ? ''
     : results.length === 0 ? `<p class="muted small">No matches for “${esc(query)}”. Check the spelling, or ${handAdd('add it yourself')}.</p>`
     : `<ul class="rows results">${results.map((r, i) => resultRow(r, i, ownedIds.has(r.id))).join('')}</ul>`;
@@ -227,7 +246,7 @@ export function addSheetHTML({ query = '', results = null, busy = false, error =
       <h2 id="add-title" class="sheet-title">Add bottles</h2>
       <p class="muted lede">Search every fragrance on Fragrantica. Brand plus name works best.</p>
       <form class="search-form" data-form="search">
-        <label class="filter big">${icon.search}<input type="search" id="add-q" name="q" placeholder="e.g. Dior Sauvage" autocomplete="off" value="${esc(query)}" aria-label="Fragrance" enterkeyhint="search"></label>
+        <label class="filter big">${icon.search}<input type="search" id="add-q" name="q" data-field="add-q" placeholder="e.g. Dior Sauvage" autocomplete="off" value="${esc(draft ?? query)}" aria-label="Fragrance" enterkeyhint="search"></label>
         <button type="submit" class="btn primary" ${busy ? 'disabled' : ''}>${busy ? '<span class="spinner small" aria-hidden="true"></span>Searching' : 'Search'}</button>
       </form>
       ${liveHTML('add-live', addSheetStatus({ query, results, busy, error }))}
@@ -242,19 +261,29 @@ export function addSheetHTML({ query = '', results = null, busy = false, error =
 /** The pasted lines' bottles to add: ticked, not in Mine already, each once. */
 export const importPicks = rows => [...new Map(rows.filter(r => r.match && r.checked && !r.owned).map(r => [r.match.id, r.match])).values()];
 
-/** What Paste a list's status line says: looking, what it found, or what went wrong. */
-export function importSheetStatus({ rows = null, busy = false, error = '' }) {
+/**
+ * What Paste a list's status line says: looking, what it found, or what went
+ * wrong, and how many lines past the first ones wait for another round (`more`).
+ */
+export function importSheetStatus({ rows = null, busy = false, error = '', more = 0 }) {
   if (!rows) return error;
-  if (busy) return `Looking up ${plural(rows.length, 'line')}…`;
+  const left = more ? `${plural(more, 'more line')} left for the next round.` : '';
+  if (busy) return [`Looking up ${plural(rows.length, 'line')}…`, left].filter(Boolean).join(' ');
   const found = rows.filter(r => r.match).length, owned = rows.filter(r => r.match && r.owned).length;
-  return [`Found ${found} of ${plural(rows.length, 'line')}.`, owned ? `${owned} already in Mine.` : '', error].filter(Boolean).join(' ');
+  return [`Found ${found} of ${plural(rows.length, 'line')}.`, owned ? `${owned} already in Mine.` : '', left, error].filter(Boolean).join(' ');
 }
 
-export function importSheetHTML({ text = '', rows = null, busy = false, error = '' }, maxLines) {
+/**
+ * Paste a list: the text box, then a row per line with its match. More lines
+ * than `maxLines`: the first ones are looked up and the rest (`more` of them)
+ * come back in the box once those are added; `carried` says the box holds them.
+ */
+export function importSheetHTML({ text = '', rows = null, busy = false, error = '', more = 0, carried = 0 }, maxLines) {
   let body;
   if (!rows) {
-    body = `<form class="import-form" data-form="import">
-        <textarea id="import-text" name="text" rows="8" placeholder="Dior Sauvage&#10;Liquid Brun&#10;Khadlaj Cream Velvet" aria-label="Fragrance list">${esc(text)}</textarea>
+    body = `${carried ? `<p class="notice">The last ${plural(carried, 'line')} of your list, ready for another round.</p>` : ''}
+      <form class="import-form" data-form="import">
+        <textarea id="import-text" name="text" data-field="import-text" rows="8" placeholder="Dior Sauvage&#10;Liquid Brun&#10;Khadlaj Cream Velvet" aria-label="Fragrance list">${esc(text)}</textarea>
         <button class="btn primary block" type="submit">Find matches</button>
       </form>`;
   } else {
@@ -262,7 +291,8 @@ export function importSheetHTML({ text = '', rows = null, busy = false, error = 
     // Each row's controls name its line: "Add it yourself" alone, said
     // twelve times, wouldn't say which.
     const yourself = (i, line, cls) => `<button class="${cls}" data-action="custom-row" data-value="${i}">${cls === 'link-btn' ? '' : icon.plus}Add it yourself<span class="visually-hidden">: ${esc(line)}</span></button>`;
-    body = `<ul class="rows import-rows">${rows.map((r, i) => {
+    body = `${more ? `<p class="notice">Only the first ${maxLines} lines. Add these, and ${more === 1 ? 'the last line comes' : `the other ${more} come`} back here for another round.</p>` : ''}
+    <ul class="rows import-rows">${rows.map((r, i) => {
       if (r.status === 'pending') return `<li class="row pending"><span class="row-main"><span class="spinner" aria-hidden="true"></span><span class="row-text"><b>${esc(r.line)}</b><small>Looking…</small></span></span></li>`;
       if (!r.match) return `<li class="row"><span class="row-main"><span class="miss">?</span><span class="row-text"><b>${esc(r.line)}</b><small>${esc(r.note || 'Not found')}</small></span></span>
         ${yourself(i, r.line, 'btn secondary compact')}</li>`;
@@ -282,7 +312,7 @@ export function importSheetHTML({ text = '', rows = null, busy = false, error = 
   return sheetFrame('import-title', `
       <h2 id="import-title" class="sheet-title" tabindex="-1">Paste a list</h2>
       <p class="muted lede">One fragrance per line, up to ${maxLines} at a time. Copy it from your notes or your Fragrantica wardrobe page.</p>
-      ${liveHTML('import-live', importSheetStatus({ rows, busy, error }))}
+      ${liveHTML('import-live', importSheetStatus({ rows, busy, error, more }))}
       ${error ? `<p class="error">${esc(error)}</p>` : ''}
       ${body}`);
 }
@@ -344,8 +374,28 @@ export function customSheetHTML({ name = '', brand = '', accords = [], seasons =
       </form>`);
 }
 
+/**
+ * A share link to copy by hand, where neither the share sheet nor the
+ * clipboard took it: the whole link in a field, selected, and Copy.
+ */
+export function shareSheetHTML({ url, name = '', copied = false }) {
+  return sheetFrame('share-title', `
+      <h2 id="share-title" class="sheet-title">Share link</h2>
+      <p class="muted lede">Send it to anyone: it opens ${name ? `${esc(name)}’s` : 'these'} bottles in Scentcast, ranked for their weather.</p>
+      <label class="name-field">Link
+        <input type="text" id="share-url" data-action="share-select" value="${esc(url)}" readonly autocomplete="off" spellcheck="false">
+      </label>
+      ${liveHTML('share-live', copied === true ? 'Link copied' : copied || '')}
+      ${typeof copied === 'string' ? `<p class="muted small">${esc(copied)}</p>` : ''}
+      <div class="sheet-bar">
+        <button class="btn secondary" data-action="close-sheet">Done</button>
+        <button class="btn primary${copied === true ? ' on' : ''}" data-action="share-copy">${copied === true ? `${icon.check}<span>Copied</span>` : `${icon.paste}<span>Copy link</span>`}</button>
+      </div>`);
+}
+
 export const sheets = {
   add: s => addSheetHTML(s, new Set(state.mine.records.map(r => r.id))),
+  'share-link': shareSheetHTML,
   import: s => importSheetHTML(s, MAX_IMPORT_LINES),
   custom: s => customSheetHTML(s, MAX_CUSTOM_ACCORDS),
   ...insights.sheets,
@@ -362,7 +412,11 @@ function redrawSheet(app, patch, fallback = '.sheet-close') {
   const id = el?.id;
   const caret = typeof el?.selectionStart === 'number' ? [el.selectionStart, el.selectionEnd] : null;
   app.keepingFocus(el, '#sheet', () => app.updateSheet(patch));
-  const now = focusInSheet(id && `#${CSS.escape(id)}`, fallback);
+  // A control that went with nothing in its place leaves focus on Close
+  // (renderSheet's last resort): the fallback is nearer where it was, and
+  // Enter pressed again shouldn't close the sheet.
+  const lost = el && !el.isConnected && !el.matches('.sheet-close') && document.activeElement?.matches('#sheet .sheet-close');
+  const now = focusInSheet({ force: lost }, id && `#${CSS.escape(id)}`, fallback);
   // A text field drawn again keeps its caret where it was.
   if (caret && now && now.id === id) {
     try { now.setSelectionRange(...caret); } catch {} // not every input type has a caret
@@ -370,11 +424,11 @@ function redrawSheet(app, patch, fallback = '.sheet-close') {
   speak(document.getElementById('sheet'));
 }
 
-// Focus stays in the sheet: where it is, else on the first of `targets` there
-// that can take it. Returns the element it landed on.
-function focusInSheet(...targets) {
+// Focus stays in the sheet: where it is (unless `force`), else on the first
+// of `targets` there that can take it. Returns the element it landed on.
+function focusInSheet({ force = false }, ...targets) {
   const sheet = document.getElementById('sheet');
-  if (!state.sheet || !sheet || sheet.contains(document.activeElement)) return null;
+  if (!state.sheet || !sheet || (!force && sheet.contains(document.activeElement))) return null;
   for (const sel of targets.filter(Boolean)) {
     const el = sheet.querySelector(sel);
     if (el && !el.disabled) {
@@ -398,8 +452,27 @@ async function runSearch(app, query) {
   }
 }
 
+/**
+ * The bottle a pasted line gets, and whether it's ticked: one whose every
+ * name word was typed (`nameMatches`), the wardrobe's and catalog's (`local`)
+ * before the library's (`hits`); else the closest guess, unticked (`weak`).
+ * "Hawas" doesn't tick Hawas Elixir, though every word typed is in it, and
+ * search answers with near misses too ("Caramello" for "Caramellino").
+ */
+export function lineMatch(line, local = null, hits = []) {
+  if (local && nameMatches(line, local)) return { match: local, checked: true, weak: false };
+  const hit = hits.find(r => nameMatches(line, r));
+  if (hit) return { match: hit, checked: true, weak: false };
+  const guess = hits[0] ?? local ?? null;
+  return { match: guess, checked: false, weak: Boolean(guess) };
+}
+
 async function runImport(app, text) {
-  const lines = importLines(text);
+  // Past the first MAX_IMPORT_LINES, the lines wait (`rest`) for another
+  // round, tidied as importLines reads them ("Name by Brand" kept).
+  const all = importLines(text, Infinity);
+  const lines = all.slice(0, MAX_IMPORT_LINES);
+  const rest = all.slice(MAX_IMPORT_LINES).map(l => (l.brand ? `${l.name} by ${l.brand}` : l.name)).join('\n');
   if (!lines.length) {
     redrawSheet(app, { text, error: 'Paste at least one fragrance name.' }, '#import-text');
     return document.getElementById('import-text')?.focus();
@@ -408,28 +481,24 @@ async function runImport(app, text) {
   const rows = lines.map(l => ({ ...l, status: 'pending', match: null, checked: false, weak: false }));
   // The text box makes way for the list: focus goes to the sheet's title,
   // just above it, while the status line says how the lookup goes.
-  redrawSheet(app, { text, job, rows, busy: true, error: '' }, '#import-title');
+  redrawSheet(app, { text, job, rows, busy: true, error: '', more: all.length - lines.length, rest, carried: 0 }, '#import-title');
   // Bottles in Mine already come marked, not ticked: adding one adds nothing.
   const mine = new Set(state.mine.records.map(r => r.id));
   const mark = (match, checked) => ({ match, owned: Boolean(match && mine.has(match.id)), checked: checked && !(match && mine.has(match.id)) });
   let stopped = '';
   for (const [i, { line }] of lines.entries()) {
-    let found;
+    // The wardrobe and catalog first; the library unless one of them is it.
     const local = localMatches(line, knownBottles(), 1)[0];
-    if (local) found = mark(local, true);
-    else if (stopped) found = { note: stopped };
-    else {
+    let hits = null;
+    if (!(local && nameMatches(line, local)) && !stopped) {
       try {
-        // Search answers with near misses too ("Caramello" for "Caramellino"),
-        // so a hit whose name wasn't typed is offered unticked.
-        const hits = await library.search(line);
-        const hit = hits.find(r => nameMatches(line, r));
-        found = { ...mark(hit ?? hits[0] ?? null, Boolean(hit)), weak: !hit && hits.length > 0 };
+        hits = await library.search(line);
       } catch (err) {
-        stopped = err.message;
-        found = { note: err.message };
+        stopped = err.message; // offline: the rest go unasked
       }
     }
+    const { match, checked, weak } = lineMatch(line, local, hits ?? []);
+    const found = match ? { ...mark(match, checked), weak } : { ...mark(null, false), note: hits ? '' : stopped };
     if (!patchImport(app, job, { row: i, patch: { ...found, status: 'done' } })) return;
   }
   patchImport(app, job, { busy: false });
@@ -535,12 +604,37 @@ async function share(app) {
     await navigator.clipboard.writeText(url);
     app.showToast('<span>Share link copied</span>');
   } catch (err) {
-    if (!url) app.showToast('<span>Couldn’t make a share link</span>', { tone: 'error' });
-    else if (err?.name !== 'AbortError') app.showToast(`<span>Copy this link: ${esc(url)}</span>`, { tone: 'info' });
+    if (!url) return app.showToast('<span>Couldn’t make a share link</span>', { tone: 'error' });
+    // Too long for a toast: the link goes in a sheet, selected, to copy by hand.
+    if (err?.name === 'AbortError') return;
+    app.openSheet({ kind: 'share-link', url, name });
+    document.getElementById('share-url')?.select();
   }
 }
 
+// Copy, from the share sheet: the clipboard, else the browser's copy of the
+// selected field, else a line saying to copy it by hand.
+async function copyShare(el, app) {
+  const s = state.sheet;
+  const field = document.getElementById('share-url');
+  let copied;
+  try {
+    await navigator.clipboard.writeText(s.url);
+    copied = true;
+  } catch {
+    field?.select();
+    try { copied = document.execCommand('copy'); } catch { copied = false; }
+  }
+  if (state.sheet !== s) return;
+  app.keepingFocus(el, '#sheet', () => app.updateSheet({ copied: copied || 'Couldn’t copy from here. The link is selected: copy it yourself.' }));
+  if (!copied) document.getElementById('share-url')?.select();
+  speak(document.getElementById('sheet'));
+}
+
 // ---------- Actions ----------
+
+// The Mine that Save as Mine replaced, until its toast's Undo.
+let replaced = null; // { mine, active, shared, search }
 
 // An owned bottle's row (its name, which opens it) when it's shown, else Add
 // bottles, else the page's heading.
@@ -624,6 +718,7 @@ export const actions = {
     app.keepingFocus(el, '#sheet', () => app.updateSheet({ rows }));
   },
   async 'import-confirm'(el, app) {
+    const { rest = '', more = 0 } = state.sheet;
     let picked;
     try {
       picked = await fullRecords(importPicks(state.sheet.rows));
@@ -634,13 +729,22 @@ export const actions = {
     const before = state.mine.records.length;
     picked.forEach(app.addToMine);
     const added = state.mine.records.length - before;
+    const said = added ? `Added ${plural(added, 'bottle')}` : 'Nothing new to add';
+    // Lines past the first round come back in the box for the next.
+    if (rest) {
+      app.openSheet({ kind: 'import', text: rest, carried: more });
+      app.render();
+      document.getElementById('import-text')?.focus();
+      return app.showToast(`<span>${said}. The other ${plural(more, 'line')} wait in the box.</span>`, { tone: added ? 'success' : 'info' });
+    }
     // Navigating waits for the sheet's history entry to go (src/app/sheets.js).
     app.closeSheet({ then: () => app.navigate('#/wardrobe/owned') });
     app.render();
-    app.showToast(`<span>${added ? `Added ${plural(added, 'bottle')}` : 'Nothing new to add'}</span>`, { tone: added ? 'success' : 'info' });
+    app.showToast(`<span>${said}</span>`, { tone: added ? 'success' : 'info' });
   },
   custom(el, app) {
-    app.openSheet(customSheet({ name: state.sheet?.query ?? '' }));
+    const s = state.sheet;
+    app.openSheet(customSheet({ name: (s?.draft ?? s?.query ?? '').trim() }));
   },
   'custom-row'(el, app) {
     const row = state.sheet.rows[+el.dataset.value];
@@ -664,6 +768,8 @@ export const actions = {
     app.keepingFocus(el, '#sheet', () => app.updateSheet({ time: state.sheet.time === el.dataset.value ? null : el.dataset.value }));
   },
   share: (el, app) => share(app),
+  'share-copy': copyShare,
+  'share-select': el => el.select(),
   'shared-save'(el, app) {
     const s = state.shared;
     if (!s || s.loading) return;
@@ -673,12 +779,32 @@ export const actions = {
       return;
     }
     state.armed = null;
-    // A named link names Mine too (Brooke's, saved by Brooke), so her own share links carry it.
-    state.mine = { name: state.mine.name || s.name || '', records: s.records };
+    // A Mine with bottles in it can come back (Undo): the bottles, the list
+    // that was ranked and the link on screen, as they were.
+    replaced = state.mine.records.length ? { mine: state.mine, active: state.active, shared: s, search: location.search } : null;
+    // The link's name goes with its bottles (Brooke's, saved by Brooke), so
+    // her own share links carry it; an unnamed link keeps Mine's.
+    state.mine = { name: s.name || state.mine.name || '', records: s.records };
     saveMine(state.mine);
     app.setActive('mine');
     app.render();
-    app.showToast('<span>Saved as Mine</span>');
+    app.showToast(`<span>Saved as Mine</span>${replaced ? '<button class="btn primary compact" data-action="shared-save-undo">Undo</button>' : ''}`);
+  },
+  // Mine back as it was, ranked as it was, under the link it replaced.
+  'shared-save-undo'(el, app) {
+    if (!replaced) return;
+    const { mine, active, shared, search } = replaced;
+    replaced = null;
+    state.mine = mine;
+    saveMine(state.mine);
+    app.setActive(active);
+    state.shared = shared;
+    const url = new URL(location.href);
+    url.search = search;
+    history.replaceState(history.state, '', url.href);
+    app.render();
+    (document.querySelector('#main [data-action="shared-save"]') ?? document.getElementById('page-title'))?.focus();
+    app.hideToast();
   },
   'shared-close'(el, app) {
     app.closeShared();
@@ -689,7 +815,8 @@ export const actions = {
     const data = journalExport(state.history, state.loc, hiddenIn(true), { skin: loadSkin() });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-    a.download = `scentcast-journal-${data.exported.slice(0, 10)}.json`;
+    // Named by the device's date: an evening export in the Americas is already tomorrow in UTC.
+    a.download = `scentcast-journal-${deviceToday()}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   },
@@ -727,7 +854,10 @@ export const fields = {
     state.mine.name = el.value.slice(0, 40);
     saveMine(state.mine);
   },
-  // Kept in state so a re-render (tapping an accord) doesn't wipe the typing.
+  // Kept in state as typed, so a render (coming back to the tab, the forecast
+  // landing, tapping an accord) redraws the sheet without wiping it.
+  'add-q'(el) { if (state.sheet?.kind === 'add') state.sheet.draft = el.value; },
+  'import-text'(el) { if (state.sheet?.kind === 'import') state.sheet.text = el.value; },
   'custom-name'(el) { if (state.sheet?.kind === 'custom') state.sheet.name = el.value; },
   'custom-brand'(el) { if (state.sheet?.kind === 'custom') state.sheet.brand = el.value; },
 };
