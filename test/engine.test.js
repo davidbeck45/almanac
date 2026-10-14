@@ -470,6 +470,19 @@ test('a week plan rotates instead of repeating one bottle', () => {
   assert.ok(night.reasons.some(r => r.text === 'Already picked for that day'), 'planned picks are not reported as worn');
 });
 
+test('the only bottle, or one nothing else comes near, keeps its match on a repeat', () => {
+  const dateISO = '2026-10-01', date = new Date(`${dateISO}T12:00:00`);
+  const windows = [{ ...mildFallNight, feelsF: 66, date, dateISO, slot: 'day' }, { ...mildFallNight, date, dateISO, slot: 'night' }];
+  const one = [fragrances.find(f => f.name === 'Sauvage')];
+  const [, night] = planWindows(one, windows);
+  assert.ok(!night.pick.reasons.some(r => /Already picked|Picked/.test(r.text)), night.pick.reasons.map(r => r.text).join('; '));
+  assert.equal(night.pick.score, rank(one, windows[1], 'night', { todayISO: dateISO })[0].score);
+  // With others close, the plan still turns to them, and a repeat further down says so.
+  const plan = planWindows(fragrances, windows);
+  assert.notEqual(plan[0].pick.fragrance.id, plan[1].pick.fragrance.id);
+  assert.ok(plan[1].ranked.find(r => r.fragrance.id === plan[0].pick.fragrance.id).reasons.some(r => r.text === 'Already picked for that day'));
+});
+
 test('a logged wear stays the pick for its window', () => {
   const dateISO = '2026-09-28';
   const win = { ...mildFallNight, dateISO, slot: 'night' };

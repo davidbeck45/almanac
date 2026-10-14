@@ -710,13 +710,21 @@ export function planWindows(fragrances, windows, opts = {}) {
   return windows.map(win => {
     const logged = history.find(h => h.date === win.dateISO && h.slot === win.slot);
     const canNudge = nudge && !logged && (nudgedOn === null || daysBetween(nudgedOn, win.dateISO) >= NUDGE_EVERY);
-    const ranked = rank(fragrances, win, win.slot, { occasion: win.occasion ?? occasion, history: planned, todayISO: win.dateISO, nudge: canNudge });
+    let ranked = rank(fragrances, win, win.slot, { occasion: win.occasion ?? occasion, history: planned, todayISO: win.dateISO, nudge: canNudge });
     // A nudged bottle leads the list, and is new to the plan. A bottle you
     // rate DISLIKED or lower never counts as the fresh one, so it's planned
     // only where it ranks first and nothing new to the plan comes close.
     const fresh = ranked.find(r => !used.has(r.fragrance.id) && !(r.fragrance.personal?.rating <= DISLIKED));
     let pick = logged && ranked.find(r => r.fragrance.id === logged.id);
     if (!pick) pick = fresh && ranked[0].score - fresh.score <= PLAN_MARGIN ? fresh : ranked[0];
+    // A repeat of the plan that tops the list anyway (the only bottle, or
+    // nothing else close) keeps its match: the plan's repeat penalty changed
+    // nothing, so it neither lowers it nor leads its reasons.
+    if (pick && !logged && pick === ranked[0] && pick.parts.planned) {
+      const id = pick.fragrance.id;
+      ranked = rank(fragrances, win, win.slot, { occasion: win.occasion ?? occasion, history: planned.filter(h => !(h.planned && h.id === id)), todayISO: win.dateISO, nudge: canNudge });
+      pick = ranked.find(r => r.fragrance.id === id);
+    }
     if (pick?.nudged) nudgedOn = win.dateISO;
     if (pick) {
       used.add(pick.fragrance.id);
