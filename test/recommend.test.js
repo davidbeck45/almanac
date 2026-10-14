@@ -109,7 +109,10 @@ test('--events reads a date, an optional slot and an occasion', () => {
   assert.equal(parseEvents('2026-10-20 day date')[0].slot, 'day');
   assert.deepEqual(parseEvents(''), []);
   assert.throws(() => parseEvents('tuesday formal'), /doesn't start with a date/);
-  assert.throws(() => parseEvents('2026-10-20 night gala'), /no occasion in "2026-10-20 night gala"/);
+  assert.throws(() => parseEvents('2026-10-20 night gala'), /no occasion in "2026-10-20 night gala"\. Write each as DATE \[day\|night\] OCCASION/);
+  const [late] = parseEvents('2026-10-15 formal night');
+  assert.deepEqual([late.slot, late.occasion.id], ['night', 'formal'], 'the slot after the occasion too');
+  assert.deepEqual([parseEvents('2026-10-15 date night')[0].slot, parseEvents('2026-10-15 office day')[0].occasion.id], ['night', 'office']);
 });
 
 test('--pack plans a trip: few bottles, every window, events on their night', () => {
@@ -128,6 +131,24 @@ test('--pack plans a trip: few bottles, every window, events on their night', ()
   assert.match(text.stdout, /Pack .+\./);
 });
 
+test('--pack takes a trip-wide occasion onto its slot, and --slot packs for days or nights only', () => {
+  const [from, to] = [dayISO(1), dayISO(3)];
+  const plain = JSON.parse(cli('--pack', '--loc', '40.7,-74', '--from', from, '--to', to, '--json').stdout);
+  const work = cli('--pack', '--loc', '40.7,-74', '--from', from, '--to', to, '--occasion', 'office', '--events', `${dayISO(2)} night formal`, '--json');
+  assert.equal(work.status, 0, work.stderr);
+  const out = JSON.parse(work.stdout);
+  assert.equal(out.occasion, 'office');
+  for (const p of out.plan) {
+    const want = p.slot === 'day' ? 'office' : p.date === dayISO(2) ? 'formal' : null;
+    assert.equal(p.occasion, want, `${p.date} ${p.slot}`);
+  }
+  const days = plan => plan.filter(p => p.slot === 'day').map(p => p.pick);
+  assert.notDeepEqual(days(out.plan), days(plain.plan), 'office picks for the days');
+  assert.ok(out.plan.filter(p => p.slot === 'day').every(p => p.reasons.some(r => /the office/.test(r))));
+  const nights = JSON.parse(cli('--pack', '--loc', '40.7,-74', '--from', from, '--to', to, '--slot', 'night', '--json').stdout);
+  assert.ok(nights.plan.length === 3 && nights.plan.every(p => p.slot === 'night'));
+});
+
 test('--pack and --date stop on bad dates before any request', () => {
   for (const [args, message] of [
     [['--pack', '--loc', '40.7,-74', '--from', dayISO(1)], /--pack needs --from and --to/],
@@ -139,6 +160,7 @@ test('--pack and --date stop on bad dates before any request', () => {
     [['--pack', '--from', dayISO(1), '--to', dayISO(2)], /--pack needs a place/],
     [['--loc', '40.7,-74', '--date', '2026-02-30'], /--date takes a date like/],
     [['--loc', '40.7,-74', '--date', dayISO(2), '--week'], /leave out --week/],
+    [['--spray', 'Terra', '--date', dayISO(2)], /--date needs a place/],
   ]) {
     const run = offline(...args);
     assert.equal(run.status, 1, args.join(' '));

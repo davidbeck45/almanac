@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { packTrip, withEvents, picksFor, tripPlan } from '../src/pack.js';
-import { rank, PLAN_MARGIN } from '../src/engine.js';
+import { rank, daysBetween, PLAN_MARGIN, ROTATION_PENALTY } from '../src/engine.js';
+import { applySkin } from '../src/skin.js';
 import { occasionById } from '../src/occasions.js';
 import { syntheticForecast } from './fixtures.js';
 
@@ -48,6 +49,100 @@ test('hot days and cold nights want different bottles; too few to pack says what
   assert.ok(one.uncovered.length >= 4, `${one.uncovered.length} uncovered`);
   const missing = one.uncovered[0].best.name;
   assert.match(one.text, new RegExp(`Nothing packed is quite right for .+; ${missing} would be, if there's room\\.`));
+});
+
+// Denver, Oct 16–21 2026 as forecast on Oct 13: a greedy cover packed two
+// bottles and left the office day bare, though two others cover all twelve.
+const DENVER = [
+  ['2026-10-16', 'day', 47.8, 36, 26.1, 'clear'], ['2026-10-16', 'night', 40.4, 53, 29.1, 'clear'],
+  ['2026-10-17', 'day', 61.3, 27, 30.1, 'clear'], ['2026-10-17', 'night', 50.3, 49, 35.8, 'cloudy'],
+  ['2026-10-18', 'day', 57.4, 31, 31.8, 'clear'], ['2026-10-18', 'night', 50.0, 47, 34.8, 'clear'],
+  ['2026-10-19', 'day', 59.5, 35, 34.8, 'clear'], ['2026-10-19', 'night', 52.5, 49, 37.4, 'clear'],
+  ['2026-10-20', 'day', 63.6, 30, 35.2, 'clear'], ['2026-10-20', 'night', 56.2, 41, 36.8, 'cloudy'],
+  ['2026-10-21', 'day', 62.6, 29, 34.9, 'cloudy'], ['2026-10-21', 'night', 53.8, 44, 37.3, 'cloudy'],
+].map(([d, slot, feelsF, humidity, dewF, category]) => win(d, slot, feelsF, dewF, { humidity, category, lat: 39.7 }));
+
+// Every k-set of the wardrobe, as packTrip weighs them: windows within reach
+// of the top, then the plan's picks less their rotation penalties.
+function bestSets(windows, k) {
+  const rows = windows.map(w => rank(fragrances, w, w.slot, { occasion: w.occasion ?? null, todayISO: w.dateISO }));
+  const floor = rows.map(r => r[0].score - PLAN_MARGIN);
+  const day = windows.map(w => daysBetween(windows[0].dateISO, w.dateISO));
+  const score = new Map(fragrances.map(f => [f.id, rows.map(r => r.find(x => x.fragrance.id === f.id).score)]));
+  const judge = set => {
+    const last = new Map();
+    let reached = 0, total = 0;
+    for (let w = 0; w < floor.length; w++) {
+      const reach = set.some(f => score.get(f.id)[w] >= floor[w]);
+      if (reach) reached++;
+      let pick = null, value = -Infinity;
+      for (const f of set) {
+        if (reach && score.get(f.id)[w] < floor[w]) continue;
+        const v = score.get(f.id)[w] - (last.has(f) ? ROTATION_PENALTY[day[w] - last.get(f)] ?? 0 : 0);
+        if (v > value) [pick, value] = [f, v];
+      }
+      last.set(pick, day[w]);
+      total += value;
+    }
+    return { reached, total };
+  };
+  const out = [];
+  const walk = (from, set) => {
+    if (set.length === k) return void out.push({ set, ...judge(set) });
+    for (let i = from; i < fragrances.length; i++) walk(i + 1, [...set, fragrances[i]]);
+  };
+  walk(0, []);
+  return out.sort((a, b) => b.reached - a.reached || b.total - a.total);
+}
+
+test('the fewest bottles that cover every window, found where a greedy cover missed them', () => {
+  const windows = withEvents(DENVER, [
+    { dateISO: '2026-10-18', slot: 'night', occasion: occasionById('formal') },
+    { dateISO: '2026-10-20', slot: 'day', occasion: occasionById('office') },
+  ]);
+  const out = packTrip(fragrances, windows, { max: 2 });
+  assert.deepEqual(out.uncovered, [], out.text);
+  assert.doesNotMatch(out.text, /Nothing packed/);
+  const [best] = bestSets(windows, 2);
+  assert.equal(best.reached, windows.length);
+  assert.deepEqual(out.bottles.map(b => b.record.id).sort(), best.set.map(f => f.id).sort(), 'the best-planned of the full covers');
+});
+
+test('extra bottles go where they improve the plan most, not to copies of the first', () => {
+  for (const [what, windows, max] of [['hot', HOT, 3], ['mixed', MIXED, 3], ['long cold', trip(8, [45, 35], [38, 30]), 3]]) {
+    const out = packTrip(fragrances, windows, { max });
+    const k = out.bottles.length;
+    const sets = bestSets(windows, k);
+    assert.equal(windows.length - out.uncovered.length, sets[0].reached, what);
+    const mine = sets.find(x => x.set.length === k && x.set.every(f => out.bottles.some(b => b.record.id === f.id)));
+    assert.ok(Math.abs(mine.total - sets[0].total) < 1e-9, `${what}: ${out.text}`);
+    // Each bottle's line leads with the windows it's worn, like the text.
+    for (const b of out.bottles) {
+      if (b.wears < b.covers.length) assert.match(b.why, /also suits/, `${what}: ${b.why}`);
+      assert.equal(b.wears, out.plan.filter(p => p.pick === b.record).length);
+    }
+  }
+});
+
+test('a bottle you rate 2★ or lower stays home unless nothing else suits a window', () => {
+  const plain = packTrip(fragrances, MIXED, { max: 4 });
+  const night = plain.plan.find(p => p.window.slot === 'night').pick;
+  const rated = packTrip(applySkin(fragrances, { [night.id]: { rating: 2 } }), MIXED, { max: 4 });
+  assert.ok(!rated.bottles.some(b => b.record.id === night.id), rated.text);
+  assert.deepEqual(rated.uncovered, []);
+  // Two bottles, the winter one disliked: still the only one for cold nights.
+  const summer = plain.plan.find(p => p.window.slot === 'day').pick;
+  const pair = applySkin([summer, night], { [night.id]: { rating: 1 } });
+  const forced = packTrip(pair, MIXED);
+  assert.ok(forced.bottles.some(b => b.record.id === night.id), forced.text);
+});
+
+test('an occasion on several days reads once, with its dates', () => {
+  const windows = withEvents(trip(4, [60, 45], [52, 42]), [0, 1, 2].map(i => ({ dateISO: shift(START, i), slot: 'day', occasion: occasionById('office') })));
+  const out = packTrip(fragrances, windows);
+  const all = [out.text, ...out.bottles.map(b => b.why)].join(' ');
+  assert.match(all, /the office on Oct 19–21/, all);
+  assert.doesNotMatch(all, /the office on Oct \d+ and the office/);
 });
 
 test('an event night packs a bottle for the occasion', () => {
@@ -105,6 +200,11 @@ test('picksFor ranks one date and slot, from the forecast or typical weather', a
     assert.ok(planned.windows.slice(0, 6).every(w => !w.typical) && planned.windows.slice(6).every(w => w.typical), 'forecast, then typical');
     assert.equal(planned.plan[3].occasion.id, 'nightout');
     assert.match(planned.text, /Dates past the forecast use typical weather\./);
+    // A work trip: the office on every day, the event still on its night, nights otherwise plain.
+    const work = await tripPlan(fragrances, { place, fromISO: shift(today, 1), toISO: shift(today, 2), occasion: occasionById('office'), events: [{ dateISO: shift(today, 1), slot: 'night', occasion: occasionById('date') }] });
+    assert.deepEqual(work.plan.map(p => p.occasion?.id ?? null), ['office', 'date', 'office', null]);
+    const nights = await tripPlan(fragrances, { place, fromISO: shift(today, 1), toISO: shift(today, 2), slots: ['night'], occasion: occasionById('formal') });
+    assert.deepEqual(nights.plan.map(p => [p.window.slot, p.occasion.id]), [['night', 'formal'], ['night', 'formal']]);
   } finally {
     globalThis.fetch = real;
   }
