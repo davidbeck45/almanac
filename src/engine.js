@@ -245,12 +245,22 @@ export function comfortRange(frag, { dewF = 55 } = {}) {
   return { lowF, highF, bestF };
 }
 
+// Your own rating and "on my skin" nudges (`personal`, from src/skin.js:
+// rating 1–5, longevity and sillage -1, 0 or 1). Your stars outweigh the
+// crowd's, and each nudge moves a performance level by PERSONAL_SHIFT.
+const PERSONAL_RATING_WEIGHT = 0.8;
+const PERSONAL_SHIFT = 0.5;
+
 // Community rating, trusted more as votes grow; unknowns sit at neutral 0.5.
+// A rating of your own leads: 1★ reads 0, 3★ neutral, 5★ 1.
 export function quality(frag) {
   const votes = Number.isFinite(frag.ratingVotes) ? frag.ratingVotes : 0;
   const rating = Number.isFinite(frag.rating) ? frag.rating : 0;
   const confidence = Math.min(1, Math.log10(Math.max(votes, 1)) / 3);
-  return clamp((rating - 3.5) / 1.0, 0, 1) * confidence + 0.5 * (1 - confidence);
+  const crowd = clamp((rating - 3.5) / 1.0, 0, 1) * confidence + 0.5 * (1 - confidence);
+  const mine = frag.personal?.rating;
+  if (!Number.isFinite(mine)) return crowd;
+  return PERSONAL_RATING_WEIGHT * clamp((mine - 1) / 4, 0, 1) + (1 - PERSONAL_RATING_WEIGHT) * crowd;
 }
 
 // Parfumo's longevity and sillage ratings (0–10 averages, `parfumo` from
@@ -266,6 +276,11 @@ const PERFORMANCE_PRIOR_VOTES = 10;
 const FRAGRANTICA_TO_PARFUMO = { longevity: [1.17, 1.839], sillage: [2.53, 2.047] };
 // How much an occasion's wish for longevity or sillage counts against its accords.
 const PERFORMANCE_WEIGHT = 0.4;
+// What a nudge of your own reads as, up and down.
+const PERSONAL_PERFORMANCE = {
+  sillage: ['Projects more on you', 'Sits closer on you'],
+  longevity: ['Lasts longer on you', 'Fades faster on you'],
+};
 // The share of an occasion's fit that earns a reason ("Stays close to the skin").
 const PERFORMANCE_REASON = 0.1;
 
@@ -278,11 +293,16 @@ export function performanceRating(frag) {
   return { longevity: scale('longevity'), sillage: scale('sillage'), votes: p.votes };
 }
 
+// A nudge of your own ("lasts longer on me") shifts the level from there.
 export function performanceLevel(frag, key) {
   const p = performanceRating(frag);
-  if (!p || p[key] == null) return 0;
-  const steady = (p.votes * p[key] + PERFORMANCE_PRIOR_VOTES * PERFORMANCE_MID[key]) / (p.votes + PERFORMANCE_PRIOR_VOTES);
-  return clamp((steady - PERFORMANCE_MID[key]) / PERFORMANCE_SPAN, -1, 1);
+  let level = 0;
+  if (p && p[key] != null) {
+    const steady = (p.votes * p[key] + PERFORMANCE_PRIOR_VOTES * PERFORMANCE_MID[key]) / (p.votes + PERFORMANCE_PRIOR_VOTES);
+    level = clamp((steady - PERFORMANCE_MID[key]) / PERFORMANCE_SPAN, -1, 1);
+  }
+  const mine = frag.personal?.[key];
+  return mine ? clamp(level + PERSONAL_SHIFT * Math.sign(mine), -1, 1) : level;
 }
 
 // What longevity and sillage add to a bottle's fit for the occasion: its
@@ -445,14 +465,25 @@ function reasonsFor(frag, parts, ctx) {
     if (fits.length) good(`${cap(fits.join(' & '))} suit${plural ? '' : 's'} ${phrase}`, W.occasion * (0.5 + parts.occasion), true);
     if (clash) bad(`${cap(nounOf(clash))} ${isPlural(nounOf(clash)) ? 'are' : 'is'} off for ${phrase}`, W.occasion * (1.5 - parts.occasion) * 0.5, true);
 
-    // Longevity and sillage, where the occasion cares about them.
+    // Longevity and sillage, where the occasion cares about them. A nudge of
+    // your own says so ("Lasts longer on you") in place of the crowd's word
+    // when they agree.
     const perf = performanceFit(frag, occasion);
     const wish = occasion.performance ?? {};
+    const said = {};
+    for (const key of ['sillage', 'longevity']) {
+      const mine = Math.sign(frag.personal?.[key] ?? 0);
+      if (!mine || !wish[key]) continue;
+      said[key] = mine * wish[key] > 0 ? 'good' : 'bad';
+      const text = PERSONAL_PERFORMANCE[key][mine > 0 ? 0 : 1];
+      (said[key] === 'good' ? good : bad)(text, W.occasion * PERFORMANCE_WEIGHT * PERSONAL_SHIFT * Math.abs(wish[key]) * 2, true);
+    }
+    const crowd = (key, tone, text, strength) => said[key] !== tone && (tone === 'good' ? good : bad)(text, strength, true);
     const [loud, quiet] = wish.sillage > 0 ? ['Projects across a room', `Too quiet for ${phrase}`] : ['Stays close to the skin', `Projects a lot for ${phrase}`];
-    if (perf.sillage >= PERFORMANCE_REASON) good(loud, W.occasion * perf.sillage * 2, true);
-    else if (perf.sillage <= -PERFORMANCE_REASON) bad(quiet, W.occasion * -perf.sillage * 2, true);
-    if (perf.longevity >= PERFORMANCE_REASON) good(`Lasts the whole ${slot === 'night' ? 'night' : 'day'}`, W.occasion * perf.longevity * 2, true);
-    else if (perf.longevity <= -PERFORMANCE_REASON) bad('Fades early', W.occasion * -perf.longevity * 2, true);
+    if (perf.sillage >= PERFORMANCE_REASON) crowd('sillage', 'good', loud, W.occasion * perf.sillage * 2);
+    else if (perf.sillage <= -PERFORMANCE_REASON) crowd('sillage', 'bad', quiet, W.occasion * -perf.sillage * 2);
+    if (perf.longevity >= PERFORMANCE_REASON) crowd('longevity', 'good', `Lasts the whole ${slot === 'night' ? 'night' : 'day'}`, W.occasion * perf.longevity * 2);
+    else if (perf.longevity <= -PERFORMANCE_REASON) crowd('longevity', 'bad', 'Fades early', W.occasion * -perf.longevity * 2);
 
     const voted = votedOccasionFit(frag, occasion);
     const what = VOTED_OCCASIONS[occasion.id]?.[3];
@@ -460,7 +491,12 @@ function reasonsFor(frag, parts, ctx) {
     else if (voted <= -PERFORMANCE_REASON) bad(`Parfumo voters rarely wear it for ${what}`, W.occasion * -voted * 2, true);
   }
 
-  if (frag.rating >= 4.35 && frag.ratingVotes >= 1000) good(`Crowd favorite · ${frag.rating.toFixed(1)}★`, 0.03);
+  // Your own stars replace the crowd's where they push the bottle up or down.
+  const stars = frag.personal?.rating;
+  if (Number.isFinite(stars)) {
+    if (stars >= 4) good(`You rate it ${stars}★`, W.quality * parts.quality, true);
+    else if (stars <= 2) bad(`You rate it ${stars}★`, W.quality * (1 - parts.quality), true);
+  } else if (frag.rating >= 4.35 && frag.ratingVotes >= 1000) good(`Crowd favorite · ${frag.rating.toFixed(1)}★`, 0.03);
 
   const d = parts.daysAgo;
   if (parts.planned) {

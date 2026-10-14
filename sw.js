@@ -4,7 +4,7 @@
 // App files always revalidate with the server: GitHub Pages lets browsers
 // keep files for 10 minutes, and a fresh main.js importing a stale module
 // fails to load at all.
-const CACHE = 'scentcast-v12';
+const CACHE = 'scentcast-v13';
 // Dataset files (data/fragrantica/) load a shard at a time as people search
 // and add bottles; they keep their own small cache instead of the shell's.
 const DATA_CACHE = 'scentcast-data';
@@ -42,6 +42,7 @@ const SHELL = [
   'src/custom.js',
   'src/layering.js',
   'src/scent-styles.js',
+  'src/skin.js',
   'src/theme.js',
   'fonts/fraunces.woff2',
   'fonts/fraunces-italic.woff2',
