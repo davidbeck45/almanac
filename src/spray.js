@@ -139,7 +139,7 @@ export function sprayGuide(record, conditions, occasion = null, skin = null) {
 
   let note = null;
   if (hi <= 2 && sillage >= LEVEL_REASON) note = 'You’ll stop smelling it long before others do; don’t add more.';
-  else if (wearsClose(record)) note = 'It wears close, so more sprays won’t make it carry; put them where you’ll catch it.';
+  else if (wearsClose(record)) note = 'It wears close, so more sprays won’t make it carry.';
   else if (mine.longevity < 0) note = 'It fades early on you, so take it along to top up.';
 
   return { sprays: [lo, hi], where, text: text.join(' '), why: ranked.map(t => t.why), note };
