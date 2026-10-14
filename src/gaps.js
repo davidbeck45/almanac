@@ -342,7 +342,7 @@ function shortfall(c) {
     return `Only ${best.bottle.name} is a strong pick (${pct(best.score)} match)${next ? `; next best is ${next.bottle.name} at ${pct(next.score)}` : ''}.`;
   }
   const beaten = 100 - best.pct;
-  return `Your best is ${best.bottle.name} at ${pct(best.score)} match; ${beaten >= 2 ? `${beaten}% of well-voted bottles do better` : 'few bottles do better'}, and the best reach ${pct(c.target)}.`;
+  return `Your best is ${best.bottle.name} at ${pct(best.score)} match; ${beaten >= 2 ? `${beaten}% of well-voted bottles do better` : 'few bottles do better'}, and top bottles here average ${pct(c.target)}.`;
 }
 
 // Runs of adjacent bands within one use and slot, from cells passing `keep`.

@@ -127,7 +127,12 @@ test('the headline reads plainly, and the thin spots name what fills them', () =
   const html = insights.thinHTML(report);
   assert.equal((html.match(/class="thin-row"/g) ?? []).length, report.gaps.length, 'five spots show whole');
   assert.ok(!html.includes('ins-thin-all'));
-  assert.match(html, /The best out there reach \d+%\./);
+  // The target is the top bottles' mean, which a suggestion can beat: never worded as a ceiling.
+  assert.match(html, /Top bottles here average \d+%\./);
+  assert.doesNotMatch(html, /best out there reach/);
+  // So does the CLI's line (gaps.js shortfall).
+  assert.ok(report.gaps.every(g => !/best reach/.test(g.text)));
+  assert.ok(report.gaps.some(g => /top bottles here average \d+%/.test(g.text)), report.gaps.map(g => g.text).join('\n'));
   // A small wardrobe's many thin spots: the biggest four, the rest behind Show more.
   const many = { ...report, gaps: Array.from({ length: 12 }, (_, i) => ({ ...report.gaps[i % report.gaps.length], title: `Spot ${i}` })) };
   const folded = insights.thinHTML(many);

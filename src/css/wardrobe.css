@@ -6,6 +6,12 @@
 
 .owned .seg.wide { margin-bottom: var(--s-1); }
 .owned .action-row { margin-top: var(--s-4); }
+/* An empty list says so inside the card, not as a second card in it. */
+/* Headings focus takes when the control it was on goes (a sheet's list
+   replacing its text box, a want leaving the list): not controls, so no ring,
+   as with the page's h1. */
+:is(#import-title, .wishlist .section-head h2, .insights .section-head h3):focus { outline: none; }
+.owned .message { max-width: none; margin: var(--s-4) 0 0; padding: var(--s-6) var(--s-2) var(--s-2); border: 0; background: none; box-shadow: none; }
 .list-note { margin: var(--s-5) 0 var(--s-3); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 /* The filter sticks under the sub-navigation while the list scrolls by. */
 .owned-filter {
@@ -20,6 +26,22 @@
   -webkit-backdrop-filter: blur(16px);
 }
 @media (prefers-reduced-transparency: reduce) { .owned-filter { background: var(--surface-1); } }
+/* Stuck (.stuck, from the view), a band of the card's surface reaches up
+   behind the sub-navigation, so the rows scrolling by don't show around the
+   pill or between it and the field. */
+.owned-filter::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: calc(var(--head-bar) + var(--s-2) + env(safe-area-inset-top));
+  background: var(--surface-1);
+  opacity: 0;
+  pointer-events: none;
+}
+.owned-filter.stuck::before { opacity: 1; }
 .owned-list { margin: 0 calc(-1 * var(--s-2)); }
 /* Two columns of rows once there's room, switches close to their names. */
 @container page (min-width: 700px) {
@@ -49,10 +71,12 @@
 .stat.wide { grid-template-columns: 30px 1fr; align-items: center; gap: var(--s-3); }
 .stat.wide img { width: 30px; height: 36px; object-fit: contain; }
 .stat.wide > span { display: grid; min-width: 0; }
-.stat .name { overflow: hidden; font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+/* A long name takes a second line rather than losing its end. */
+.stat .name { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
 .stat.wide > span > span { color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
 
-.calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--s-1); }
+/* minmax(0, …): a column narrower than its label shrinks, never the page wider. */
+.calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--s-1); }
 .cal-dow { padding-bottom: var(--s-0); color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; text-align: center; }
 .cal-cell {
   position: relative;
@@ -63,7 +87,7 @@
   border-radius: var(--r-thumb);
   background: var(--fill-faint);
 }
-.cal-cell small { color: var(--text-tertiary); font-size: var(--fs-caption); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cal-cell small { overflow: hidden; color: var(--text-tertiary); font-size: var(--fs-caption); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cal-cell.has { background: color-mix(in srgb, var(--positive) 7%, var(--surface-2)); }
 .cal-cell.has small { color: var(--text-secondary); }
 .cal-cell.today { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 70%, transparent); }
@@ -72,6 +96,13 @@
 .cal-bottles { display: flex; justify-content: center; align-items: flex-end; min-height: 0; }
 .cal-bottles img { width: 60%; max-width: 30px; height: auto; max-height: 100%; object-fit: contain; }
 .cal-bottles img + img { margin-left: -18%; }
+/* Under a 360px phone (a 328px column) the 1st says its month alone ("Oct"),
+   in tighter cells. */
+@container page (max-width: 327px) {
+  .calendar { gap: var(--s-0); }
+  .cal-cell { padding: var(--s-0); }
+  .cal-cell.first .cal-day { display: none; }
+}
 
 .rank-list { display: grid; gap: var(--s-1); }
 .rank-list li { display: grid; grid-template-columns: 30px minmax(0, 1.1fr) minmax(40px, 1fr) 28px; align-items: center; gap: var(--s-3); padding: var(--s-1) var(--s-0); }
@@ -80,15 +111,19 @@
 .rank-bar span { display: block; height: 100%; border-radius: var(--r-pill); background: linear-gradient(90deg, color-mix(in srgb, var(--ambient) 55%, transparent), var(--ambient)); }
 .rank-n { color: var(--text-secondary); font-size: var(--fs-footnote); font-variant-numeric: tabular-nums; text-align: right; }
 
-.dust-list { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }
+/* A row's tiles as tall as its tallest (a name on two lines). */
+.dust-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-2); }
+.dust-list li { display: grid; }
 .dust-list button { display: grid; grid-template-columns: 28px 1fr; align-items: center; gap: var(--s-2); width: 100%; min-height: 48px; padding: var(--s-1) var(--s-2); border-radius: var(--r-control); border: 1px solid var(--border-subtle); background: var(--surface-2); text-align: left; transition: transform var(--dur-1) var(--ease-out), background-color var(--dur-2), border-color var(--dur-2); }
 .dust-list button:active { transform: scale(0.97); }
 @media (hover: hover) { .dust-list button:hover { border-color: var(--border-strong); background: var(--surface-3); } }
 .dust-list img { width: 28px; height: 32px; object-fit: contain; }
 .dust-list span { display: grid; min-width: 0; }
-.dust-list b { overflow: hidden; font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.dust-list b { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
 .dust-list small { overflow: hidden; color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); text-overflow: ellipsis; white-space: nowrap; }
-@container page (min-width: 600px) { .dust-list { grid-template-columns: repeat(3, 1fr); } }
+@container page (min-width: 600px) { .dust-list { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* Under a 360px phone two columns would cut a long word ("Sandalwood"). */
+@container page (max-width: 327px) { .dust-list { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---------- Paste a list ---------- */
 
@@ -115,6 +150,10 @@
 .custom-form legend span { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
 .custom-form .name-field { margin: var(--s-3) 0 0; }
 .custom-form .error { margin-top: var(--s-4); }
+/* By its field: under the name, or between the accords' legend and chips. */
+.custom-form .name-field + .error { margin-top: var(--s-2); }
+.custom-form legend + .error { margin: 0 0 var(--s-2); }
+.custom-form input[aria-invalid='true'] { border-color: var(--negative); }
 .pick-chips { display: flex; flex-wrap: wrap; gap: var(--s-2); }
 .pick-chip {
   display: inline-flex;
@@ -164,11 +203,11 @@
 .verdict[data-kind='strong'] { background: color-mix(in srgb, var(--positive) 12%, transparent); }
 .verdict[data-kind='risky'] { border-color: color-mix(in srgb, var(--negative) 45%, transparent); color: var(--negative); }
 
-.want-btn[aria-pressed='true'] { border-color: color-mix(in srgb, var(--ambient) 50%, transparent); color: var(--ambient); }
+/* The kit's Want heart (gold once wanted, as on every screen), ghosted in
+   rows: neutral at rest and on hover, not the remove button's red. */
 .icon-btn.ghosted.want-btn { color: var(--text-secondary); }
-.icon-btn.want-btn[aria-pressed='true'] { color: var(--ambient); }
-@media (hover: hover) { .icon-btn.ghosted.want-btn:hover { color: var(--ambient); } .icon-btn.ghosted.want-btn:hover::after { background: var(--fill); } }
-.want-btn[aria-pressed='true'] svg path { fill: currentColor; }
+@media (hover: hover) { .icon-btn.ghosted.want-btn:hover { color: var(--text-primary); } .icon-btn.ghosted.want-btn:hover::after { background: var(--fill); } }
+.icon-btn.ghosted.want-btn[aria-pressed='true'] { color: var(--accent); }
 
 /* A fill: where, the match it would have, the bottle it beats, and the two
    as a dumbbell on a 60–100% track (a ring for your best now, a dot for it). */
@@ -215,7 +254,7 @@
 
 /* The vial: a situation's coverage as a fill level, one sky hue darker as it
    fills, so it reads by shape as much as shade. One that falls short has a
-   coral rim and a mark at its top (where the best out there reach), filled
+   coral rim and a mark at its top (what the top bottles there average), filled
    as near as your best comes (--lvl, set inline; empty only when nothing
    fits); Never is struck through; a cell that rarely comes up has a dashed
    rim. The rim and the thinnest fill clear 3:1 on the card in both themes. */
@@ -262,8 +301,10 @@
 .cov-table th { font-weight: 600; }
 .cov-table th[scope='row'] { overflow: hidden; padding-right: var(--s-2); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 500; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .cov-table th[scope='row'] small { display: block; color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
-.cov-bands th { padding-bottom: var(--s-1); color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); text-align: center; }
-.cov-bands th small { display: block; overflow: hidden; color: var(--text-tertiary); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.cov-bands th { padding-bottom: var(--s-1); vertical-align: top; color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); text-align: center; }
+/* The ranges are the bands' only legend: never below the caption size, and
+   on two lines ("40–" / "58°") in a column too narrow for one, never cut. */
+.cov-bands th small { display: block; color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 400; font-variant-numeric: tabular-nums; }
 .cov-slots th { padding-bottom: var(--s-2); color: var(--text-primary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); text-align: left; }
 .cov-slots th svg { display: inline-block; width: 14px; height: 14px; margin-right: var(--s-1); vertical-align: -2px; color: var(--ambient); }
 .cov-table td { padding: 0; text-align: center; }
@@ -279,6 +320,8 @@
   .cov[data-show='day'] [data-slot='night'], .cov[data-show='night'] [data-slot='day'] { display: none; }
   .cov[data-show='day'] tr.only-night, .cov[data-show='night'] tr.only-day { display: none; }
 }
+/* A 320px phone gives the bands the room the uses' names don't need. */
+@container page (max-width: 327px) { .cov-table col.cov-use { width: 80px; } }
 @container page (min-width: 600px) {
   .cov-toggle { display: none; }
   .cov-table col.cov-use { width: 112px; }
@@ -379,7 +422,8 @@
 .mix-label small { display: block; color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
 .mix-row.liked .mix-label { color: var(--text-primary); font-weight: 600; }
 .mix-track { display: block; }
-.mix-bar { display: block; height: 8px; min-width: 4px; border-radius: 0 4px 4px 0; background: color-mix(in srgb, var(--ambient) 38%, transparent); }
+/* Mixed with the card, not see-through: 3:1 against it in both themes. */
+.mix-bar { display: block; height: 8px; min-width: 4px; border-radius: 0 4px 4px 0; background: color-mix(in srgb, var(--ambient) 62%, var(--surface-1)); }
 .mix-row.liked .mix-bar { background: var(--ambient); }
 .mix-n { font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-variant-numeric: tabular-nums; text-align: right; }
 .mix-like {
@@ -463,9 +507,18 @@
 /* While the library loads: the map in outline. */
 .sk-head { height: 22px; margin-bottom: var(--s-3); }
 .ins-top .sk-line { display: block; }
+/* Shaped like the table (.cov-table): a vial per cell, 5 bands of one slot
+   under 600px of page, both slots' 10 from there, past the uses' column. */
 .sk-cov { display: grid; gap: var(--s-4); }
-.sk-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--s-2) var(--s-3); padding-left: 96px; }
-.sk-vial { height: 28px; border-radius: 7px; }
+/* The top padding stands in for the Day / Night toggle and the bands' heads. */
+.sk-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; padding: 116px 0 0 94px; }
+.sk-grid .sk-vial { justify-self: center; width: 22px; height: 28px; margin: var(--s-2) 0; border-radius: 7px 7px 8px 8px; }
+.sk-grid .sk-vial:nth-child(n + 41) { display: none; }
+@container page (max-width: 327px) { .sk-grid { padding-left: 82px; } }
+@container page (min-width: 600px) {
+  .sk-grid { grid-template-columns: repeat(10, minmax(0, 1fr)); padding: 76px 0 0 114px; }
+  .sk-grid .sk-vial:nth-child(n + 41) { display: block; }
+}
 
 /* How you wear (sheet). */
 .uses { display: grid; margin-top: var(--s-2); }
