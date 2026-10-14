@@ -46,8 +46,9 @@ only what it needs:
   counts (rounded to 2 significant digits: they only weigh the average
   against the middle); k as r/'s, x 100. Signals: o owners (Fragrantica's
   "have") as 4 x log2(1 + owners), whole; rc reach, the share (x 100) of the
-  bottles its fans also like that are among the pool's 5% most owned (-1
-  when none of them is in the pool); val value for money x 100 (1 overpriced
+  bottles its fans also like that are among the pool's 5% most owned, at
+  most its brand's median + 0.15 (-1 when none of them is in the pool and
+  its brand has under 5 pool bottles); val value for money x 100 (1 overpriced
   .. 5 great value, few votes leaning to 3.1; 0 unvoted); safe blind-buy
   safety, the pool percentile of like+love share less 4 x hate share; keep
   keeper rate (have / (have + had)) over what pages that old keep, per mille;
@@ -191,9 +192,14 @@ FLAG_TEXT = {
 # summary point calls it one ("impressive longevity for a body mist", "high
 # projection for a body splash"; not "performs like a body mist", "high price
 # for body mist performance"). A plain "mist" in a name is a perfume's (Cashmere
-# Mist, Iris Silver Mist), and a plain "spray" in a description its atomizer.
+# Mist, Iris Silver Mist), and so is a plain "spray" (Eau de Parfum Spray, On
+# The Go Spray, Bon Parfumeur's 801 sea spray) or "brume" (Guerlain's Brume
+# d'Automne): a name counts when it says what kind ("All-Over Spray", "Very
+# Cool Spray", "Brume Soyeuse pour le Corps", "Brume de Bain"). A plain
+# "spray" in a description is its atomizer.
 MIST_KIND = r"(?:(?:fine )?fragrance|body|hair|body and hair|skin|perfume|perfumed|scented)"
-MIST_NAME = re.compile(rf"\b(?:{MIST_KIND} (?:mist|spray|splash)|hair perfume|brume|spray)\b", re.I)
+MIST_NAME = re.compile(rf"\b(?:{MIST_KIND} (?:mist|spray|splash)|hair perfume|(?:all[- ]over|very cool|aroma|body (?:&|and) soul|splash fresh) spray"
+                       rf"|brume (?:\w+ )?(?:corps|cheveux|parfum[ée]e|de bain|soyeuse|d['’]oreiller|fra[iî]ch(?:e|eur)|paillet[ée]e))\b", re.I)
 MIST_DESC = re.compile(rf"\b(?:fine )?fragrance mist by\b|\bbody (?:mist|spray|splash) by\b|\bthis [\w\s'-]{{0,25}}?\b{MIST_KIND} (?:mist|spray|splash)\b"
                        rf"|\bis an? [\w\s,-]{{0,60}}?\b(?:body|hair|body and hair) (?:mist|spray|splash)\b"
                        r"|\bavailable (?:only )?as (?:an? )?[\d\s,.]*(?:ml )?(?:perfumed )?(?:body|fragrance) (?:mist|spray)\.?\s*$", re.I)
@@ -212,8 +218,13 @@ def is_mist(r: dict) -> bool:
 # like"). The pool's median is 0.85; Granado, Phebo, Natura and O Boticário's
 # fans like each other's bottles, at 0.20, Louis Vuitton's and some indie
 # houses' sit low too. Owners alone don't show it (Granado's have as many
-# per rating as Lattafa's).
+# per rating as Lattafa's). A house's best known bottles reach further than
+# the house does (Granado's Bossa 0.40, its median 0.06), so a bottle's reach
+# is at most its brand's median plus BRAND_REACH_SLACK, for a brand with
+# BRAND_REACH_MIN pool bottles or more; niche houses sit at 0.65-0.95.
 REACH_TOP = 0.05
+BRAND_REACH_MIN = 5
+BRAND_REACH_SLACK = 0.15
 # Brigaded: far more ratings than owners with a lopsided spread (review-bombed
 # or meme pages: SpongeBob, Bolsonaro, the Pride editions), or many times more
 # whatever the spread (a brand's rating drive). Louis Vuitton bottles people
@@ -459,6 +470,11 @@ class Signals:
         owned = sorted(((r.get("relation") or {}).get("have", 0), r["id"]) for r in self.pool)
         self.pool_ids = {r["id"] for r in self.pool}
         self.most_owned = {i for _, i in owned[int((1 - REACH_TOP) * len(owned)):]}
+        brands = {}
+        for r in self.pool:
+            if (own := self.own_reach(r)) is not None:
+                brands.setdefault(r["brand"], []).append(own)
+        self.brand_reach = {b: statistics.median(xs) for b, xs in brands.items() if len(xs) >= BRAND_REACH_MIN}
         self.safeties = sorted(safety(histogram(r["rating"], 5)) for r in self.pool)
         self.recents = sorted(math.log1p(popularity(r)[1]) for r in self.pool)
         hates = sorted(hate_share(histogram(r["rating"], 5)) for r in self.pool)
@@ -513,10 +529,16 @@ class Signals:
                 near[s["id"]] = s
         return [s["id"] for s in by_net(list(near.values()))][:n]
 
-    def reach(self, r: dict) -> float | None:
+    def own_reach(self, r: dict) -> float | None:
         """The share of the pool bottles its fans also like that are among the pool's most owned."""
         also = [s["id"] for s in r["similar"]["also_liked"] if s["id"] in self.pool_ids]
         return sum(i in self.most_owned for i in also) / len(also) if also else None
+
+    def reach(self, r: dict) -> float | None:
+        """Its own reach, at most its brand's median plus BRAND_REACH_SLACK (its brand's, without its own)."""
+        own, brand = self.own_reach(r), self.brand_reach.get(r["brand"])
+        cap = brand + BRAND_REACH_SLACK if brand is not None else None
+        return own if cap is None else cap if own is None else min(own, cap)
 
     def flags(self, r: dict) -> int:
         cons = [x["text"] for x in (r.get("ai_summary") or {}).get("cons", []) if x["up_votes"] > x["down_votes"]]

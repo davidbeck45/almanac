@@ -256,7 +256,7 @@
           "notBlindBuy"
         ],
         "owners": 4727,
-        "reach": 0.9,
+        "reach": 0.83,
         "clones": [
           118549,
           115548
@@ -1661,7 +1661,7 @@
           "notBlindBuy"
         ],
         "owners": 4821,
-        "reach": 1.0,
+        "reach": 0.95,
         "clones": [
           121449
         ]
@@ -3402,7 +3402,7 @@
         ],
         "flags": [],
         "owners": 26346,
-        "reach": 0.95,
+        "reach": 0.35,
         "clones": [
           99815
         ]

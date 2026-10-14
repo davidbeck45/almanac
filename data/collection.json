@@ -2560,7 +2560,7 @@
           ],
           "flags": [],
           "owners": 26346,
-          "reach": 0.95
+          "reach": 0.35
         },
         "siblings": [
           99815
@@ -3447,7 +3447,7 @@
         "alt": [],
         "flags": [],
         "owners": 36695,
-        "reach": 1.0,
+        "reach": 0.9,
         "clones": [
           98242,
           106802,
@@ -5443,7 +5443,7 @@
           "hardToFind"
         ],
         "owners": 2701,
-        "reach": 0.9,
+        "reach": 0.75,
         "clones": [
           101314,
           108244
@@ -5979,7 +5979,7 @@
         "alt": [],
         "flags": [],
         "owners": 10328,
-        "reach": 1.0,
+        "reach": 0.7,
         "clones": [
           102788,
           103380
@@ -6118,7 +6118,7 @@
             "notBlindBuy"
           ],
           "owners": 4821,
-          "reach": 1.0
+          "reach": 0.95
         },
         "siblings": [],
         "parfumo": {
@@ -6964,7 +6964,7 @@
             "notBlindBuy"
           ],
           "owners": 4727,
-          "reach": 0.9
+          "reach": 0.83
         },
         "siblings": [
           115548

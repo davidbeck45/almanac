@@ -773,7 +773,7 @@
         "alt": [],
         "flags": [],
         "owners": 34178,
-        "reach": 1.0,
+        "reach": 0.88,
         "clones": [
           123710,
           137297
@@ -1311,7 +1311,7 @@
         "alt": [],
         "flags": [],
         "owners": 1315,
-        "reach": 0.9,
+        "reach": 0.8,
         "clones": []
       }
     },
