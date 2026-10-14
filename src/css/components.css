@@ -609,6 +609,7 @@
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast > svg { width: 16px; height: 16px; flex: none; color: var(--positive); }
+.toast[data-tone='error'] > svg { width: 18px; height: 18px; color: var(--negative); }
 .toast:not(:has(button, a)) { padding-right: var(--s-5); }
 /* The message wraps to two lines at most, so a long bottle name never cuts
    off what happened to it ("… hidden from picks") before its Undo. A longer

@@ -259,6 +259,14 @@ test('Settings can hold the sky still, and the location sheet stays in reach whi
   assert.match(locating, /role="alert">Location permission was denied\./, 'the error is announced');
 });
 
+test('a toast cuts a long name so what happened to it still shows', () => {
+  assert.equal(ui.toastName('Sauvage'), 'Sauvage');
+  const long = 'Le Jardin Secret de Mademoiselle Extraordinaire Eau de Parfum';
+  const cut = ui.toastName(long);
+  assert.ok(cut.length <= 35 && cut.endsWith('…') && long.startsWith(cut.slice(0, -1)), cut);
+  assert.equal(ui.toastName(null), '');
+});
+
 test('the shared link says what it would replace, and calls the list Mine', () => {
   const link = { name: 'Brooke', records: bottles.slice(0, 3), missing: [], loading: false };
   assert.match(sharedBannerHTML(link, 1), />Save as Mine</);

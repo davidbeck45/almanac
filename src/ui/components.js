@@ -32,6 +32,7 @@ export const icon = {
   refresh: stroke('M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7'),
   external: stroke('M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5'),
   check: svg('<path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>'),
+  alert: stroke('M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7.5v5.5M12 16.5h.01'),
   spray: stroke('M9.5 9.5h5v2.2a3 3 0 0 1 1.5 2.6V19a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-4.7a3 3 0 0 1 1.5-2.6Zm1-4h3v4h-3zM16.5 5.5h.01M18.5 4h.01M18.5 7h.01'),
   hide: stroke('M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.4 5.2A9.7 9.7 0 0 1 12 5c5 0 8.5 4.3 9.5 7-.4 1-1.2 2.4-2.4 3.7M6.1 6.2C4.2 7.5 3 9.4 2.5 12c1 2.7 4.5 7 9.5 7 1.6 0 3-.4 4.3-1.1'),
   plus: svg('<path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>'),

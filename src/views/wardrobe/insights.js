@@ -866,7 +866,7 @@ export const actions = {
     try {
       record = await ownable(id, findRecord(id));
     } catch (err) {
-      return app.showToast(`<span>${esc(err.message)}</span>`);
+      return app.showToast(`<span>${esc(err.message)}</span>`, { tone: 'error' });
     }
     if (!record) return;
     setWant(id, false);

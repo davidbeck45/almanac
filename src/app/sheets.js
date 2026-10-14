@@ -223,7 +223,9 @@ export function closeSheet({ instant = false, fromHistory = false, then = null }
 // it's the last stop in the tab order, a long way off. Ctrl+Z (⌘Z) presses
 // its Undo from anywhere outside a text field. Following one of its controls
 // puts it away (the shell's clicks). Callers pass HTML: escape names, and an
-// Undo button goes inside.
+// Undo button goes inside. `tone`: 'success' (the default) leads with a
+// check, 'error' (it didn't work, or can't be done) with an alert mark, and
+// 'info' (a fallback, a note) with nothing.
 
 const TOAST_MS = 5000;
 let toastTimer;
@@ -234,9 +236,12 @@ function armToast(ms = TOAST_MS) {
   if (!toastWaits) toastTimer = setTimeout(hideToast, ms);
 }
 const undoButton = () => [...$('#toast').querySelectorAll('button')].find(b => b.textContent.trim() === 'Undo');
-export function showToast(html) {
+const TOAST_GLYPH = { success: icon.check, error: icon.alert, info: '' };
+export function showToast(html, { tone = 'success' } = {}) {
   const el = $('#toast');
-  el.innerHTML = `${icon.check}${html}`;
+  const known = Object.hasOwn(TOAST_GLYPH, tone) ? tone : 'success';
+  el.innerHTML = `${TOAST_GLYPH[known]}${html}`;
+  el.dataset.tone = known;
   el.hidden = false;
   // A message on two lines takes the rounded box, not the pill.
   const text = el.querySelector(':scope > span');
