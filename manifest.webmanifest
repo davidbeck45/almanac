@@ -32,9 +32,9 @@
   ],
   "shortcuts": [
     {
-      "name": "Today's picks",
-      "short_name": "Today",
-      "url": "./?view=today",
+      "name": "What to wear now",
+      "short_name": "Now",
+      "url": "./#/wear/now",
       "icons": [
         {
           "src": "icons/icon-192.png",
@@ -45,7 +45,7 @@
     {
       "name": "The week ahead",
       "short_name": "Week",
-      "url": "./?view=week",
+      "url": "./#/wear/week",
       "icons": [
         {
           "src": "icons/icon-192.png",
@@ -56,7 +56,7 @@
     {
       "name": "Pick for an occasion",
       "short_name": "Occasion",
-      "url": "./?view=occasion",
+      "url": "./#/wear/occasion",
       "icons": [
         {
           "src": "icons/icon-192.png",

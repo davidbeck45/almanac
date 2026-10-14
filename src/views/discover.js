@@ -75,7 +75,10 @@ async function runSearch(query) {
     d.busy = false;
   }
   // The query lives in the URL, so Back and a shared link come back to it.
-  if (location.hash.startsWith('#/discover')) go(routeHash({ dest: 'discover', query: { q: query.length >= MIN_QUERY ? query : '' } }), { replace: true });
+  if (state.route?.dest === 'discover') {
+    state.route.query = query.length >= MIN_QUERY ? { q: query } : {};
+    go(routeHash(state.route), { replace: true });
+  }
   renderResults();
 }
 

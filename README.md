@@ -2,13 +2,14 @@
 
 A quick look at what to wear from my own collection, based on today's weather, time of day and occasion.
 
-- **Today** — live local weather (Open-Meteo, no key), a scene drawn for the conditions, and S/A/B/C tiers for daytime and tonight. Each pick shows a match score and, in its detail sheet, why it ranks where it does and what else fits.
+- **Wear** — live local weather (Open-Meteo, no key) drawn as a scene, with the top pick standing on its hill, for daytime or tonight, and the rest of your bottles on a shelf by how well they fit. Each pick shows a match score and the reasons behind it.
 - **Week** — a day and night pick for each of the next 7 days, planned against the forecast so nothing repeats back to back.
 - **Occasion** — Everyday, Office, Date Night, Night Out, Formal, Outdoors, Cozy, for daytime or tonight.
-- **Layering** — each bottle's detail sheet suggests which of your other bottles to layer it with, names the notes that complement each other, and says which to spray first.
-- **Wear this** — logs what you wore so picks rotate, fading over the next ten days. The wear journal shows a calendar, your most-worn bottles and the ones gathering dust.
-- °F or °C (defaults from your locale), recent locations, and home-screen shortcuts for Today, Week and Occasion.
-- **Your own collection** — search every fragrance on Fragrantica (from [Le Decanteur's dataset](https://www.kaggle.com/datasets/ledecanteur/fragrantica-perfumes), CC BY-NC-SA 4.0), paste a list, or add a bottle no database has by picking its accords. Share it as a link. The demo shows my wardrobe.
+- **Bottle page** — every bottle has one (a sheet on phones, a panel beside the page on desktop): why it ranks where it does, what else fits, what to layer it with and which to spray first, its accords, seasons and notes.
+- **Wardrobe** — switch bottles in and out of rotation, and the wear journal: "Wear this" logs what you wore so picks rotate, fading over the next ten days, with a calendar, your most-worn bottles and the ones gathering dust.
+- **Discover** — search every fragrance on Fragrantica (from [Le Decanteur's dataset](https://www.kaggle.com/datasets/ledecanteur/fragrantica-perfumes), CC BY-NC-SA 4.0) and see how any of them would do today.
+- **Your own collection** — add what you own from Discover, paste a list, or add a bottle no database has by picking its accords. Share it as a link. The demo shows my wardrobe.
+- °F or °C (defaults from your locale), two themes, recent locations, links to every view, and home-screen shortcuts for Now, Week and Occasion.
 
 Picks come from Fragrantica community votes (season, day/night, and those of the bottles voters say it smells like), each bottle's main accords, how heavy they wear versus the temperature and humidity, and the occasion's accord profile.
 

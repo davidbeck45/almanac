@@ -111,7 +111,7 @@ export function slotHeadHTML(win, hour, { id, thumb = false } = {}) {
     ${scene}
     <div class="slot-title">
       <h2${id ? ` id="${id}"` : ''}>${slotIcon(win.slot)}${esc(win.label)}</h2>
-      <p class="slot-line"><span class="slot-time">${esc(windowRange(win, hour))}</span>${wxIcon(win.category)}<span>${esc(weather)}</span></p>
+      <p class="slot-line"><span class="slot-time">${esc(windowRange(win, hour))}</span><span class="slot-wx">${wxIcon(win.category)}<span>${esc(weather)}</span></span></p>
     </div>
   </header>`;
 }

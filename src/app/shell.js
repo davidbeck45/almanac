@@ -29,6 +29,7 @@ import * as wardrobeView from '../views/wardrobe.js';
 import * as discoverView from '../views/discover.js';
 import * as bottleView from '../views/bottle.js';
 import * as settingsView from '../views/settings.js';
+import '../views/sections.js';
 
 const REFRESH_AFTER = 20 * 60 * 1000;
 const $ = sel => document.querySelector(sel);

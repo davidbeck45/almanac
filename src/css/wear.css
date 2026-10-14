@@ -5,7 +5,7 @@
 
 .hero {
   position: relative;
-  height: calc(clamp(300px, 40vh, 340px) + env(safe-area-inset-top));
+  height: calc(clamp(288px, 36vh, 320px) + env(safe-area-inset-top));
   margin: 0 calc(-1 * var(--s-4));
   overflow: hidden;
   border-radius: 0 0 var(--r-surface) var(--r-surface);
@@ -165,6 +165,8 @@
 .slot-title h2 svg { width: 18px; height: 18px; color: var(--ambient); }
 .slot-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-2); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .slot-time { padding: 0 var(--s-2); border-radius: var(--r-chip); background: var(--fill); color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+.slot-wx { display: inline-flex; align-items: flex-start; gap: var(--s-2); min-width: 0; }
+.slot-wx .wx { margin-top: 1px; }
 .slot-line .wx svg { width: 16px; height: 16px; }
 
 /* The pick: an inset card washed in its top accord's color. */

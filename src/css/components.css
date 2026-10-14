@@ -631,5 +631,6 @@
   .bar-track, .rank-bar { border: 1px solid CanvasText; }
   .bar-fill, .rank-bar span, .reasons li::before, .mag, .match circle.arc { forced-color-adjust: none; background: CanvasText; stroke: CanvasText; }
   .shelf-bottle { border-bottom-color: CanvasText; }
+  .nav, .subnav, .head-bar .gear-link::after, .toast { background: Canvas; border: 1px solid CanvasText; }
   .icon-btn::after { border: 1px solid ButtonText; }
 }

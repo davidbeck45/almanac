@@ -36,6 +36,7 @@ const SHELL = [
   'src/app/state.js',
   'src/views/bottle.js',
   'src/views/discover.js',
+  'src/views/sections.js',
   'src/views/settings.js',
   'src/views/wardrobe.js',
   'src/views/wear.js',
