@@ -18,10 +18,10 @@ const NOTE_TIERS = { t: 'top', m: 'mid', b: 'base', f: 'all' };
 const NOTE_TIER_KEYS = ['t', 'm', 'b', 'f'];
 const SEASONS = ['winter', 'spring', 'summer', 'fall'];
 // Search: a bottle whose whole name was typed ranks as if it had WHOLE_LIFT
-// times its votes, plus WHOLE_FLOOR (a new bottle typed exactly still leads
-// hits with a few votes).
+// times its votes plus WHOLE_FLOOR: a new bottle typed exactly still leads
+// hits with a few dozen votes, a 0-vote clone none with more.
 const WHOLE_LIFT = 50;
-const WHOLE_FLOOR = 10;
+const WHOLE_FLOOR = 1;
 
 const round3 = x => Math.round(x * 1000) / 1000;
 
