@@ -7,7 +7,7 @@
 // ask the suggestion pool keep their answers with pooled(), and draw again
 // on their own when an answer lands (redrawSection).
 import { rank, comfortRange, SEASONS } from '../engine.js';
-import { layerPicks } from '../layering.js';
+import { layerPicks, pairingKept, warmPairing } from '../layering.js';
 import { setHidden } from '../hidden.js';
 import { loadWants, saveWants, hasWant, setWant } from '../wishlist.js';
 import { loadSkin, applySkin } from '../skin.js';
@@ -243,7 +243,8 @@ export function bottleModel(route) {
     wears: wearInfo(f.id),
     todayISO: todayISO(),
     alts: ctx && !solo ? ctx.ranked.filter(r => r.fragrance.id !== id).slice(0, 4) : [],
-    partners: others.length ? layerPicks(f, others, 3, win ?? undefined) : null,
+    // undefined while a long list's pairings are worked out after the page draws (layeringAfter).
+    partners: !others.length ? null : others.length <= LAYER_NOW || pairingKept(others) ? layerPicks(f, others, 3, win ?? undefined) : undefined,
     comfort: comfortRange(f),
     about: state.about.get(id),
     wanted: hasWant(loadWants(), f.id),
@@ -409,7 +410,27 @@ function altsSection({ alts, ctx, ctxLabel, worn }) {
 }
 
 // Partners from the same collection (src/layering.js), heavier one sprayed first.
+// A list this long works out its pairings (n²) after the page draws, while
+// nobody's tapping, so the first page each session opens at once.
+const LAYER_NOW = 12;
+let warming = null;
+function layeringAfter(model, app) {
+  if (model.partners !== undefined || warming) return;
+  warming = warmPairing(activeFragrances().filter(o => o.id !== model.f.id), model.f).finally(() => { warming = null; });
+  warming.then(() => {
+    if (!showing(model.arg)) return;
+    redrawSection('layering', app);
+    // The list changed meanwhile (another one switched on): work that one out too.
+    const now = bottleModel(state.route);
+    if (now?.partners === undefined) layeringAfter(now, app);
+  }, () => {});
+}
+
 function layeringSection({ f, partners, ctx }) {
+  if (partners === undefined) {
+    const row = '<li class="row"><span class="row-main"><span class="sk bp-sk-thumb"></span><span class="sk-lines"><span class="sk sk-line w70"></span><span class="sk sk-line w40"></span></span></span></li>';
+    return `<section class="bp-section" aria-busy="true"><h3>Layer it with</h3><span class="visually-hidden">Finding what layers with it</span><ul class="rows">${row.repeat(3)}</ul></section>`;
+  }
   if (!partners) return '';
   const rows = partners.map(p => {
     const o = p.fragrance;
@@ -465,7 +486,7 @@ addSection({ id: 'summary', order: 100, render: summarySection });
 addSection({ id: 'actions', order: 150, render: actionsSection });
 addSection({ id: 'why', order: 200, render: whySection });
 addSection({ id: 'alts', order: 300, render: altsSection });
-addSection({ id: 'layering', order: 400, shopOrder: 850, render: layeringSection });
+addSection({ id: 'layering', order: 400, shopOrder: 850, render: layeringSection, after: layeringAfter });
 addSection({ id: 'accords', order: 500, shopOrder: 360, render: accordsSection });
 addSection({ id: 'seasons', order: 600, render: seasonsSection });
 addSection({ id: 'notes', order: 700, shopOrder: 370, render: notesSection });
