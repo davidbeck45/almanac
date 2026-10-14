@@ -1,7 +1,7 @@
 // Hash routes, so deep links and Back work without a server:
 //   #/wear/now | week | occasion[/<id>] | trip
 //   #/wardrobe/owned | wishlist | worn | insights
-//   #/discover[?q=…]
+//   #/discover[?q=…&styles=…&seeds=…&…]
 //   #/bottle/<id>[?ctx=<context key>]
 //   #/settings
 // parseRoute and routeHash are pure (test/router.test.js). The shell renders;
@@ -11,8 +11,11 @@ export const HOME = '#/wear/now';
 
 // Old home-screen shortcuts open ?view=today|week|occasion.
 const LEGACY_VIEWS = { today: '#/wear/now', week: '#/wear/week', occasion: '#/wear/occasion' };
+// Discover keeps its search, its lists and their filters in the URL
+// (src/views/discover/query.js reads and writes them).
+const DISCOVER_KEYS = ['q', 'by', 'tab', 'styles', 'mode', 'seeds', 'season', 'time', 'lean', 'longevity', 'projection', 'safe', 'discontinued', 'mists'];
 // The query keys each kind of route keeps.
-const QUERY_KEYS = { bottle: ['ctx'], discover: ['q'] };
+const QUERY_KEYS = { bottle: ['ctx'], discover: DISCOVER_KEYS };
 
 /**
  * '#/wear/occasion/office' -> { dest: 'wear', pane: 'occasion', arg: 'office', query: {} }.
@@ -41,7 +44,8 @@ const part = s => encodeURIComponent(s).replace(/%3A/gi, ':');
 /** The canonical hash for a route: parseRoute(routeHash(r)) gives r back. */
 export function routeHash({ dest, pane = null, arg = null, query = {} }) {
   const path = [dest, pane, arg].filter(x => x !== null && x !== undefined && x !== '').map(part).join('/');
-  const qs = new URLSearchParams(Object.entries(query).filter(([, v]) => v)).toString();
+  // Lists stay readable (?styles=skin,clean): a comma needs no escaping in a query.
+  const qs = new URLSearchParams(Object.entries(query).filter(([, v]) => v)).toString().replace(/%2C/gi, ',');
   return `#/${path}${qs ? `?${qs}` : ''}`;
 }
 

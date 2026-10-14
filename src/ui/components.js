@@ -58,6 +58,9 @@ export const icon = {
   heart: stroke('M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20Z'),
   chart: stroke('M4 20h16M7 16.5V11M12 16.5V6M17 16.5v-3.5'),
   suitcase: stroke('M5 8h14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1ZM9 8V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V8M8 8v12M16 8v12'),
+  // Filters (sliders), and two bottles' worth of overlap (smells like, twins).
+  filter: stroke('M4 7h10M18 7h2M4 17h4M12 17h8M16 4.5v5M10 14.5v5'),
+  similar: stroke('M9.5 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12ZM14.5 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z'),
   // Occasions (OCCASIONS[].icon names these).
   cup: stroke('M5 10h11v4a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5v-4ZM16 11h1.5a2.5 2.5 0 0 1 0 5H16M8.5 3.5c-.8 1 .8 2 0 3M12 3.5c-.8 1 .8 2 0 3'),
   briefcase: stroke('M4.5 8h15A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5v-8A1.5 1.5 0 0 1 4.5 8ZM9 8V6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 13h18M11 13v2h2v-2'),
@@ -207,6 +210,51 @@ export function rowHTML(f, { meta = '', trailing = '', open = null, cls = '', at
     ? `<button class="row-main" data-action="open" data-ctx="${esc(open.ctx ?? '')}" data-id="${esc(f.id)}">${body}</button>`
     : `<span class="row-main">${body}</span>`;
   return `<li class="row ${cls}"${attrs}>${main}${trailing}</li>`;
+}
+
+// ---------- Bottle cards ----------
+
+// A bottle to consider (Discover's picks; any suggestion): its photo stands
+// on a horizon line, and the photo, name and meta are one button that opens
+// its page (context `ctx`); screen readers hear the name as its label and
+// the marks as its description. `marks`: [{ text, tone: 'good' | 'warn' | '',
+// spoken }] (rating, value, risk; `spoken` replaces the text for screen
+// readers). `tags`: [{ text, color, on, kind }] (style chips; `on` lights the
+// ones the list was asked for, kind 'close' draws the wears-close marker).
+// `lines`: HTML sentences on why it's here. `corner` sits top right (a Want
+// toggle), `actions` along the bottom. `key` keeps ids unique when a bottle
+// shows in two lists. The caller escapes `meta`, `lines`, `corner` and `actions`.
+export function bottleCardHTML(f, { ctx = '', key = 'c', meta = '', marks = [], tags = [], lines = [], corner = '', actions = '', cls = '' } = {}) {
+  const id = `bc-${String(key).replace(/[^\w-]/g, '')}-${String(f.id).replace(/[^\w-]/g, '_')}`;
+  const markHTML = marks.length
+    ? `<span class="bcard-marks" id="${id}-m">${marks.map(m => `<span class="bcard-mark ${esc(m.tone ?? '')}">${m.spoken
+      ? `<span aria-hidden="true">${esc(m.text)}</span><span class="visually-hidden">${esc(m.spoken)}</span>`
+      : esc(m.text)}</span>`).join('<span class="visually-hidden">, </span>')}</span>`
+    : '';
+  const tagHTML = tags.length
+    ? `<ul class="bcard-tags" aria-label="Styles">${tags.map(t => `<li class="tag${t.on ? ' on' : ''}${t.kind ? ` ${esc(t.kind)}` : ''}"${t.color ? ` style="--c:${t.color}"` : ''}>${esc(t.text)}</li>`).join('')}</ul>`
+    : '';
+  return `<article class="bcard ${cls}">
+    <button class="bcard-open" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(f.id)}" aria-labelledby="${id}-n"${markHTML ? ` aria-describedby="${id}-m"` : ''}>
+      <span class="bcard-photo">${img(f)}</span>
+      <span class="bcard-title"><b class="bcard-name" id="${id}-n">${esc(f.name)}</b>${meta ? `<span class="bcard-meta">${meta}</span>` : ''}${markHTML}</span>
+    </button>
+    ${corner ? `<div class="bcard-corner">${corner}</div>` : ''}
+    ${tagHTML}
+    ${lines.length ? `<div class="bcard-why">${lines.map(l => `<p>${l}</p>`).join('')}</div>` : ''}
+    ${actions ? `<div class="bcard-actions">${actions}</div>` : ''}
+  </article>`;
+}
+
+// Bottle cards while their list loads, the same size as the real ones.
+export function bottleCardSkeletonHTML(count = 1) {
+  const card = `<div class="bcard sk-bcard" aria-hidden="true">
+      <div class="bcard-open"><span class="sk bcard-photo"></span><span class="bcard-title"><span class="sk sk-line w70"></span><span class="sk sk-line w40"></span><span class="sk sk-line w30"></span></span></div>
+      <div class="bcard-tags"><span class="sk sk-tag"></span><span class="sk sk-tag"></span></div>
+      <div class="bcard-why"><span class="sk sk-line"></span><span class="sk sk-line w70"></span></div>
+      <div class="bcard-actions"><span class="sk sk-btn"></span><span class="sk sk-btn"></span></div>
+    </div>`;
+  return card.repeat(count);
 }
 
 // ---------- Shared link ----------

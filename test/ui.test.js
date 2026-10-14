@@ -5,7 +5,7 @@ import * as ui from '../src/ui.js';
 import { icon, shelfHTML, sharedBannerHTML, messageHTML, skeletonHTML, rowHTML } from '../src/ui/components.js';
 import * as wear from '../src/views/wear.js';
 import * as wardrobe from '../src/views/wardrobe.js';
-import * as discover from '../src/views/discover.js';
+import * as discoverT from '../src/views/discover/templates.js';
 import * as settings from '../src/views/settings.js';
 import { SECTIONS, addSection, bottlePageHTML } from '../src/views/bottle.js';
 import { OCCASIONS } from '../src/occasions.js';
@@ -101,10 +101,11 @@ test('every template renders clean: no undefined or NaN, names escaped', () => {
     importForm: wardrobe.importSheetHTML({ text: EVIL }, 15),
     custom: wardrobe.customSheetHTML({ name: EVIL, brand: EVIL, accords: ['vanilla'], seasons: ['fall'], time: 'night', error: EVIL, back: { kind: 'import' } }, 6),
     shared: sharedBannerHTML({ name: EVIL, records: bottles, missing: ['1'], loading: false }, 3, { confirm: true }),
-    discover: discover.discoverHTML({ draft: EVIL, query: EVIL, results: [evil, { ...evil, id: '2', year: null }], busy: false, error: '', offline: '' }, new Map([['2', `In ${EVIL}’s`]])),
-    discoverNone: discover.discoverHTML({ query: EVIL, results: [], busy: false, error: '' }, new Map()),
-    discoverOffline: discover.discoverHTML({ query: EVIL, results: [evil], busy: false, error: '', offline: EVIL }, new Map()),
-    discoverError: discover.discoverHTML({ query: EVIL, results: null, busy: false, error: EVIL }, new Map()),
+    discover: discoverT.namesHTML({ query: EVIL, results: [evil, { ...evil, id: '2', year: null }] }, new Map([['2', `In ${EVIL}’s`]])),
+    discoverStatus: discoverT.statusHTML({ query: EVIL, results: [], busy: false, error: '' }),
+    discoverOffline: discoverT.statusHTML({ query: EVIL, results: [evil], busy: false, error: '', offline: EVIL }),
+    discoverError: discoverT.statusHTML({ query: EVIL, results: null, busy: false, error: EVIL }),
+    discoverField: discoverT.searchFormHTML(EVIL),
     nextWindow: wear.nextWindowHTML({ win: wx.night, pick: entry }, evil.id, 12),
     location: settings.locationSheetHTML({ query: EVIL, error: EVIL, results: [{ name: EVIL, region: EVIL }] }, [{ name: EVIL, region: EVIL }]),
     settings: settings.settingsHTML({ loc: { name: EVIL, region: EVIL }, units: 'C', themeName: 'gruvbox', active: 'mine', mineCount: 2, shared: { name: EVIL }, on: 3, total: 4, wears: 5, updated: '9:00 AM', stale: true, credits: settings.creditsHTML({ fetched: EVIL, scraped: true, fragella: true }) }),
@@ -200,14 +201,13 @@ test('the sun and moon keep clear of the hero’s bottle', async () => {
   assert.equal(skyLight({ phase: 'night', aspect: 1.3 }).x, 0.8, 'without a bottle the moon is where it always was');
 });
 
-test('Discover announces a line, not the list', () => {
-  const html = discover.discoverHTML({ query: 'dior', results: fragrances.slice(0, 3), busy: false, error: '' }, new Map([[fragrances[0].id, 'In David’s']]));
-  const status = html.match(/<p[^>]*role="status"[^>]*>([\s\S]*?)<\/p>/);
-  assert.equal(status[1], '3 matches');
-  assert.ok(!/aria-live/.test(html.replace(/<p[^>]*role="status"[\s\S]*?<\/p>/, '')), 'the results sit outside the live region');
+test('Discover’s name search: a status line, and rows that say where a bottle already is', () => {
+  const html = discoverT.namesHTML({ query: 'dior', results: fragrances.slice(0, 3) }, new Map([[fragrances[0].id, 'In David’s']]));
+  assert.equal(discoverT.statusHTML({ query: 'dior', results: fragrances.slice(0, 3), busy: false, error: '' }), '3 matches');
   assert.match(html, /In David’s/, 'a bottle in the ranked list says so instead of offering I own it');
   assert.equal((html.match(/data-action="own-result"/g) ?? []).length, 2);
-  assert.match(discover.statusHTML({ query: 'x', results: [fragrances[0]], offline: 'Can’t reach' }), /saved on this device/);
+  assert.equal((html.match(/data-action="disc-dupes"/g) ?? []).length, 3, 'every row leads to what smells like it for less');
+  assert.match(discoverT.statusHTML({ query: 'x', results: [fragrances[0]], offline: 'Can’t reach' }), /saved on this device/);
 });
 
 test('each Wardrobe pane has its own heading, and Wear this names its bottle', () => {
