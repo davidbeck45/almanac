@@ -451,9 +451,8 @@ export function renderTrip(app = null) {
   const shown = result ?? (sameDates(memo?.trip, trip) ? memo.result : null);
   if (!shown) return head + skeleton('Planning what to pack…');
   for (const [key, win, occasion, ranked] of memo.contexts) storeContext(key, win, occasion, ranked);
-  const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
   return `${head}
-    <div class="trip-out${result ? '' : ' refreshing'}"${result ? '' : ' aria-busy="true"'}>${tripPackHTML(shown, trip, { canShare })}${tripPlanHTML(shown, { today })}</div>`;
+    <div class="trip-out${result ? '' : ' refreshing'}"${result ? '' : ' aria-busy="true"'}>${tripPackHTML(shown, trip, { canShare: canShare() })}${tripPlanHTML(shown, { today })}</div>`;
 }
 
 // An event filled in but not added yet counts: Plan adds it first. One
@@ -537,8 +536,12 @@ function finish(app, trip) {
   app.renderPage();
   // The plan's head takes focus, so a screen reader hears where it went.
   const head = document.querySelector('#trip-title');
-  head?.focus({ preventScroll: true });
-  head?.closest('.trip-head').scrollIntoView({ block: 'nearest' });
+  if (!head) return;
+  // The skeleton's smooth scroll may still be running (the weather came
+  // back at once): stop it where it is, or it carries the page past the head.
+  window.scrollTo(window.scrollX, window.scrollY);
+  head.focus({ preventScroll: true });
+  head.closest('.trip-head').scrollIntoView({ block: 'nearest' });
 }
 
 // When that refresh fails: the plan stands on the weather saved, on the
@@ -574,12 +577,17 @@ onPlace('trip', place => {
   ui.error = '';
 });
 
+// Whether the browser has a share sheet (the Share button shows only then).
+const canShare = () => typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+
 async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
     return true;
   } catch {
-    // Older browsers, or no permission: the hidden-field way.
+    // Older browsers, or no permission: the hidden-field way. Selecting it
+    // takes focus, which goes back where it was once the field is gone.
+    const back = document.activeElement;
     const field = Object.assign(document.createElement('textarea'), { value: text, readOnly: true });
     field.style.cssText = 'position:fixed;opacity:0';
     document.body.append(field);
@@ -587,6 +595,7 @@ async function copyText(text) {
     let ok = false;
     try { ok = document.execCommand('copy'); } catch {}
     field.remove();
+    back?.focus?.({ preventScroll: true });
     return ok;
   }
 }
@@ -669,7 +678,8 @@ export const actions = {
     const trip = savedTrip();
     if (!trip) return;
     const ok = await copyText(packingText(packNow(trip), trip, { today: todayISO() }));
-    app.showToast(ok ? '<span>Packing list copied</span>' : '<span class="note">This browser won’t let the page copy. Try Share instead.</span>', { tone: ok ? 'success' : 'error' });
+    const instead = canShare() ? 'Try Share instead.' : 'Select the plan and copy it yourself.';
+    app.showToast(ok ? '<span>Packing list copied</span>' : `<span class="note">This browser won’t let the page copy. ${instead}</span>`, { tone: ok ? 'success' : 'error' });
   },
   async 'trip-share'(el, app) {
     const trip = savedTrip();
