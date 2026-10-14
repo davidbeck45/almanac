@@ -4,9 +4,11 @@
    (color-mix with transparent), so they follow the theme. */
 
 /* Self-hosted variable fonts (fonts/, SIL OFL), latin subset from Google
-   Fonts' CSS API: Fraunces opsz 9–144 and wght 400–700, roman and italic;
-   Inter opsz 14–32 and wght 400–700. Fraunces' SOFT axis is left out: it
-   doubles the files (120 and 149 KB against 67 and 82). */
+   Fonts' CSS API: Fraunces opsz 9–144, roman and italic; Inter opsz 14–32.
+   Their weight axes are cut to the 400–700 the app uses (fontTools:
+   `fonttools varLib.instancer <font>.woff2 wght=400:700`), 222 KB down to
+   190; opsz stays whole, since the hero's temperature draws at 72–104px.
+   Fraunces' SOFT axis is left out: it doubles the files. */
 @font-face {
   font-family: 'Fraunces';
   font-style: normal;
@@ -57,7 +59,6 @@
   --s-6: 24px;
   --s-7: 32px;
   --s-8: 40px;
-  --s-9: 56px;
   --s-10: 72px;
   --hit: 44px; /* smallest tap target */
 
@@ -92,9 +93,8 @@
   --surface-3: #20242f; /* hover, selected */
   --text-primary: #eef0f5;
   --text-secondary: #9aa1b1;
-  --text-tertiary: #838a9a; /* still 4.5:1 on --surface-3 */
+  --text-tertiary: #838a9a; /* 4.5:1 on --surface-0 to -2 (4.9 on -2), not on -3 (4.48) */
   --accent: #f2c35b;        /* gold: today, selection, focus (the sky's --ambient does the rest) */
-  --on-accent: #0a0b10;
   --positive: #86d9a8;
   --negative: #f19a84;
   --info: #7fb8f0;          /* rain */
@@ -104,7 +104,6 @@
   --mag-2: #c9cfe0;
   --mag-3: #8f98b3;
   --mag-4: #6b7389;
-  --on-mag: #0a0b10;
   --paper: #ffffff;         /* the brightest neutral: knobs, hover on primary, chip text */
   --on-scene: #ffffff;      /* text and glass over the weather scene */
   --chip-ink: 50%;          /* how much of an accord's color its chip text keeps (4.5:1 for every accord) */
@@ -146,8 +145,9 @@
 }
 
 /* gruvbox dark (morhetz/gruvbox), switched on by src/theme.js. Secondary text
-   is fg3 and tertiary fg4, which both clear 4.5:1 on bg1; red is too dark on
-   the panels, so warnings are bright orange. */
+   is fg3 and tertiary fg4, which both clear 4.5:1 on bg1 (tertiary on
+   --surface-0 to -2, not -3: 4.17); red is too dark on the panels, so
+   warnings are bright orange. */
 :root[data-theme='gruvbox'] {
   --surface-0: #1d2021;
   --surface-1: #282828;
@@ -157,7 +157,6 @@
   --text-secondary: #bdae93;
   --text-tertiary: #a89984;
   --accent: #fabd2f;
-  --on-accent: #1d2021;
   --positive: #b8bb26;
   --negative: #fe8019;
   --info: #83a598;
@@ -166,7 +165,6 @@
   --mag-2: #d5c4a1;
   --mag-3: #a89984;
   --mag-4: #928374;
-  --on-mag: #1d2021;
   --paper: #fbf1c7;
   --on-scene: #fbf1c7;
   --chip-ink: 40%;

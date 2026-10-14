@@ -19,8 +19,8 @@
 // stops (a slow line isn't a stuck question; a stalled one fails by itself),
 // and a worker that isn't up within TIMEOUT counts as one that can't start.
 // poolStatus() is 'idle' (nothing asked yet), 'loading' (the pool is on its
-// way), 'ready' or 'error'; onPoolStatus(fn) hears each change (fn(status,
-// error), the error a sentence) and returns a function that stops it.
+// way), 'ready' or 'error' (a client's onStatus(fn) hears each change,
+// fn(status, error), the error a sentence; nothing in the app needs it yet).
 // warmPool() starts loading early, for a page about to need it.
 // onPoolRecords(fn) hears every dataset record an answer names (the wardrobe
 // sent with it, and its switched-off bottles, aside): src/app/state.js keeps
@@ -274,5 +274,4 @@ const client = poolClient();
 export const askPool = client.ask;
 export const warmPool = client.warm;
 export const poolStatus = client.status;
-export const onPoolStatus = client.onStatus;
 export const onPoolRecords = client.onRecords;
