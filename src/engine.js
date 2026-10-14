@@ -1,6 +1,6 @@
 // Recommendation engine. Pure functions only: fragrances + conditions in,
 // ranked tiers with reasons out.
-import { ACCORDS, heaviness } from './accords.js';
+import { ACCORDS, heaviness, accordNoun } from './accords.js';
 import { isWet } from './wmo.js';
 import { predictedShares } from './custom.js';
 import { PRIOR_VOTES } from './profiles.js';
@@ -49,21 +49,9 @@ export const ROTATION_PENALTY = Object.freeze([0.2, 0.12, 0.08, 0.06, 0.045, 0.0
 
 const RAIN_ACCORDS = ['green', 'earthy', 'woody', 'aromatic', 'mossy', 'aquatic'];
 
-// Reasons name accords as nouns ("Warm spice for the cold", "Woods & aromatics
-// suit casual wear"), never as raw labels ("Warm warm spicy"). An accord not
-// listed reads as its own name (vanilla, leather, iris).
-const ACCORD_NOUN = {
-  woody: 'woods', 'warm spicy': 'warm spice', 'fresh spicy': 'crisp spice', 'soft spicy': 'soft spice',
-  aromatic: 'aromatics', sweet: 'sweetness', fresh: 'fresh notes', green: 'green notes', aquatic: 'aquatic notes',
-  marine: 'marine notes', ozonic: 'airy notes', earthy: 'earthy notes', musky: 'musk', powdery: 'powder',
-  fruity: 'fruit', floral: 'florals', 'white floral': 'white florals', 'yellow floral': 'yellow florals',
-  balsamic: 'resins', animalic: 'animalic notes', smoky: 'smoke', lactonic: 'milky notes', herbal: 'herbs',
-  mossy: 'moss', tropical: 'tropical fruit', salty: 'sea salt', metallic: 'metallic notes', soapy: 'soap',
-  mineral: 'mineral notes', terpenic: 'terpenes', savory: 'savory notes', nutty: 'nuts', gourmand: 'gourmand notes',
-  'coca-cola': 'cola', aldehydic: 'aldehydes', conifer: 'pine', bitter: 'bitter notes', sour: 'sour notes',
-  alcohol: 'boozy notes', anis: 'anise', camphor: 'camphor notes',
-};
-const nounOf = accord => ACCORD_NOUN[accord] ?? accord.toLowerCase();
+// Reasons name accords as nouns (accordNoun: "Warm spice for the cold", never
+// "Warm warm spicy").
+const nounOf = accordNoun;
 // Accords a reason names one of, not both ("Aquatic notes & marine notes").
 const NEAR_SAME = [
   ['aquatic', 'marine', 'salty', 'ozonic'], ['warm spicy', 'soft spicy', 'fresh spicy', 'cinnamon'], ['fruity', 'tropical'],

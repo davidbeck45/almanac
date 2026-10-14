@@ -232,6 +232,15 @@ test('more like Liquid Brun and Amber Empire is warm vanilla and amber', () => {
   assert.deepEqual(moreLike([{ id: 'my:x', name: 'Nothing', brand: 'Me', accords: {} }], ctx), []);
 });
 
+test('a hand-entered seed counts as much as a dataset one beside it', () => {
+  const garden = customRecord({ name: 'Night Garden', brand: 'Me', accords: ['rose', 'oud', 'amber'] });
+  const picks = moreLike([ctx.byId.get('9828'), garden], ctx, { k: 8 }); // Aventus
+  const hers = picks.filter(p => ['rose', 'oud', 'amber'].some(a => Object.keys(p.record.accords).slice(0, 2).includes(a)));
+  assert.ok(hers.length >= 4, picks.map(p => p.record.name).join(', '));
+  // Alone, each still gets its own kind.
+  assert.ok(moreLike([garden], ctx, { k: 5 }).every(p => p.record.accords.oud || p.record.accords.rose));
+});
+
 test('default seeds: the most worn of the last 60 days, else the best rated', () => {
   const history = [
     { id: '94713', date: '2026-10-10', slot: 'night' }, { id: '94713', date: '2026-10-02', slot: 'night' },

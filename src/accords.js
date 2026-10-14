@@ -113,3 +113,21 @@ export function heaviness(accords) {
   heavinessOf.set(accords, h);
   return h;
 }
+
+// Copy names accords as nouns: engine reasons ("Warm spice for the cold",
+// "Woods & aromatics suit casual wear", never "Warm warm spicy") and shared
+// traits ("sharing vanilla, warm spice and woods"). An accord not listed
+// reads as its own name (vanilla, leather, iris).
+const ACCORD_NOUN = {
+  woody: 'woods', 'warm spicy': 'warm spice', 'fresh spicy': 'crisp spice', 'soft spicy': 'soft spice',
+  aromatic: 'aromatics', sweet: 'sweetness', fresh: 'fresh notes', green: 'green notes', aquatic: 'aquatic notes',
+  marine: 'marine notes', ozonic: 'airy notes', earthy: 'earthy notes', musky: 'musk', powdery: 'powder',
+  fruity: 'fruit', floral: 'florals', 'white floral': 'white florals', 'yellow floral': 'yellow florals',
+  balsamic: 'resins', animalic: 'animalic notes', smoky: 'smoke', lactonic: 'milky notes', herbal: 'herbs',
+  mossy: 'moss', tropical: 'tropical fruit', salty: 'sea salt', metallic: 'metallic notes', soapy: 'soap',
+  mineral: 'mineral notes', terpenic: 'terpenes', savory: 'savory notes', nutty: 'nuts', gourmand: 'gourmand notes',
+  'coca-cola': 'cola', aldehydic: 'aldehydes', conifer: 'pine', bitter: 'bitter notes', sour: 'sour notes',
+  alcohol: 'boozy notes', anis: 'anise', camphor: 'camphor notes',
+};
+/** An accord as a noun for copy: "woods", "warm spice", "aldehydes"; an accord not listed reads as its own name. */
+export const accordNoun = accord => ACCORD_NOUN[accord] ?? String(accord).toLowerCase();
