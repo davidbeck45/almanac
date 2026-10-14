@@ -155,7 +155,8 @@ test('a pick’s card: escaped, marked, and every action named', () => {
   assert.match(html, /Risky buy/);
   assert.match(html, /class="tag on"[^>]*>Skin scent</, 'the styles asked for light up');
   assert.match(html, /class="tag"[^>]*>Powdery &amp; iris</);
-  assert.match(html, /class="tag on close"[^>]*>Wears close</, 'wears close, lit when Intimate was asked for');
+  assert.match(html, /class="tag on close"[^>]*>Intimate</, 'wears close, named as its chip and lit when Intimate was asked for');
+  assert.match(html, /data-action="disc-dupes" data-id="p1" aria-label="What smells like &lt;img[^"]*"/, 'Smells like says whose');
   assert.match(html, /aria-labelledby="bc-styles-p1-n"/, 'the button’s name is the bottle’s');
   assert.match(html, /aria-pressed="false" aria-label="Want /);
   const lines = T.whyLines(pick('p1'), { max: 9 });
@@ -207,7 +208,9 @@ test('marks say value and risk in words', () => {
   assert.equal(T.valueMark(3.0), null, 'the middle says nothing');
   assert.equal(T.valueMark(2.1).text, 'Pricey');
   assert.equal(T.riskMark({ level: 'low', reasons: ['It doesn’t last long.'] }), null);
-  assert.deepEqual(T.riskMark({ level: 'medium', reasons: ['Owners often let it go.'] }), { text: 'Some risk', tone: 'warn', spoken: 'Some risk: Owners often let it go.' });
+  assert.deepEqual(T.riskMark({ level: 'medium', reasons: ['Owners often let it go.'] }), { text: 'Some risk', tone: 'warn', spoken: 'Some risk. Owners often let it go.' });
+  assert.equal(T.riskMark({ level: 'high', reasons: ['It divides people: many voters hate it.'] }).spoken, 'Risky buy. It divides people: many voters hate it.', 'one colon at most');
+  assert.equal(T.riskMark({ level: 'high', reasons: [] }).spoken, 'Risky buy');
 });
 
 test('a list: skeletons first, the old cards dimmed while a change loads, errors and empties, the teaser after four', () => {
@@ -303,6 +306,7 @@ test('filters: radio groups with one stop each, the value toggle as answered, mi
   assert.match(T.filterSheetHTML(NO_FILTERS, { preferValue: true, mists: true, status: '' }), /data-action="disc-filters-reset">Reset/, 'and Reset can turn it off');
   assert.ok(!/class="count"/.test(T.filterButtonHTML(NO_FILTERS)));
   clean(T.filterSheetHTML(NO_FILTERS, { preferValue: false, mists: true, status: EVIL }), 'filter sheet');
+  assert.match(html, /Safe blind buys<\/b><small>Safer than most popular bottles\.<\/small>/, 'the safety percentile, not “most voters love it”');
   // A change redraws the parts; the status line keeps its node (only its text changes), so it's heard.
   const sheet = T.filterSheetHTML(NO_FILTERS, { preferValue: false, mists: true, status: '12 bottles fit' });
   assert.match(sheet, /<div data-part="filters">/);
@@ -335,8 +339,10 @@ test('the teaser: the thinnest gap and what fills it, a skeleton, nothing when i
   const report = { gaps: [{ title: 'Date Night on mild and warm nights' }], picks: [{ id: 'g1', record: r, fills: [{ title: 'Date Night on mild nights' }, { title: 'Cozy on mild nights' }] }] };
   const html = clean(T.teaserHTML({ status: 'done', result: report }), 'teaser');
   assert.match(html, /Bottles for what your wardrobe covers least\./);
-  assert.match(html, /<small>&lt;img[^<]*Oud&#39;s · Fills Date Night on mild nights \+1<\/small>/, 'its brand, then what it fills');
-  assert.equal(T.fillsLine({ fills: [{ title: 'Daily picks on hot nights' }] }), 'Fills everyday wear on hot nights');
+  assert.match(html, /<small>&lt;img[^<]*Oud&#39;s · Fills Date Night on mild nights and 1 more<\/small>/, 'its brand, then what it fills');
+  // Named as Insights names them: "everyday" is Casual's old name.
+  assert.equal(T.fillsLine({ fills: [{ title: 'Daily picks on hot nights' }] }), 'Fills Daily picks on hot nights');
+  assert.equal(T.fillsLine({ fills: [{ title: 'Daily picks on warm nights' }, { title: 'Casual on warm days' }, { title: 'Office on warm days' }] }), 'Fills Daily picks on warm nights and 2 more');
   assert.match(html, /href="#\/wardrobe\/insights"/);
   assert.match(T.teaserHTML({ status: 'loading', result: null }), /teaser-sk/);
   assert.equal(T.teaserHTML({ status: 'error', result: null, error: 'x' }), '');

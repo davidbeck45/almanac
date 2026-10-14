@@ -68,11 +68,13 @@ export function valueMark(value) {
   return null;
 }
 
-/** A blind buy's risk as a mark (medium and high only), the weightiest reason spoken. */
+/** A blind buy's risk as a mark (medium and high only), the weightiest reason spoken after it. */
 export function riskMark(risk) {
   if (!risk || (risk.level !== 'medium' && risk.level !== 'high')) return null;
   const text = risk.level === 'high' ? 'Risky buy' : 'Some risk';
-  return { text, tone: 'warn', spoken: `${text}: ${risk.reasons[0] ?? ''}` };
+  // (Two sentences: a reason can hold a colon of its own.)
+  const reason = risk.reasons?.[0];
+  return { text, tone: 'warn', spoken: reason ? `${text}. ${reason}` : text };
 }
 
 function marksOf(pick) {
@@ -136,7 +138,8 @@ export function pickCardHTML(pick, { owned = null, wanted = false, selected = []
     ...matched.map(name => ({ text: cap(name), kind: 'match', on: true })),
     ...(pick.styles ?? []).filter(s => !said.has(s.label.toLowerCase()))
       .map(s => ({ text: s.label, color: styleColor(s.id), on: selected.includes(s.id) })),
-    ...(pick.close ? [{ text: 'Wears close', kind: 'close', on: selected.includes('intimate') }] : []),
+    // Named as its chip is (the tag's mark says it wears close).
+    ...(pick.close ? [{ text: 'Intimate', kind: 'close', on: selected.includes('intimate') }] : []),
   ];
   const own = owned
     ? `<span class="owned-tag">${icon.check}${esc(owned)}</span>`
@@ -144,7 +147,7 @@ export function pickCardHTML(pick, { owned = null, wanted = false, selected = []
   // Its page's smells-like section (the original, cheaper twins, voted
   // siblings), when voters link it to anything.
   const dupes = hasDupes(pick)
-    ? `<button class="btn tertiary compact" data-action="disc-dupes" data-id="${esc(r.id)}">${icon.similar}<span>Smells like</span><span class="visually-hidden">: bottles like ${esc(r.name)}</span></button>`
+    ? `<button class="btn tertiary compact" data-action="disc-dupes" data-id="${esc(r.id)}" aria-label="What smells like ${esc(r.name)}">${icon.similar}<span>Smells like</span></button>`
     : '';
   return bottleCardHTML(r, {
     ctx: '',
@@ -339,7 +342,7 @@ export function filtersHTML(filters, { preferValue = false, mists = true, prefix
       ${radios(`${prefix}-projection`, 'Projection', 'disc-projection', PROJECTION, f.projection)}
       <div class="filter-switches">
         ${switchRow('Prefer great value', 'Only bottles voters call great value for money.', switchHTML({ on: Boolean(preferValue), label: 'Prefer great value', action: 'disc-value', id: 'value' }))}
-        ${switchRow('Safe blind buys', 'Only bottles most voters love.', switchHTML({ on: f.safe, label: 'Safe blind buys only', action: 'disc-switch', id: 'safe' }))}
+        ${switchRow('Safe blind buys', 'Safer than most popular bottles.', switchHTML({ on: f.safe, label: 'Safe blind buys only', action: 'disc-switch', id: 'safe' }))}
         ${switchRow('Hide discontinued', '', switchHTML({ on: !f.discontinued, label: 'Hide discontinued', action: 'disc-switch', id: 'discontinued' }))}
         ${mists ? switchRow('Include body mists', 'Body and hair mists, sprays and splashes.', switchHTML({ on: f.mists, label: 'Include body mists', action: 'disc-switch', id: 'mists' })) : ''}
       </div>
@@ -367,12 +370,12 @@ export function filterSheetHTML(filters, { preferValue, mists, status }) {
 
 // ---------- Fill a gap ----------
 
-// What a gap pick fills, in a line: its first fill, and how many more
-// ("Date Night on mild nights +2"). The weather-only picks read as everyday wear.
+// What a gap pick fills, in a line: its first fill as Insights names it,
+// and how many more ("Fills Date Night on mild nights and 2 more").
 export const fillsLine = pick => {
   const fills = pick.fills ?? [];
   if (!fills.length) return '';
-  return `Fills ${fills[0].title.replace(/^Daily picks\b/, 'everyday wear')}${fills.length > 1 ? ` +${fills.length - 1}` : ''}`;
+  return `Fills ${fills[0].title}${fills.length > 1 ? ` and ${fills.length - 1} more` : ''}`;
 };
 
 /**
