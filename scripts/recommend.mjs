@@ -875,6 +875,7 @@ async function discover(args, fragrances, { slot, count, history, hidden }) {
     value: p.value,
     score: +p.score.toFixed(3),
     styles: p.styles.map(s => s.label),
+    ...(p.leans && { leansOnly: p.leans.map(id => styleById(id).label) }),
     wearsClose: p.close,
     ...(p.via && { via: p.via }),
     ...(p.matched && { matched: p.matched }),
@@ -913,7 +914,10 @@ async function discover(args, fragrances, { slot, count, history, hidden }) {
     const mode = args.all ? 'all' : 'any';
     const picks = moreOfStyles(ids, ctx, { mode, k: count, filters });
     const labels = ids.map(id => styleById(id).label);
-    await print(`More ${labels.join(args.all ? ' + ' : ', ')}${ids.length > 1 ? ` (${mode === 'all' ? 'all at once' : 'any of them'})` : ''}:`, picks, { styles: ids, mode, filters });
+    // Too few bottles are every style at once: the rest lean toward some, and say which.
+    const whole = picks.filter(p => !p.leans).length;
+    const leaning = whole < picks.length ? `\n${whole ? `Only ${whole} ${whole === 1 ? 'is' : 'are'}` : 'None is'} all of them at once; the rest lean toward some.` : '';
+    await print(`More ${labels.join(args.all ? ' + ' : ', ')}${ids.length > 1 ? ` (${mode === 'all' ? 'all at once' : 'any of them'})` : ''}:${leaning}`, picks, { styles: ids, mode, filters });
     return;
   }
 

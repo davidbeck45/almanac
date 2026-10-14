@@ -175,9 +175,26 @@ test('any of several styles takes turns, Intimate shapes them, and all of them w
   const all = moreOfStyles(['skin', 'clean', 'intimate'], ctx, { mode: 'all', k: 12 });
   for (const p of all) {
     const s = scoresOf(p.record, ctx);
-    assert.ok(s.skin >= 0.4 && s.clean >= 0.4 && s.intimate >= 0.4, p.record.name);
+    assert.ok(s.skin >= 0.55 && s.clean >= 0.55 && s.intimate >= 0.6, p.record.name);
   }
   assert.ok(names(all).includes('Fleur de Peau Eau de Parfum'), names(all).join());
+  // Every pick's card shows each chosen style (Intimate as its wears-close tag);
+  // when too few bottles are all of them, the ones leaning toward a style follow, saying so.
+  for (const chosen of [['skin', 'clean', 'intimate'], ['skin', 'clean'], ['oud', 'aquatic'], ['leather', 'oud', 'woody', 'amber']]) {
+    const picks = moreOfStyles(chosen, ctx, { mode: 'all', k: 10 });
+    assert.ok(picks.length, chosen.join());
+    for (const p of picks) {
+      for (const id of chosen) {
+        if (id === 'intimate') assert.ok(p.close, `${p.record.name} wears close`);
+        else assert.ok(p.styles.some(s => s.id === id), `${chosen.join()}: ${p.record.name} shows ${id}: ${p.styles.map(s => s.label)}`);
+      }
+      assert.deepEqual(p.styles.filter(s => s.leans).map(s => s.id), p.leans ?? []);
+      for (const s of p.styles.filter(s => s.leans)) assert.match(s.label, /^Leans [a-z]/);
+    }
+    assert.ok(picks.findIndex(p => p.leans) === -1 || picks.slice(picks.findIndex(p => p.leans)).every(p => p.leans), 'leaning picks follow');
+  }
+  const oudAquatic = moreOfStyles(['oud', 'aquatic'], ctx, { mode: 'all', k: 10 });
+  assert.ok(oudAquatic.some(p => !p.leans) && oudAquatic.some(p => p.leans), names(oudAquatic).join());
   assert.throws(() => moreOfStyles(['skin'], ctx, { mode: 'most' }), /any or all/);
 });
 

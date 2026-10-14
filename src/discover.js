@@ -34,7 +34,10 @@ const SPREAD = 0.9;
 // keeps WEAR_FLOOR of its match, one that does all of it.
 const WEAR_FLOOR = 0.6;
 // "All" blends the chosen styles' scores by a power mean this far below 0
-// (a soft minimum: 0.9 and 0.6 make 0.68), and wants each at least STYLE_LEAN.
+// (a soft minimum: 0.9 and 0.6 make 0.68), and wants each where a card shows
+// it (STYLE_MIN; Intimate from WEARS_CLOSE). When too few bottles are all of
+// them, bottles that lean toward a scent style (from STYLE_LEAN) fill the
+// rest, after them, its tag saying "Leans oud".
 const SOFT_MIN_POWER = -4;
 // A pick stays out when it's this alike to a bottle already owned, or voters
 // tie it to one closer than family (twin, flanker, an owned dupe's original:
@@ -503,12 +506,14 @@ export function likedStyles(owned, { stated = null, scores = styleScores, k = LI
  * styles taking turns; Intimate (a wear style) chosen beside scent styles
  * shapes them rather than competing, so skin scents that wear close lead and
  * a quiet cologne of another kind doesn't come in on quietness alone. 'all':
- * each at least STYLE_LEAN, blended by a soft minimum. Score = style match ×
- * √quality (against the style's own median rating, which also sets its rating
- * floor) × novelty (nothing owned, no twin of an owned bottle, nothing over
- * MAX_OWNED_SIM alike to one), the lean bands taking turns (mergeTurns). ->
- * picks as describe() makes them, plus `match` and `via` (the chosen style
- * it's here for).
+ * each where a card shows it, blended by a soft minimum; when fewer than k
+ * are, bottles leaning toward the scent styles follow (`leans`: the chosen
+ * styles they only lean toward). Score = style match × √quality (against the
+ * style's own median rating, which also sets its rating floor) × novelty
+ * (nothing owned, no twin of an owned bottle, nothing over MAX_OWNED_SIM
+ * alike to one), the lean bands taking turns (mergeTurns). -> picks as
+ * describe() makes them, plus `match` and `via` (the chosen style it's here
+ * for); their `styles` lead with the chosen ones.
  */
 export function moreOfStyles(styleIds, ctx, { mode = 'any', k = 10, filters = {} } = {}) {
   const ids = [...new Set(styleIds.filter(id => STYLE_IDS.includes(id)))];
@@ -520,28 +525,49 @@ export function moreOfStyles(styleIds, ctx, { mode = 'any', k = 10, filters = {}
   const groups = mode === 'any' && scents.length > 1 ? scents.map(id => [id, ...wear]) : [ids];
   // Intimate beside scent styles: a bottle that doesn't wear close never takes a turn ahead of one that does.
   const fits = scents.length && wear.length ? p => p.close : null;
-  const lists = groups.flatMap((group, g) => styleLists(ctx, group, mode, k, filters, shares).map(picks => ({ picks, group: g, fits })));
-  return mergeTurns(ctx, lists, k, shares);
+  const listsFor = how => groups.flatMap((group, g) => styleLists(ctx, group, how, k, filters, shares).map(picks => ({ picks, group: g, fits })));
+  const picks = mergeTurns(ctx, listsFor(mode), k, shares);
+  if (mode !== 'all' || picks.length >= k || !scents.length) return picks;
+  const taken = new Set(picks.flatMap(p => [p.id, ...(p.alike ?? []).map(r => r.id)]));
+  const leaning = listsFor('lean').map(l => ({ ...l, picks: l.picks.filter(p => !taken.has(p.id) && !picks.some(q => twins(q.record, p.record))) }));
+  return [...picks, ...mergeTurns(ctx, leaning, k - picks.length, shares)];
+}
+
+// A pick's styles for its card: the chosen ones it shows first ("Leans oud"
+// for one it only leans toward), then its own top ones, three in all (more
+// when more were chosen).
+function stylesWith(scores, chosen) {
+  const first = chosen.filter(id => !isWear(id) && scores[id] >= STYLE_LEAN).map(id => {
+    const { label } = STYLES.find(s => s.id === id);
+    return scores[id] >= STYLE_MIN ? { id, label, score: scores[id] } : { id, label: `Leans ${lower(label)}`, score: scores[id], leans: true };
+  });
+  const rest = topOf(scores).filter(s => !chosen.includes(s.id));
+  return [...first, ...rest].slice(0, Math.max(3, first.length));
 }
 
 // One group of moreOfStyles' styles: its candidates' best (bandLists).
-function styleLists(ctx, ids, mode, k, filters, shares) {
+// `how`: 'any' (the group's first style shows), 'all' (each shows) or 'lean'
+// (each scent style from STYLE_LEAN, not all showing; Intimate shows).
+function styleLists(ctx, ids, how, k, filters, shares) {
   const cols = styleColumns(ctx);
   const scents = ids.filter(id => !isWear(id)), wear = ids.filter(isWear);
   const via = scents[0] ?? wear[0];
   const matches = ctx.records.map((record, i) => {
-    if (mode === 'any') {
+    if (how === 'any') {
       let match = cols[via][i] >= showsFrom(via) ? cols[via][i] : 0;
       if (match && scents.length && wear.length) match *= WEAR_FLOOR + (1 - WEAR_FLOOR) * Math.max(...wear.map(id => cols[id][i]));
       return match;
     }
-    let sum = 0, min = 1;
+    let sum = 0, shows = true;
     for (const id of ids) {
       const x = cols[id][i];
-      min = Math.min(min, x);
+      if (x < showsFrom(id)) {
+        if (how === 'all' || isWear(id) || x < STYLE_LEAN) return 0;
+        shows = false;
+      }
       sum += Math.max(x, 1e-3) ** SOFT_MIN_POWER;
     }
-    return min >= STYLE_LEAN ? (sum / ids.length) ** (1 / SOFT_MIN_POWER) : 0;
+    return how === 'lean' && shows ? 0 : (sum / ids.length) ** (1 / SOFT_MIN_POWER);
   });
   const { norms, floor } = normsFor(ctx, ctx.records.filter((_, i) => matches[i] > 0).map(r => r.rating));
   const admits = admitter(ctx, { ...filters, minRating: 'minRating' in filters ? filters.minRating : floor });
@@ -553,7 +579,9 @@ function styleLists(ctx, ids, mode, k, filters, shares) {
   return bandLists(ctx, scored, k, (record, bound) => {
     const nov = novelty(record, ctx.vecs, ctx.family);
     if ((nov.dupe?.mult ?? 1) < FAMILY_FLOOR || nov.sim > MAX_OWNED_SIM) return null;
-    return describe(ctx, record, { score: bound * nov.mult, nov, extra: { match: matchOf.get(record), via: mode === 'any' ? via : null } });
+    const styles = stylesWith(scoresOf(record, ctx), ids);
+    const leans = styles.filter(s => s.leans).map(s => s.id);
+    return describe(ctx, record, { score: bound * nov.mult, nov, extra: { match: matchOf.get(record), via: how === 'any' ? via : null, styles, ...(leans.length && { leans }) } });
   }, shares);
 }
 
