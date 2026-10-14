@@ -14,7 +14,7 @@ import { state, findRecord } from '../app/state.js';
 const MAX = 4;
 const num = n => Number(n).toLocaleString('en-US');
 // Value for money in words, as the crowd block says it (the number is on compare).
-const valueWord = v => (v >= 4 ? 'great value' : v >= 3.4 ? 'good value' : v >= 2.4 ? 'fair price' : 'pricey');
+const valueWord = v => (v >= 4 ? 'Great value' : v >= 3.4 ? 'Good value' : v >= 2.4 ? 'Fair price' : 'Pricey');
 // The pool's answer for a bottle it has nothing on: nothing to show, not an error.
 const NOT_IN_LIBRARY = /isn’t in the fragrance library/;
 
@@ -32,17 +32,19 @@ function votesFor(e, m) {
   return v ? v.up : null;
 }
 
+// "2,813 say it smells like it · Pricey": what the count counts, as the CLI
+// says it (the head's votes are ratings).
 function entryMeta(e, m) {
   const bits = [];
   if (e.owned) bits.push('You own it');
   const up = votesFor(e, m);
-  if (up > 0) bits.push(`${num(up)} vote${up === 1 ? '' : 's'}`);
+  if (up > 0) bits.push(`${num(up)} ${up === 1 ? 'says' : 'say'} it smells like it`);
   else if (e.why === 'notes') bits.push('Alike by its notes');
   else if (e.why === 'votes') bits.push('Voters link them');
   if (e.value != null) bits.push(valueWord(e.value));
   if (bits.length < 2 && e.rating) bits.push(`★ ${e.rating.toFixed(1)}`);
-  if (e.risk?.level === 'high') bits.push('risky blind buy');
-  return esc(bits.join(' · ').replace(/^./, c => c.toUpperCase()));
+  if (e.risk?.level === 'high') bits.push('Risky blind buy');
+  return esc(bits.join(' · '));
 }
 
 function entryRow(e, m) {
@@ -81,7 +83,7 @@ export function dupesHTML(m, answer) {
   ].join('');
   if (!body) return '';
   return `<section class="bp-section${answer.status === 'loading' ? ' bp-refreshing' : ''}" id="bp-dupes" aria-labelledby="dupes-title">${head}${body}
-    <p class="bp-credit">From Fragrantica members’ “smells like” votes.</p>
+    <p class="bp-credit">From Fragrantica members’ “smells like” votes, via Le Decanteur’s dataset.</p>
   </section>`;
 }
 

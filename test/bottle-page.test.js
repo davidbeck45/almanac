@@ -377,20 +377,20 @@ test('smells like: the original, cheaper twins and siblings, each opening its pa
   assert.match(html, /Inspired by/);
   assert.match(html, /data-action="open" data-ctx="night" data-id="84112"/, 'an original opens by id');
   assert.match(html, /href="#\/compare\/9828,1"/);
-  assert.match(html, /1,200 votes · great value/);
+  assert.match(html, /1,200 say it smells like it · Great value/, 'what the count counts');
   assert.match(html, /Alike by its notes/);
   assert.match(html, /You own it/);
-  assert.match(html, /risky blind buy/);
+  assert.match(html, /Risky blind buy/);
   assert.match(html, /<span>Compare<\/span>/, 'the compare link says what it does');
   assert.match(html, /id="bp-dupes"/, 'Discover’s Similar & cheaper scrolls here');
   assert.equal((html.match(/<li class="row/g) ?? []).length, 6, 'four cheaper at most, the original and a sibling');
-  assert.match(html, /“smells like” votes/, 'credited');
+  assert.match(html, /“smells like” votes, via Le Decanteur’s dataset/, 'credited, the dataset too');
 
   // A sibling the pool sent no votes for: the page's own top five, else "voters link them".
   const quiet = { ...result, original: null, cheaper: [], siblings: [entry('7', { up: null, down: null }), entry('8', { up: null, down: null })] };
   const counted = dupesHTML(modelOf(stranger, { owned: false, about: { smellsLike: [{ id: 7, up: 321, down: 4 }] } }), { status: 'ready', result: quiet });
-  assert.match(counted, /321 votes · great value/);
-  assert.match(counted, /Voters link them · great value/);
+  assert.match(counted, /321 say it smells like it · Great value/);
+  assert.match(counted, /Voters link them · Great value/);
   // A bottle the library has nothing on (newer than the dataset): nothing to show, not an error.
   assert.equal(dupesHTML(m, { status: 'error', error: 'That bottle isn’t in the fragrance library.' }), '');
 });
