@@ -232,6 +232,29 @@ export function poolTable(records, summary, cc = cellsFor(summary)) {
   return lastTable.table;
 }
 
+const nextTurn = () => new Promise(resolve => setTimeout(resolve, 0));
+
+/**
+ * gapContext's pool table for `records` (the pool's) in a climate, worked
+ * out ahead of time in slices of `chunk` bottles, pausing between them so a
+ * Worker answers other questions meanwhile: the first report or buy check
+ * then finds it done (about 230 ms of a 340 ms context in Node). Stops when
+ * one already is. -> the table.
+ */
+export async function warmPoolTable(records, summary = DEFAULT_CLIMATE, { pause = nextTurn, chunk = 500 } = {}) {
+  summary ??= DEFAULT_CLIMATE;
+  const key = JSON.stringify(summary), footed = allFooted(records);
+  const done = () => lastTable?.records === footed && lastTable.key === key;
+  const cc = cellsFor(summary), m = cc.cells.length, table = new Float32Array(footed.length * m);
+  for (let i = 0; i < footed.length; i += chunk) {
+    await pause();
+    if (done()) return lastTable.table;
+    table.set(fitTable(footed.slice(i, i + chunk), cc), i * m);
+  }
+  if (!done()) lastTable = { records: footed, key, table };
+  return lastTable.table;
+}
+
 const quantile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(p * (sorted.length - 1))))];
 
 // What the best bottles reach in a cell: the mean of the reference's top

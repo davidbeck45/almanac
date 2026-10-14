@@ -6,7 +6,7 @@ import { loadPool, fromPool } from '../src/fragrantica.js';
 import { allow, genderLean, leanWindow } from '../src/candidates.js';
 import {
   BANDS, USES, DEFAULT_CLIMATE, PER_CELL, MAX_ACCORDS, climateSummary, cellsFor, fitTable, sameFooting, flatVotes, gapContext,
-  coverage, gapSummary, strengths, suggest, buyCheck, gapReport, checkJSON, cellTitle, explainCell, SAME_SIM,
+  coverage, gapSummary, strengths, suggest, buyCheck, gapReport, checkJSON, cellTitle, explainCell, SAME_SIM, warmPoolTable,
 } from '../src/gaps.js';
 import { customRecord, predictedShares } from '../src/custom.js';
 import { applySkin } from '../src/skin.js';
@@ -526,6 +526,21 @@ test('use shares: Never drops a use, Often counts 2.5 times, Daily stays on, the
   assert.deepEqual(sharesFrom({ office: 'toString', date: '__proto__' }), base);
   assert.throws(() => cellsFor(DEFAULT_CLIMATE, { shares: {} }), /sharesFrom/);
   assert.throws(() => cellsFor(DEFAULT_CLIMATE, { shares: { office: 'often' } }), /sharesFrom/);
+});
+
+test('the pool’s table can be worked out ahead, in slices, and the next report reads it', async () => {
+  const hot = { ...DEFAULT_CLIMATE };
+  for (const k of Object.keys(hot)) hot[k] = { ...hot[k], share: k.endsWith('hot') ? hot[k].share + 0.1 : hot[k].share };
+  let pauses = 0;
+  const table = await warmPoolTable(records, hot, { pause: async () => { pauses++; }, chunk: 2000 });
+  assert.equal(pauses, Math.ceil(records.length / 2000));
+  const ctx2 = gapContext({ owned: wardrobe, records, byId, summary: hot });
+  assert.equal(ctx2.table, table, 'the report takes the warmed table');
+  const fresh = fitTable(records.map(sameFooting), cellsFor(hot));
+  assert.deepEqual([...table.slice(0, 2000)], [...fresh.slice(0, 2000)]);
+  assert.deepEqual([...table.slice(-2000)], [...fresh.slice(-2000)]);
+  // Already there: nothing to work out.
+  assert.equal(await warmPoolTable(records, hot, { pause: async () => { pauses++; } }), table);
 });
 
 test('a place’s climate comes from one archive call, is kept, and falls back offline', async () => {
