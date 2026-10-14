@@ -119,7 +119,7 @@ function own(record) {
   const before = { active: state.active, shared: state.shared, search: location.search };
   addToMine(record);
   render();
-  if (!switching) return showToast(`<span>${esc(record.name)} added to your collection</span>`);
+  if (!switching) return showToast(`<span>${esc(record.name)} added to Mine</span>`);
   listBefore = before;
   showToast(`<span class="note">${esc(record.name)} added to Mine. Picks now come from your ${plural(state.mine.records.length, 'bottle')}.</span>
     <button class="btn secondary compact" data-action="list-back">Back to ${esc(label)}</button>`);
