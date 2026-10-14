@@ -152,6 +152,24 @@ export function loadPool(load = defaultLoad) {
   return pools.get(load);
 }
 
+/** A pool's ids as one short hash (FNV-1a), which pool-styles.json carries to say which pool it was made for. */
+export function poolKey(pool) {
+  let h = 0x811c9dc5;
+  for (const ch of pool.cols.id.join(',')) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193);
+  return (h >>> 0).toString(16);
+}
+
+/**
+ * The pool's style scores (data/fragrantica/pool-styles.json, written by
+ * scripts/fit-pool-styles.mjs), fetched once: { styles: [ids], min, s: per
+ * pool row [style index, score × 100, …] }, or null when there's no file or
+ * it was made for another pool (score the records live then).
+ */
+export async function loadPoolStyles(load = defaultLoad) {
+  const [pool, styles] = await Promise.all([loadPool(load), cached(load)('pool-styles.json', JSON.parse)]);
+  return styles?.count === pool.count && styles.key === poolKey(pool) ? styles : null;
+}
+
 /**
  * What a dataset bottle's page shows beyond its record (data/fragrantica/x/),
  * readable keys as data/extras.jsonl has them, or null for bottles under 30
