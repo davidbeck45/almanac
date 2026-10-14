@@ -86,7 +86,7 @@ test('what the name claims counts, and counts less once voters have rated it', (
   assert.ok(mid(cologne) >= mid(edt));
   assert.equal(concentrationOf('Bleu de Chanel Parfum').why, 'Parfum strength');
   assert.equal(concentrationOf('Bleu de Chanel Eau de Parfum'), null, 'EDP is the baseline');
-  assert.equal(concentrationOf('Hawas Elixir').why, 'A concentrated version');
+  assert.equal(concentrationOf('Hawas Elixir').why, 'A stronger version');
   assert.equal(concentrationOf('Essence de Blanc'), null);
   assert.ok(extrait.why.includes('Extrait strength'));
 });

@@ -49,7 +49,7 @@ const CONCENTRATIONS = [
   [/\b(eau de toilette|edt)\b/i, 0.5, 'An eau de toilette'],
   [/\b(extrait|pure parfum)\b/i, -0.75, 'Extrait strength'],
   [/(?<!eau de )\bparfum\b/i, -0.75, 'Parfum strength'],
-  [/\b(elixir|intense|absolu|absolute)\b/i, -0.5, 'A concentrated version'],
+  [/\b(elixir|intense|absolu|absolute)\b/i, -0.5, 'A stronger version'],
 ];
 
 export function concentrationOf(name) {

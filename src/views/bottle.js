@@ -225,7 +225,8 @@ export function bottleModel(route) {
     solo,
     win,
     ctx: key,
-    ctxLabel: win ? (ctx.occasion ? `${ctx.occasion.label} · ${win.label.toLowerCase()}` : win.label) : '',
+    // "Formal · tonight", but "Formal · Friday night": only the relative words go lower case.
+    ctxLabel: win ? (ctx.occasion ? `${ctx.occasion.label} · ${win.label.replace(/^(Today|Tonight|Tomorrow)\b/, w => w.toLowerCase())}` : win.label) : '',
     occasion: ctx?.occasion ?? null,
     owned,
     inMine: state.mine.records.some(r => r.id === f.id),

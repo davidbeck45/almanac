@@ -469,10 +469,11 @@ function transition(next, { quiet = false, instant = false } = {}) {
 }
 
 // The page a bottle page opened straight from a link sits over: the list its
-// context names (a Week window, Occasion), so its ranking is there to read.
+// context names (a Week window, Occasion, the saved trip's plan), so its
+// ranking is there to read.
 function baseFor({ query }) {
   const ctx = query.ctx ?? '';
-  return ctx.startsWith('w:') ? '#/wear/week' : ctx === 'occ' ? '#/wear/occasion' : HOME;
+  return ctx.startsWith('w:') ? '#/wear/week' : ctx.startsWith('trip:') ? '#/wear/trip' : ctx === 'occ' ? '#/wear/occasion' : HOME;
 }
 
 function applyRoute(next, { quiet = false, instant = false } = {}) {
