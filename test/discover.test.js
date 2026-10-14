@@ -247,7 +247,7 @@ test('every pick says why', () => {
   const [like] = moreLike([owned('Cream Velvet')], ctx, { k: 1 });
   assert.match(whyLine(like), /^Shares .*vanilla/);
   const [note] = searchNotes('fig', ctx, {}, { k: 1 }).results;
-  assert.match(whyLine(note), /fig/);
+  assert.match(whyLine(note), /^Fig/);
   for (const p of [skin, like, note]) {
     assert.ok(['low', 'medium', 'high', 'unknown'].includes(p.risk.level));
     assert.ok(p.nearest.name && p.nearest.traits.length && p.nearest.sim > 0);

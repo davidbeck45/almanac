@@ -282,7 +282,7 @@ function describe(ctx, record, { score, nov, extra = {} }) {
     styles: topOf(scores),
     close: closeOf(scores),
     nearest,
-    family: nov.dupe && nov.dupe.kind === 'family' ? nov.dupe.text : null,
+    family: nov.dupe && nov.dupe.kind !== 'owned' ? nov.dupe.text : null,
     value: s.value,
     rating: record.rating,
     votes: record.ratingVotes,
@@ -293,7 +293,8 @@ function describe(ctx, record, { score, nov, extra = {} }) {
 }
 
 const chips = pick => [...pick.styles.map(s => s.label), ...(pick.close ? ['wears close'] : [])];
-const lower = (text, i) => (i ? text.charAt(0).toLowerCase() + text.slice(1) : text);
+const lower = text => text.charAt(0).toLowerCase() + text.slice(1);
+const upper = text => text.charAt(0).toUpperCase() + text.slice(1);
 const listed = items => (items.length < 3 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
 
 /** One line on why a pick is here, for the CLI and a card's subtitle. */
@@ -308,8 +309,8 @@ export function whyLine(pick) {
   if (pick.alsoLiked) parts.push('fans of your picks like it too');
   if (pick.risk.level !== 'low') parts.push(`${pick.risk.level} risk: ${pick.risk.reasons[0]?.replace(/\.$/, '').toLowerCase() ?? ''}`);
   if (pick.twin) parts.push(`cheaper twin: ${pick.twin.record.name}`);
-  if (pick.alike?.length) parts.push(`twins: ${pick.alike.map(r => r.name).join(", ")}`);
-  return parts.map((p, i) => (i ? lower(p, 1) : p)).join('; ');
+  if (pick.alike?.length) parts.push(`twins: ${pick.alike.map(r => r.name).join(', ')}`);
+  return parts.map((p, i) => (i ? lower(p) : upper(p))).join('; ');
 }
 
 // Two picks voters call one scent (a family link either way), or over
