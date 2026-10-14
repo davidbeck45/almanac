@@ -1,4 +1,6 @@
-// WMO weather interpretation codes, as returned by Open-Meteo.
+// WMO weather interpretation codes, as returned by Open-Meteo, and the dew
+// point. Tiny on purpose: the forecast loads before the rest of the app
+// (src/app/early.js), and weather.js needs nothing heavier.
 const CODES = {
   0: ['Clear', 'clear'],
   1: ['Mostly clear', 'clear'],
@@ -39,3 +41,10 @@ export function describe(code) {
 }
 
 export const isWet = category => category === 'drizzle' || category === 'rain' || category === 'storm';
+
+// Dew point (°F) from temperature (°F) and relative humidity (%), Magnus formula.
+export function dewPointF(tempF, humidity) {
+  const c = ((tempF - 32) * 5) / 9;
+  const g = Math.log(Math.min(100, Math.max(1, humidity)) / 100) + (17.62 * c) / (243.12 + c);
+  return ((243.12 * g) / (17.62 - g)) * 9 / 5 + 32;
+}

@@ -12,6 +12,12 @@ export const temp = f => Math.round(units === 'C' ? ((f - 32) * 5) / 9 : f);
 export const deg = f => `${temp(f)}°`;
 
 export const plural = (n, word, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
+// A bottle's name in a toast's two-line message, cut short so what happened
+// to it ("… hidden from picks", "… added to Mine") always shows. Escape after.
+export const toastName = name => {
+  const n = String(name ?? '');
+  return n.length > 36 ? `${n.slice(0, 34).trimEnd()}…` : n;
+};
 export const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
 // An accord's key as a label: "Fresh spicy", "Champagne" (the data keeps its keys).
 export const accordLabel = a => a.charAt(0).toUpperCase() + a.slice(1).toLowerCase();

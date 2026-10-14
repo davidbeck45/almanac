@@ -13,7 +13,7 @@ import { loadWants, saveWants, hasWant, setWant } from '../wishlist.js';
 import { loadSkin, applySkin } from '../skin.js';
 import { isCustomId, shareToken } from '../custom.js';
 import { styleById } from '../scent-styles.js';
-import { esc, deg, temp, matchPct, relativeDay } from '../ui.js';
+import { esc, deg, temp, matchPct, relativeDay, toastName } from '../ui.js';
 import { icon, img, bar, reasonsList, accordColor, wearButton, magDot, messageHTML, shelfHTML } from '../ui/components.js';
 import { askPool } from '../app/pool.js';
 import {
@@ -509,7 +509,7 @@ export const actions = {
     setHidden(state.hiding, id, true, viewingDemo());
     app.closeBottle();
     app.render();
-    app.showToast(`<span>${esc(findRecord(id)?.name ?? 'Bottle')} hidden from picks</span><button class="btn primary compact" data-action="unhide" data-id="${esc(id)}">Undo</button>`);
+    app.showToast(`<span>${esc(toastName(findRecord(id)?.name ?? 'Bottle'))} hidden from picks</span><button class="btn primary compact" data-action="unhide" data-id="${esc(id)}">Undo</button>`);
   },
   unhide(el, app) {
     setHidden(state.hiding, el.dataset.id, false, viewingDemo());
@@ -542,7 +542,7 @@ export const actions = {
     }
     wantsBefore = null;
     const onList = state.base?.dest === 'wardrobe' && state.base.pane === 'wishlist';
-    app.showToast(onList ? `<span>${esc(f.name)} is on your wishlist</span>`
+    app.showToast(onList ? `<span>${esc(toastName(f.name))} is on your wishlist</span>`
       : `<span class="note">${esc(f.name)} is on your wishlist</span><a class="btn secondary compact" href="#/wardrobe/wishlist">See it</a>`);
   },
   'bp-want-undo'(el, app) {

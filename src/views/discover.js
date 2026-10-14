@@ -933,9 +933,9 @@ export const actions = {
     try {
       [record] = await fullRecords([hit]);
     } catch (err) {
-      return app.showToast(`<span>${esc(err.message)}</span>`);
+      return app.showToast(`<span>${esc(err.message)}</span>`, { tone: 'error' });
     }
-    if (!record) return app.showToast(`<span>Couldn’t load ${esc(hit.name)}. Try again.</span>`);
+    if (!record) return app.showToast(`<span>Couldn’t load ${esc(hit.name)}. Try again.</span>`, { tone: 'error' });
     app.own(record);
     // The button became a tag; the row's name takes focus.
     document.querySelector(`.results [data-action="open"][data-id="${CSS.escape(record.id)}"]`)?.focus();
@@ -997,7 +997,7 @@ export const actions = {
     const id = el.dataset.id;
     const ids = seedIds(current());
     const next = ids.includes(id) ? ids.filter(x => x !== id) : ids.length < SEED_MAX ? [...ids, id] : ids;
-    if (next === ids) return app.showToast(`<span>Up to ${SEED_MAX} bottles at once</span>`);
+    if (next === ids) return app.showToast(`<span>Up to ${SEED_MAX} bottles at once</span>`, { tone: 'error' });
     // A dataset hit from the search loads its record for the chip.
     const hit = state.sheet?.results?.find(r => r.id === id);
     if (hit?.stub && !findRecord(id)) fullRecords([hit]).then(([r]) => { if (r) { keepBottles([r]); repaint(app); } }, () => {});

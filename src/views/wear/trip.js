@@ -669,7 +669,7 @@ export const actions = {
     const trip = savedTrip();
     if (!trip) return;
     const ok = await copyText(packingText(packNow(trip), trip, { today: todayISO() }));
-    app.showToast(ok ? '<span>Packing list copied</span>' : '<span class="note">This browser won’t let the page copy. Try Share instead.</span>');
+    app.showToast(ok ? '<span>Packing list copied</span>' : '<span class="note">This browser won’t let the page copy. Try Share instead.</span>', { tone: ok ? 'success' : 'error' });
   },
   async 'trip-share'(el, app) {
     const trip = savedTrip();
@@ -677,7 +677,7 @@ export const actions = {
     try {
       await navigator.share({ title: `Packing for ${trip.place.name}`, text: packingText(packNow(trip), trip, { today: todayISO() }) });
     } catch (err) {
-      if (err?.name !== 'AbortError') app.showToast('<span>Couldn’t open sharing. Copy the list instead.</span>');
+      if (err?.name !== 'AbortError') app.showToast('<span>Couldn’t open sharing. Copy the list instead.</span>', { tone: 'error' });
     }
   },
 };

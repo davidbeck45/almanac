@@ -23,9 +23,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Scentcast">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- Inter sets nearly every word; Fraunces (titles, bottle names) loads from the stylesheet, so the first paint doesn't wait on all three. -->
   <link rel="preload" href="fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="fonts/fraunces.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="fonts/fraunces-italic.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="src/tokens.css">
   <link rel="stylesheet" href="src/css/base.css">
   <link rel="stylesheet" href="src/css/components.css">
@@ -44,16 +43,17 @@
     } catch {}
   </script>
   <script type="module" src="src/main.js"></script>
-  <!-- Every module main.js imports, fetched in parallel rather than as a waterfall (test/shell.test.js keeps the list whole). -->
-  <link rel="modulepreload" href="src/app/shell.js">
+  <!-- Every module main.js imports (the forecast's first, then the app's), fetched in parallel rather than as a waterfall (test/shell.test.js keeps the list whole). -->
+  <link rel="modulepreload" href="src/app/early.js">
   <link rel="modulepreload" href="src/weather.js">
   <link rel="modulepreload" href="src/wmo.js">
+  <link rel="modulepreload" href="src/location.js">
+  <link rel="modulepreload" href="src/app/shell.js">
   <link rel="modulepreload" href="src/engine.js">
   <link rel="modulepreload" href="src/accords.js">
   <link rel="modulepreload" href="src/custom.js">
   <link rel="modulepreload" href="src/profiles.js">
   <link rel="modulepreload" href="src/occasions.js">
-  <link rel="modulepreload" href="src/location.js">
   <link rel="modulepreload" href="src/collections.js">
   <link rel="modulepreload" href="src/api.js">
   <link rel="modulepreload" href="src/fragella.js">

@@ -57,8 +57,10 @@ html:has(#main .disc-search) { scroll-padding-top: calc(env(safe-area-inset-top)
 
 /* ---------- Page head ---------- */
 
-.page-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin: var(--s-6) 0 var(--s-3); padding-top: env(safe-area-inset-top); }
-.page-head.quiet { margin: 0; padding: 0; }
+/* As tall as the gear beside the title, so a page without it (Settings)
+   puts its title at the same height. */
+.page-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); min-height: calc(var(--hit) + env(safe-area-inset-top)); margin: var(--s-6) 0 var(--s-3); padding-top: env(safe-area-inset-top); }
+.page-head.quiet { min-height: 0; margin: 0; padding: 0; }
 /* A page without a sub-navigation (Settings) keeps the same gap under its heading. */
 .page-head:not(.quiet):not(:has(+ .head-bar)) { margin-bottom: var(--s-5); }
 .page-head h1 { font-family: var(--display); font-size: var(--fs-title-1); line-height: var(--lh-title-1); font-weight: 600; letter-spacing: -0.015em; }
@@ -89,8 +91,11 @@ html:has(#main .disc-search) { scroll-padding-top: calc(env(safe-area-inset-top)
   box-shadow: inset 0 0 0 1px var(--border-subtle), 0 10px 24px -14px rgb(var(--shade) / 0.8);
 }
 .subnav { min-width: 0; }
-.subnav a { flex: 1 1 auto; padding: 0 var(--s-3); }
-@media (max-width: 374px) { .subnav a { padding: 0 var(--s-2); font-size: var(--fs-footnote); } }
+/* The links share the bar's width (flex-grow spaces them out as a wider
+   padding would), so a tight bar takes the room from between them, not from
+   their labels. */
+.subnav a { flex: 1 1 auto; padding: 0 var(--s-1); }
+@media (max-width: 374px) { .subnav a { font-size: var(--fs-footnote); } }
 .head-bar .gear-link::after { inset: 2px; background: rgb(var(--ink-panel) / 0.72); box-shadow: inset 0 0 0 1px var(--border-subtle); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
 @media (prefers-reduced-transparency: reduce) { .subnav, .head-bar .gear-link::after { background: var(--surface-2); } }
 .head-bar:has(.subnav)::before {
@@ -113,7 +118,13 @@ html:has(#main .disc-search) { scroll-padding-top: calc(env(safe-area-inset-top)
 
 [data-route='settings'] .foot { display: none; }
 .foot { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-1) var(--s-4); margin-top: var(--s-8); color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); text-align: center; }
-.foot a, .set-credits a { position: relative; z-index: 1; padding: calc((var(--hit) - 1.25em) / 2) 0; color: var(--text-secondary); text-underline-offset: 2px; }
+/* Links in the credits' sentences, each kept whole on its line. Their hit
+   area grows sideways but no taller than the line (as .link-btn's does):
+   grown to 44px, each covered the line above or below, and a tap on the
+   licence opened Open-Meteo. Links in a sentence are exempt from the 24px
+   minimum. */
+.foot a, .set-credits a { position: relative; color: var(--text-secondary); text-underline-offset: 2px; white-space: nowrap; }
+:is(.foot, .set-credits) a::before { content: ''; position: absolute; inset: min(0px, calc(50% - 0.5lh)) min(0px, calc(50% - var(--hit) / 2)); }
 
 /* ---------- Nav: tab bar ---------- */
 
@@ -329,6 +340,16 @@ body:has(#sheet:not([hidden]) .sheet-bar) .toast, body:has(#bottle.modal:not([hi
   body:has(#sheet:not([hidden]) .sheet-bar) .toast { bottom: calc(80px + env(safe-area-inset-bottom)); }
 }
 @media (min-width: 1100px) { .toast { bottom: calc(var(--s-5) + env(safe-area-inset-bottom)); } }
+/* From 1100px it centres on the page's column, not the window: the rail
+   takes the left (88px, then --rail), a docked bottle page the right. */
+@media (min-width: 1100px) {
+  .toast { left: calc(50% + 88px / 2); }
+  body:has(#app.has-bottle) .toast { left: calc(50% + (88px - var(--inspector)) / 2); }
+}
+@media (min-width: 1280px) {
+  .toast { left: calc(50% + var(--rail) / 2); }
+  body:has(#app.has-bottle) .toast { left: calc(50% + (var(--rail) - var(--inspector)) / 2); }
+}
 
 /* View transitions: the bottle flies between its list and its page, and the
    page rises a little and fades in place so the bottle lands on it. Both

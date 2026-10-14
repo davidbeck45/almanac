@@ -10,7 +10,7 @@ import { saveMine, shareURL, localMatches, nameMatches, importLines, MAX_IMPORT_
 import { customRecord, MAX_CUSTOM_ACCORDS } from '../custom.js';
 import { clearHistory, journalExport } from '../history.js';
 import { loadSkin } from '../skin.js';
-import { esc, plural, shortDate, relativeDay, accordLabel } from '../ui.js';
+import { esc, plural, shortDate, relativeDay, accordLabel, toastName } from '../ui.js';
 import {
   icon, img, messageHTML, rowHTML, switchHTML, segHTML, sheetFrame, sharedBannerHTML, accordColor, sectionHead,
 } from '../ui/components.js';
@@ -485,7 +485,7 @@ function saveCustom(app, name, brand) {
   if (s.back) app.openSheet(s.back);
   else app.closeSheet();
   app.render();
-  app.showToast(`<span>${esc(record.name)} added to Mine</span>`);
+  app.showToast(`<span>${esc(toastName(record.name))} added to Mine</span>`);
 }
 
 // The accord chips are one Tab stop (customSheetHTML): arrow keys move
@@ -535,8 +535,8 @@ async function share(app) {
     await navigator.clipboard.writeText(url);
     app.showToast('<span>Share link copied</span>');
   } catch (err) {
-    if (!url) app.showToast('<span>Couldn’t make a share link</span>');
-    else if (err?.name !== 'AbortError') app.showToast(`<span>Copy this link: ${esc(url)}</span>`);
+    if (!url) app.showToast('<span>Couldn’t make a share link</span>', { tone: 'error' });
+    else if (err?.name !== 'AbortError') app.showToast(`<span>Copy this link: ${esc(url)}</span>`, { tone: 'info' });
   }
 }
 
@@ -571,7 +571,7 @@ export const actions = {
     state.lastRemoved = { record: removed, index };
     app.render();
     focusOwned(next);
-    app.showToast(`<span>${esc(removed.name)} removed</span><button class="btn primary compact" data-action="undo-remove">Undo</button>`);
+    app.showToast(`<span>${esc(toastName(removed.name))} removed</span><button class="btn primary compact" data-action="undo-remove">Undo</button>`);
   },
   // The Undo button goes with its toast: focus goes to the bottle that came back.
   'undo-remove'(el, app) {
@@ -611,7 +611,7 @@ export const actions = {
       const open = [...document.querySelectorAll('#sheet [data-action="add-result"]:not(:disabled)')];
       (open.find(b => +b.dataset.value > i) ?? open.at(-1) ?? document.getElementById('add-q'))?.focus();
     }
-    app.showToast(`<span>${esc(record.name)} added to Mine</span>`);
+    app.showToast(`<span>${esc(toastName(record.name))} added to Mine</span>`);
   },
   import(el, app) {
     const again = state.sheet?.kind === 'import';
@@ -637,7 +637,7 @@ export const actions = {
     // Navigating waits for the sheet's history entry to go (src/app/sheets.js).
     app.closeSheet({ then: () => app.navigate('#/wardrobe/owned') });
     app.render();
-    app.showToast(`<span>${added ? `Added ${plural(added, 'bottle')}` : 'Nothing new to add'}</span>`);
+    app.showToast(`<span>${added ? `Added ${plural(added, 'bottle')}` : 'Nothing new to add'}</span>`, { tone: added ? 'success' : 'info' });
   },
   custom(el, app) {
     app.openSheet(customSheet({ name: state.sheet?.query ?? '' }));

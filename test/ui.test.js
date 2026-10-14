@@ -8,6 +8,7 @@ import * as wear from '../src/views/wear.js';
 import * as wardrobe from '../src/views/wardrobe.js';
 import * as discoverT from '../src/views/discover/templates.js';
 import * as settings from '../src/views/settings.js';
+import * as wearPickers from '../src/views/wear/pickers.js';
 import { SECTIONS, addSection, bottlePageHTML } from '../src/views/bottle.js';
 import { OCCASIONS } from '../src/occasions.js';
 import { rank, comfortRange } from '../src/engine.js';
@@ -257,4 +258,56 @@ test('Settings can hold the sky still, and the location sheet stays in reach whi
   assert.match(locating, /data-action="geo" aria-disabled="true"/, 'focusable while it looks, so focus stays in the sheet');
   assert.ok(!/data-action="geo"[^>]*\sdisabled/.test(locating));
   assert.match(locating, /role="alert">Location permission was denied\./, 'the error is announced');
+});
+
+test('a toast cuts a long name so what happened to it still shows', () => {
+  assert.equal(ui.toastName('Sauvage'), 'Sauvage');
+  const long = 'Le Jardin Secret de Mademoiselle Extraordinaire Eau de Parfum';
+  const cut = ui.toastName(long);
+  assert.ok(cut.length <= 35 && cut.endsWith('…') && long.startsWith(cut.slice(0, -1)), cut);
+  assert.equal(ui.toastName(null), '');
+});
+
+test('the shared link says what it would replace, and calls the list Mine', () => {
+  const link = { name: 'Brooke', records: bottles.slice(0, 3), missing: [], loading: false };
+  assert.match(sharedBannerHTML(link, 1), />Save as Mine</);
+  assert.match(sharedBannerHTML(link, 1, { confirm: true }), />Replace your 1 bottle\?</);
+  assert.match(sharedBannerHTML(link, 4, { confirm: true }), />Replace your 4 bottles\?</);
+});
+
+test('the credits name Parfumo, whose votes the app quotes', () => {
+  assert.match(settings.creditsHTML({}), /votes from <a href="https:\/\/www\.parfumo\.com"[^>]*>Parfumo<\/a>/);
+});
+
+test('the location sheet says what the place is used for, and reads out a count, not every city', () => {
+  const sheet = settings.locationSheetHTML({ query: 'chicago', results: [{ name: 'Chicago', region: 'Illinois, US' }, { name: 'Willard', region: 'Ohio, US' }] });
+  assert.match(sheet, /forecast and climate from Open-Meteo\. Wears you log note roughly where you were, on this device only\./);
+  assert.ok(!/aria-live/.test(sheet), 'the list isn’t a live region');
+  assert.match(sheet, /role="status">2 places match “chicago”</);
+  const none = settings.locationSheetHTML({ query: 'xq', results: [] });
+  assert.match(none, /role="status">No places match “xq”</);
+  const pickers = wearPickers.placeSheetHTML({ for: 'trip', query: 'paris', results: [{ name: 'Paris', region: 'France' }] });
+  assert.ok(!/aria-live/.test(pickers));
+  assert.match(pickers, /role="status">1 place matches “paris”</);
+});
+
+test('the location sheet’s Recent list leaves out the place you’re in', async () => {
+  const { state } = await import('../src/app/state.js');
+  const store = new Map([['scentcast.recentLocations', JSON.stringify([{ name: 'Chicago', lat: 41.85, lon: -87.65 }, { name: 'New York', lat: 40.71, lon: -74.01 }])]]);
+  globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k) };
+  const before = state.loc;
+  try {
+    state.loc = { name: 'Chicago', lat: 41.85, lon: -87.65 };
+    const html = settings.sheets.location({});
+    assert.ok(!/<strong>Chicago<\/strong>/.test(html), 'not where you are');
+    assert.match(html, /data-action="recent" data-value="0">.*<strong>New York<\/strong>/s, 'the place before it, first');
+  } finally {
+    delete globalThis.localStorage;
+    state.loc = before;
+  }
+});
+
+test('a shelf keeps its sideways scroll through a redraw, one key per list', () => {
+  assert.match(shelfHTML(ranked, 'day'), /<ul class="shelf" data-keep-scroll="shelf-day">/);
+  assert.match(shelfHTML(ranked, 'w:2026-10-14:night'), /data-keep-scroll="shelf-w:2026-10-14:night"/);
 });
