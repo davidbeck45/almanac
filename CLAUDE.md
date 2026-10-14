@@ -103,7 +103,7 @@ Search covers the demo, the catalog, then the dataset (offline, the first two st
 
 When someone sends their Fragrantica profile (they follow the guide at https://claude.ai/code/artifact/25b353d3-857f-4341-89b3-230131f8c484):
 1. Open `https://www.fragrantica.com/@<name>#wardrobe` with Claude in Chrome and run `scripts/fragrantica-wardrobe.js`. It lists the pages on their "Perfumes I Have" shelf; `found` below `expected` means the shelf didn't fully load.
-2. Send them `https://davidbeck45.github.io/scentcast/?c=<id>,<id>&n=<Name>` with their bottles' ids (the number ending each slug); they open it and tap "Save as mine" (an unnamed Mine takes the link's name, so their own share links carry it). An id missing from `data/fragrantica/r/` (a bottle newer than the dataset) needs a catalog line, pushed, before the link loads it.
+2. Send them `https://davidbeck45.github.io/scentcast/?c=<id>,<id>&n=<Name>` with their bottles' ids (the number ending each slug); they open it and tap "Save as Mine" (an unnamed Mine takes the link's name, so their own share links carry it). An id missing from `data/fragrantica/r/` (a bottle newer than the dataset) needs a catalog line, pushed, before the link loads it.
 
 `data/catalog.jsonl` (built to `data/catalog.json` by `npm run build:data`) holds bottles outside the wardrobe added for friends and family: bottles newer than the dataset (extractor), and ones whose Parfumo layering votes should pair them (`decant.py add catalog <id>` plus their Parfumo lines). Add any accord the extractor returns that `src/accords.js` lacks, then `npm run build:data`, `npm run fit` and `npm test`. Catalog bottles never show up in the demo.
 

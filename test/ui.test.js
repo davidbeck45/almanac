@@ -258,3 +258,10 @@ test('Settings can hold the sky still, and the location sheet stays in reach whi
   assert.ok(!/data-action="geo"[^>]*\sdisabled/.test(locating));
   assert.match(locating, /role="alert">Location permission was denied\./, 'the error is announced');
 });
+
+test('the shared link says what it would replace, and calls the list Mine', () => {
+  const link = { name: 'Brooke', records: bottles.slice(0, 3), missing: [], loading: false };
+  assert.match(sharedBannerHTML(link, 1), />Save as Mine</);
+  assert.match(sharedBannerHTML(link, 1, { confirm: true }), />Replace your 1 bottle\?</);
+  assert.match(sharedBannerHTML(link, 4, { confirm: true }), />Replace your 4 bottles\?</);
+});

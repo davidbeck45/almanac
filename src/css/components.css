@@ -94,11 +94,14 @@
 .icon-btn.ghosted::after { background: none; }
 @media (hover: hover) { .icon-btn.ghosted:hover { color: var(--negative); } .icon-btn.ghosted:hover::after { background: color-mix(in srgb, var(--negative) 10%, transparent); } }
 
-/* Inline text buttons and links inside sentences. Their hit area grows
-   sideways but no taller than their own line (1lh): grown to 44px, links on
-   neighbouring lines covered each other, and a tap on one opened the next
-   (inline links in a sentence are exempt from the 24px minimum anyway). */
-:is(a, button).link-btn::before { inset-block: min(0px, calc(50% - 0.5lh)); } /* (outranks the shared rule above) */
+/* Text buttons and links. Alone on their line ("Include pricier ones",
+   "Change") they get the full 44px like any control. Where another line's
+   links sit close (a paragraph with several, a card's why lines, a row's
+   meta), the hit area grows sideways but no taller than the line (1lh):
+   grown to 44px there, links on neighbouring lines covered each other and a
+   tap on one opened the next (links in a sentence are exempt from the 24px
+   minimum anyway). */
+:is(p:has(.link-btn ~ .link-btn), .bcard-why, small) :is(a, button).link-btn::before { inset-block: min(0px, calc(50% - 0.5lh)); }
 .link-btn {
   color: var(--text-secondary);
   text-decoration: underline;
@@ -201,10 +204,16 @@
   color: var(--text-secondary);
   font-size: var(--fs-body);
   font-weight: 600;
+  text-align: center;
   text-decoration: none;
-  white-space: nowrap;
 }
-.seg span { overflow: hidden; text-overflow: ellipsis; }
+/* A label that doesn't fit wraps at its spaces ("David’s / wardrobe"), and a
+   word breaks only when it can't fit alone: never an ellipsis, which left
+   "N…" and "Occasi…" under larger text spacing (WCAG 1.4.12). */
+.seg span { overflow-wrap: break-word; }
+/* A narrow column (the page's or the bottle page's) takes some padding back
+   before a label wraps. */
+@container (max-width: 340px) { .seg button, .seg a { padding-inline: var(--s-3); } }
 @media (hover: hover) { :is(.seg button, .seg a):hover { color: var(--text-primary); } }
 .seg svg { width: 16px; height: 16px; flex: none; }
 :is(.seg button[aria-pressed='true'], .seg a[aria-current='page']) {
@@ -213,7 +222,7 @@
   box-shadow: inset 0 0 0 1px var(--border-strong), 0 2px 8px rgb(var(--shade) / 0.25);
 }
 .seg.wide { display: flex; width: 100%; }
-.seg.wide > * { flex: 1; padding: 0 var(--s-2); }
+.seg.wide > * { flex: 1; padding: 0 var(--s-1); } /* equal widths: the room goes to the labels */
 /* Over the scene: glass, with the chosen segment lit like the glass rim. */
 .seg.glass { --glass-tint: rgb(var(--ink) / 0.34); border-color: transparent; }
 .seg.glass button { color: color-mix(in srgb, var(--on-scene) 78%, transparent); }
@@ -325,8 +334,9 @@
 }
 .shelf::-webkit-scrollbar { display: none; }
 /* Four and a half bottles to a row, so the edge cuts one and the row reads
-   as one that scrolls. */
-.shelf-slot { flex: 0 0 calc(100% / 4.5); scroll-snap-align: start; }
+   as one that scrolls; never so narrow that a name's longer words
+   ("Sandalwood", "Sauvage") don't fit their caption. */
+.shelf-slot { flex: 0 0 max(76px, calc(100% / 4.5)); scroll-snap-align: start; }
 @container page (min-width: 560px) {
   .shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); row-gap: var(--s-3); margin: 0; padding: 0; overflow: visible; }
 }
@@ -356,11 +366,14 @@
   -webkit-box-orient: vertical;
   max-width: 100%;
   margin-top: var(--s-3);
-  padding: 0 var(--s-1);
   color: var(--text-secondary);
   font-size: var(--fs-caption);
   line-height: var(--lh-caption);
   text-align: center;
+  /* A word too long for the caption hyphenates (index.html says lang=en),
+     else breaks, rather than running into the next bottle's. */
+  hyphens: auto;
+  overflow-wrap: break-word;
 }
 .shelf-slot:is([data-tier='B'], [data-tier='C']) img { opacity: 0.5; }
 .shelf-slot:is([data-tier='B'], [data-tier='C']) .shelf-name { color: var(--text-tertiary); }
@@ -742,9 +755,19 @@
 .banner-icon { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: var(--r-round); background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
 .banner-icon svg { width: 16px; height: 16px; }
 .banner-text { display: grid; flex: 1; min-width: 0; }
-.banner b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The owner's name may take a second line rather than cut to "Brooke’s
+   coll…"; a narrow column drops the glyph to give it the room. */
+.banner b { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: break-word; }
 .banner small { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .banner.slim .banner-icon { display: none; }
+@container page (max-width: 420px) {
+  .banner-icon { display: none; }
+  /* "Replace your 3 bottles?" takes a row of its own under the name. */
+  .banner.confirm { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-2); }
+  .banner.confirm .banner-text { grid-area: 1 / 1; }
+  .banner.confirm .icon-btn { grid-area: 1 / 2; }
+  .banner.confirm .btn { grid-area: 2 / 1 / 3 / 3; justify-self: start; }
+}
 
 /* ---------- Weather glyphs ---------- */
 

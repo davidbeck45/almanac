@@ -275,12 +275,12 @@ export function bottleCardSkeletonHTML(count = 1) {
 
 // ---------- Shared link ----------
 
-// `confirm`: Save as mine was tapped once and would replace Mine.
+// `confirm`: Save as Mine was tapped once and would replace Mine's bottles.
 export function sharedBannerHTML(shared, mineCount, { slim = false, confirm = false } = {}) {
   const who = shared.name ? `${esc(shared.name)}’s` : 'A shared';
   const status = shared.loading ? 'Loading…' : `${plural(shared.records.length, 'bottle')}${shared.missing.length ? ` · ${shared.missing.length} couldn’t load` : ''}`;
-  const save = confirm ? `Replace your ${mineCount}?` : 'Save as mine';
-  return `<div class="banner${slim ? ' slim' : ''}" role="status">
+  const save = confirm ? `Replace your ${plural(mineCount, 'bottle')}?` : 'Save as Mine';
+  return `<div class="banner${slim ? ' slim' : ''}${confirm ? ' confirm' : ''}" role="status">
     <span class="banner-icon">${icon.share}</span>
     <span class="banner-text"><b>${who} collection</b><small>${status}</small></span>
     <button class="btn primary compact" data-action="shared-save" ${shared.loading || !shared.records.length ? 'disabled' : ''}>${save}</button>
