@@ -952,10 +952,10 @@ function reverseLinks(ctx, key) {
  *   from the votes, originalFromVotes), or null.
  * - cheaper: bottles that smell like it for far less, most agreed and alike
  *   first: voters' cheaper twins (extras.alt) and, for a bottle that isn't a
- *   dupe itself, its clones (extras.clones, and pool bottles whose family
- *   links name it, by the clone rule), `why` 'votes'; and pool bottles alike
- *   by notes no vote links, `why` 'notes'. `notesDiffer` marks a voted one
- *   under CLONE_SIM alike.
+ *   dupe itself, its clones (extras.clones, and pool bottles whose links name
+ *   it, by the clone rule), `why` 'votes'; and pool bottles alike by notes no
+ *   vote links, `why` 'notes'. `notesDiffer` marks a voted one under
+ *   CLONE_SIM alike.
  * - siblings: other bottles voters link it or its original with, most agreed
  *   first (its about data's links from AGREED_NET net votes and 2:1).
  * Each entry: { id, record, name, brand, value, rating, votes, risk, sim (to
@@ -1020,13 +1020,13 @@ export function dupesOf(record, ctx, { more = null } = {}) {
   const valueOf = r => signalsOf(r, ctx.byId).value;
   const copies = r => r.brand !== record.brand && (r.year ?? Infinity) >= (record.year ?? 0)
     && valueOf(r) >= (own ?? Infinity) + CLONE_VALUE_GAP && similarity(record, r) >= CLONE_SIM;
-  const voted = [...take(s.alt, 'votes'),
-    ...(original ? [] : [...take(s.clones, 'votes'), ...take([...familyOf(self), ...(row ? familyOf(row.id) : [])], 'votes', copies)])];
-  // Alike by notes: the pool's closest from other brands, valued far higher.
-  const byNotes = [];
+  const linking = [...familyOf(self), ...likeOf(self), ...(row ? [...familyOf(row.id), ...likeOf(row.id)] : [])];
+  const voted = [...take(s.alt, 'votes'), ...(original ? [] : [...take(s.clones, 'votes'), ...take(linking, 'votes', copies)])];
+  // Alike by notes: the pool's closest from other brands, valued far higher, that no vote links.
+  const byNotes = [], linked = new Set([...linking, ...s.like, ...s.family, ...votes.keys()]);
   if (scented && own != null) {
     for (const r of ctx.records) {
-      if (seen.has(r.id) || r.brand === record.brand || !(valueOf(r) >= own + CLONE_VALUE_GAP) || !(r.rating >= MIN_RATING)) continue;
+      if (seen.has(r.id) || linked.has(r.id) || r.brand === record.brand || !(valueOf(r) >= own + CLONE_VALUE_GAP) || !(r.rating >= MIN_RATING)) continue;
       const flags = signalsOf(r, ctx.byId).flags;
       if (flags.includes('brigaded') || flags.includes('discontinued')) continue;
       const sim = similarity(record, r);
