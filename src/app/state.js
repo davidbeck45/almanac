@@ -49,6 +49,7 @@ export const state = {
   error: null,
   route: null, // the parsed route on screen (src/app/router.js)
   base: null, // the page under a bottle page: the last route that wasn't one
+  from: null, // the route before the page under it last changed (a bottle page: the compare page's Back goes there)
   units: prefs.units === 'C' || prefs.units === 'F' ? prefs.units : defaultUnits(),
   occasion: prefs.occasion ?? 'casual',
   occasionSlot: null,
@@ -59,6 +60,9 @@ export const state = {
   today: null, // { day: plan, night: plan } where plan = { win, ranked, pick }
   bottles: new Map(), // dataset records loaded for bottle pages, and every one a pool answer names (keepBottles), by id
   about: new Map(), // id -> loadAbout() result (null: none), for bottle pages
+  // Ids whose about data couldn't load (offline): the bottle page says so,
+  // with Try again (the shell's retryBottle clears it, as coming back online does).
+  aboutFailed: new Set(),
   // "Prefer great value" as set (true / false; setPreferValue), or null for the
   // wardrobe's default. Pool questions send it (poolInputs).
   preferValue: typeof prefs.preferValue === 'boolean' ? prefs.preferValue : null,
