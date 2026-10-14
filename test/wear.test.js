@@ -174,7 +174,9 @@ test('rankings take your ratings and the rotation nudge; the cache follows the s
   // A journal begun 60 days ago in which every bottle was worn 10 to 17
   // days back (too long ago to count against it), but one that ranks within
   // reach of today's top and was never worn.
-  const plain = rank(app.activeFragrances(), wx.day, 'day', { todayISO: wx.day.dateISO });
+  // Now plans its next window first (tonight, once the day is over).
+  const next = [wx.day, wx.night].filter(Boolean).sort(app.byTime)[0];
+  const plain = rank(app.activeFragrances(), next, next.slot, { todayISO: next.dateISO });
   const idle = plain.find((r, i) => i > 0 && plain[0].score - r.score <= PLAN_MARGIN && r.tier === plain[0].tier).fragrance;
   state.history = [
     ...app.activeFragrances().filter(f => f.id !== idle.id).map((f, i) => ({ id: f.id, date: shiftISO(today, -10 - (i % 8)), slot: 'day' })),
@@ -185,8 +187,8 @@ test('rankings take your ratings and the rotation nudge; the cache follows the s
   assert.deepEqual(records.map(f => f.id), app.activeFragrances().map(f => f.id), 'the bottles switched on');
 
   app.computeToday();
-  const day = state.today.day;
-  const direct = rank(records, day.win, 'day', { history: state.history, todayISO: day.win.dateISO, nudge: true });
+  const day = state.today[next.slot];
+  const direct = rank(records, day.win, next.slot, { history: state.history, todayISO: day.win.dateISO, nudge: true });
   assert.ok(direct.some(r => r.nudged), 'the fixture leaves a bottle neglected a month within reach');
   assert.deepEqual(day.ranked.map(r => r.fragrance.id), direct.map(r => r.fragrance.id), 'Now plans with the nudge');
   assert.equal(day.pick.fragrance.id, direct[0].fragrance.id);
@@ -202,8 +204,8 @@ test('rankings take your ratings and the rotation nudge; the cache follows the s
   assert.notEqual(rated, records, 'a saved rating refreshes the cache');
   assert.deepEqual(rated.find(f => f.id === top).personal, { rating: 1, longevity: 1, sillage: 0 });
   app.computeToday();
-  assert.notEqual(state.today.day.pick.fragrance.id, top, 'a 1★ bottle sits out');
-  assert.ok(state.today.day.ranked.find(r => r.fragrance.id === top).reasons.some(r => r.text === 'You rate it 1★'));
+  assert.notEqual(state.today[next.slot].pick.fragrance.id, top, 'a 1★ bottle sits out');
+  assert.ok(state.today[next.slot].ranked.find(r => r.fragrance.id === top).reasons.some(r => r.text === 'You rate it 1★'));
   assert.ok(!fragrances.find(f => f.id === top).personal, 'the records themselves stay as they were');
   assert.ok(!app.activeFragrances().find(f => f.id === top).personal, 'and the pool’s questions keep the crowd’s footing');
 });
