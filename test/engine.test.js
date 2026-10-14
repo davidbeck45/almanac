@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart } from '../src/engine.js';
+import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, seasonFit, SEASONS } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { heaviness } from '../src/accords.js';
 import { summarize, week } from '../src/weather.js';
@@ -121,6 +121,31 @@ test("a dupe with few votes leans toward its original's", () => {
   // Well-voted dupes keep their own split.
   const own = steadyShares(atlantis).season.summer;
   assert.ok(Math.abs(own - atlantis.season.summer) < 0.03, `${own} vs ${atlantis.season.summer}`);
+});
+
+test('seasonFit, written out season by season, scores as the loop it replaced', () => {
+  const loop = (frag, weights) => {
+    const { season } = steadyShares(frag);
+    const peak = Math.max(...SEASONS.map(s => season[s])) || 1;
+    const relative = SEASONS.reduce((sum, s) => sum + weights[s] * (season[s] / peak), 0);
+    const lift = SEASONS.reduce((sum, s) => sum + weights[s] * season[s], 0) / 0.25;
+    return 0.5 * relative + 0.5 * Math.min(1, Math.max(0, lift / 1.6));
+  };
+  const unvoted = fragrances.map(f => ({ ...f, seasonVotes: undefined, timeVotes: undefined }));
+  let worst = 0, checked = 0;
+  for (const month of ['01', '04', '07', '10']) {
+    for (let feelsF = 0; feelsF <= 105; feelsF += 5) {
+      for (const lat of [40, -33, 5]) {
+        const weights = targetSeasonWeights(feelsF, new Date(`2026-${month}-15T12:00:00`), lat);
+        for (const f of [...fragrances, ...unvoted]) {
+          worst = Math.max(worst, Math.abs(seasonFit(f, weights) - loop(f, weights)));
+          checked++;
+        }
+      }
+    }
+  }
+  assert.ok(checked > 10000);
+  assert.ok(worst < 1e-12, `largest difference ${worst}`);
 });
 
 test('hot humid day: fresh scents on top, heavy ones at the bottom', () => {

@@ -134,7 +134,8 @@ const steadied = new WeakMap();
 
 export function steadyShares(frag) {
   if (!frag.seasonVotes && !frag.timeVotes) return frag;
-  if (steadied.has(frag)) return steadied.get(frag);
+  const known = steadied.get(frag);
+  if (known) return known;
   const orig = frag.original;
   const ko = orig ? ORIGINAL_PRIOR_VOTES : 0;
   const est = predictedShares(frag.accords, frag.like);
@@ -159,11 +160,14 @@ export function steadyShares(frag) {
 // Half "is this within the fragrance's comfort zone" (relative to its own best
 // season), half "is this its specialty" (lift over an even 25% split). Without
 // the lift, all-rounders tie specialists in-season and win everywhere else.
+// Written out season by season (the gap finder calls it 9,600 bottles × 10
+// slot-bands × 6 windows at a time), in SEASONS order, as a loop would add.
 export function seasonFit(frag, weights) {
-  const { season } = steadyShares(frag);
-  const peak = Math.max(...SEASONS.map(s => season[s])) || 1;
-  const relative = SEASONS.reduce((sum, s) => sum + weights[s] * (season[s] / peak), 0);
-  const lift = SEASONS.reduce((sum, s) => sum + weights[s] * season[s], 0) / 0.25;
+  const { winter, spring, summer, fall } = steadyShares(frag).season;
+  const peak = Math.max(winter, spring, summer, fall) || 1;
+  const relative = weights.winter * (winter / peak) + weights.spring * (spring / peak)
+    + weights.summer * (summer / peak) + weights.fall * (fall / peak);
+  const lift = (weights.winter * winter + weights.spring * spring + weights.summer * summer + weights.fall * fall) / 0.25;
   return 0.5 * relative + 0.5 * clamp(lift / 1.6, 0, 1);
 }
 
