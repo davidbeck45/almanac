@@ -7,6 +7,7 @@ import { week } from '../weather.js';
 import { loadLocation } from '../location.js';
 import { loadHistory, wornIn, journalStats, journalCalendar, occasionCounts } from '../history.js';
 import { loadHidden, hiddenFor } from '../hidden.js';
+import { applySkin, loadSkin, skinStamp } from '../skin.js';
 import { loadMine, saveMine, loadActive, saveActive, localMatches } from '../collections.js';
 import { fragranticaLibrary } from '../fragrantica.js';
 import { onPoolRecords } from './pool.js';
@@ -91,6 +92,27 @@ export function activeFragrances() {
   return sourceRecords().filter(f => !hidden.has(f.id));
 }
 
+// What every ranking reads (Now, the Week, Occasion, trips and events): the
+// bottles switched on, with your own stars and skin nudges (src/skin.js)
+// attached as `personal`, so a 1★ bottle sits out and one that lasts longer
+// on you counts so. Cached until the list, its switches or the saved
+// ratings change: the bottle page's "On my skin" saves them and renders, and
+// the next call sees it. The pool's questions keep the crowd's footing
+// (poolInputs sends activeFragrances()).
+let skinned = { key: null, stamp: null, all: [], hidden: null, out: [] };
+export function rankedFragrances() {
+  const records = sourceRecords(), stamp = skinStamp();
+  // Ids, not the array: Mine's remove and undo splice it in place.
+  const key = records.map(f => f.id).join('\n');
+  if (skinned.key !== key || skinned.stamp !== stamp || skinned.records !== records) {
+    skinned = { key, stamp, records, all: applySkin(records, loadSkin()), hidden: null, out: [] };
+  }
+  const hidden = hiddenIn(viewingDemo());
+  const off = [...hidden].sort().join('\n');
+  if (skinned.hidden !== off) Object.assign(skinned, { hidden: off, out: skinned.all.filter(f => !hidden.has(f.id)) });
+  return skinned.out;
+}
+
 export const isActive = id => activeFragrances().some(f => f.id === id);
 export const inSource = id => sourceRecords().some(f => f.id === id);
 
@@ -142,8 +164,10 @@ export function storeContext(key, win, occasion, ranked) {
   state.contexts[key] = { win, occasion, ranked, entries: new Map(ranked.map(r => [r.fragrance.id, r])) };
 }
 
+// Rankings put a bottle left on the shelf a month first when it's within
+// reach of the top (the engine's rotation nudge: "Not worn in 34 days").
 export function rankContext(key, win, occasion) {
-  const ranked = rank(activeFragrances(), win, win.slot, { occasion, history: state.history, todayISO: win.dateISO });
+  const ranked = rank(rankedFragrances(), win, win.slot, { occasion, history: state.history, todayISO: win.dateISO, nudge: true });
   storeContext(key, win, occasion, ranked);
   return ranked;
 }
@@ -151,11 +175,11 @@ export function rankContext(key, win, occasion) {
 // Today's day and night are planned together, so the evening pick doesn't
 // repeat the daytime one and a logged wear becomes that window's pick.
 export function computeToday() {
-  if (!state.wx || !activeFragrances().length) {
+  if (!state.wx || !rankedFragrances().length) {
     state.today = null;
     return;
   }
-  const plan = planWindows(activeFragrances(), [state.wx.day, state.wx.night].filter(Boolean).sort(byTime), { history: state.history });
+  const plan = planWindows(rankedFragrances(), [state.wx.day, state.wx.night].filter(Boolean).sort(byTime), { history: state.history, nudge: true });
   state.today = {};
   for (const p of plan) {
     storeContext(p.win.slot, p.win, null, p.ranked);
@@ -177,7 +201,7 @@ export function nowSlot() {
 export function computeWeek() {
   const days = week(state.forecast);
   const windows = days.flatMap(d => [d.day, d.night].filter(Boolean));
-  const plan = planWindows(activeFragrances(), windows, { history: state.history });
+  const plan = planWindows(rankedFragrances(), windows, { history: state.history, nudge: true });
   const byWindow = new Map(plan.map(p => [`${p.win.dateISO}:${p.win.slot}`, p]));
   const slotPlan = win => {
     if (!win) return null;

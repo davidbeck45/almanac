@@ -1,5 +1,6 @@
 /* Wear: the hero with the bottle on the horizon, the window card with its
-   pick and shelf, the week board, occasions, the journal teaser. */
+   pick and shelf, the week board, occasions and "When and where?", the
+   trip planner, the journal teaser. */
 
 /* ---------- Hero ---------- */
 
@@ -129,7 +130,18 @@
 }
 @media (hover: hover) { .hero-pick:hover .hero-bottle img { transform: translateY(-3px) rotate(-2deg); } }
 .hero-pick:active .hero-bottle img { transform: scale(0.96); }
-.hero-label { display: grid; justify-items: center; max-width: 100%; margin-top: var(--s-2); text-shadow: 0 1px 2px rgb(var(--shade) / 0.5), 0 0 16px rgb(var(--ink-deep) / 0.6); }
+.hero-label { position: relative; display: grid; justify-items: center; max-width: 100%; margin-top: var(--s-2); text-shadow: 0 1px 2px rgb(var(--shade) / 0.6), 0 0 16px rgb(var(--ink-deep) / 0.7); }
+/* A soft pool of shade under the name, so it reads over the trees and a
+   bright hillside alike; no edge, so it stays part of the scene. */
+.hero-label::before {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * var(--s-3)) calc(-1 * var(--s-5));
+  z-index: -1;
+  border-radius: var(--r-round);
+  background: radial-gradient(closest-side, rgb(var(--ink-deep) / 0.5), rgb(var(--ink-deep) / 0.28) 55%, transparent);
+  pointer-events: none;
+}
 .hero-label small { display: inline-flex; align-items: center; gap: var(--s-1); color: color-mix(in srgb, var(--on-scene) 80%, transparent); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 500; }
 .hero-label small svg { width: 12px; height: 12px; }
 .hero-label b { max-width: 100%; overflow: hidden; font-family: var(--display); font-size: var(--fs-headline); line-height: var(--lh-headline); font-style: italic; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
@@ -161,13 +173,15 @@
 .slot-thumb { width: 78px; height: 54px; flex: none; overflow: hidden; border-radius: var(--r-control); box-shadow: 0 0 0 1px var(--border-subtle); }
 .slot-thumb svg { width: 100%; height: 100%; }
 .slot-title { display: grid; gap: var(--s-1); min-width: 0; }
-.slot-title h2 { display: flex; align-items: center; gap: var(--s-2); font-family: var(--display); font-size: var(--fs-title-3); line-height: var(--lh-title-3); font-weight: 600; letter-spacing: -0.01em; }
-.slot-title h2 svg { width: 18px; height: 18px; color: var(--ambient); }
+.slot-title h2 { display: flex; align-items: flex-start; gap: var(--s-2); font-family: var(--display); font-size: var(--fs-title-3); line-height: var(--lh-title-3); font-weight: 600; letter-spacing: -0.01em; }
+.slot-title h2 svg { width: 18px; height: 18px; flex: none; margin-top: 3px; color: var(--ambient); }
 .slot-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-2); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .slot-time { padding: 0 var(--s-2); border-radius: var(--r-chip); background: var(--fill); color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
 .slot-wx { display: inline-flex; align-items: flex-start; gap: var(--s-2); min-width: 0; }
 .slot-wx .wx { margin-top: 1px; }
 .slot-line .wx svg { width: 16px; height: 16px; }
+.slot-title h2 > span { min-width: 0; }
+.slot-typical { padding: 0 var(--s-2); border-radius: var(--r-chip); border: 1px dashed var(--border-strong); color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-footnote); font-weight: 500; }
 
 /* The pick: an inset card washed in its top accord's color. */
 .pick {
@@ -182,8 +196,40 @@
 }
 .pick-top { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); margin: calc(-1 * var(--s-2)) calc(-1 * var(--s-2)) var(--s-2) 0; }
 .pick-top .btn svg { width: 14px; height: 14px; }
-.pick-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-top: var(--s-4); }
+.pick-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); margin-top: var(--s-4); }
 .pick-actions .match { margin-left: auto; }
+/* A bottle the rotation nudge brought back: its own quiet line, the sky's
+   color, so it doesn't read as one more reason it fits. */
+.nudge { display: inline-flex; align-items: center; gap: var(--s-1); margin: 0 0 var(--s-3); padding: var(--s-0) var(--s-2) var(--s-0) var(--s-1); border-radius: var(--r-pill); background: color-mix(in srgb, var(--ambient) 12%, transparent); color: var(--ambient); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
+.nudge svg { width: 14px; height: 14px; flex: none; }
+.pick.full .nudge { margin-top: calc(-1 * var(--s-1)); }
+.next-window .nudge { align-self: flex-start; margin: 0; }
+/* How much to spray, beside Wear this: one line that opens the bottle
+   page's spray section. */
+.spray-hint {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: var(--hit);
+  padding: 0 var(--s-2);
+  border-radius: var(--r-pill);
+  color: var(--text-secondary);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  transition: color var(--dur-2), background-color var(--dur-2);
+}
+.spray-hint svg { width: 16px; height: 16px; flex: none; color: var(--ambient); }
+.spray-hint svg:last-child { width: 14px; height: 14px; color: var(--text-tertiary); }
+@media (hover: hover) { .spray-hint:hover { color: var(--text-primary); background: var(--fill); } }
+/* On a phone it can't sit beside Wear this: it goes above it, in line
+   with the reasons. */
+@container page (max-width: 559px) {
+  .pick-actions .spray-hint { order: -1; width: calc(100% + var(--s-2)); margin: calc(-1 * var(--s-3)) 0 0 calc(-1 * var(--s-2)); }
+  .spray-hint svg:last-child { margin-left: auto; }
+}
 /* Elsewhere the card shows the bottle too. */
 .pick.full { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: var(--s-1) var(--s-4); }
 .pick.full .pick-actions { grid-column: 1 / -1; }
@@ -255,16 +301,17 @@
 .wk-temps b { font-size: var(--fs-footnote); font-weight: 600; }
 .wk-temps small { color: var(--text-tertiary); font-size: var(--fs-caption); }
 .wk-pop { color: var(--info); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; font-variant-numeric: tabular-nums; }
-.wk-picks { display: grid; gap: var(--s-2); min-width: 0; }
+.wk-picks { display: grid; gap: var(--s-1); min-width: 0; }
+/* A pick: its time of day as a glyph (a check once worn), the photo, the name. */
 .wk-pick {
   position: relative;
   display: grid;
-  grid-template-columns: 28px 1fr auto;
+  grid-template-columns: 16px 26px minmax(0, 1fr);
   align-items: center;
   gap: var(--s-2);
   min-width: 0;
   min-height: var(--hit);
-  padding: var(--s-1) var(--s-3) var(--s-1) var(--s-1);
+  padding: var(--s-1) var(--s-3) var(--s-1) var(--s-2);
   border-radius: var(--r-control);
   background: var(--surface-2);
   border: 1px solid var(--border-subtle);
@@ -273,24 +320,24 @@
 }
 .wk-pick:active { transform: scale(0.97); }
 @media (hover: hover) { .wk-pick:hover { border-color: var(--border-strong); background: var(--surface-3); } }
-.wk-pick img { width: 28px; height: 32px; object-fit: contain; }
+.wk-pick img { width: 26px; height: 32px; object-fit: contain; }
 .wk-pick.worn { border-color: color-mix(in srgb, var(--positive) 45%, transparent); }
-.wk-text { display: grid; min-width: 0; }
-.wk-text small { display: flex; align-items: center; gap: var(--s-1); color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 500; }
-.wk-text small svg { width: 12px; height: 12px; }
-.wk-pick.worn .wk-text small { color: var(--positive); }
-.wk-text b { overflow: hidden; font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.wk-pick.empty { grid-template-columns: 28px 1fr; background: transparent; border-style: dashed; color: var(--text-tertiary); font-size: var(--fs-caption); }
-.wk-slot { display: grid; place-items: center; }
+.wk-slot { display: grid; place-items: center; color: var(--text-tertiary); }
 .wk-slot svg { width: 14px; height: 14px; }
+.wk-pick.worn .wk-slot { color: var(--positive); }
+.wk-text { display: grid; min-width: 0; }
+.wk-text b { overflow: hidden; font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.wk-nudge { display: flex; align-items: center; gap: var(--s-1); overflow: hidden; color: var(--ambient); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 500; white-space: nowrap; }
+.wk-nudge svg { width: 11px; height: 11px; flex: none; }
+.wk-pick.empty { grid-template-columns: 16px 1fr; background: transparent; border-style: dashed; color: var(--text-tertiary); font-size: var(--fs-caption); }
 @media (max-width: 374px) {
   .wk-day { grid-template-columns: 40px 44px 1fr; gap: var(--s-2); }
   .wk-temps { flex-direction: column; align-items: center; gap: 0; line-height: 1.2; }
-  .wk-pick { grid-template-columns: 24px 1fr; }
-  .wk-pick img { width: 24px; height: 28px; }
-  .wk-pick .mag { display: none; }
+  .wk-pick { grid-template-columns: 14px 22px minmax(0, 1fr); padding-right: var(--s-2); }
+  .wk-pick img { width: 22px; height: 28px; }
 }
-/* Room for the whole week side by side. */
+/* Room for the whole week side by side: a column a day, the day's pick
+   over the night's. */
 @container page (min-width: 700px) {
   .wk-list { grid-template-columns: repeat(var(--days, 7), minmax(0, 1fr)); gap: var(--s-2); }
   .wk-day {
@@ -298,23 +345,31 @@
     grid-template-rows: auto auto 1fr;
     align-items: start;
     justify-items: center;
-    gap: var(--s-3);
-    padding: var(--s-4) var(--s-1) var(--s-2);
+    gap: var(--s-2);
+    padding: var(--s-3) var(--s-1) var(--s-1);
     border: 1px solid var(--border-subtle);
     border-radius: var(--r-inset);
     background: var(--fill-faint);
     text-align: center;
   }
-  .wk-day:first-child { padding-top: var(--s-4); border-top: 1px solid var(--border-subtle); }
+  .wk-day:first-child { padding-top: var(--s-3); border-top: 1px solid var(--border-subtle); }
   .wk-day.today { border-color: color-mix(in srgb, var(--accent) 40%, transparent); background: color-mix(in srgb, var(--accent) 5%, transparent); }
-  .wk-wx .wx svg { width: 34px; height: 34px; }
-  .wk-picks { width: 100%; gap: var(--s-2); }
-  .wk-pick { grid-template-columns: 1fr; justify-items: center; gap: var(--s-1); padding: var(--s-3) var(--s-1) var(--s-2); text-align: center; }
-  .wk-pick img { width: 42px; height: 50px; }
+  .wk-wx { grid-template-columns: auto auto; align-items: center; column-gap: var(--s-1); }
+  .wk-wx .wx svg { width: 26px; height: 26px; }
+  .wk-temps { flex-direction: column; align-items: flex-start; gap: 0; line-height: 1.15; }
+  .wk-pop { grid-column: 1 / -1; }
+  .wk-pop[aria-hidden='true'] { display: none; }
+  .wk-picks { width: 100%; align-self: end; }
+  .wk-pick { grid-template-columns: 1fr; justify-items: center; gap: var(--s-1); padding: var(--s-2) var(--s-1); text-align: center; }
+  .wk-pick .wk-slot { position: absolute; top: var(--s-2); left: var(--s-2); }
+  .wk-pick img { width: 40px; height: 48px; }
   .wk-text { justify-items: center; max-width: 100%; }
   .wk-text b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; min-height: calc(2 * var(--lh-footnote)); }
-  .wk-pick .mag { position: absolute; top: var(--s-2); right: var(--s-2); }
-  .wk-pick.empty { grid-template-columns: 1fr; min-height: 118px; place-content: center; }
+  /* The nudge as a glyph in the corner; the button's label says it. */
+  .wk-nudge { position: absolute; top: var(--s-2); right: var(--s-2); }
+  .wk-nudge span { display: none; }
+  .wk-nudge svg { width: 13px; height: 13px; }
+  .wk-pick.empty { grid-template-columns: 1fr; min-height: 104px; place-content: center; }
 }
 
 /* ---------- Occasions ---------- */
@@ -332,39 +387,81 @@
   mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 28px), transparent);
 }
 .occasions::-webkit-scrollbar { display: none; }
+/* A tile: the occasion's glyph over its name (positioned, so its hidden
+   blurb stays inside the strip and doesn't widen the page). */
 .occ {
+  position: relative;
   display: grid;
-  flex: 0 0 132px;
-  align-content: start;
-  gap: var(--s-0);
-  padding: var(--s-3);
+  flex: 0 0 auto;
+  justify-items: center;
+  align-content: center;
+  gap: var(--s-1);
+  min-width: 84px;
+  min-height: 72px;
+  padding: var(--s-2) var(--s-3);
   border-radius: var(--r-inset);
   background: var(--surface-1);
   border: 1px solid var(--border-subtle);
   box-shadow: var(--e2);
-  text-align: left;
+  text-align: center;
   scroll-snap-align: start;
   transition: transform var(--dur-1) var(--ease-out), background-color var(--dur-2), border-color var(--dur-2);
 }
 .occ:active { transform: scale(0.97); }
 @media (hover: hover) { .occ:hover:not(.on) { border-color: var(--border-strong); background: var(--surface-2); } }
 .occ.on { border-color: color-mix(in srgb, var(--accent) 65%, transparent); background: color-mix(in srgb, var(--accent) 9%, var(--surface-1)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent); }
-.occ-icon { margin-bottom: var(--s-2); color: var(--text-secondary); }
-.occ-icon svg { width: 24px; height: 24px; }
+.occ-icon { color: var(--text-secondary); }
+.occ-icon svg { width: 22px; height: 22px; }
 .occ.on .occ-icon { color: var(--accent); }
-.occ-label { font-weight: 600; }
-.occ-blurb { color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
+.occ-label { font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; white-space: nowrap; }
 @container page (min-width: 700px) {
-  .occasions { display: grid; grid-template-columns: repeat(4, 1fr); margin: 0; padding: 0; overflow: visible; mask-image: none; }
+  .occasions { display: grid; grid-template-columns: repeat(var(--n, 7), minmax(0, 1fr)); margin: 0; padding: 0; overflow: visible; mask-image: none; }
+  .occ { min-width: 0; min-height: 76px; padding-inline: var(--s-1); }
 }
-.occ-bar { display: flex; justify-content: center; }
+
+/* "When and where?": the date, the place, and day or night. */
+.occ-when { display: grid; gap: var(--s-2); }
+.occ-when-label { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
+.occ-when-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
+.occ-when-controls .occ-slots { margin-left: auto; }
+.occ-when-reset { margin-left: calc(-1 * var(--s-1)); }
+@container page (max-width: 519px) {
+  .occ-when-controls .occ-slots { display: flex; width: 100%; margin-left: 0; }
+  .occ-when-controls .occ-slots > * { flex: 1; }
+}
+@container page (min-width: 700px) {
+  .occ-when { grid-template-columns: auto 1fr; align-items: center; column-gap: var(--s-4); }
+}
+
+/* Date and place pills: the date in words with a native date input laid
+   over it (the system's picker opens on a tap), and a place button. */
+.date-pill, .place-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  min-height: var(--hit);
+  padding: 0 var(--s-4) 0 var(--s-3);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-strong);
+  background: var(--fill-faint);
+  color: var(--text-primary);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--dur-2), border-color var(--dur-2);
+}
+.date-pill svg, .place-pill svg { width: 16px; height: 16px; flex: none; color: var(--ambient); }
+.place-pill span { overflow: hidden; text-overflow: ellipsis; }
+@media (hover: hover) { :is(.date-pill, .place-pill):hover { background: var(--fill); border-color: color-mix(in srgb, var(--text-primary) 22%, transparent); } }
+.date-pill input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; font-size: var(--fs-headline); }
+/* Chromium opens its calendar from this indicator: stretch it over the pill. */
+.date-pill input::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: auto; height: auto; opacity: 0; cursor: pointer; }
+.date-pill:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ---------- Journal teaser ---------- */
 
-.journal-teaser header { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin-bottom: var(--s-3); }
-.journal-teaser h2 { display: flex; align-items: center; gap: var(--s-2); font-family: var(--display); font-size: var(--fs-title-3); line-height: var(--lh-title-3); font-weight: 600; }
-.journal-teaser h2 svg { width: 18px; height: 18px; color: var(--ambient); }
-.journal-teaser p { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .jt-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--s-2); }
 .jt-cell { display: grid; justify-items: center; gap: var(--s-1); padding: var(--s-2) var(--s-0); border-radius: var(--r-control); background: var(--fill-faint); }
 .jt-cell.today { background: color-mix(in srgb, var(--accent) 9%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
@@ -374,3 +471,175 @@
 .jt-bottles img { width: 26px; height: 30px; object-fit: contain; }
 .jt-bottles img + img { margin-left: -9px; }
 .jt-bottles i { width: 5px; height: 5px; border-radius: var(--r-round); background: var(--fill-strong); }
+
+/* ---------- Trip ---------- */
+
+/* The form: where and when on top, then the bottle count and the events. */
+.trip-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s-4) var(--s-3); }
+.trip-field { display: grid; align-content: start; gap: var(--s-2); min-width: 0; }
+.trip-field.where, .trip-field.events, .trip-field.bottles, .trip-error, .trip-submit { grid-column: 1 / -1; }
+.trip-label { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
+@container page (min-width: 640px) {
+  .trip-fields { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); }
+  .trip-field.where { grid-column: 1; }
+  .trip-field.events { grid-column: 1 / 3; }
+  .trip-field.bottles { grid-column: 3; grid-row: 2; }
+}
+.trip-place {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  min-height: 52px;
+  padding: var(--s-1) var(--s-3);
+  border-radius: var(--r-control);
+  border: 1px solid var(--border-strong);
+  background: var(--fill-faint);
+  text-align: left;
+  transition: background-color var(--dur-2), border-color var(--dur-2);
+}
+@media (hover: hover) { .trip-place:hover { background: var(--fill); } }
+.trip-place svg { width: 18px; height: 18px; color: var(--ambient); }
+.trip-place svg:last-child { width: 16px; height: 16px; color: var(--text-tertiary); }
+.trip-place-text { display: grid; min-width: 0; }
+.trip-place-text b { overflow: hidden; font-size: var(--fs-headline); line-height: var(--lh-headline); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.trip-place-text small { overflow: hidden; color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); text-overflow: ellipsis; white-space: nowrap; }
+.trip-place.empty b { color: var(--text-secondary); font-weight: 500; }
+/* In the form a date reads like a field, not a pill. */
+.trip-field .date-pill { width: 100%; min-height: 52px; border-radius: var(--r-control); font-weight: 500; }
+.trip-field .seg { align-self: start; justify-self: start; }
+.trip-field .seg button { min-width: 52px; }
+
+.trip-event-list { display: grid; gap: var(--s-1); }
+.trip-event { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; gap: var(--s-3); padding: var(--s-1) var(--s-1) var(--s-1) var(--s-2); border-radius: var(--r-control); background: var(--surface-2); border: 1px solid var(--border-subtle); }
+.trip-event-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-round); background: color-mix(in srgb, var(--ambient) 12%, transparent); color: var(--ambient); }
+.trip-event-icon svg { width: 18px; height: 18px; }
+.trip-event-text { display: grid; min-width: 0; }
+.trip-event-text b { font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 600; }
+.trip-event-text small { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.trip-add-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-3); }
+.trip-add-line small { color: var(--text-tertiary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+/* A new event: which day, day or night, and the occasion. */
+.trip-add { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); padding: var(--s-3); border-radius: var(--r-inset); border: 1px dashed var(--border-strong); background: var(--fill-faint); }
+.trip-add-actions { display: flex; gap: var(--s-1); margin-left: auto; }
+.trip-select { position: relative; display: inline-flex; flex: 1 1 140px; align-items: center; min-width: 0; }
+.trip-select select {
+  width: 100%;
+  min-height: var(--hit);
+  padding: 0 var(--s-8) 0 var(--s-3);
+  border-radius: var(--r-control);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-headline);
+  appearance: none;
+  cursor: pointer;
+}
+.trip-select svg { position: absolute; right: var(--s-3); width: 14px; height: 14px; color: var(--text-tertiary); transform: rotate(90deg); pointer-events: none; }
+.trip-select select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.trip-error { margin: 0; }
+.trip-submit { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
+
+/* The trip at a glance. */
+.trip-head-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: var(--s-3); }
+.trip-badge { display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--r-control); background: color-mix(in srgb, var(--ambient) 14%, var(--surface-2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ambient) 25%, transparent); color: var(--ambient); }
+.trip-badge svg { width: 22px; height: 22px; }
+.trip-head-text { min-width: 0; }
+.trip-head-text h2:focus { outline: none; } /* focused after packing, for screen readers */
+.trip-head-text h2 { overflow: hidden; font-family: var(--display); font-size: var(--fs-title-2); line-height: var(--lh-title-2); font-weight: 600; letter-spacing: -0.01em; text-overflow: ellipsis; white-space: nowrap; }
+.trip-head-text p { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+/* Its events, as tags under the dates. */
+.trip-tags { display: flex; flex-wrap: wrap; gap: var(--s-1); margin-top: var(--s-2); }
+.trip-tag { display: inline-flex; align-items: center; gap: var(--s-1); padding: var(--s-0) var(--s-2); border-radius: var(--r-pill); background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; }
+.trip-tag svg { width: 12px; height: 12px; }
+.trip-wx { display: flex; align-items: center; gap: var(--s-2); margin-top: var(--s-3); padding-top: var(--s-3); border-top: 1px solid var(--border-subtle); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.trip-wx .wx svg { width: 18px; height: 18px; }
+.trip-wx.updating span::after { content: ''; display: inline-block; width: 6px; height: 6px; margin-left: var(--s-2); border-radius: var(--r-round); background: currentColor; animation: breathe 1.4s ease-in-out infinite; }
+.trip-note { margin-top: var(--s-2); color: var(--negative); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+
+/* What to pack: each bottle stands on the shelf line with its name and
+   why. On a phone a row each; with room, side by side on one shelf. */
+.trip-bags { display: grid; gap: var(--s-3); }
+.trip-bag { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: var(--s-3); }
+.trip-bag-photo { display: grid; place-items: end center; height: 76px; padding-bottom: var(--s-1); border-radius: var(--r-thumb); background: radial-gradient(closest-side at 50% 85%, var(--fill), transparent); }
+.trip-bag-photo img { width: auto; max-width: 100%; height: 66px; object-fit: contain; object-position: bottom; filter: var(--drop-small); transition: transform var(--dur-3) var(--ease-out); }
+@media (hover: hover) { .trip-bag-photo:hover img { transform: translateY(-3px) rotate(-2deg); } }
+.trip-bag-text { min-width: 0; }
+.trip-bag-name { font-family: var(--display); font-size: var(--fs-headline); line-height: var(--lh-headline); font-style: italic; font-weight: 600; }
+.trip-bag-name .clamp { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.trip-bag .brand { color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
+.trip-role { margin-top: var(--s-1); color: var(--text-primary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
+.trip-bag .reasons { margin: var(--s-0) 0 0; color: var(--text-secondary); }
+@container page (min-width: 560px) {
+  .trip-bags { grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: var(--s-4); }
+  .trip-bag { grid-template-columns: 1fr; grid-template-rows: auto 1fr; align-items: start; gap: var(--s-3); text-align: center; }
+  .trip-bag-photo { height: 116px; padding-bottom: var(--s-2); border-bottom: 1px solid var(--border-strong); border-radius: 0; background: radial-gradient(closest-side at 50% 100%, var(--fill), transparent); }
+  .trip-bag-photo img { height: 100px; }
+  .trip-bag .reasons { justify-items: center; }
+  .trip-bag .reasons li { text-align: left; }
+}
+.trip-notice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); margin-top: var(--s-4); padding: var(--s-3); border-radius: var(--r-control); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); background: color-mix(in srgb, var(--accent) 7%, transparent); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.trip-notice p { flex: 1 1 240px; color: var(--text-secondary); }
+.trip-notice b { color: var(--text-primary); font-weight: 600; }
+.trip-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-3); margin-top: var(--s-5); padding-top: var(--s-4); border-top: 1px solid var(--border-subtle); }
+.trip-max { display: flex; align-items: center; gap: var(--s-3); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
+.trip-max .seg button { min-width: 44px; }
+.trip-share { display: flex; flex-wrap: wrap; gap: var(--s-1); }
+
+/* Day by day: a row a day, the day's bottle and the night's. Phones stack
+   them; with room they sit in two columns under Day and Night. */
+.trip-cols { display: none; }
+.trip-days { display: grid; }
+.trip-day { display: grid; grid-template-columns: 48px minmax(0, 1fr); grid-template-areas: 'date day' 'date night'; align-items: center; gap: var(--s-1) var(--s-3); padding: var(--s-2) 0; border-top: 1px solid var(--border-subtle); }
+.trip-day:first-child { border-top: 0; padding-top: 0; }
+.trip-date { grid-area: date; display: grid; align-self: start; padding-top: var(--s-2); }
+.trip-date b { font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 600; }
+.trip-date small { color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); font-variant-numeric: tabular-nums; }
+.trip-day.today .trip-date b { color: var(--accent); }
+.trip-cell[data-slot='day'] { grid-area: day; }
+.trip-cell[data-slot='night'] { grid-area: night; }
+.trip-cell {
+  display: grid;
+  grid-template-columns: 16px 58px 24px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  min-height: var(--hit);
+  padding: var(--s-1) var(--s-3) var(--s-1) var(--s-2);
+  border-radius: var(--r-control);
+  text-align: left;
+  transition: background-color var(--dur-2), transform var(--dur-1) var(--ease-out);
+}
+button.trip-cell:active { transform: scale(0.98); }
+@media (hover: hover) { button.trip-cell:hover { background: var(--fill); } }
+.trip-slot { display: grid; place-items: center; color: var(--text-tertiary); }
+.trip-slot svg { width: 14px; height: 14px; }
+.trip-wx-cell { display: flex; align-items: center; gap: var(--s-1); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-variant-numeric: tabular-nums; }
+.trip-wx-cell .wx svg { width: 18px; height: 18px; }
+.trip-temp i { margin-right: 1px; font-style: normal; color: var(--text-tertiary); }
+.trip-cell img { width: 24px; height: 30px; object-fit: contain; }
+.trip-name { display: grid; min-width: 0; overflow: hidden; font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.trip-name small { display: flex; align-items: center; gap: var(--s-1); color: var(--accent); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; }
+.trip-name small svg { width: 12px; height: 12px; flex: none; }
+.trip-cell.off .trip-name { color: var(--text-secondary); }
+.trip-cell.off img { opacity: 0.55; }
+.trip-cell.off .trip-slot { color: var(--negative); }
+.trip-cell.none { grid-template-columns: 16px 1fr; color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
+@container page (min-width: 560px) {
+  .trip-cols { display: grid; grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr); gap: var(--s-3); margin-bottom: var(--s-1); color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; }
+  .trip-cols span { display: flex; align-items: center; gap: var(--s-1); padding-left: var(--s-2); }
+  .trip-cols svg { width: 13px; height: 13px; }
+  .trip-day { grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: 'date day night'; gap: var(--s-3); padding: var(--s-1) 0; }
+  .trip-day:first-child { padding-top: var(--s-1); border-top: 1px solid var(--border-subtle); }
+  .trip-date { align-self: center; padding: 0; }
+  .trip-cell { grid-template-columns: 58px 24px minmax(0, 1fr); }
+  .trip-cell .trip-slot { display: none; }
+  .trip-cell.none { grid-template-columns: 1fr; }
+}
+
+.trip-sk-bags { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-4); margin-top: var(--s-4); }
+.trip-sk-bags .sk { height: 120px; border-radius: var(--r-inset); }
+.trip-sk .sk-line.w40 { margin-bottom: var(--s-3); }
+.trip-sk-row { height: 40px; margin-top: var(--s-2); border-radius: var(--r-control); }
