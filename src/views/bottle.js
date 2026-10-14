@@ -402,6 +402,12 @@ function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned, inMine,
   </div>`;
 }
 
+// Why a bottle is given a rest, in the words of its reason (src/engine.js).
+function restText({ daysAgo: d, planned }) {
+  if (planned) return d === 0 ? 'Already picked for that day' : d > 0 ? `Picked ${d === 1 ? 'the day' : `${d} days`} before` : 'Picked for a day nearby';
+  return d === 0 ? 'Already wearing it today' : d === 1 ? 'Worn yesterday' : d > 1 ? `Worn ${d} days ago` : 'Worn recently';
+}
+
 function whySection({ entry, solo, win }) {
   if (!entry) return '';
   const p = entry.parts;
@@ -412,16 +418,17 @@ function whySection({ entry, solo, win }) {
   const yours = Number.isFinite(f.personal?.rating);
   const crowd = f.source !== 'custom' && f.rating > 0 && f.ratingVotes > 0;
   const bars = FACTORS.filter(([k]) => p[k] !== null && p[k] !== undefined && (k !== 'quality' || yours || crowd))
-    .map(([k, label, color]) => bar(k === 'quality' && yours ? 'Your rating' : label, p[k] * 100, color, `${Math.round(p[k] * 100)}`)).join('');
+    .map(([k, label, color]) => bar(k === 'quality' && yours ? 'Your rating' : label, p[k] * 100, color, `${Math.round(p[k] * 100)}%`)).join('');
+  // What a recent wear (or a pick for a day nearby) takes off its match.
   const rotation = p.rotation > 0
-    ? `<p class="why-note">−${Math.round(p.rotation * 100)} for rotation: ${esc(p.planned ? 'already in the plan nearby' : 'worn recently')}.</p>`
+    ? `<p class="why-note">${esc(restText(p))}: ${Math.round(p.rotation * 100)}% lower so others get a turn.</p>`
     : '';
   const title = solo ? `How it would do ${win.slot === 'day' ? 'by day' : 'tonight'}` : 'Why it ranks here';
   return `<section class="bp-section"><h3>${title} <span class="h3-aside">${matchPct(entry)}% match</span></h3><div class="bars why">${bars}</div>${rotation}</section>`;
 }
 
 // Only the relative words go lower case: "Also good for tonight", "Also good for Saturday night".
-const inSentence = label => label.replace(/^(Today|Tonight|Tomorrow)\b/, w => w.toLowerCase());
+export const inSentence = label => label.replace(/^(Today|Tonight|Tomorrow)\b/, w => w.toLowerCase());
 
 // The next few from the same list, on the same shelf the list draws.
 function altsSection({ alts, ctx, ctxLabel, worn }) {
@@ -459,9 +466,12 @@ function seasonsSection({ f }) {
   const peak = Math.max(...SEASONS.map(s => f.season[s]));
   const seasonBars = SEASONS.map(s => bar(s, (f.season[s] / peak) * 100, SEASON_COLORS[s], `${Math.round(f.season[s] * 100)}%`)).join('');
   const dnPeak = Math.max(f.dayNight.day, f.dayNight.night);
-  const dnBars = ['day', 'night'].map(s => bar(s, (f.dayNight[s] / dnPeak) * 100, SEASON_COLORS[s], `${Math.round(f.dayNight[s] * 100)}%`)).join('');
+  // Whole percents that add up to 100, as Compare shows them.
+  const night = Math.round(f.dayNight.night * 100);
+  const shown = { day: 100 - night, night };
+  const dnBars = ['day', 'night'].map(s => bar(s, (f.dayNight[s] / dnPeak) * 100, SEASON_COLORS[s], `${shown[s]}%`)).join('');
   return `<section class="bp-section two-col">
-    <div><h3>${estimated ? 'Season fit' : 'Seasons voted'}</h3><div class="bars">${seasonBars}</div></div>
+    <div><h3>${estimated ? 'Seasons, estimated' : 'Seasons voted'}</h3><div class="bars">${seasonBars}</div></div>
     <div><h3>${estimated ? 'Time of day, estimated' : 'Time of day'}</h3><div class="bars">${dnBars}</div></div>
   </section>`;
 }
@@ -493,7 +503,7 @@ addSection({ id: 'notes', order: 700, shopOrder: 370, render: notesSection });
 
 // ---------- Actions ----------
 
-// The want list before the last bottle came off it, for Undo.
+// The want list before the last bottle came off it, and that bottle, for Undo.
 let wantsBefore = null;
 
 export const actions = {
@@ -537,7 +547,7 @@ export const actions = {
     const on = hasWant(setWant(f), f.id);
     app.keepingFocus(el, '#bottle', app.render);
     if (!on) {
-      wantsBefore = before;
+      wantsBefore = { list: before, id: f.id };
       return app.showToast(`<span class="note">${esc(f.name)} removed from your wishlist</span><button class="btn primary compact" data-action="bp-want-undo">Undo</button>`);
     }
     wantsBefore = null;
@@ -545,12 +555,16 @@ export const actions = {
     app.showToast(onList ? `<span>${esc(f.name)} is on your wishlist</span>`
       : `<span class="note">${esc(f.name)} is on your wishlist</span><a class="btn secondary compact" href="#/wardrobe/wishlist">See it</a>`);
   },
+  // The list as it was; focus back on the heart that took it off (the
+  // page's Want, or a twin's in the buy check), as the Wishlist's Undo does.
   'bp-want-undo'(el, app) {
     if (!wantsBefore) return;
-    saveWants(wantsBefore);
+    const { list, id } = wantsBefore;
+    saveWants(list);
     wantsBefore = null;
     app.render();
     app.hideToast();
+    document.querySelector(`#bottle [data-action="bp-want"][data-id="${CSS.escape(id)}"]`)?.focus();
   },
   // Compare (bp-compare) opens "Compare with…", whose handler lives with it in src/views/compare.js.
 };

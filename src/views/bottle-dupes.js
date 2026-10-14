@@ -6,7 +6,7 @@
 // records and about data of the family members outside it (up to 300 KB),
 // and the section sits well below the fold, so it asks only once its slot
 // nears the reader (askNear), pool or no pool.
-import { esc, valueWord, ratingMark } from '../ui.js';
+import { esc, valueWord, riskWord, ratingMark } from '../ui.js';
 import { icon, rowHTML } from '../ui/components.js';
 import { routeHash } from '../app/router.js';
 import { addSection, pooled, aboutOf, linkId, showing, bottleModel } from './bottle.js';
@@ -50,7 +50,7 @@ function entryMeta(e, m) {
   else if (e.why === 'votes') bits.push('Voters link them');
   if (e.value != null) bits.push(valueWord(e.value));
   if (bits.length < 2 && e.rating) bits.push(ratingMark(e.rating));
-  if (e.risk?.level === 'high') bits.push('Risky blind buy');
+  if (e.risk?.level === 'high') bits.push(riskWord('high'));
   return esc(bits.join(' · '));
 }
 

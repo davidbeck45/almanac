@@ -11,7 +11,7 @@ import { state, computeToday, keepBottles } from '../src/app/state.js';
 import '../src/views/sections.js';
 import { buyCheckHTML, checkable, fillGroups } from '../src/views/bottle-check.js';
 import { sprayHTML, figureSVG, sprayCount } from '../src/views/bottle-spray.js';
-import { skinHTML, moveText, listLabel, ordinal } from '../src/views/bottle-skin.js';
+import { skinHTML, moveText, listLabel, ordinal, sprayText } from '../src/views/bottle-skin.js';
 import { stylesHTML } from '../src/views/bottle-styles.js';
 import { dupesHTML } from '../src/views/bottle-dupes.js';
 import { crowdHTML, riskLine, wholePercents } from '../src/views/bottle-crowd.js';
@@ -129,6 +129,27 @@ test('why it ranks here: the rating bar says whose rating it is, and a bottle no
   assert.match(why(byHand), /bar-label">Season</);
   assert.ok(!/bar-label">(Your r|R)ating</.test(why(byHand)), 'no crowd, no rating bar');
   assert.match(why({ ...byHand, personal: { rating: 5, longevity: 0, sillage: 0 } }), /bar-label">Your rating</);
+  // Every bar says what its number is.
+  assert.ok([...why(f).matchAll(/bar-value">([^<]*)</g)].every(([, v]) => /^\d+%$/.test(v)), 'bars read as percents');
+  // A recent wear: what it takes off, in the app's words (rotation is the on/off switch).
+  const worn = rec => {
+    const e = rank([rec], wx.night, 'night', { history: [{ id: rec.id, date: '2026-09-25', slot: 'night' }], todayISO: wx.night.dateISO })[0];
+    const html = bottlePageHTML(modelOf(rec, { entry: e }));
+    return [e, html.slice(html.indexOf('data-section="why"'), html.indexOf('data-section="alts"'))];
+  };
+  const [e, rest] = worn(f);
+  assert.ok(e.parts.rotation > 0);
+  assert.ok(rest.includes(`Worn 3 days ago: ${Math.round(e.parts.rotation * 100)}% lower so others get a turn.`), rest);
+  assert.ok(!/rotation/i.test(rest));
+  const planned = rank([f], wx.night, 'night', { history: [{ id: f.id, date: wx.night.dateISO, slot: 'day', planned: true }], todayISO: wx.night.dateISO })[0];
+  assert.match(bottlePageHTML(modelOf(f, { entry: planned })), /Already picked for that day: \d+% lower so others get a turn\./);
+});
+
+test('day and night read as whole percents that add up to 100, as Compare shows them', () => {
+  const dn = f => [...bottlePageHTML(modelOf(f)).matchAll(/bar-label">(day|night)<[^]*?bar-value">(\d+)%</g)].map(m => [m[1], Number(m[2])]);
+  // Détour Noir's .475 / .525 read 48 and 53 when each rounds alone.
+  assert.deepEqual(dn(byName('Détour Noir')), [['day', 47], ['night', 53]]);
+  for (const f of fragrances) assert.equal(dn(f).reduce((a, [, v]) => a + v, 0), 100, f.name);
 });
 
 test('notes listed flat show under their heading alone, and estimated seasons say so in words', () => {
@@ -139,6 +160,8 @@ test('notes listed flat show under their heading alone, and estimated seasons sa
   assert.match(section(bottlePageHTML(modelOf(byName('Liquid Brun'))), 'notes'), /layer-label">Top</);
   const byHand = customRecord({ name: 'Rose', accords: ['rose', 'musky'] });
   assert.match(bottlePageHTML(modelOf(byHand, { entry: null })), /Time of day, estimated/);
+  assert.match(bottlePageHTML(modelOf(byHand, { entry: null })), /<h3>Seasons, estimated<\/h3>/, 'both halves say they’re estimated');
+  assert.ok(!bottlePageHTML(modelOf(byHand, { entry: null })).includes('Season fit'));
 });
 
 test('also good: only today, tonight and tomorrow go lower case in its heading', () => {
@@ -286,7 +309,7 @@ test('the buy check: nothing for a bottle you own, a skeleton until it answers, 
   assert.match(html, /Closest you own · 62% alike/);
   assert.match(html, /data-action="bp-want" data-id="34696" aria-pressed="true"/, 'the twin can be wanted, and shows that it is');
   assert.match(html, /data-action="open" data-ctx="night" data-id="34696"/, 'the twin opens its page');
-  assert.match(html, /Smells like it, for less · great value/, 'value in words');
+  assert.match(html, /Smells like it, for less · Great value/, 'value in words, as every section says it');
 
   // Seven groups of fills: "+3 more", never "3 mores".
   const many = buyCheckHTML(m, { status: 'ready', result: { ...check, fills: ['Formal', 'Office', 'Casual', 'Cozy', 'Date Night', 'Night Out', 'Outdoors'].map((u, i) => ({ title: `${u} on cold nights`, first: i < 2 })) } });
@@ -348,6 +371,8 @@ test('the spray guide counts sprays, lights the spots and says why', () => {
   assert.equal(sprayHTML(modelOf({ ...evil, accords: {} })), '');
   const office = sprayHTML(modelOf(evil, { occasion: occasionById('office') }));
   assert.match(office, /Office · tonight/);
+  const saturday = sprayHTML(modelOf(evil, { occasion: occasionById('date'), win: { ...wx.night, label: 'Saturday night' } }));
+  assert.match(saturday, /Date Night · Saturday night/, 'only today, tonight and tomorrow go lower case');
   const sky = byName('Shiyaaka Sky');
   const louder = sprayHTML(modelOf(sky, { skin: { rating: null, longevity: 0, sillage: 1 } }));
   assert.match(louder, /projects more on you/i, 'your skin nudges change the advice');
@@ -382,6 +407,11 @@ test('on my skin: stars, nudges and where the bottle moved', () => {
   assert.equal(moveText(1, 3, 'for tonight'), 'Now 3rd for tonight, was 1st.');
   assert.equal(moveText(2, 2, 'for tonight'), 'Still 2nd for tonight.');
   assert.equal(moveText(1, null, 'for tonight'), '');
+  // A nudge that leaves the count where it was says so, not "updated".
+  assert.equal(sprayText('1–2 sprays', '1–2 sprays'), 'Spray guide unchanged: 1–2 sprays.');
+  assert.equal(sprayText('1–2 sprays', '1 spray'), 'Now 1 spray, was 1–2.');
+  assert.equal(sprayText('2 sprays', '3 sprays'), 'Now 3 sprays, was 2.');
+  assert.equal(sprayText(null, null), '');
   assert.equal(listLabel(wx.night, null), 'for tonight');
   assert.equal(listLabel(wx.night, occasionById('date')), 'for date night tonight');
   assert.equal(listLabel({ label: 'Friday night' }, null), 'for Friday night');
@@ -440,7 +470,8 @@ test('smells like: the original, cheaper twins and siblings, each opening its pa
   assert.match(html, /1,200 say it smells like it · Great value/, 'what the count counts');
   assert.match(html, /Alike by its notes/);
   assert.match(html, /You own it/);
-  assert.match(html, /Risky blind buy/);
+  assert.match(html, /You own it · 1,200 say it smells like it · Great value · Risky/, 'risk in the word every screen uses');
+  assert.ok(!html.includes('Risky blind buy'));
   assert.match(html, /<span>Compare<\/span>/, 'the compare link says what it does');
   assert.match(html, /id="bp-dupes"/, 'Discover’s Similar & cheaper scrolls here');
   assert.equal((html.match(/<li class="row/g) ?? []).length, 6, 'four cheaper at most, the original and a sibling');
@@ -466,7 +497,9 @@ test('what voters say: value, keepers, blind buy, buzz, ratings and lean, credit
   const keep = f.about.owners.have / (f.about.owners.have + f.about.owners.had);
   assert.ok(html.includes(`${Math.round(keep * 100)}%`), 'the share of owners who keep it');
   assert.ok(!html.includes('Blind buy'), 'a bottle you own isn’t a blind buy');
-  assert.match(html, /<b>92%<\/b><span>of 27K owners/, 'kept says it once');
+  const owners = (f.about.owners.have + f.about.owners.had).toLocaleString('en-US');
+  assert.ok(html.includes(`<b>92%</b><span>of ${owners} owners`), 'kept says it once');
+  assert.ok(!/\d+(\.\d)?K\b/.test(html), 'counts in full, as the votes beside them are: one format in the card');
   assert.match(html, /Top 1%/);
   assert.equal((html.match(/class="crowd-hist-fill"/g) ?? []).length, 5);
   assert.match(html, /love or like it/);

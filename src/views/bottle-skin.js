@@ -2,8 +2,8 @@
 // stars and how it wears on you against the crowd's votes (src/skin.js).
 // Stars move it in picks and the nudges tune its spray guide; saving ranks
 // everything again and says what changed: where the bottle moved in the list
-// it was opened from ("Now 3rd for tonight, was 1st"), or the spray guide's
-// new count.
+// it was opened from ("Now 3rd for tonight, was 1st"), or what it did to the
+// spray guide's count ("Now 1 spray, was 1–2", or that it's unchanged).
 import { setSkin } from '../skin.js';
 import { esc } from '../ui.js';
 import { icon, segHTML } from '../ui/components.js';
@@ -95,6 +95,22 @@ function changeFor(id) {
   return changes.get(id) ?? '';
 }
 
+/**
+ * What a nudge did to the spray guide's count: "Now 1 spray, was 1–2." or
+ * "Spray guide unchanged: 1–2 sprays." ('' without a guide).
+ */
+export function sprayText(before, after) {
+  if (!after) return '';
+  if (before === after) return `Spray guide unchanged: ${after}.`;
+  return `Now ${after}, was ${before.replace(/ sprays?$/, '')}.`;
+}
+
+// The page's spray count as it stands ("1–2 sprays"), or null without a guide.
+function sprayNow() {
+  const model = state.route?.dest === 'bottle' ? bottleModel(state.route) : null;
+  return model && Object.keys(model.f.accords ?? {}).length ? sprayCount(guideFor(model)) : null;
+}
+
 // The bottle's place (1-based) in the list the page was opened from, as ranked now.
 function placeIn(key, id) {
   const i = state.contexts[key]?.ranked.findIndex(r => r.fragrance.id === id) ?? -1;
@@ -107,15 +123,15 @@ function save(el, app, patch) {
   const id = findRecord(arg)?.id ?? arg;
   const key = state.contexts[state.route.query.ctx] ? state.route.query.ctx : nowSlot()?.win.slot;
   const before = placeIn(key, id);
+  const was = 'rating' in patch ? null : sprayNow();
   const next = setSkin(id, patch);
   // State keeps the ratings the lists rank with, once the Wear screens wire them in.
   if ('skin' in state) state.skin = next;
   changes.clear();
   app.render();
-  // Stars move it in the list; how it wears on you changes the spray guide.
-  const ctx = state.contexts[key], model = bottleModel(state.route);
-  const said = 'rating' in patch ? moveText(before, placeIn(key, id), listLabel(ctx?.win, ctx?.occasion))
-    : model && Object.keys(model.f.accords ?? {}).length ? `Spray guide updated: ${sprayCount(guideFor(model))}.` : '';
+  // Stars move it in the list; how it wears on you may change the spray guide.
+  const ctx = state.contexts[key];
+  const said = 'rating' in patch ? moveText(before, placeIn(key, id), listLabel(ctx?.win, ctx?.occasion)) : sprayText(was, sprayNow());
   changes.set(id, said);
   app.keepingFocus(el, '#bottle', app.renderBottle);
   if (!el.isConnected && !document.activeElement?.closest?.('#bottle')) document.querySelector('#skin-title')?.focus({ preventScroll: true });

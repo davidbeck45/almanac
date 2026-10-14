@@ -5,7 +5,7 @@
 // (#bp-spray).
 import { sprayGuide } from '../spray.js';
 import { esc, cap } from '../ui.js';
-import { addSection } from './bottle.js';
+import { addSection, inSentence } from './bottle.js';
 
 // Where each spot sits on the figure (viewBox 0 0 80 100); `back` ones are
 // drawn hollow (the back of the neck, fabric).
@@ -49,7 +49,8 @@ export function sprayHTML(m) {
   const g = guideFor(m);
   // The guide's text opens with the count ("2–3 sprays, on the neck…"); the rest is where and why.
   const rest = cap(g.text.replace(/^[^,]*,\s*/, ''));
-  const when = m.win ? (m.occasion ? `${m.occasion.label} · ${m.win.label.toLowerCase()}` : m.win.label) : '';
+  // "Date Night · tonight", "Date Night · Saturday night".
+  const when = m.win ? (m.occasion ? `${m.occasion.label} · ${inSentence(m.win.label)}` : m.win.label) : '';
   return `<section class="bp-section" id="bp-spray" aria-labelledby="spray-title">
     <h3 id="spray-title" tabindex="-1">How much to spray${when ? ` <span class="h3-aside">${esc(when)}</span>` : ''}</h3>
     <div class="spray-guide">
