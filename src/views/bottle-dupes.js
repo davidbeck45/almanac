@@ -2,10 +2,13 @@
 // family from the suggestion pool (src/discover.js dupesOf): the original a
 // dupe copies, bottles that smell like it for far less, and the ones voters
 // link it with. Each opens its own page, or a side-by-side with this one.
+// Asking loads the whole pool (about 0.8 MB), and the section sits well
+// below the fold, so it asks once its slot nears the reader (askNear).
 import { esc } from '../ui.js';
 import { icon, rowHTML } from '../ui/components.js';
 import { routeHash } from '../app/router.js';
-import { addSection, pooled, aboutOf, linkId } from './bottle.js';
+import { poolStatus } from '../app/pool.js';
+import { addSection, pooled, aboutOf, linkId, showing, bottleModel } from './bottle.js';
 import { state, findRecord } from '../app/state.js';
 
 const MAX = 4;
@@ -19,6 +22,8 @@ const NOT_IN_LIBRARY = /isn’t in the fragrance library/;
 // neither the pool nor r/); a dataset id alone otherwise.
 const payload = m => (Object.keys(m.f.accords ?? {}).length ? { record: m.f } : /^\d+$/.test(m.f.id) ? { id: m.f.id } : null);
 const families = pooled('dupes', 'bp-dupes', payload, { section: 'dupes' });
+// How far below the panel's view the slot starts asking.
+const NEAR = '0px 0px 400px 0px';
 
 // Its smells-like votes: the pool's, else this bottle's own page's top five.
 function votesFor(e, m) {
@@ -80,11 +85,39 @@ export function dupesHTML(m, answer) {
   </section>`;
 }
 
+// The slot being watched, and its observer.
+let watched = null;
+
+/**
+ * Asks for the bottle's family once its slot comes within NEAR of the
+ * panel's view (scrolled to, or a jump to #bp-dupes such as Discover's
+ * Smells like); the skeleton stands until then. At once when the pool is
+ * already in, or when it asked before (pooled() then asks again only for a
+ * changed wardrobe).
+ */
+function askNear(m, app) {
+  if (!payload(m)) return;
+  if (families.get(m.f.id) || poolStatus() === 'ready' || typeof IntersectionObserver === 'undefined') return families.ask(m, app);
+  const slot = document.querySelector('#bottle [data-section="dupes"]');
+  const panel = slot?.closest('.bp-panel');
+  if (!panel || watched?.slot === slot) return;
+  watched?.observer.disconnect();
+  const observer = new IntersectionObserver(seen => {
+    if (!seen.some(e => e.isIntersecting)) return;
+    observer.disconnect();
+    if (watched?.observer === observer) watched = null;
+    const now = showing(m.arg ?? m.f.id) ? bottleModel(state.route) : null;
+    if (now?.f.id === m.f.id) families.ask(now, app);
+  }, { root: panel, rootMargin: NEAR });
+  observer.observe(slot);
+  watched = { slot, observer };
+}
+
 addSection({
   id: 'dupes',
   order: 450,
   render: m => dupesHTML(m, families.get(m.f.id)),
-  after: (m, app) => families.ask(m, app),
+  after: askNear,
   actions: {
     'bp-dupes-retry'(el, app) {
       families.forget(el.dataset.id);

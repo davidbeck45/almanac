@@ -443,12 +443,25 @@ function load(app, route) {
     askPool('warm').then(() => askPool('records', { ids: bare })).then(again, () => bare.forEach(id => askedSignals.delete(id)));
   }
   // A lone bottle's column suggests from its family.
-  const lone = ids.length === 1 ? findRecord(ids[0]) : null;
-  if (lone && !familyOf(ids[0]) && !families.has(ids[0]) && Object.keys(lone.accords ?? {}).length) {
-    families.set(ids[0], null);
-    poolInputs().then(inputs => askPool('dupes', { ...inputs, record: lone }, { channel: 'cmp-family' }))
-      .then(r => { if (!r.stale) families.set(ids[0], r); else families.delete(ids[0]); again(); }, () => families.delete(ids[0]));
-  }
+  if (ids.length === 1) askFamily(app, ids[0]);
+}
+
+/**
+ * Asks the pool for a bottle's smells-like family (`dupes`), for a lone
+ * bottle's column and the first list of "Compare with…", unless its bottle
+ * page has it (familyOf) or it was asked. Whichever of them is on screen
+ * draws again when it lands.
+ */
+function askFamily(app, id) {
+  const f = findRecord(id);
+  if (!f || familyOf(id) || families.has(id) || !Object.keys(f.accords ?? {}).length) return;
+  families.set(id, null);
+  const landed = () => {
+    if (onCompare()) redraw(app);
+    if (state.sheet?.kind === 'cmp-pick' && state.sheet.base?.[0] === id) app.keepingFocus(document.activeElement, '#sheet', () => app.updateSheet({}));
+  };
+  poolInputs().then(inputs => askPool('dupes', { ...inputs, record: f }, { channel: 'cmp-family' }))
+    .then(r => { if (!r.stale) families.set(id, r); else families.delete(id); landed(); }, () => families.delete(id));
 }
 
 // Back online: bottles that couldn't load try again.
@@ -597,6 +610,12 @@ let removedFrom = null;
 export const actions = {
   'cmp-add'(el, app) {
     app.openSheet({ kind: 'cmp-pick', base: compareIds(state.base?.dest === 'compare' ? state.base.arg : ''), ctx: null, query: '', results: null });
+  },
+  // A bottle page's Compare: the picker, that bottle first, its family (the
+  // first list) asked now if its page's section hadn't yet.
+  'bp-compare'(el, app) {
+    app.openSheet({ kind: 'cmp-pick', base: [el.dataset.id], ctx: el.dataset.ctx || null, query: '', results: null });
+    askFamily(app, el.dataset.id);
   },
   // From the picker, or a lone bottle's suggestions on the page. The page
   // drawn (and the bottle page under the picker gone), focus on its heading:

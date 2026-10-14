@@ -510,8 +510,5 @@ export const actions = {
     app.render();
     app.hideToast();
   },
-  // "Compare with…": the picker (src/views/compare.js), this bottle first.
-  'bp-compare'(el, app) {
-    app.openSheet({ kind: 'cmp-pick', base: [el.dataset.id], ctx: el.dataset.ctx || null, query: '', results: null });
-  },
+  // Compare (bp-compare) opens "Compare with…", whose handler lives with it in src/views/compare.js.
 };

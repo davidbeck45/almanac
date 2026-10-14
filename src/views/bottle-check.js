@@ -8,7 +8,7 @@ import { styleById } from '../scent-styles.js';
 import { esc } from '../ui.js';
 import { icon, rowHTML } from '../ui/components.js';
 import { addSection, pooled, likedStyleIds } from './bottle.js';
-import { state, collectionLabel, findRecord } from '../app/state.js';
+import { state, collectionLabel, findRecord, viewingDemo } from '../app/state.js';
 import { loadWants, hasWant } from '../wishlist.js';
 
 // Verdicts as tones (any other verdict reads neutral).
@@ -26,6 +26,10 @@ export const checkable = f => /^\d+$/.test(f.id) || Object.keys(f.accords ?? {})
 // its own row for a dataset id.
 const payload = m => (m.owned || m.inMine || !checkable(m.f) ? null
   : Object.keys(m.f.accords ?? {}).length ? { record: m.f } : { id: m.f.id });
+// The ranked list still on its way (David's wardrobe at boot, a shared
+// link): whether it owns the bottle isn't known yet, so it doesn't ask (and
+// load the pool) for one it may own.
+const listLoading = () => (viewingDemo() && !state.demo) || Boolean(state.shared?.loading);
 const checks = pooled('check', 'bp-check', payload, {
   section: 'check',
   // The liked styles, so a skin scent for someone who loves them reads as one.
@@ -148,7 +152,7 @@ addSection({
   id: 'check',
   order: 170,
   render: m => buyCheckHTML(m, checks.get(m.f.id), { who: collectionLabel(), wants: loadWants() }),
-  after: (m, app) => checks.ask(m, app),
+  after: (m, app) => { if (!listLoading()) checks.ask(m, app); },
   actions: {
     'bp-check-retry'(el, app) {
       checks.forget(el.dataset.id);
