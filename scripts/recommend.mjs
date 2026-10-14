@@ -425,8 +425,9 @@ async function discover(args, fragrances, { slot, count, history }) {
   const library = fragranticaLibrary(fromDisk);
   // A typed name: the wardrobe first, then the pool, then the whole dataset (with its about data).
   const findAny = async name => {
-    const [mine] = matchBottles(fragrances, name);
-    if (mine) return mine;
+    const mine = matchBottles(fragrances, name);
+    if (mine.length > 1) console.error(`"${name}" matches ${mine.map(f => f.name).join(', ')}; using ${mine[0].name}. Give more of the name for another.`);
+    if (mine.length) return mine[0];
     const [hit] = await library.search(name, 1);
     if (!hit) return null;
     const record = ctx.byId.get(hit.id) ?? (await library.records([hit.id])).get(hit.id);

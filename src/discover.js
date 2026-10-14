@@ -72,7 +72,7 @@ export const FILTERS = Object.freeze({
   minSafe: null, // blind-buy safety percentile, 0–100
   minRating: MIN_RATING,
   hideDiscontinued: true,
-  excludeOwned: true,
+  excludeOwned: true, // search only: style and example picks never include owned bottles or their twins
 });
 
 // Notes and accords search: a term matches when its note salience or accord
