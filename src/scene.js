@@ -157,10 +157,21 @@ const TREE_SPOTS = {
   near: [[0.065, 1, 'pine'], [0.12, 0.85, 'round'], [0.175, 1.1, 'round'], [0.88, 0.9, 'round'], [0.94, 1.05, 'pine']],
 };
 
-function trees(layer, W, season, shade, snowy, P) {
+// Trees keep this far (a fraction of the width) from the hero's bottle, off
+// the hillside under the hero's temperature (its left FOOT_W), so the big
+// numbers sit on open ground, and on wide scenes off the middle hill behind
+// the bottle's name beside it (LABEL_W).
+const STAGE_CLEAR = 0.07;
+const FOOT_W = 0.45;
+const LABEL_W = 0.32;
+
+function trees(layer, W, season, shade, snowy, P, stage = null) {
   const pal = P.foliage[season].map(c => mix(c, shade.color, shade.t));
   const pine = mix(season === 'winter' ? P.pine.winter : P.pine.other, shade.color, shade.t);
+  const label = stage !== null && layer === 'mid' && W / H >= CABIN_ROOM;
   return TREE_SPOTS[layer].map(([fx, s, kind], i) => {
+    if (stage !== null && (Math.abs(fx - stage) < STAGE_CLEAR || fx < FOOT_W)) return '';
+    if (label && fx > stage && fx < stage + LABEL_W) return '';
     const x = fx * W;
     const bare = season === 'winter' && kind === 'round';
     const color = kind === 'pine' || bare ? pine : pal[i % pal.length];
@@ -187,6 +198,40 @@ function cabin(x, phase, weatherDark, cold, shade, glowId, P) {
   </g>`;
 }
 
+// With a bottle on stage the cabin moves down the hill, out of its way, and
+// only when the scene is wide enough to leave room for it.
+const CABIN_STAGED = 0.86;
+const CABIN_ROOM = 1.6;
+
+// The hero's bottle and the sky's light keep out of each other's way: the
+// moon sits across the sky from the bottle, and a sun that would hang behind
+// it (on its cap, like a bulb) waits beside it instead. In scene units: the
+// bottle is about 2 × STAGE_HALF wide and STAGE_TALL high on the hill.
+const STAGE_HALF = 44;
+const STAGE_TALL = 92;
+const SUN_R = 17;
+const LIGHT_GAP = 10;
+
+function lightAt(phase, sunProgress, W, stage) {
+  if (phase === 'night') {
+    const fx = stage === null ? 0.8 : stage > 0.5 ? stage - 0.3 : stage + 0.3;
+    return { x: W * fx, y: 52 };
+  }
+  const y = 176 - Math.sin(sunProgress * Math.PI) * 142;
+  let x = 30 + sunProgress * (W - 60);
+  if (stage !== null) {
+    const sx = stage * W;
+    const room = STAGE_HALF + SUN_R + LIGHT_GAP;
+    if (Math.abs(x - sx) < room && y + SUN_R + LIGHT_GAP > hill.mid(sx) - STAGE_TALL) {
+      // On the side it's on, unless that's off the edge.
+      const side = x < sx ? -1 : 1;
+      const fits = d => sx + d * room > SUN_R && sx + d * room < W - SUN_R;
+      x = sx + (fits(side) ? side : -side) * room;
+    }
+  }
+  return { x, y };
+}
+
 // Labels can carry place names; keep them inside the attribute.
 const attr = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
@@ -197,8 +242,10 @@ const attr = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;'
  * season: 'winter' | 'spring' | 'summer' | 'fall'
  * cold: chimney smoke (and snow on the ground in winter)
  * aspect: container width / height
+ * stage: where the hero's bottle stands on the middle hill (a fraction of the
+ *   width, see stagePoint); the cabin and trees make room for it
  */
-export function renderScene({ phase = 'day', category = 'clear', sunProgress = 0.5, season = 'summer', cold = false, aspect = BASE_W / H, label = '', theme = 'default' }) {
+export function renderScene({ phase = 'day', category = 'clear', sunProgress = 0.5, season = 'summer', cold = false, aspect = BASE_W / H, label = '', theme = 'default', stage = null }) {
   const P = palette(theme);
   const id = `sc${++uid}`;
   const W = Math.round(H * Math.min(4, Math.max(1.2, aspect)));
@@ -223,8 +270,9 @@ export function renderScene({ phase = 'day', category = 'clear', sunProgress = 0
       parts.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(2)}" fill="${P.star}" class="${i % 4 === 0 ? 'twinkle' : ''}" style="animation-delay:${(-rand() * 4).toFixed(2)}s" opacity="${(0.5 + rand() * 0.5).toFixed(2)}"/>`);
     }
   }
+  const light = lightAt(phase, sunProgress, W, stage);
   if (night) {
-    const mx = W * 0.8, my = 52;
+    const { x: mx, y: my } = light;
     const moonDim = category === 'clear' || category === 'partly' ? 1 : 0.3;
     parts.push(`<g opacity="${moonDim}">
       <circle cx="${mx}" cy="${my}" r="30" fill="url(#${id}-moonglow)"/>
@@ -232,9 +280,7 @@ export function renderScene({ phase = 'day', category = 'clear', sunProgress = 0
       <circle cx="${mx}" cy="${my}" r="16" fill="${P.moon}" mask="url(#${id}-crescent)"/>
     </g>`);
   } else {
-    const p = sunProgress;
-    const sunX = 30 + p * (W - 60);
-    const sunY = 176 - Math.sin(p * Math.PI) * 142;
+    const { x: sunX, y: sunY } = light;
     const warm = phase !== 'day';
     const dim = { clear: 1, partly: 0.95, fog: 0.4 }[category] ?? 0.22;
     parts.push(`<g opacity="${dim}">
@@ -246,10 +292,11 @@ export function renderScene({ phase = 'day', category = 'clear', sunProgress = 0
   // Hills, trees, cabin
   parts.push(`<path d="${hillPath(hill.far, W)}" fill="${hills[0]}"/>`);
   parts.push(`<path d="${hillPath(hill.mid, W)}" fill="${hills[1]}"/>`);
-  parts.push(trees('mid', W, season, { color: shade.color, t: Math.min(0.9, shade.t + 0.15) }, snowy, P));
+  parts.push(trees('mid', W, season, { color: shade.color, t: Math.min(0.9, shade.t + 0.15) }, snowy, P, stage));
   parts.push(`<path d="${hillPath(hill.near, W)}" fill="${hills[2]}"/>`);
-  parts.push(cabin(W * 0.715, phase, category === 'storm' || category === 'rain', cold, shade, `${id}-window`, P));
-  parts.push(trees('near', W, season, shade, snowy, P));
+  // On a narrow stage the bottle's name sits where the cabin would.
+  if (stage === null || W / H >= CABIN_ROOM) parts.push(cabin(W * (stage === null ? 0.715 : CABIN_STAGED), phase, category === 'storm' || category === 'rain', cold, shade, `${id}-window`, P));
+  parts.push(trees('near', W, season, shade, snowy, P, stage));
 
   // Clouds: spread evenly across the width; heavier weather sits lower and bigger.
   const n = Math.round((CLOUDS[category] ?? 3) * Math.max(1, sx * 0.8));
@@ -324,4 +371,64 @@ export function sceneTint(phase, category, theme = 'default') {
   const P = palette(theme);
   const g = GRAY[category] ?? 0.3;
   return P.sky[phase].map(c => mix(c, grayTarget(P, phase, category), g));
+}
+
+// Where the middle hill's ridge is at `fx` (a fraction of a box's width), as
+// fractions of a box of this aspect: the hero stands its bottle there. The
+// scene fills the box like the SVG does (preserveAspectRatio slice, from the
+// bottom).
+export function stagePoint(aspect, fx) {
+  const W = Math.round(H * Math.min(4, Math.max(1.2, aspect)));
+  const scale = Math.max(aspect / W, 1 / H);
+  const offsetX = (aspect - W * scale) / 2;
+  const xs = (fx * aspect - offsetX) / scale;
+  return { x: fx, y: 1 - H * scale + hill.mid(xs) * scale, scene: xs / W };
+}
+
+const hsl = hex => {
+  const [r, g, b] = hexToRgb(hex).map(c => c / 255);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+  if (!d) return [0, 0, l];
+  const s = d / (1 - Math.abs(2 * l - 1));
+  const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [(h * 60 + 360) % 360, s, l];
+};
+const fromHsl = (h, s, l) => {
+  const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+  const f = n => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1))));
+  return `#${[0, 8, 4].map(n => f(n).toString(16).padStart(2, '0')).join('')}`;
+};
+
+// gruvbox's own accents for its skies (a lightened gruvbox sky lands on its
+// neutrals): purple at dawn and dusk, blue by day and at night. All clear
+// 4.5:1 on its panels.
+const GRUVBOX_SKY = { dawn: '#d3869b', day: '#83a598', dusk: '#d3869b', night: '#83a598' };
+
+// The sky's ambient color, light enough to draw with on the page's dark
+// surfaces (about 7:1 on --surface-1): the middle of the sky's gradient at a
+// fixed lightness, its saturation kept (a gray sky gives a quiet accent).
+// Dawn reads rose, day slate-blue, dusk violet, night indigo.
+export function skyAccent(phase, category, theme = 'default') {
+  if (theme === 'gruvbox') return GRUVBOX_SKY[phase] ?? GRUVBOX_SKY.night;
+  const [h, s] = hsl(sceneTint(phase, category, theme)[1]);
+  return fromHsl(h, Math.min(0.62, Math.max(0.14, s * 0.9)), 0.76);
+}
+
+// Where the scene's light is (fractions of its width and height) and its
+// color: the moon at night, the sun by day, weaker under cloud. The hero
+// rim-lights its bottle from there.
+// `stage` as renderScene's.
+export function skyLight({ phase = 'day', category = 'clear', sunProgress = 0.5, aspect = BASE_W / H, theme = 'default', stage = null }) {
+  const P = palette(theme);
+  const W = Math.round(H * Math.min(4, Math.max(1.2, aspect)));
+  const { x, y } = lightAt(phase, sunProgress, W, stage);
+  if (phase === 'night') {
+    return { x: x / W, y: y / H, color: P.moon, strength: category === 'clear' || category === 'partly' ? 1 : 0.35 };
+  }
+  return {
+    x: x / W,
+    y: y / H,
+    color: phase === 'day' ? P.sun.day : P.sun.warm,
+    strength: { clear: 1, partly: 0.9, fog: 0.45 }[category] ?? 0.3,
+  };
 }

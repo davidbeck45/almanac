@@ -27,7 +27,13 @@
   <link rel="preload" href="fonts/fraunces.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/fraunces-italic.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="src/tokens.css">
-  <link rel="stylesheet" href="src/styles.css">
+  <link rel="stylesheet" href="src/css/base.css">
+  <link rel="stylesheet" href="src/css/components.css">
+  <link rel="stylesheet" href="src/css/shell.css">
+  <link rel="stylesheet" href="src/css/wear.css">
+  <link rel="stylesheet" href="src/css/wardrobe.css">
+  <link rel="stylesheet" href="src/css/discover.css">
+  <link rel="stylesheet" href="src/css/bottle.css">
   <!-- Apply the saved theme before first paint (src/theme.js takes over from there). -->
   <script>
     try {
@@ -37,36 +43,46 @@
   </script>
   <script type="module" src="src/main.js"></script>
   <!-- Every module main.js imports, fetched in parallel rather than as a waterfall (test/shell.test.js keeps the list whole). -->
-  <link rel="modulepreload" href="src/accords.js">
-  <link rel="modulepreload" href="src/wmo.js">
-  <link rel="modulepreload" href="src/profiles.js">
-  <link rel="modulepreload" href="src/custom.js">
-  <link rel="modulepreload" href="src/engine.js">
-  <link rel="modulepreload" href="src/occasions.js">
+  <link rel="modulepreload" href="src/app/shell.js">
   <link rel="modulepreload" href="src/weather.js">
+  <link rel="modulepreload" href="src/wmo.js">
+  <link rel="modulepreload" href="src/engine.js">
+  <link rel="modulepreload" href="src/accords.js">
+  <link rel="modulepreload" href="src/custom.js">
+  <link rel="modulepreload" href="src/profiles.js">
+  <link rel="modulepreload" href="src/occasions.js">
   <link rel="modulepreload" href="src/location.js">
-  <link rel="modulepreload" href="src/history.js">
-  <link rel="modulepreload" href="src/hidden.js">
   <link rel="modulepreload" href="src/collections.js">
   <link rel="modulepreload" href="src/api.js">
   <link rel="modulepreload" href="src/fragella.js">
   <link rel="modulepreload" href="src/fragrantica.js">
-  <link rel="modulepreload" href="src/layering.js">
   <link rel="modulepreload" href="src/scene.js">
   <link rel="modulepreload" href="src/theme.js">
   <link rel="modulepreload" href="src/ui.js">
+  <link rel="modulepreload" href="src/ui/components.js">
+  <link rel="modulepreload" href="src/app/router.js">
+  <link rel="modulepreload" href="src/app/state.js">
+  <link rel="modulepreload" href="src/history.js">
+  <link rel="modulepreload" href="src/hidden.js">
+  <link rel="modulepreload" href="src/app/sheets.js">
+  <link rel="modulepreload" href="src/views/wear.js">
+  <link rel="modulepreload" href="src/views/wardrobe.js">
+  <link rel="modulepreload" href="src/views/discover.js">
+  <link rel="modulepreload" href="src/views/bottle.js">
+  <link rel="modulepreload" href="src/layering.js">
+  <link rel="modulepreload" href="src/views/settings.js">
+  <link rel="modulepreload" href="src/views/sections.js">
 </head>
 <body>
-  <div id="app">
-    <h1 id="page-title" class="visually-hidden">Scentcast</h1>
-    <header id="hero" class="hero"></header>
-    <nav class="tabs" role="tablist" aria-label="View">
-      <button role="tab" id="tab-today" data-view="today" aria-selected="true" aria-controls="view">Today</button>
-      <button role="tab" id="tab-week" data-view="week" aria-selected="false" aria-controls="view" tabindex="-1">Week</button>
-      <button role="tab" id="tab-occasion" data-view="occasion" aria-selected="false" aria-controls="view" tabindex="-1">Occasion</button>
-    </nav>
-    <main id="view" role="tabpanel" aria-labelledby="tab-today" tabindex="-1"></main>
-    <footer id="foot"></footer>
+  <button class="skip-link" data-action="skip">Skip to content</button>
+  <div id="app" class="app">
+    <nav id="nav" class="nav" aria-label="Main"></nav>
+    <div id="page" class="page">
+      <header id="hero" class="hero" hidden></header>
+      <main id="main"></main>
+      <footer id="foot" class="foot"></footer>
+    </div>
+    <aside id="bottle" class="bottle" aria-label="Bottle" hidden></aside>
   </div>
   <div id="sheet" class="sheet" hidden></div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

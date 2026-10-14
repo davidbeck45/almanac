@@ -1,0 +1,84 @@
+/* The bottle page's content (its frame, sheet or inspector, is in
+   src/css/shell.css): the head with the photo, the reasons, actions, and
+   one .bp-section per registered section. A new section can use
+   .bp-section and its h3 as they are. */
+
+.bp-head { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: var(--s-4); align-items: center; padding-right: var(--s-7); }
+.bp-bottle {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: var(--r-round);
+  background: radial-gradient(circle at 50% 58%, color-mix(in srgb, var(--accord) 30%, transparent), transparent 68%);
+}
+.bp-bottle img { width: 92px; height: auto; filter: var(--drop-bottle); }
+.bp-title { min-width: 0; }
+.bp-title .kicker { display: flex; align-items: center; gap: var(--s-2); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 500; }
+/* Bottle names are set like book titles: Fraunces italic. */
+.bp-title h2 { margin: var(--s-1) 0 var(--s-0); font-family: var(--display); font-size: var(--fs-title-1); line-height: var(--lh-title-1); font-style: italic; font-weight: 600; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.bp-title h2.long { font-size: var(--fs-title-3); line-height: var(--lh-title-3); }
+.bp-title .brand { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.rating { margin-top: var(--s-2); color: var(--accent); font-size: var(--fs-body); font-weight: 600; font-variant-numeric: tabular-nums; }
+.rating span { margin-left: var(--s-1); color: var(--text-secondary); font-size: var(--fs-footnote); font-weight: 400; }
+.performance, .inspired { margin-top: var(--s-0); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.inspired a { color: var(--text-primary); }
+.performance span { color: var(--text-tertiary); }
+.performance a { color: inherit; }
+:is(.inspired, .performance) a { position: relative; z-index: 1; padding: calc((var(--hit) - 1.25em) / 2) 0; text-underline-offset: 2px; }
+
+.bp-summary { margin-top: var(--s-4); }
+.reasons.full { margin: 0 0 var(--s-3); }
+.fact { display: flex; align-items: center; gap: var(--s-2); margin: 0 0 var(--s-2); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.fact svg { width: 14px; height: 14px; flex: none; color: var(--text-tertiary); }
+.bp-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-top: var(--s-4); }
+
+.bp-section { margin-top: var(--s-7); }
+.bp-section h3 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+  margin-bottom: var(--s-3);
+  font-size: var(--fs-headline);
+  line-height: var(--lh-headline);
+  font-weight: 600;
+}
+.h3-aside { color: var(--ambient); font-size: var(--fs-footnote); font-weight: 600; font-variant-numeric: tabular-nums; }
+.why-note { margin-top: var(--s-2); color: var(--negative); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.two-col { display: grid; gap: var(--s-6); }
+@media (min-width: 480px) { .two-col { grid-template-columns: 1.25fr 1fr; } }
+/* The inspector is narrow: one column there. */
+@media (min-width: 1100px) { .bottle:not(.modal) .two-col { grid-template-columns: 1fr; } }
+
+/* "Also good": the list's shelf, edge to edge of the page; with room (the
+   drawer, the inspector) the four stand side by side. */
+.bp-section .shelf { margin-inline: calc(-1 * var(--sheet-px)); padding-inline: var(--sheet-px); scroll-padding: 0 var(--sheet-px); }
+@container bottle (min-width: 360px) {
+  .bp-section .shelf { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-inline: 0; padding-inline: 0; overflow: visible; }
+}
+
+.pairings { display: grid; gap: var(--s-2); }
+.pairing { padding: var(--s-2) var(--s-3) var(--s-3); border-radius: var(--r-inset); border: 1px solid var(--border-subtle); background: var(--surface-2); }
+.pairing-head { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: var(--s-3); width: 100%; min-height: var(--hit); text-align: left; }
+.pairing-head img { width: 34px; height: 38px; object-fit: contain; }
+.pairing-head > span { display: grid; min-width: 0; }
+.pairing-head b { overflow: hidden; font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.pairing-head small { color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
+.pairing-head > svg { width: 16px; height: 16px; color: var(--text-tertiary); }
+@media (hover: hover) { .pairing-head:hover > svg { color: var(--text-primary); } }
+.pairing .reasons.compact { margin: var(--s-2) 0 0 calc(34px + var(--s-3)); }
+.pairing-order { display: flex; align-items: center; gap: var(--s-2); margin: var(--s-2) 0 0 calc(34px + var(--s-3)); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.pairing-order svg { width: 14px; height: 14px; flex: none; color: var(--text-tertiary); }
+
+.pyramid { display: grid; gap: var(--s-3); }
+.layer { display: grid; grid-template-columns: 48px 1fr; align-items: start; gap: var(--s-2); }
+.layer-label { padding-top: var(--s-1); color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
+.notes { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.note-chip { padding: var(--s-0) var(--s-3); border-radius: var(--r-pill); border: 1px solid var(--border-subtle); background: var(--surface-2); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+
+.bp-loading { display: grid; justify-items: start; gap: var(--s-3); padding-top: var(--s-2); }
+/* Not found, couldn't load: clear of the close button. */
+.bp-notice { padding-top: var(--s-8); }
+.bp-sk-photo { width: 104px; height: 104px; border-radius: var(--r-round); }
+.bp-sk-line { width: 70%; height: 22px; }
+.bp-sk-line.short { width: 45%; height: 14px; }

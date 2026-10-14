@@ -1,0 +1,141 @@
+/* Wardrobe: the owned list, the journal (Worn), and the add, paste and
+   add-it-yourself sheets. */
+
+/* ---------- Owned ---------- */
+
+.owned .seg.wide { margin-bottom: var(--s-1); }
+.owned .action-row { margin-top: var(--s-4); }
+.list-note { margin: var(--s-5) 0 var(--s-3); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+/* The filter sticks under the sub-navigation while the list scrolls by. */
+.owned-filter {
+  position: sticky;
+  top: calc(var(--s-2) + var(--head-bar) + env(safe-area-inset-top));
+  z-index: 5;
+  margin: calc(-1 * var(--s-2)) calc(-1 * var(--s-1)) var(--s-2);
+  padding: var(--s-2) var(--s-1) var(--s-1);
+  border-radius: 0 0 calc(var(--r-control) + var(--s-1)) calc(var(--r-control) + var(--s-1));
+  background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+@media (prefers-reduced-transparency: reduce) { .owned-filter { background: var(--surface-1); } }
+.owned-list { margin: 0 calc(-1 * var(--s-2)); }
+/* Two columns of rows once there's room, switches close to their names. */
+@container page (min-width: 700px) {
+  .owned-list { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--s-4); }
+}
+.rows.results, .rows.import-rows { margin-top: var(--s-3); }
+.owned-tag { display: inline-flex; flex: none; align-items: center; gap: var(--s-1); padding: 0 var(--s-3); color: var(--positive); font-size: var(--fs-footnote); font-weight: 600; }
+.owned-tag svg { width: 14px; height: 14px; }
+
+/* ---------- Worn ---------- */
+
+.journal > section { margin-top: var(--s-6); }
+.journal h3 { margin-bottom: var(--s-3); font-size: var(--fs-headline); line-height: var(--lh-headline); font-weight: 600; }
+.stat-tiles { display: grid; grid-template-columns: 1fr 1fr 2.2fr; gap: var(--s-2); }
+.stat {
+  display: grid;
+  align-content: center;
+  gap: var(--s-0);
+  min-width: 0;
+  padding: var(--s-3);
+  border-radius: var(--r-inset);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-2);
+}
+.stat > b { font-family: var(--display); font-size: var(--fs-title-2); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.stat > span { color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
+.stat.wide { grid-template-columns: 30px 1fr; align-items: center; gap: var(--s-3); }
+.stat.wide img { width: 30px; height: 36px; object-fit: contain; }
+.stat.wide > span { display: grid; min-width: 0; }
+.stat .name { overflow: hidden; font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.stat.wide > span > span { color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
+
+.calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--s-1); }
+.cal-dow { padding-bottom: var(--s-0); color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; text-align: center; }
+.cal-cell {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  aspect-ratio: 1 / 1.05;
+  padding: var(--s-1);
+  border-radius: var(--r-thumb);
+  background: var(--fill-faint);
+}
+.cal-cell small { color: var(--text-tertiary); font-size: var(--fs-caption); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cal-cell.has { background: color-mix(in srgb, var(--positive) 7%, var(--surface-2)); }
+.cal-cell.has small { color: var(--text-secondary); }
+.cal-cell.today { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 70%, transparent); }
+.cal-cell.today small { color: var(--accent); }
+.cal-cell.future { background: transparent; box-shadow: inset 0 0 0 1px var(--border-subtle); }
+.cal-bottles { display: flex; justify-content: center; align-items: flex-end; min-height: 0; }
+.cal-bottles img { width: 60%; max-width: 30px; height: auto; max-height: 100%; object-fit: contain; }
+.cal-bottles img + img { margin-left: -18%; }
+
+.rank-list { display: grid; gap: var(--s-1); }
+.rank-list li { display: grid; grid-template-columns: 30px minmax(0, 1.1fr) minmax(40px, 1fr) 28px; align-items: center; gap: var(--s-3); padding: var(--s-1) var(--s-0); }
+.rank-list img { width: 30px; height: 34px; object-fit: contain; }
+.rank-bar { height: 6px; overflow: hidden; border-radius: var(--r-pill); background: var(--fill); }
+.rank-bar span { display: block; height: 100%; border-radius: var(--r-pill); background: linear-gradient(90deg, color-mix(in srgb, var(--ambient) 55%, transparent), var(--ambient)); }
+.rank-n { color: var(--text-secondary); font-size: var(--fs-footnote); font-variant-numeric: tabular-nums; text-align: right; }
+
+.dust-list { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }
+.dust-list button { display: grid; grid-template-columns: 28px 1fr; align-items: center; gap: var(--s-2); width: 100%; min-height: 48px; padding: var(--s-1) var(--s-2); border-radius: var(--r-control); border: 1px solid var(--border-subtle); background: var(--surface-2); text-align: left; transition: transform var(--dur-1) var(--ease-out), background-color var(--dur-2), border-color var(--dur-2); }
+.dust-list button:active { transform: scale(0.97); }
+@media (hover: hover) { .dust-list button:hover { border-color: var(--border-strong); background: var(--surface-3); } }
+.dust-list img { width: 28px; height: 32px; object-fit: contain; }
+.dust-list span { display: grid; min-width: 0; }
+.dust-list b { overflow: hidden; font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.dust-list small { overflow: hidden; color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); text-overflow: ellipsis; white-space: nowrap; }
+@container page (min-width: 600px) { .dust-list { grid-template-columns: repeat(3, 1fr); } }
+
+/* ---------- Paste a list ---------- */
+
+.import-form { display: grid; gap: var(--s-3); }
+.import-form textarea {
+  width: 100%;
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-control);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-size: var(--fs-headline);
+  line-height: var(--lh-body);
+  resize: vertical;
+  outline: none;
+}
+.import-form textarea:focus { border-color: color-mix(in srgb, var(--accent) 60%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
+.import-rows .pending .spinner { margin: 0 var(--s-2); }
+
+/* ---------- Add it yourself ---------- */
+
+.custom-form fieldset { margin: var(--s-5) 0 0; padding: 0; border: 0; }
+.custom-form legend { display: flex; justify-content: space-between; gap: var(--s-3); width: 100%; margin-bottom: var(--s-2); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.custom-form legend span { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.custom-form .name-field { margin: var(--s-3) 0 0; }
+.custom-form .error { margin-top: var(--s-4); }
+.pick-chips { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.pick-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 36px;
+  padding: 0 var(--s-3);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  font-size: var(--fs-footnote);
+}
+.pick-chip::after { content: ''; order: -1; flex: none; width: 8px; height: 8px; border-radius: var(--r-round); background: var(--c); }
+.pick-chip.on {
+  border-color: color-mix(in srgb, var(--c) 60%, transparent);
+  background: color-mix(in srgb, var(--c) 20%, transparent);
+  color: color-mix(in srgb, var(--c) 45%, var(--paper));
+}
+.pick-chip.on::after { display: none; }
+.pick-chip b { display: grid; place-items: center; width: 18px; height: 18px; border-radius: var(--r-round); background: var(--c); color: var(--surface-0); font-size: var(--fs-caption); font-weight: 600; }
+.pick-chip:disabled { opacity: 0.35; }
+@media (hover: hover) { .pick-chip:hover:not(:disabled):not(.on) { color: var(--text-primary); border-color: color-mix(in srgb, var(--text-primary) 22%, transparent); } }
+.when { display: grid; justify-items: start; gap: var(--s-2); }
+.when .seg { flex-wrap: wrap; }
+.when .seg button { padding: 0 var(--s-3); }

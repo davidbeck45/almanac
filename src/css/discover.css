@@ -1,0 +1,12 @@
+/* Discover: the search field and its results. Wave 4 adds styles, more like
+   this and notes search here. */
+
+.discover-search { position: sticky; top: calc(var(--s-2) + env(safe-area-inset-top)); z-index: 10; }
+.discover-search .filter { background: color-mix(in srgb, var(--surface-2) 92%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: 0 10px 24px -14px rgb(var(--shade) / 0.8); }
+.discover-list { padding-block: var(--s-3); }
+.discover-hint { margin: var(--s-1) var(--s-1) var(--s-2); }
+/* The live line: searching, the count, no matches. Empty, it takes no room. */
+.result-status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin: 0 var(--s-1) var(--s-1); }
+.result-status:empty { margin: 0; }
+.discover-list .rows { margin: 0 calc(-1 * var(--s-2)); }
+.discover-list .rows.results { margin-top: 0; }

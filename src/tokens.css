@@ -61,6 +61,13 @@
   --s-10: 72px;
   --hit: 44px; /* smallest tap target */
 
+  /* Layout (src/css/shell.css). */
+  --col: 760px;       /* the content column */
+  --rail: 232px;      /* the left rail from 1280px; 88px from 1100px */
+  --inspector: 420px; /* the bottle page docked beside the page */
+  --tabbar: 64px;     /* the phone and tablet tab bar, without the safe area */
+  --head-bar: 46px;   /* the sticky sub-navigation under the page's heading */
+
   /* Radii, concentric: an inner radius is the outer one minus the padding. */
   --r-pill: 999px;
   --r-surface: 24px; /* cards, sheets, the hero */
@@ -86,7 +93,7 @@
   --text-primary: #eef0f5;
   --text-secondary: #9aa1b1;
   --text-tertiary: #838a9a; /* still 4.5:1 on --surface-3 */
-  --accent: #f2c35b;        /* today, selection, focus */
+  --accent: #f2c35b;        /* gold: today, selection, focus (the sky's --ambient does the rest) */
   --on-accent: #0a0b10;
   --positive: #86d9a8;
   --negative: #f19a84;
@@ -109,9 +116,13 @@
   --ink-veil: 2 3 8;
   --ink-panel: 18 20 28;
   --shade: 0 0 0;           /* shadows */
-  /* The page tint behind the hero; main.js sets both from the sky. */
+  /* The sky: src/app/shell.js sets the tints (top, middle and horizon of
+     the scene's gradient) and --ambient, the sky's own accent (dawn rose,
+     day slate-blue, dusk violet, night indigo; about 7:1 on --surface-1). */
   --tint-top: #101838;
   --tint-mid: #1f2c57;
+  --tint-low: #1f2c57;
+  --ambient: #a3afe0;
 
   /* Lines and fills: the text color at an alpha. */
   --border-subtle: color-mix(in srgb, var(--text-primary) 7%, transparent);
