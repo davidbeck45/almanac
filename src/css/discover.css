@@ -51,8 +51,9 @@ body[data-route='discover'] .page > :is(#main, #foot) { --disc-col: 1120px; max-
 /* The tabs (By style, By bottle) or a search's two readings, and Filters. */
 .disc-bar { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
 .disc-tabs, .disc-modes { flex: 1 1 auto; min-width: 0; }
-@container disc (min-width: 560px) { .disc-tabs { flex: 0 1 320px; } .disc-modes { flex: 0 1 auto; } .disc-bar { justify-content: space-between; } }
+@container disc (min-width: 560px) { .disc-tabs, .disc-modes { flex: 0 1 320px; } .disc-bar { justify-content: space-between; } }
 .disc-modes button { min-width: 0; }
+.disc-title { overflow-wrap: anywhere; font-family: var(--display); font-size: var(--fs-title-3); line-height: var(--lh-title-3); font-weight: 600; letter-spacing: -0.01em; }
 .filter-btn { min-height: 44px; padding: 0 var(--s-4); }
 .filter-btn .count {
   display: grid;
@@ -211,6 +212,8 @@ body[data-route='discover'] .page > :is(#main, #foot) { --disc-col: 1120px; max-
 .ghost-btn { color: var(--text-secondary); }
 .ghost-btn::after { background: none; }
 @media (hover: hover) { .ghost-btn:hover { color: var(--text-primary); } .ghost-btn:hover::after { background: var(--fill); } }
+.disc-sk-chips { display: flex; gap: var(--s-2); overflow: hidden; }
+.disc-sk-chips .sk { flex: none; width: 112px; height: 36px; border-radius: var(--r-pill); }
 .disc-sk-rows { display: grid; gap: var(--s-2); }
 .disc-sk-rows .sk { height: 56px; border-radius: var(--r-control); }
 .disc-list > .disc-line { margin: 0 var(--s-1) var(--s-3); }

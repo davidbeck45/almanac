@@ -374,9 +374,15 @@ export function namesHTML({ results }, owned) {
 export function modeToggleHTML(mode, { names, notes }) {
   if (!names || !notes) return '';
   return segHTML([
-    { value: 'notes', label: `With ${listed(notes)}`, on: mode === 'notes' },
-    { value: 'names', label: `Named “${names}”`, on: mode === 'names' },
-  ], { action: 'disc-by', label: 'Search for', cls: 'disc-modes' });
+    { value: 'notes', label: 'By notes', on: mode === 'notes' },
+    { value: 'names', label: 'By name', on: mode === 'names' },
+  ], { action: 'disc-by', label: 'Search', cls: 'disc-modes' });
+}
+
+/** What a search's list is, in a line: "With iris and leather", or names matching what was typed. */
+export function searchTitleHTML(mode, { query, terms }) {
+  const text = mode === 'notes' ? `With ${listed(terms ?? [])}` : `Names matching “${query}”`;
+  return `<h2 class="disc-title">${esc(text)}</h2>`;
 }
 
 /** What the notes search made of the words: a typo it read, or one it might mean. */

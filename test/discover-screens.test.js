@@ -14,6 +14,7 @@ import { bottleCardHTML } from '../src/ui/components.js';
 import { FILTERS } from '../src/discover.js';
 import { STYLES } from '../src/scent-styles.js';
 import { handlePool, newPoolCache } from '../src/pool-tasks.js';
+import { seedSheetHTML, sheets } from '../src/views/discover.js';
 
 const PANES = { wear: ['now'], wardrobe: ['owned'], discover: [] };
 const viaURL = d => readQuery(parseRoute(routeHash({ dest: 'discover', query: writeQuery(d) }), PANES).query);
@@ -240,9 +241,11 @@ test('search: names with where they are, the two readings, typos and nothing fou
   assert.equal((names.match(/data-action="own-result"/g) ?? []).length, 1);
   assert.equal((names.match(/data-action="disc-dupes"/g) ?? []).length, 2);
   const toggle = T.modeToggleHTML('notes', { names: 'iris leather', notes: ['iris', 'leather'] });
-  assert.match(toggle, /data-value="notes" aria-pressed="true"><span>With iris and leather</);
-  assert.match(toggle, /Named “iris leather”/);
+  assert.match(toggle, /data-value="notes" aria-pressed="true"><span>By notes</);
+  assert.match(toggle, /data-value="names" aria-pressed="false"><span>By name</);
   assert.equal(T.modeToggleHTML('notes', { names: null, notes: ['iris'] }), '', 'one reading needs no toggle');
+  assert.equal(T.searchTitleHTML('notes', { query: 'x', terms: ['iris', 'leather', 'smoke'] }), '<h2 class="disc-title">With iris, leather and smoke</h2>');
+  assert.match(clean(T.searchTitleHTML('names', { query: EVIL }), 'title'), /Names matching “&lt;img/);
   const note = T.notesNoteHTML({ corrected: [{ from: 'lavnder', to: 'lavender' }], suggested: [{ from: 'vanila', to: 'vanilla' }] }, 'vanila smoke');
   assert.match(note, /Showing lavender for “lavnder”\./);
   assert.match(note, /data-action="disc-suggest" data-value="vanilla smoke">vanilla</);
@@ -270,6 +273,20 @@ test('the kit’s bottle card keeps ids apart per list and escapes what it’s g
   clean(a, 'card');
   assert.notEqual(a.match(/id="([^"]+)-n"/)[1], b.match(/id="([^"]+)-n"/)[1]);
   for (const [, id] of a.matchAll(/\sid="([^"]*)"/g)) assert.match(id, /^[\w-]+$/, 'ids are safe');
+});
+
+test('the seed picker: picked first, then the library’s hits, then yours', () => {
+  const mine = [record('m1', 'Liquid Brun'), record('m2', 'Hawas Elixir'), record('m3', EVIL)];
+  const html = clean(seedSheetHTML({ query: 'brun', results: [record('m1', 'Liquid Brun'), record('l1', 'Brun Noir')] }, { owned: mine, chosen: ['m2'], picked: [mine[1]] }), 'seed sheet');
+  const sections = [...html.matchAll(/<p class="list-title">([^<]+)<\/p>/g)].map(m => m[1]);
+  assert.deepEqual(sections, ['Picked', 'From the library', 'Yours that match']);
+  assert.match(html, /data-action="disc-seed-toggle" data-id="m2" aria-pressed="true"/);
+  assert.match(html, /data-id="l1" aria-pressed="false"/);
+  assert.equal((html.match(/data-id="m1"/g) ?? []).length, 1, 'an owned hit shows once, under yours');
+  assert.match(html, /1 of 5 picked/);
+  assert.match(seedSheetHTML({ query: '' }, { owned: [], chosen: [] }), /Your wardrobe is empty/);
+  // Off Discover, its sheets close themselves.
+  assert.equal(sheets['disc-filters'](), null);
 });
 
 // ---------- Real answers ----------

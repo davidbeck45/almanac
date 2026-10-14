@@ -7,7 +7,7 @@
 // so Back, a reload and a shared link come back to it; the templates are
 // src/views/discover/templates.js, the styles src/css/discover.css.
 import { esc } from '../ui.js';
-import { icon, messageHTML, segHTML, sheetFrame, img } from '../ui/components.js';
+import { icon, messageHTML, segHTML, sheetFrame, img, bottleCardSkeletonHTML } from '../ui/components.js';
 import { routeHash, go } from '../app/router.js';
 import { askPool, warmPool, poolStatus } from '../app/pool.js';
 import {
@@ -124,8 +124,12 @@ function seedIds(d) {
   return slots.like.result?.from !== 'given' ? (slots.like.result?.seeds ?? []).map(r => r.id) : [];
 }
 
+// The wardrobe the lists are for is in: David's (boot loads it), Mine, or a shared link's.
+const wardrobeIn = () => (state.shared ? !state.shared.loading : state.active === 'mine' || Boolean(state.demo));
+
 // Asks for whatever the page shows that it doesn't have yet.
 function ensure(app, d) {
+  if (!wardrobeIn()) return;
   const filters = filtersFor(d), pv = state.preferValue;
   if (searching(d)) {
     const k = ks.notes;
@@ -256,6 +260,13 @@ function seedModel(d) {
 }
 
 function browseHTML(d) {
+  // Until the wardrobe is in, the shapes of what's coming (not "Pick a style").
+  if (!wardrobeIn()) {
+    return `<div class="disc-layout"><div class="disc-main" aria-busy="true">
+        <div class="disc-sk-chips">${'<span class="sk"></span>'.repeat(4)}</div>
+        <div class="disc-grid">${bottleCardSkeletonHTML(4)}</div>
+      </div></div>`;
+  }
   const t = tasteOf();
   const selected = selectedStyles(d);
   const tabs = segHTML([
@@ -296,13 +307,16 @@ function searchHTML(d) {
     names: names.results?.length ? d.q : null,
     notes: notes?.terms?.length && !notes.unknown?.length && (notes.picks?.length || notesShown) ? notes.terms : null,
   });
-  let results;
+  // The title says which list this is, once there's one to show.
+  let results, titled = false;
   if ((names.busy && !names.results) || waiting) {
     results = `<p class="disc-count muted">Searching…</p><div class="disc-sk-rows" aria-busy="true">${'<span class="sk"></span>'.repeat(4)}</div>`;
   } else if (notesShown) {
     results = `${T.notesNoteHTML(notes, d.q)}${listHTML(d, 'notes', emptyHTML(d, 'notes'))}`;
+    titled = true;
   } else if (names.results?.length || names.error) {
     results = `<p class="disc-count muted">${T.statusHTML(names)}</p>${T.namesHTML(names, nameOwners())}`;
+    titled = Boolean(names.results?.length);
   } else if (names.results && (notesSlot.status === 'done' || notesSlot.status === 'error')) {
     results = T.noMatchHTML(d.q);
   } else {
@@ -310,8 +324,8 @@ function searchHTML(d) {
   }
   return `<div class="disc-layout${notesShown ? '' : ' solo'}">
       <div class="disc-main">
-        <h2 class="visually-hidden">Search results</h2>
         ${toggle || notesShown ? `<div class="disc-bar">${toggle}${notesShown ? T.filterButtonHTML(d.filters, { mists: HAS_MISTS }) : ''}</div>` : ''}
+        ${titled ? T.searchTitleHTML(mode, { query: d.q, terms: notes?.terms }) : '<h2 class="visually-hidden">Search results</h2>'}
         <div class="disc-list">${results}</div>
       </div>
       ${notesShown ? sideHTML(d) : ''}
@@ -356,7 +370,8 @@ function repaint(app) {
   const next = body.querySelector('.style-chips');
   if (next) next.scrollLeft = left;
   after(app);
-  if (state.sheet?.kind === 'disc-filters') app.renderSheet({ keepScroll: true });
+  // The filters sheet shows how many bottles fit; its focus stays put.
+  if (state.sheet?.kind === 'disc-filters') app.keepingFocus(document.activeElement, '#sheet', () => app.renderSheet({ keepScroll: true }));
 }
 
 let appRef = null;
@@ -365,8 +380,9 @@ function after(app) {
   warmPool();
   watchSheets();
   wireTips();
-  const live = document.getElementById('disc-status');
   const d = current();
+  showChosen(d);
+  const live = document.getElementById('disc-status');
   const line = spoken(d);
   if (live && live.textContent !== line) live.textContent = line;
   if (focusAfter && slots[focusAfter.list].status === 'done') {
@@ -374,6 +390,24 @@ function after(app) {
     cards[focusAfter.index]?.focus();
     focusAfter = null;
   }
+}
+
+// A selection that arrived from the URL (a link, Back) may sit past the
+// strip's edge on a phone: scroll its first chip into view, once per selection.
+let chipsShown = null;
+function showChosen(d) {
+  // (The order changes when the wardrobe does: the demo loading, a list switched.)
+  const key = `${selectedStyles(d).join()}|${tasteOf().order.join()}`;
+  if (key === chipsShown) return;
+  chipsShown = key;
+  // Once the fonts are in: they change the chips' widths.
+  (document.fonts?.ready ?? Promise.resolve()).then(() => requestAnimationFrame(() => {
+    const strip = document.querySelector('#disc-body .style-chips');
+    const chip = strip?.querySelector('.style-chip.on');
+    if (!chip) return;
+    const s = strip.getBoundingClientRect(), c = chip.getBoundingClientRect();
+    if (c.right > s.right || c.left < s.left) strip.scrollLeft += c.left - s.left - s.width / 4;
+  }));
 }
 
 // ---------- The URL ----------
@@ -558,6 +592,7 @@ export const actions = {
     }
     const styles = toggleStyle(el.dataset.value, current());
     quietUntil = Date.now() + 1500;
+    chipsShown = `${styles.join()}|${tasteOf().order.join()}`; // the chip just tapped is in view
     saveStyles(styles);
     ks.styles = T.PAGE;
     update(app, { styles });
@@ -597,6 +632,10 @@ export const actions = {
     if (!record) return;
     // Every note, not just the pool's 8 strongest (offline, the pool's will do).
     const full = record.source === 'fragrantica' ? await loadFullRecord(id).catch(() => null) : null;
+    // Owning it can switch the ranked list (to Mine), whose liked styles and
+    // most worn bottles differ: pin the ones on screen, so the list stays.
+    const d = current();
+    update(app, { styles: d.styles ?? selectedStyles(d), seeds: d.seeds ?? (d.tab === 'like' ? seedIds(d) : null) }, { paint: false });
     adopting = true;
     try {
       app.own(full ?? record);
@@ -727,21 +766,27 @@ function seedRow(r, on) {
     </button></li>`;
 }
 
-/** The seed picker: the bottles chosen, owned ones by name, and any bottle from the library. */
-export function seedSheetHTML(sheet, { owned, chosen }) {
+/**
+ * The seed picker: the bottles picked (first, always), any bottle from the
+ * library by search, and owned ones by name. `picked`: the chosen ids'
+ * records (null while one loads).
+ */
+export function seedSheetHTML(sheet, { owned, chosen, picked = [] }) {
   const q = normalize(sheet.query ?? '');
-  const mine = owned.filter(f => !q || normalize(`${f.name} ${f.brand}`).includes(q));
+  const taken = new Set(chosen);
+  const mine = owned.filter(f => !taken.has(f.id) && (!q || normalize(`${f.name} ${f.brand}`).includes(q)));
   const ownedIds = new Set(owned.map(f => f.id));
-  const more = (sheet.results ?? []).filter(r => !ownedIds.has(r.id));
+  const more = (sheet.results ?? []).filter(r => !ownedIds.has(r.id) && !taken.has(r.id));
   const status = sheet.busy ? 'Searching…' : sheet.error ? sheet.error : '';
   return `<h2 class="sheet-title" id="disc-seeds-title">More like…</h2>
     <p class="lede muted">Pick up to ${SEED_MAX} bottles. The list finds bottles close to all of them.</p>
     <form class="search-form" data-form="disc-seed-search" role="search">
       <label class="filter">${icon.search}<input type="search" name="q" data-field="disc-seed-q" placeholder="Search any bottle" value="${esc(sheet.query ?? '')}" autocomplete="off" aria-label="Search bottles to start from"></label>
     </form>
-    ${more.length ? `<p class="list-title">From the library</p><ul class="rows seed-rows">${more.map(r => seedRow(r, chosen.includes(r.id))).join('')}</ul>` : ''}
+    ${picked.some(Boolean) ? `<p class="list-title">Picked</p><ul class="rows seed-rows">${picked.filter(Boolean).map(r => seedRow(r, true)).join('')}</ul>` : ''}
+    ${more.length ? `<p class="list-title">From the library</p><ul class="rows seed-rows">${more.map(r => seedRow(r, false)).join('')}</ul>` : ''}
     <p class="list-title">${q ? 'Yours that match' : 'Yours'}</p>
-    ${mine.length ? `<ul class="rows seed-rows">${mine.map(r => seedRow(r, chosen.includes(r.id))).join('')}</ul>` : `<p class="muted small">${q ? 'None of yours match. Search finds any bottle.' : 'Your wardrobe is empty. Search for any bottle.'}</p>`}
+    ${mine.length ? `<ul class="rows seed-rows">${mine.map(r => seedRow(r, false)).join('')}</ul>` : `<p class="muted small">${q ? 'None of yours match. Search finds any bottle.' : owned.length ? 'Every one of yours is picked.' : 'Your wardrobe is empty. Search for any bottle.'}</p>`}
     <div class="sheet-bar spread">
       <span class="muted" role="status">${esc(status || `${chosen.length} of ${SEED_MAX} picked`)}</span>
       <button class="btn primary" data-action="close-sheet">Done</button>
@@ -765,6 +810,7 @@ export const sheets = {
   },
   'disc-seeds'(sheet) {
     if (!discoverRoute()) return null;
-    return sheetFrame('disc-seeds-title', seedSheetHTML(sheet, { owned: activeFragrances(), chosen: seedIds(current()) }));
+    const d = current(), chosen = seedIds(d);
+    return sheetFrame('disc-seeds-title', seedSheetHTML(sheet, { owned: activeFragrances(), chosen, picked: seedModel(d).seeds }));
   },
 };
