@@ -14,7 +14,7 @@ import { sprayHTML, figureSVG, sprayCount } from '../src/views/bottle-spray.js';
 import { skinHTML, moveText, listLabel, ordinal } from '../src/views/bottle-skin.js';
 import { stylesHTML } from '../src/views/bottle-styles.js';
 import { dupesHTML } from '../src/views/bottle-dupes.js';
-import { crowdHTML, riskLine } from '../src/views/bottle-crowd.js';
+import { crowdHTML, riskLine, wholePercents } from '../src/views/bottle-crowd.js';
 import { reviewsHTML } from '../src/views/bottle-reviews.js';
 import { compareHTML, compareModel, relation, leader, verdictHTML, pickerLists, pickerHTML, pickerMatches, MAX_COMPARE } from '../src/views/compare.js';
 import { parseRoute, routeHash, compareIds } from '../src/app/router.js';
@@ -402,6 +402,14 @@ test('what voters say: value, keepers, blind buy, buzz, ratings and lean, credit
   assert.match(html, /Top 1%/);
   assert.equal((html.match(/class="crowd-hist-fill"/g) ?? []).length, 5);
   assert.match(html, /love or like it/);
+  // The headline agrees with its bars: 52.6% + 26.6% rounds to 79 but the bars say 53 and 27.
+  const hist = { love: 526, like: 266, ok: 110, dislike: 58, hate: 40 };
+  const said = crowdHTML(modelOf({ ...stranger, extras: undefined, sentiment: hist }, { about: null }));
+  const bars = [...said.matchAll(/crowd-hist-value">(\d+)%/g)].map(m => Number(m[1]));
+  assert.equal(bars.reduce((a, b) => a + b, 0), 100, 'the bars add up');
+  assert.match(said, new RegExp(`>${bars[0] + bars[1]}% love or like it`));
+  assert.deepEqual(wholePercents([1, 1, 1]), [34, 33, 33]);
+  assert.deepEqual(wholePercents([0, 0]), [0, 0]);
   assert.match(html, /left:\d+(\.\d)?%/, 'the lean has a place on its scale');
   assert.match(html, /Voters call it masculine/);
   assert.match(crowdHTML(modelOf(evil, { owned: false })), /Blind buy/);
