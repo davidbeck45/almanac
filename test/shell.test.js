@@ -10,11 +10,17 @@ const sw = read('sw.js');
 const html = read('index.html');
 const SHELL = JSON.parse(sw.match(/const SHELL = (\[[\s\S]*?\]);/)[1].replace(/'/g, '"').replace(/,\s*\]/, ']'));
 
-// The modules main.js loads, following static imports (paths from the repo root).
+// The modules main.js loads, following static imports (paths from the repo
+// root), and main.js's own `await import()` of the shell, which it loads
+// right after starting the forecast. Other modules' dynamic imports load on
+// demand and stay out.
 function moduleGraph(file = 'src/main.js', seen = new Set()) {
   if (seen.has(file)) return seen;
   seen.add(file);
-  for (const [, dep] of read(file).matchAll(/^\s*import\s[^'"]*['"](\.{1,2}\/[\w/.-]+\.js)['"]/gm)) moduleGraph(normalize(join(dirname(file), dep)), seen);
+  const source = read(file);
+  const deps = [...source.matchAll(/^\s*import\s[^'"]*['"](\.{1,2}\/[\w/.-]+\.js)['"]/gm)];
+  if (file === 'src/main.js') deps.push(...source.matchAll(/await import\(['"](\.{1,2}\/[\w/.-]+\.js)['"]\)/g));
+  for (const [, dep] of deps) moduleGraph(normalize(join(dirname(file), dep)), seen);
   return seen;
 }
 
@@ -37,7 +43,7 @@ test('index.html preloads the whole module graph and the self-hosted fonts', () 
   assert.deepEqual([...preloaded].sort(), [...graph].sort(), 'modulepreload links match what main.js imports');
 
   const fonts = [...html.matchAll(/<link rel="preload" href="(fonts\/[\w-]+\.woff2)" as="font" type="font\/woff2" crossorigin>/g)].map(m => m[1]);
-  assert.ok(fonts.length >= 2);
+  assert.deepEqual(fonts, ['fonts/inter.woff2'], 'Inter alone: preloading Fraunces too held the first paint back');
   for (const font of fonts) {
     assert.ok(existsSync(new URL(font, root)), `${font} exists`);
     assert.ok(SHELL.includes(font), `${font} works offline`);
@@ -67,8 +73,9 @@ test('the stylesheets take their colors from the tokens, so every theme follows'
 });
 
 // Runs sw.js against an in-memory Cache Storage and a fake network. The
-// network answers after `net.delay` ms, each file with an ETag of
-// `net.version`; `puts` counts the writes into Cache Storage.
+// network answers after `net.delay` ms (or `net.slow[path]`), each file with
+// an ETag of `net.version`, and a 304 when asked with that ETag already;
+// `puts` counts the writes into Cache Storage, `net.sent` the bodies sent.
 function serviceWorker(scope = 'https://example.org/scentcast/') {
   const listeners = {};
   const stores = new Map();
@@ -88,7 +95,7 @@ function serviceWorker(scope = 'https://example.org/scentcast/') {
       match: async (key, { ignoreSearch } = {}) => find(m, key, ignoreSearch),
     };
   };
-  const net = { online: true, status: 200, delay: 0, version: 'v1' };
+  const net = { online: true, status: 200, delay: 0, slow: {}, version: 'v1', sent: 0, notModified: 0 };
   const self = {
     addEventListener: (type, fn) => { listeners[type] = fn; },
     registration: { scope },
@@ -103,11 +110,18 @@ function serviceWorker(scope = 'https://example.org/scentcast/') {
       }
     },
   };
-  const fetch = async input => {
+  const fetch = async (input, init = {}) => {
     const version = net.version;
-    if (net.delay) await new Promise(r => setTimeout(r, net.delay));
-    if (!net.online) throw new TypeError('Failed to fetch');
     const { pathname } = new URL(typeof input === 'string' ? input : input.url);
+    const delay = net.slow[pathname.replace(new URL(scope).pathname, '')] ?? net.delay;
+    if (delay) await new Promise(r => setTimeout(r, delay));
+    if (!net.online) throw new TypeError('Failed to fetch');
+    const asked = init.headers?.['If-None-Match'];
+    if (asked === `"${version}"` && net.status === 200) {
+      net.notModified++;
+      return new Response(null, { status: 304, headers: { etag: `"${version}"` } });
+    }
+    net.sent++;
     return new Response(`${pathname} from the network (${version})`, { status: net.status, headers: { etag: `"${version}"` } });
   };
   const context = { self, caches, fetch, Response, URL, setTimeout, clearTimeout };
@@ -121,7 +135,7 @@ function serviceWorker(scope = 'https://example.org/scentcast/') {
     return res ? res.text() : null;
   }
   const cached = (name, path) => stores.get(name)?.get(new URL(path, scope).href)?.clone();
-  return { get, cached, net, puts, wait: Number(sw.match(/const NETWORK_WAIT_MS = (\d+)/)[1]) };
+  return { get, cached, net, puts, wait: Number(sw.match(/const NETWORK_WAIT_MS = (\d+)/)[1]), slow: Number(sw.match(/const SLOW_MS = (\d+)/)[1]) };
 }
 
 test('the service worker keeps one copy of the app page, and other pages opened in a tab never replace it', async () => {
@@ -194,6 +208,100 @@ test('the service worker leaves a file it already holds alone', async () => {
   w.net.version = 'v2';
   await w.get('src/main.js');
   assert.equal(w.puts.length, before + 1, 'a new version is saved');
+});
+
+test('a file the worker holds costs a 304, even once the browser’s own cache has let it go', async () => {
+  const w = serviceWorker();
+  await w.get('', 'navigate');
+  await w.get('src/main.js');
+  const sent = w.net.sent;
+  // The fake network has no HTTP cache: only the worker's own ETag makes it a 304.
+  assert.equal(await w.get('', 'navigate', { resultingClientId: 'a' }), '/scentcast/ from the network (v1)');
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'a' }), '/scentcast/src/main.js from the network (v1)');
+  assert.equal(w.net.sent, sent, 'nothing downloaded again');
+  assert.equal(w.net.notModified, 2);
+  // A new version downloads.
+  w.net.version = 'v2';
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'a' }), '/scentcast/src/main.js from the network (v2)');
+  assert.equal(w.net.sent, sent + 1);
+});
+
+test('a slow check on an unchanged launch takes the rest of the launch from the cache', async () => {
+  const w = serviceWorker();
+  await w.get('', 'navigate');
+  for (const f of ['src/main.js', 'src/app/shell.js', 'src/engine.js']) await w.get(f);
+  await w.get('', 'navigate', { resultingClientId: 'a' });
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'a' }), '/scentcast/src/main.js from the network (v1)');
+  // The shell's check is slow: the saved copy answers at SLOW_MS, and the
+  // files after it don't wait on the network at all.
+  w.net.slow['src/app/shell.js'] = w.slow + 1500;
+  let start = Date.now();
+  assert.equal(await w.get('src/app/shell.js', 'cors', { clientId: 'a' }), '/scentcast/src/app/shell.js from the network (v1)');
+  assert.ok(Date.now() - start < w.slow + 400, 'it waited no longer than SLOW_MS');
+  w.net.delay = w.slow + 1500;
+  start = Date.now();
+  assert.equal(await w.get('src/engine.js', 'cors', { clientId: 'a' }), '/scentcast/src/engine.js from the network (v1)');
+  assert.ok(Date.now() - start < 300, 'the rest came from the cache at once');
+  // A page that came in time but slow does the same from the start.
+  w.net.slow = {};
+  w.net.delay = w.slow + 300;
+  await w.get('', 'navigate', { resultingClientId: 'b' });
+  w.net.delay = w.slow + 1500;
+  start = Date.now();
+  await w.get('src/main.js', 'cors', { clientId: 'b' });
+  assert.ok(Date.now() - start < 300, 'a slow page puts its files on the cache');
+});
+
+test('a launch that met a new version waits for the network, so versions never mix', async () => {
+  const w = serviceWorker();
+  await w.get('', 'navigate');
+  for (const f of ['src/main.js', 'src/app/shell.js']) await w.get(f);
+  // The page itself is new: no file may come from the cache.
+  w.net.version = 'v2';
+  await w.get('', 'navigate', { resultingClientId: 'a' });
+  w.net.delay = w.slow + 300;
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'a' }), '/scentcast/src/main.js from the network (v2)', 'it waited past SLOW_MS');
+  // The page is as saved, but a file comes back new: from there it waits too.
+  w.net.delay = 0;
+  await w.get('', 'navigate', { resultingClientId: 'b' });
+  w.net.version = 'v3';
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'b' }), '/scentcast/src/main.js from the network (v3)');
+  w.net.delay = w.slow + 300;
+  assert.equal(await w.get('src/app/shell.js', 'cors', { clientId: 'b' }), '/scentcast/src/app/shell.js from the network (v3)', 'not the saved v2 beside a v3 main.js');
+});
+
+test('dataset files answer from the cache at once and are checked behind it', async () => {
+  const w = serviceWorker();
+  w.net.version = 'v2';
+  await w.get('data/fragrantica/pool.json');
+  w.net.version = 'v3';
+  assert.equal(await w.get('data/fragrantica/pool.json'), '/scentcast/data/fragrantica/pool.json from the network (v2)', 'the saved copy first');
+  assert.equal(await w.get('data/fragrantica/pool.json'), '/scentcast/data/fragrantica/pool.json from the network (v3)', 'the check behind it saved the new one');
+  w.net.version = 'v4';
+  await w.get('data/fragrantica/x/7.json');
+  w.net.version = 'v5';
+  assert.equal(await w.get('data/fragrantica/x/7.json'), '/scentcast/data/fragrantica/x/7.json from the network (v4)', 'a shard too');
+});
+
+test('the forecast goes out before the app loads, from a module that imports almost nothing', async () => {
+  assert.deepEqual([...moduleGraph('src/app/early.js')].sort(), ['src/app/early.js', 'src/location.js', 'src/weather.js', 'src/wmo.js'],
+    'weather.js stays clear of the engine (its dew point lives in wmo.js)');
+  const main = read('src/main.js');
+  assert.ok(main.indexOf('startForecast()') < main.indexOf("await import('./app/shell.js')"), 'main.js starts the forecast, then loads the shell');
+  const { startForecast, locationFromURL } = await import('../src/app/early.js');
+  assert.deepEqual(locationFromURL(new URLSearchParams('loc=40.71,-74.01,New%20York')), { name: 'New York', lat: 40.71, lon: -74.01 });
+  assert.equal(locationFromURL(new URLSearchParams('loc=nowhere')), null);
+  const realFetch = globalThis.fetch;
+  const asked = [];
+  globalThis.fetch = async url => { asked.push(String(url)); throw new TypeError('Failed to fetch'); };
+  try {
+    const early = startForecast('?loc=40.71,-74.01,New%20York');
+    assert.deepEqual(early.loc, { name: 'New York', lat: 40.71, lon: -74.01 });
+    await assert.rejects(early.forecast);
+    assert.ok(asked.some(u => u.includes('latitude=40.71')), 'the request went out');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });
 
 test('the suggestion pool’s files stay cached offline, however many dataset shards come and go', async () => {

@@ -2,8 +2,7 @@
 // and a night window. Open-Meteo returns wall-clock times for the location
 // ("2026-09-28T13:00"); we parse them as UTC and shift "now" by the
 // location's UTC offset so all comparisons happen in the location's time.
-import { describe, SEVERITY } from './wmo.js';
-import { dewPointF } from './engine.js';
+import { describe, SEVERITY, dewPointF } from './wmo.js';
 
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 const ARCHIVE_URL = 'https://archive-api.open-meteo.com/v1/archive';

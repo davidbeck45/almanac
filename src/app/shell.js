@@ -13,9 +13,12 @@ import { isCustomId, fromShareToken } from '../custom.js';
 import { loadAbout } from '../fragrantica.js';
 import { sceneTint, skyAccent } from '../scene.js';
 import { setTheme, theme, paint } from '../theme.js';
-import { esc, deg, plural } from '../ui.js';
+import { esc, deg, plural, toastName } from '../ui.js';
 import { icon, segLinksHTML, messageHTML, FALLBACK_THUMB } from '../ui/components.js';
 import { parseRoute, routeHash, sameRoute, legacyHash, go, HOME } from './router.js';
+import { locationFromURL } from './early.js';
+import { askPool } from './pool.js';
+import { loadWants, hasWant, setWant } from '../wishlist.js';
 import {
   state, computeToday, sourceRecords, knownBottles, library, setActive as chooseList,
   addToMine as addRecord, markBottlesLoaded, keepBottles, loadFullRecord, retryClimate,
@@ -574,6 +577,7 @@ window.addEventListener('hashchange', () => sync());
 
 // The forecast boot asked for while the wardrobe loads: it doesn't need it.
 let early = null; // { loc, forecast: promise }
+const samePlace = (a, b) => a?.lat === b?.lat && a?.lon === b?.lon;
 
 // Opens on the saved forecast when there is one: fresh, it's all we need;
 // older, it shows under "Updating…", photos faded, until the new one arrives,
@@ -774,16 +778,9 @@ function listen() {
 
 // ---------- Boot ----------
 
-// ?loc=lat,lon,Name pins a location, e.g. for a home-screen shortcut per city.
-function locationFromURL(params) {
-  const raw = params.get('loc');
-  if (!raw) return null;
-  const [lat, lon, ...name] = raw.split(',');
-  if (!Number.isFinite(+lat) || !Number.isFinite(+lon)) return null;
-  return { name: name.join(',').trim() || 'Pinned location', lat: +lat, lon: +lon };
-}
-
-export async function boot() {
+// `early`: the forecast main.js asked for before the app loaded
+// (src/app/early.js), { loc, forecast }.
+export async function boot({ early: asked = null } = {}) {
   history.scrollRestoration = 'manual';
   // A reload on a sheet's history entry: no sheet is open, so it's the page's.
   if (sheetEntry()) history.replaceState(null, '');
@@ -806,8 +803,10 @@ export async function boot() {
   // A bottle page opened from a link, as a dialog: focus in it, not on the
   // page behind (inert) or the body.
   if (first.dest === 'bottle' && !docked()) $('#bottle .bp-close')?.focus({ preventScroll: true });
-  // A forecast that isn't fresh is asked for now, alongside the wardrobe.
-  if (state.loc && !cachedForecast(state.loc)?.fresh) {
+  // A forecast that isn't fresh is on its way already (main.js), or asked
+  // for now, alongside the wardrobe.
+  if (asked && state.loc && samePlace(asked.loc, state.loc)) early = { loc: state.loc, forecast: asked.forecast };
+  else if (state.loc && !cachedForecast(state.loc)?.fresh) {
     early = { loc: state.loc, forecast: getForecast(state.loc) };
     early.forecast.catch(() => {}); // refreshWeather hears it
   }

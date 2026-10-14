@@ -1,7 +1,7 @@
 // Recommendation engine. Pure functions only: fragrances + conditions in,
 // ranked tiers with reasons out.
 import { ACCORDS, heaviness } from './accords.js';
-import { isWet } from './wmo.js';
+import { isWet, dewPointF } from './wmo.js';
 import { predictedShares } from './custom.js';
 import { PRIOR_VOTES } from './profiles.js';
 import { OCCASION_SCALE } from './occasions.js';
@@ -217,12 +217,8 @@ export function timeFit(frag, slot) {
   return 0.5 * (dayNight[slot] / peak) + 0.5 * clamp(lift / 1.3, 0, 1);
 }
 
-// Dew point (°F) from temperature (°F) and relative humidity (%), Magnus formula.
-export function dewPointF(tempF, humidity) {
-  const c = ((tempF - 32) * 5) / 9;
-  const g = Math.log(clamp(humidity, 1, 100) / 100) + (17.62 * c) / (243.12 + c);
-  return ((243.12 * g) / (17.62 - g)) * 9 / 5 + 32;
-}
+// Dew point (°F): src/wmo.js has it, so the forecast needn't load the engine.
+export { dewPointF };
 
 // Mugginess follows the dew point, not relative humidity: about 55°F feels
 // comfortable, 65°F sticky, 70°F and up oppressive, whatever the temperature.

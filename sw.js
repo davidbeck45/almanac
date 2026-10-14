@@ -3,17 +3,27 @@
 // here; the app keeps its own last forecast in localStorage.
 // App files always revalidate with the server: GitHub Pages lets browsers
 // keep files for 10 minutes, and a fresh main.js importing a stale module
-// fails to load at all.
-// A launch doesn't wait on a slow line, though: when the app's page hasn't
-// come within NETWORK_WAIT_MS, the saved page opens, and that page (and the
-// workers it starts) loads every app file from the same cache, so it's one
-// version throughout, never a mix. The cache catches up on a launch where
-// the network answers in time, or when a new sw.js installs.
-const CACHE = 'scentcast-v20';
+// fails to load at all. The worker sends the saved copy's ETag (or date)
+// itself, so a file that hasn't changed costs a 304 even after the browser
+// has let its own HTTP cache go.
+// A launch doesn't wait on a slow line, though, and it's one version
+// throughout, never a mix. When the app's page hasn't come within
+// NETWORK_WAIT_MS, the saved page opens, and that page (and the workers it
+// starts) loads every app file from the same cache. When the page comes but
+// late (past SLOW_MS), or a file's check passes SLOW_MS, while everything so
+// far came back unchanged, the rest of that launch comes from the cache too:
+// what it already has is the cache's version. Once anything came back
+// changed (a new version is out), the launch waits for the network, so
+// versions don't mix. The cache catches up on a launch where the network
+// answers in time, or when a new sw.js installs.
+const CACHE = 'scentcast-v21';
 const NETWORK_WAIT_MS = 2500;
+const SLOW_MS = 1000;
 // Dataset files (data/fragrantica/) load a shard at a time as people search
 // and add bottles; they keep their own small cache instead of the shell's.
 // Each Discover answer reads a few about shards (x/), so it holds plenty.
+// They change only with a dataset rebuild: a saved one answers at once, and
+// the worker checks it with the server behind it.
 const DATA_CACHE = 'scentcast-data';
 const DATA_MAX = 120;
 // The suggestion pool's three files (data/fragrantica/pool*.json) keep a
@@ -22,13 +32,13 @@ const DATA_MAX = 120;
 const POOL_CACHE = 'scentcast-pool';
 // Bottle photos from other hosts. They come back opaque (no CORS headers),
 // so the worker can't see whether one failed; a capped cache keeps a bad
-// one from sticking around for good, and the cap bounds the padding Chrome
-// counts per opaque response against the quota.
+// one from sticking around for good. Chrome counts each opaque response as
+// about 7 MB of quota, so the cap is about the wardrobe's photos (offline),
+// not every photo browsed: the HTTP cache keeps those for weeks anyway.
 const IMAGE_CACHE = 'scentcast-images';
-const IMAGE_MAX = 150;
+const IMAGE_MAX = 30;
 const SHELL = [
   './',
-  'index.html',
   'manifest.webmanifest',
   'data/collection.json',
   'data/catalog.json',
@@ -41,6 +51,7 @@ const SHELL = [
   'src/css/discover.css',
   'src/css/bottle.css',
   'src/main.js',
+  'src/app/early.js',
   'src/app/pool.js',
   'src/app/router.js',
   'src/app/sheets.js',
@@ -146,14 +157,15 @@ async function put(name, key, res, max) {
   if (max) await trim(cache, max);
 }
 
-// Pages that opened from the cache (the network was late), and the workers
-// they started: their app files come from the cache too. Ids of clients
-// long gone fall off the front.
-const fromCache = new Set();
-function servedFromCache(id) {
+// Each launch's one decision, shared by the page and the workers it starts:
+// { cached } once its app files come from the cache, { changed } once one
+// came back changed from the network. Ids of clients long gone fall off the
+// front.
+const launches = new Map();
+function launchOf(id, launch) {
   if (!id) return;
-  fromCache.add(id);
-  if (fromCache.size > 30) fromCache.delete(fromCache.values().next().value);
+  launches.set(id, launch);
+  if (launches.size > 30) launches.delete(launches.keys().next().value);
 }
 const late = ms => new Promise(resolve => setTimeout(resolve, ms, 'late'));
 
@@ -162,6 +174,19 @@ function isAppPage(url) {
   const root = new URL(self.registration.scope).pathname;
   return url.pathname === root || url.pathname === `${root}index.html`;
 }
+
+// The network's copy of a file. With a saved copy, the request carries its
+// ETag and date, and a 304 is answered with the saved copy.
+function fresh(url, hit) {
+  const tag = hit?.headers.get('etag'), date = hit?.headers.get('last-modified');
+  if (!tag && !date) return fetch(url, { cache: 'no-cache' });
+  const headers = {};
+  if (tag) headers['If-None-Match'] = tag;
+  if (date) headers['If-Modified-Since'] = date;
+  return fetch(url, { headers, cache: 'no-store' }).then(res => (res.status === 304 ? hit.clone() : res));
+}
+// Whether the network's answer is another version than the saved copy.
+const changed = (res, hit) => !hit || version(res) == null || version(res) !== version(hit);
 
 self.addEventListener('fetch', e => {
   const req = e.request;
@@ -179,34 +204,71 @@ self.addEventListener('fetch', e => {
     const pool = data && /\/data\/fragrantica\/pool[\w-]*\.json$/.test(url.pathname);
     const [store, max] = pool ? [POOL_CACHE, 0] : data ? [DATA_CACHE, DATA_MAX] : [CACHE, 0];
     const saved = () => caches.open(store).then(c => c.match(key, { ignoreSearch: true }));
-    const fresh = () => fetch(appPage ? req.url : req, { cache: 'no-cache' });
     const keep = res => {
       if (res.ok) e.waitUntil(put(store, key, res.clone(), max));
       return res;
     };
-    // A page that opened from the cache keeps to it (a worker it starts too).
-    if (store === CACHE && fromCache.has(e.clientId)) {
-      servedFromCache(e.resultingClientId);
-      e.respondWith(saved().then(hit => hit ?? fresh().then(keep)).catch(() => Response.error()));
+
+    if (data) {
+      e.respondWith(saved().then(hit => {
+        const checked = fresh(req.url, hit).then(keep);
+        if (!hit) return checked;
+        e.waitUntil(checked.catch(() => {}));
+        return hit;
+      }).catch(() => Response.error()));
       return;
     }
+
     if (appPage) {
       e.respondWith((async () => {
-        const page = fresh();
         const hit = await saved();
+        const started = Date.now();
+        const page = fresh(req.url, hit);
         if (!hit) return page.then(keep).catch(() => Response.error());
         // The network's answer if it comes in time; else the saved app (and
         // the late answer isn't saved: its files would be another version).
         // A server error (an outage) counts as no answer.
         const first = await Promise.race([page.catch(() => 'failed'), late(NETWORK_WAIT_MS)]);
-        if (first instanceof Response && first.ok) return keep(first);
+        if (first instanceof Response && first.ok) {
+          const launch = { changed: changed(first, hit), cached: false };
+          // Unchanged but slow: the line is, so the files come from the cache.
+          launch.cached = !launch.changed && Date.now() - started > SLOW_MS;
+          launchOf(e.resultingClientId, launch);
+          return keep(first);
+        }
         page.catch(() => {});
-        servedFromCache(e.resultingClientId);
+        launchOf(e.resultingClientId, { changed: false, cached: true });
         return hit;
       })());
       return;
     }
-    e.respondWith(fresh().then(keep).catch(async () => (await saved()) ?? (await caches.match(key, { ignoreSearch: true })) ?? Response.error()));
+
+    // An app file. A worker the page starts shares its launch.
+    const launch = launches.get(e.clientId);
+    if (launch) launchOf(e.resultingClientId, launch);
+    e.respondWith((async () => {
+      const hit = await saved();
+      if (hit && launch?.cached) return hit;
+      const net = fresh(req.url, hit);
+      // Nothing saved, or no launch to decide for (the page didn't open
+      // through this worker), or a new version coming in: wait for the network.
+      if (!hit || !launch || launch.changed) {
+        return net.then(res => {
+          if (launch && res.ok && changed(res, hit)) launch.changed = true;
+          return keep(res);
+        }).catch(async () => hit ?? (await caches.match(key, { ignoreSearch: true })) ?? Response.error());
+      }
+      const first = await Promise.race([net.catch(() => 'failed'), late(SLOW_MS)]);
+      if (first instanceof Response) {
+        if (first.ok && changed(first, hit)) launch.changed = true;
+        return keep(first);
+      }
+      // Offline, or the line is slow: the saved copy, and the rest of the
+      // launch from the cache (a late answer isn't saved).
+      if (first === 'late') launch.cached = true;
+      net.catch(() => {});
+      return hit;
+    })());
   } else if (IMAGE_HOSTS.includes(url.hostname)) {
     e.respondWith(
       caches.match(req).then(hit => hit ?? fetch(req).then(res => {

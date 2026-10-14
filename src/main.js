@@ -1,5 +1,8 @@
-// Boots the app. The shell (src/app/shell.js) lays out the page, routes and
-// handles events; the views (src/views/) draw each destination.
-import { boot } from './app/shell.js';
+// Boots the app. The forecast goes out first (src/app/early.js), while the
+// shell (src/app/shell.js) and the views (src/views/) load: index.html
+// preloads them all, so they download alongside it.
+import { startForecast } from './app/early.js';
 
-boot();
+const early = startForecast();
+const { boot } = await import('./app/shell.js');
+boot({ early });
