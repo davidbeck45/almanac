@@ -15,7 +15,7 @@
 import { seasonFit, timeFit, weatherFit, quality, personalPart, occasionRaw, occasionPart, scoreOf, targetSeasonWeights, DISLIKED } from './engine.js';
 import { occasionById } from './occasions.js';
 import { similarity, sharedTraits } from './similar.js';
-import { styleScores, styleMix, styleById, topOf, closeOf } from './scent-styles.js';
+import { styleScores, styleMix, styleById, topOf, shownOf, closeOf } from './scent-styles.js';
 import {
   signalsOf, genderLean, leanWindow, allowContext, allow, poolNorms, candidateQuality, valueSlope, preferValueDefault,
   familyIndex, ownedVectors, novelty, cheaperTwin, riskOf, weakLongevity, poolRowOf, PREFER_VALUE, FAMILY_MULT, MIN_RATING,
@@ -865,10 +865,13 @@ export function buyCheck(record, ctx, { liked = null, stated = true } = {}) {
   const kinds = new Set((liked ?? []).map(id => styleById(id)?.kind).filter(Boolean));
   const which = kinds.size > 1 ? `scent styles ${like}` : `styles ${like}`;
   const wears = kinds.size > 1 && closeOf(styleScores(scored)) ? ' and wears close, but' : ',';
+  // No clear style, but one its page shows as a lean ("Leans skin scent"): say so.
+  const [leaning] = taste && !styleLabels.length ? shownOf(styleScores(scored)) : [];
+  const leansTo = leaning && `It only leans toward ${styleById(leaning.id).label.toLowerCase()}, ${liked.includes(leaning.id) ? 'one' : 'none'} of the ${which}.`;
   const tasteLine = !taste ? null
     : taste.thin ? `More of the ${styleNoun(taste.style)} ${like}: you own ${countWord(taste.owned)}.`
       : taste.style ? `You own ${taste.owned} ${styleNoun(taste.style)} already.`
-        : styleLabels.length ? `It’s ${list(styleLabels)}${wears} none of the ${which}.` : `It isn’t one of the ${which}.`;
+        : styleLabels.length ? `It’s ${list(styleLabels)}${wears} none of the ${which}.` : leansTo || `It isn’t one of the ${which}.`;
   const mistLine = mist ? 'It’s a body mist: lighter and shorter-lived than a perfume.' : null;
   // Why it adds nothing: it fades where it would help, or where it comes
   // closest to the wardrobe's best (in a cell that comes up) it's matched.

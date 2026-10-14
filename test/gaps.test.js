@@ -422,6 +422,8 @@ test('the buy check knows what he likes: more of a style he’s thin on is good,
   const bo = check('69541');
   assert.equal(bo.verdict, 'Covered');
   assert.match(bo.reasons[1], /^It’s woody\b.* and wears close, but none of the scent styles you like\.$/);
+  // A bottle that only leans toward a style he likes says so, as its page does ("Leans skin scent").
+  assert.equal(check('209').reasons[1], 'It only leans toward skin scent, one of the scent styles you like.', 'Narciso Rodriguez For Her');
   // Where it comes closest to his best, not where it does best.
   assert.match(check('210').reasons[0], /^Your .+ outdoes it even for .+, where it comes closest\.$/);
   // Risky and strong fit stand whatever he likes.
