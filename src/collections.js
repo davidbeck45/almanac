@@ -92,12 +92,13 @@ export function sameBottle(a, b) {
 // "1. Pear Pavlova by French Cowboy 50ml"
 //   -> { line: 'Pear Pavlova French Cowboy', name: 'Pear Pavlova', brand: 'French Cowboy' }
 // `line` is the search query; name and brand prefill a bottle entered by hand.
-export function importLines(text) {
+// `max` lines at most (Infinity counts them all).
+export function importLines(text, max = MAX_IMPORT_LINES) {
   const tidy = s => s.replace(/\s+/g, ' ').trim();
   return text.split(/\r?\n/)
     .map(l => tidy(l.replace(/^\s*(?:[-*•·]|\d+[.)])\s*/, '').replace(/\b\d+(?:[.,]\d+)?\s?(?:ml|oz)\b/gi, '')))
     .filter(l => l.length >= 3)
-    .slice(0, MAX_IMPORT_LINES)
+    .slice(0, max)
     .map(l => {
       // Only "by" says which side is the brand ("Dior - Sauvage" could go either way).
       const [name, brand = ''] = l.split(/\s+by\s+/i);

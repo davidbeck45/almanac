@@ -55,6 +55,7 @@
 
 .journal > section { margin-top: var(--s-6); }
 .journal h3 { margin-bottom: var(--s-3); font-size: var(--fs-headline); line-height: var(--lh-headline); font-weight: 600; }
+.journal .journal-scope { margin: calc(-1 * var(--s-2)) 0 var(--s-3); }
 .stat-tiles { display: grid; grid-template-columns: 1fr 1fr 2.2fr; gap: var(--s-2); }
 .stat {
   display: grid;

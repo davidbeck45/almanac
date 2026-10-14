@@ -34,6 +34,12 @@ test('pasted lines split into a search query and a name and brand', () => {
   assert.deepEqual(importLines('- Dior - Sauvage 100 ml'), [{ line: 'Dior Sauvage', name: 'Dior Sauvage', brand: '' }]);
 });
 
+test('pasted lines past the first fifteen are counted, not dropped unseen', () => {
+  const text = Array.from({ length: 18 }, (_, i) => `Bottle number ${i + 1}`).join('\n');
+  assert.equal(importLines(text).length, 15);
+  assert.equal(importLines(text, Infinity).length, 18, 'Paste a list says how many wait for the next round');
+});
+
 test('the catalog finds the pasted indie bottles offline', () => {
   const found = importLines(PASTED).map(l => localMatches(l.line, [...demo, ...catalog], 1)[0]);
   assert.deepEqual(found.map(f => f && `${f.name} · ${f.brand}`), [
