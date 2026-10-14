@@ -206,7 +206,7 @@ test('Discover’s name search: a status line, and rows that say where a bottle 
   assert.equal(discoverT.statusHTML({ query: 'dior', results: fragrances.slice(0, 3), busy: false, error: '' }), '3 matches');
   assert.match(html, /In David’s/, 'a bottle in the ranked list says so instead of offering I own it');
   assert.equal((html.match(/data-action="own-result"/g) ?? []).length, 2);
-  assert.equal((html.match(/data-action="disc-dupes"/g) ?? []).length, 3, 'every row leads to what smells like it for less');
+  assert.equal((html.match(/data-action="disc-want"/g) ?? []).length, 3, 'every row offers Want');
   assert.match(discoverT.statusHTML({ query: 'x', results: [fragrances[0]], offline: 'Can’t reach' }), /saved on this device/);
 });
 

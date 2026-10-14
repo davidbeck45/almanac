@@ -85,10 +85,14 @@ export function writeQuery(d) {
   return Object.fromEntries(Object.entries(out).filter(([, v]) => v != null && v !== ''));
 }
 
-/** How many filters differ from the defaults (the Filters button's count). */
-export const filterCount = (filters, { mists = true } = {}) => {
+/**
+ * How many filters differ from the defaults (the Filters button's count).
+ * `value`: "Prefer great value" is on, which counts as one (it lives in
+ * prefs, not the URL).
+ */
+export const filterCount = (filters, { mists = true, value = false } = {}) => {
   const f = { ...NO_FILTERS, ...filters };
-  return [f.seasons.length > 0, f.time, f.lean, f.longevity != null, f.projection != null, f.safe, f.discontinued, mists && f.mists]
+  return [f.seasons.length > 0, f.time, f.lean, f.longevity != null, f.projection != null, f.safe, f.discontinued, mists && f.mists, value]
     .filter(Boolean).length;
 };
 
@@ -111,21 +115,44 @@ export function poolFilters(filters, { mists = true } = {}) {
   };
 }
 
+// A bottle named exactly what was typed is what the words mean once this
+// many voters rated it: Tobacco Vanille (31,666), Oud Wood, Santal 33,
+// Neroli Portofino (9,787). Under it, the words are a pairing that small
+// houses named bottles after: Smoky Vanilla (Qhue, 5), Amber Vanilla (The 7
+// Virtues, 822), Rose Oud (Yves Rocher, 1,963; Kilian, 1,040).
+export const WELL_KNOWN = 5000;
+
+/**
+ * Name search hits named exactly what was typed, in two words or more
+ * ("Tobacco Vanille"; "fig" and "iris" stay notes), or named with their
+ * brand ("oud wood tom ford").
+ */
+export function exactNames(q, names) {
+  const typed = normalize(q);
+  return (names ?? []).filter(r => {
+    const name = normalize(r.name);
+    return (name.includes(' ') && name === typed) || normalize(`${r.name} ${r.brand}`) === typed;
+  });
+}
+
 /**
  * Which list a search shows: `by` when someone picked one; else the notes
  * list when every word named a note or accord, unless a bottle is named
- * exactly that ("Tobacco Vanille", "Oud Wood": two words or more, so "fig"
- * and "iris" stay notes). `notes` is the pool's answer (null while it's on
- * its way: names until then), `names` the name search's results.
+ * exactly that (exactNames) and it's one people mean by the words: one
+ * of the bottles on this device (the wardrobe, the catalog, Mine: not a
+ * `stub`), one named with its brand, or one WELL_KNOWN voters rated
+ * (`votesOf(id)`: its rating votes, once the library has said). `notes` is
+ * the pool's answer (null while it's on its way: names until then), `names`
+ * the name search's results.
  */
-export function searchMode({ q, by }, names, notes) {
+export function searchMode({ q, by }, names, notes, votesOf = () => 0) {
   const notesOk = Boolean(notes?.terms?.length) && !notes.unknown?.length;
   if (!notesOk) return 'names';
   if (by) return by;
   const typed = normalize(q);
-  const exact = (names ?? []).some(r => {
-    const name = normalize(r.name);
-    return name.includes(' ') && (name === typed || normalize(`${r.name} ${r.brand}`) === typed);
-  });
-  return exact ? 'names' : 'notes';
+  const meant = exactNames(q, names).some(r => !r.stub || normalize(`${r.name} ${r.brand}`) === typed || votesOf(r.id) >= WELL_KNOWN);
+  return meant ? 'names' : 'notes';
 }
+
+/** The exactly named hits searchMode still needs the votes of (`votesOf` undefined: not known yet). */
+export const namedToCheck = (q, names, votesOf) => exactNames(q, names).filter(r => r.stub && votesOf(r.id) === undefined);

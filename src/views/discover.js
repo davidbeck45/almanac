@@ -6,7 +6,7 @@
 // (findBottles). Every choice lives in the URL (src/views/discover/query.js),
 // so Back, a reload and a shared link come back to it; the templates are
 // src/views/discover/templates.js, the styles src/css/discover.css.
-import { esc } from '../ui.js';
+import { esc, plural } from '../ui.js';
 import { icon, messageHTML, segHTML, sheetFrame, img, bottleCardSkeletonHTML } from '../ui/components.js';
 import { routeHash, go } from '../app/router.js';
 import { askPool, warmPool, poolStatus } from '../app/pool.js';
@@ -15,11 +15,14 @@ import {
   loadFullRecord, keepBottles,
 } from '../app/state.js';
 import { loadWants, hasWant, setWant } from '../wishlist.js';
+import { occasionCounts } from '../history.js';
 import { normalize } from '../collections.js';
-import { readQuery, writeQuery, poolFilters, filterCount, searchMode, NO_FILTERS, SEED_MAX } from './discover/query.js';
+import { readQuery, writeQuery, poolFilters, filterCount, searchMode, namedToCheck, NO_FILTERS, SEED_MAX } from './discover/query.js';
 import * as T from './discover/templates.js';
 
 const MIN_QUERY = 3;
+// How long Smells like waits for the bottle page's section (its record and the pool's answer).
+const DUPES_WAIT_MS = 15000;
 const TYPING_MS = 320;
 // The styles last picked here, kept on this device: they start Discover next time.
 const STYLES_KEY = 'scentcast.styles';
@@ -27,14 +30,15 @@ const STYLES_KEY = 'scentcast.styles';
 const HOLD_MS = 450;
 
 // ---------- Modules loaded on demand ----------
-// The scent styles and src/discover.js (DEMO_LIKED, likedStyles, FILTERS)
-// stay out of the boot graph, as Wardrobe's panes keep them: the page shows
-// skeletons until they're in. The pool's worker loads its own copies.
+// The scent styles, src/discover.js (DEMO_LIKED, likedStyles, FILTERS) and
+// "How you wear" (src/uses.js) stay out of the boot graph, as Wardrobe's
+// panes keep them: the page shows skeletons until they're in. The pool's
+// worker loads its own copies.
 
 let lib = null, libLoading = null;
 function loadLib(app) {
-  libLoading ??= Promise.all([import('../discover.js'), import('../scent-styles.js')]).then(([discover, styles]) => {
-    lib = { ...discover, ...styles };
+  libLoading ??= Promise.all([import('../discover.js'), import('../scent-styles.js'), import('../uses.js')]).then(([discover, styles, uses]) => {
+    lib = { ...discover, ...styles, loadUses: uses.loadUses };
     repaint(app);
   }, () => { libLoading = null; });
   return libLoading;
@@ -98,6 +102,14 @@ function load(app, name, key, ask) {
   });
 }
 
+// "Prefer great value" in Discover: on only when someone turned it on (here,
+// on Insights or the Wishlist: it's one setting). Left unset, the
+// wardrobe's default (on for David) is the gap finder's, which shops to fill
+// gaps. Discover explores, and a floor at great value hid most designer and
+// niche bottles there (Dior Homme Parfum, Philosykos, Molecule 01) behind
+// drugstore mists and oils. The gap teaser keeps the gap finder's default.
+const valueOn = () => state.preferValue === true;
+
 // Discover's state, read from the page's route.
 const discoverRoute = () => (state.base?.dest === 'discover' ? state.base : null);
 const current = () => readQuery(discoverRoute()?.query ?? {});
@@ -143,33 +155,71 @@ function seedIds(d) {
 // The wardrobe the lists are for is in: David's (boot loads it), Mine, or a shared link's.
 const wardrobeIn = () => (state.shared ? !state.shared.loading : state.active === 'mine' || Boolean(state.demo));
 
+// Each list's question. The report's also covers the place (its climate),
+// "How you wear" and the journal's occasions, as Insights' does.
+const notesKey = (d, filters) => JSON.stringify(['notes', d.q, filters, ks.notes, valueOn()]);
+const likeKey = (d, filters) => JSON.stringify(['like', d.seeds, d.seeds ? 0 : state.history.length, filters, ks.like, valueOn()]);
+const stylesKey = (d, styles, filters) => JSON.stringify(['styles', styles, d.mode, filters, ks.styles, valueOn()]);
+const reportKey = () => JSON.stringify(['report', state.preferValue, state.loc?.lat ?? null, state.loc?.lon ?? null, lib.loadUses(), occasionCounts(state.history)]);
+// What every list asks with: the wardrobe, and Discover's value setting.
+const inputs = async () => ({ ...(await poolInputs()), preferValue: valueOn() });
+
 // Asks for whatever the page shows that it doesn't have yet.
 function ensure(app, d) {
   if (!lib) loadLib(app);
   if (!wardrobeIn() || !lib) return;
-  const filters = filtersFor(d), pv = state.preferValue;
+  const filters = filtersFor(d);
   if (searching(d)) {
     const k = ks.notes;
-    load(app, 'notes', JSON.stringify(['notes', d.q, filters, k, pv]), async () =>
-      askPool('notes', { ...(await poolInputs()), query: d.q, filters, k }, { channel: 'disc-notes' }));
+    load(app, 'notes', notesKey(d, filters), async () =>
+      askPool('notes', { ...(await inputs()), query: d.q, filters, k }, { channel: 'disc-notes' }));
+    checkNamed(app, d);
     return;
   }
   if (d.tab === 'like') {
     const k = ks.like;
     const seeds = d.seeds ? { seeds: d.seeds } : { history: state.history, todayISO: todayISO() };
     if (!d.seeds || d.seeds.length) {
-      load(app, 'like', JSON.stringify(['like', d.seeds, d.seeds ? 0 : state.history.length, filters, k, pv]), async () =>
-        askPool('moreLike', { ...(await poolInputs()), ...seeds, filters, k }, { channel: 'disc-like' }));
+      load(app, 'like', likeKey(d, filters), async () =>
+        askPool('moreLike', { ...(await inputs()), ...seeds, filters, k }, { channel: 'disc-like' }));
     }
   } else {
     const styles = selectedStyles(d), k = ks.styles;
     if (styles.length) {
-      load(app, 'styles', JSON.stringify(['styles', styles, d.mode, filters, k, pv]), async () =>
-        askPool('styles', { ...(await poolInputs()), styles, mode: d.mode, k, filters }, { channel: 'disc-styles' }));
+      load(app, 'styles', stylesKey(d, styles, filters), async () =>
+        askPool('styles', { ...(await inputs()), styles, mode: d.mode, k, filters }, { channel: 'disc-styles' }));
     }
   }
-  load(app, 'report', JSON.stringify(['report', pv]), async () =>
+  load(app, 'report', reportKey(), async () =>
     askPool('report', { ...(await poolInputs()), k: 3 }, { channel: 'disc-report' }));
+}
+
+// ---------- Is it a name, or notes? ----------
+// A search whose words are all notes reads as notes, unless a bottle named
+// exactly that is one people mean by them (searchMode): a name hit carries
+// no votes, so the pool's `records` says how many rated it (from its rows,
+// which the notes question loaded, or r/). id -> rating votes.
+const namedVotes = new Map();
+const namedAsked = new Set();
+const votesOf = id => namedVotes.get(id);
+// The notes reading is in and needs no pick: the exactly named hits still to hear about.
+function namedPending(d) {
+  const notes = slots.notes.result;
+  if (d.by || !notes?.terms?.length || notes.unknown?.length) return [];
+  return namedToCheck(d.q, state.discover.results, votesOf);
+}
+function checkNamed(app, d) {
+  const ask = namedPending(d).filter(r => !namedAsked.has(r.id));
+  if (!ask.length) return;
+  for (const r of ask) namedAsked.add(r.id);
+  const ids = ask.map(r => r.id);
+  askPool('records', { ids }).then(({ records, missing }) => {
+    for (const r of records) namedVotes.set(String(r.id), r.ratingVotes ?? 0);
+    for (const id of missing) namedVotes.set(String(id), 0);
+  }, () => {
+    // Offline: the words read as notes (the toggle still offers names).
+    for (const id of ids) namedVotes.set(id, 0);
+  }).then(() => repaint(app));
 }
 
 // ---------- Name search ----------
@@ -218,27 +268,33 @@ function wantedOf() {
   return id => hasWant(wants, id);
 }
 
-// What the value toggle shows: what the last answer used.
-const shownPreferValue = () => [slots.styles, slots.like, slots.notes, slots.report]
-  .map(s => s.result?.preferValue).find(v => typeof v === 'boolean') ?? state.preferValue ?? false;
+// The filters on, "Prefer great value" among them (the Filters button's count).
+const filtersOn = d => filterCount(d.filters, { mists: hasMists(), value: valueOn() });
+
+// The pool's answer when none of a link's seed bottles are in the library
+// (src/pool-tasks.js moreLike): not a failure Try again would fix.
+export const NONE_FOUND = /^None of those bottles/;
 
 function emptyHTML(d, what) {
-  if (filterCount(d.filters, { mists: hasMists() })) {
+  // All at once is the likelier reason a list of several styles came up empty.
+  const all = what === 'all';
+  const anyOf = '<button class="btn secondary" data-action="disc-mode" data-value="any">Try any of them</button>';
+  if (filtersOn(d)) {
     return messageHTML({
       glyph: icon.filter,
-      title: 'Nothing fits every filter',
-      body: 'Loosen a filter or two to see more.',
-      action: '<button class="btn primary" data-action="disc-filters-reset">Reset filters</button>',
+      title: all ? 'Nothing is all of these, with these filters' : 'Nothing fits every filter',
+      body: all ? 'Few bottles are every style at once. Try any of them, or loosen a filter.' : 'Loosen a filter or two to see more.',
+      action: `<div class="action-row">${all ? anyOf : ''}<button class="btn primary" data-action="disc-filters-reset">Reset filters</button></div>`,
     });
   }
   const bodies = {
-    all: ['No bottle is all of these', 'Try Any of them, or fewer styles.'],
+    all: ['No bottle is all of these', 'Few bottles are every style at once. Try any of them, or fewer styles.'],
     styles: ['Nothing new in these styles', 'Every bottle that fits is one you own or a twin of one. Try another style.'],
     like: ['Nothing close enough', 'Try other bottles to start from.'],
     notes: ['Nothing has all of these', 'No bottle in the library carries every one of these notes strongly. Try fewer.'],
   };
   const [title, body] = bodies[what];
-  return messageHTML({ glyph: icon.discover, title, body });
+  return messageHTML({ glyph: icon.discover, title, body, action: all ? anyOf : '' });
 }
 
 function listHTML(d, name, empty, { teaser = false } = {}) {
@@ -254,26 +310,38 @@ function listHTML(d, name, empty, { teaser = false } = {}) {
   });
 }
 
+// The filters beside the list, from a 940px column (first, so Tab reaches
+// them before the cards, as they sit on screen); narrower, the aside isn't
+// drawn at all (discover.css) and the Filters button opens the sheet.
 function sideHTML(d) {
-  const n = filterCount(d.filters, { mists: hasMists() });
   return `<aside class="disc-side" aria-label="Filters">
       <section class="disc-panel" aria-labelledby="disc-filters-head">
-        <header class="disc-panel-head"><h2 id="disc-filters-head" tabindex="-1">Filters</h2>${n ? '<button class="btn tertiary compact" data-action="disc-filters-reset">Reset</button>' : ''}</header>
-        ${T.filtersHTML(d.filters, { preferValue: shownPreferValue(), mists: hasMists(), prefix: 'dfs' })}
+        <header class="disc-panel-head"><h2 id="disc-filters-head" tabindex="-1" data-focus="disc-filters-head">Filters</h2>${filtersOn(d) ? '<button class="btn tertiary compact" data-action="disc-filters-reset">Reset</button>' : ''}</header>
+        ${T.filtersHTML(d.filters, { preferValue: valueOn(), mists: hasMists(), prefix: 'dfs' })}
       </section>
     </aside>`;
 }
 
+// A list's title, and the line that says only great value shows.
+const listHeadHTML = title => `<div class="disc-list-head">${T.listTitleHTML(title)}${valueOn() ? T.valueFloorHTML() : ''}</div>`;
+
+/**
+ * The bottles "more like" starts from, for the page and the picker: records,
+ * null while one loads, a stub from the picker's search until its record is
+ * in, `{ id, missing }` once the library has said it can't find one.
+ * `loading`: the defaults (most worn, best rated) are on their way.
+ */
 function seedModel(d) {
-  const ids = seedIds(d);
-  const answer = new Map((slots.like.result?.seeds ?? []).map(r => [r.id, r]));
-  const loadingDefaults = !d.seeds && !slots.like.result;
-  return {
-    seeds: loadingDefaults ? [null, null, null] : ids.map(id => findRecord(id) ?? answer.get(id) ?? null),
-    from: d.seeds ? 'given' : slots.like.result?.from,
-    chosen: Boolean(d.seeds),
-    max: SEED_MAX,
-  };
+  const s = slots.like;
+  const loading = !d.seeds && !s.result && s.status !== 'error';
+  // Asked about these very seeds and answered: one not in the answer isn't in the library.
+  const answered = Boolean(d.seeds) && s.key === likeKey(d, filtersFor(d))
+    && (s.status === 'done' || (s.status === 'error' && NONE_FOUND.test(s.error)));
+  const answer = new Map((s.status === 'done' ? s.result?.seeds ?? [] : []).map(r => [r.id, r]));
+  const stubs = new Map((state.sheet?.kind === 'disc-seeds' ? state.sheet.results ?? [] : []).map(r => [r.id, r]));
+  const seeds = loading ? [null, null, null]
+    : seedIds(d).map(id => findRecord(id) ?? answer.get(id) ?? stubs.get(id) ?? (answered ? { id, missing: true, name: 'Not found' } : null));
+  return { seeds, from: d.seeds ? 'given' : s.result?.from, chosen: Boolean(d.seeds), loading };
 }
 
 function browseHTML(d) {
@@ -292,61 +360,74 @@ function browseHTML(d) {
   ], { action: 'disc-tab', label: 'Find bottles', cls: 'disc-tabs' });
   let head, list;
   if (d.tab === 'like') {
-    head = T.seedsHTML(seedModel(d));
-    const none = d.seeds ? !d.seeds.length : slots.like.result?.seeds?.length === 0;
-    list = none
-      ? messageHTML({ glyph: icon.bottle, title: 'Pick bottles you love', body: 'Get more like them: one bottle, or a few to blend.', action: `<button class="btn primary" data-action="disc-seeds-open">${icon.plus}<span>Pick bottles</span></button>` })
-      : listHTML(d, 'like', emptyHTML(d, 'like'), { teaser: true });
+    const m = seedModel(d), s = slots.like;
+    const none = d.seeds ? !d.seeds.length : s.result?.seeds?.length === 0;
+    const lost = d.seeds?.length && s.status === 'error' && NONE_FOUND.test(s.error) && s.key === likeKey(d, filtersFor(d));
+    const lede = T.likeHead({ from: m.from, chosen: m.chosen, loading: m.loading, none });
+    // (With nothing to start from, the message below says what to do.)
+    head = `${T.seedsHTML({ seeds: m.seeds, max: SEED_MAX, line: lede.line, addable: !none })}${none ? '' : listHeadHTML(lede.title)}`;
+    if (none) {
+      list = messageHTML({ glyph: icon.bottle, title: 'Pick bottles you love', body: 'Get more like them: one bottle, or a few to blend.', action: `<button class="btn primary" data-action="disc-seeds-open">${icon.plus}<span>Pick bottles</span></button>` });
+    } else if (lost) {
+      list = messageHTML({ glyph: icon.bottle, title: 'These bottles aren’t in the library', body: 'Start from your favorites, or pick other bottles.', action: '<button class="btn primary" data-action="disc-seeds-reset">Back to your favorites</button>' });
+    } else {
+      list = listHTML(d, 'like', emptyHTML(d, 'like'), { teaser: true });
+    }
   } else {
-    head = T.stylePickerHTML({ styles: lib.STYLES, order: t.order, selected, mode: d.mode, owned: t.owned, all: allStyles });
-    list = selected.length ? listHTML(d, 'styles', emptyHTML(d, d.mode === 'all' ? 'all' : 'styles'), { teaser: true }) : T.teaserHTML(slots.report, { wantedOf: wantedOf() });
+    const labels = selected.map(id => lib.STYLES.find(x => x.id === id)?.label ?? id);
+    head = `${T.stylePickerHTML({ styles: lib.STYLES, order: chipOrder(d), selected, mode: d.mode, owned: t.owned, all: allStyles })}${selected.length ? listHeadHTML(T.stylesTitle(labels, d.mode)) : ''}`;
+    list = selected.length ? listHTML(d, 'styles', emptyHTML(d, d.mode === 'all' && selected.length > 1 ? 'all' : 'styles'), { teaser: true }) : T.teaserHTML(slots.report, { wantedOf: wantedOf() });
   }
   return `<div class="disc-layout">
+      ${sideHTML(d)}
       <div class="disc-main">
-        <div class="disc-bar">${tabs}${T.filterButtonHTML(d.filters, { mists: hasMists() })}</div>
-        <h2 class="visually-hidden">${d.tab === 'like' ? 'More like these bottles' : 'More of these styles'}</h2>
+        <div class="disc-bar">${tabs}${T.filterButtonHTML(d.filters, { mists: hasMists(), value: valueOn() })}</div>
         ${head}
         <div class="disc-list">${list}</div>
       </div>
-      ${sideHTML(d)}
     </div>`;
 }
 
 function searchHTML(d) {
   const names = state.discover, notesSlot = slots.notes;
   const notes = notesSlot.result;
-  // While the notes answer is on its way (and the pool is in), wait for it
-  // before guessing which list the words meant.
-  const waiting = !notes && notesSlot.status === 'loading' && poolStatus() !== 'loading';
-  const mode = searchMode(d, names.results, notes);
+  const notesOk = Boolean(notes?.terms?.length) && !notes.unknown?.length;
+  // Before guessing which list the words meant: the notes answer (once the
+  // pool is in), the names, and how well known a bottle named exactly that is.
+  const waiting = (!notes && notesSlot.status === 'loading' && poolStatus() !== 'loading')
+    || (notesOk && !d.by && (names.busy || namedPending(d).length > 0));
+  const mode = searchMode(d, names.results, notes, votesOf);
   const notesShown = mode === 'notes';
   const toggle = T.modeToggleHTML(mode, {
     names: names.results?.length ? d.q : null,
-    notes: notes?.terms?.length && !notes.unknown?.length && (notes.picks?.length || notesShown) ? notes.terms : null,
+    notes: notesOk && (notes.picks?.length || notesShown) ? notes.terms : null,
   });
   // The title says which list this is, once there's one to show.
-  let results, titled = false;
+  let results, title = '';
   if ((names.busy && !names.results) || waiting) {
     results = `<p class="disc-count muted">Searching…</p><div class="disc-sk-rows" aria-busy="true">${'<span class="sk"></span>'.repeat(4)}</div>`;
   } else if (notesShown) {
     results = `${T.notesNoteHTML(notes, d.q)}${listHTML(d, 'notes', emptyHTML(d, 'notes'))}`;
-    titled = true;
-  } else if (names.results?.length || names.error) {
-    // The title says what's listed; the line stays for an offline or failed search.
-    results = `${names.offline || names.error ? `<p class="disc-count muted">${T.statusHTML(names)}</p>` : ''}${T.namesHTML(names, nameOwners())}`;
-    titled = Boolean(names.results?.length);
+    title = `<div class="disc-list-head">${T.searchTitleHTML(mode, { query: d.q, terms: notes?.terms })}${valueOn() ? T.valueFloorHTML() : ''}</div>`;
+  } else if (names.results?.length) {
+    // The title says what's listed; the line stays for an offline search.
+    results = `${names.offline ? `<p class="disc-count muted">${T.statusHTML(names)}</p>` : ''}${T.namesHTML(names, nameOwners(), { wantedOf: wantedOf() })}`;
+    title = T.searchTitleHTML(mode, { query: d.q });
+  } else if (names.error && notesSlot.status !== 'loading') {
+    // Offline with nothing on this device: one message, and the way to try again.
+    results = T.searchErrorHTML(names.error);
   } else if (names.results && (notesSlot.status === 'done' || notesSlot.status === 'error')) {
     results = T.noMatchHTML(d.q);
   } else {
     results = `<p class="disc-count muted">Searching…</p>`;
   }
   return `<div class="disc-layout${notesShown ? '' : ' solo'}">
+      ${notesShown ? sideHTML(d) : ''}
       <div class="disc-main">
-        ${toggle || notesShown ? `<div class="disc-bar">${toggle}${notesShown ? T.filterButtonHTML(d.filters, { mists: hasMists() }) : ''}</div>` : ''}
-        ${titled ? T.searchTitleHTML(mode, { query: d.q, terms: notes?.terms }) : '<h2 class="visually-hidden">Search results</h2>'}
+        ${toggle || notesShown ? `<div class="disc-bar">${toggle}${notesShown ? T.filterButtonHTML(d.filters, { mists: hasMists(), value: valueOn() }) : ''}</div>` : ''}
+        ${title || '<h2 class="disc-title visually-hidden" tabindex="-1" data-focus="disc-title">Search results</h2>'}
         <div class="disc-list">${results}</div>
       </div>
-      ${notesShown ? sideHTML(d) : ''}
     </div>`;
 }
 
@@ -355,14 +436,14 @@ const bodyHTML = d => (searching(d) ? searchHTML(d) : browseHTML(d));
 // One line for screen readers when what's listed changes.
 function spoken(d) {
   if (searching(d)) {
-    const notes = slots.notes.result, mode = searchMode(d, state.discover.results, notes);
-    if (mode === 'notes') return slots.notes.status === 'loading' ? 'Searching…' : `${notes?.picks?.length ?? 0} bottles with ${notes?.terms?.join(' and ') ?? 'these notes'}`;
+    const notes = slots.notes.result, mode = searchMode(d, state.discover.results, notes, votesOf);
+    if (mode === 'notes') return slots.notes.status === 'loading' ? 'Searching…' : `${plural(notes?.picks?.length ?? 0, 'bottle')} with ${notes?.terms?.join(' and ') ?? 'these notes'}${valueOn() ? ', great value only' : ''}`;
     return T.statusHTML(state.discover).replace(/<[^>]+>/g, '');
   }
   const s = slots[d.tab === 'like' ? 'like' : 'styles'];
   if (s.status === 'loading') return 'Finding bottles…';
   if (s.status === 'error') return s.error;
-  return s.result ? `${s.result.picks.length} bottles` : '';
+  return s.result ? `${plural(s.result.picks.length, 'bottle')}${valueOn() ? ', great value only' : ''}` : '';
 }
 
 function discoverPage(app, route) {
@@ -388,26 +469,68 @@ function repaint(app) {
   const next = body.querySelector('.style-chips');
   if (next) next.scrollLeft = left;
   after(app);
-  // The filters sheet shows how many bottles fit; its focus stays put.
-  if (state.sheet?.kind === 'disc-filters') app.keepingFocus(document.activeElement, '#sheet', () => app.renderSheet({ keepScroll: true }));
+  // The sheets show what the page has: how many bottles fit, the seeds
+  // (a default landing, a picked bottle's record); their focus stays put.
+  if (state.sheet?.kind === 'disc-filters' || state.sheet?.kind === 'disc-seeds') {
+    app.keepingFocus(document.activeElement, '#sheet', () => app.renderSheet({ keepScroll: true }));
+  }
 }
 
-let appRef = null;
+// Focus for a control that went (a Try again, the value line's Show all):
+// the list's title.
+const focusTitle = () => document.querySelector('#disc-body .disc-title')?.focus();
+
 function after(app) {
-  appRef = app;
   warmPool();
   watchSheets();
+  watchStuck();
   wireTips();
   const d = current();
   showChosen(d);
   const live = document.getElementById('disc-status');
   const line = spoken(d);
   if (live && live.textContent !== line) live.textContent = line;
-  if (focusAfter && slots[focusAfter.list].status === 'done') {
+  // After Show more: the first new card, else (no more came) the last one;
+  // after a failure, the list's title (the line under it says what happened).
+  const more = focusAfter && slots[focusAfter.list];
+  if (more?.status === 'done') {
     const cards = document.querySelectorAll('#disc-body .disc-grid .bcard-open');
-    cards[focusAfter.index]?.focus();
+    (cards[focusAfter.index] ?? cards[cards.length - 1])?.focus();
+    focusAfter = null;
+  } else if (more?.status === 'error') {
+    focusTitle();
     focusAfter = null;
   }
+}
+
+// The chips' order: the wardrobe's (tasteOf), held still while someone
+// toggles them here; a selection arriving from outside (a link, Back) puts
+// its chips first, where a phone shows them without scrolling.
+let chips = null; // { taste, selection, order }
+let toggling = false; // the next selection came from a chip here
+function chipOrder(d) {
+  const t = tasteOf(), selection = selectedStyles(d).join();
+  if (chips?.taste === t.key && (chips.selection === selection || toggling)) {
+    Object.assign(chips, { selection });
+    toggling = false;
+    return chips.order;
+  }
+  toggling = false;
+  const chosen = selectedStyles(d);
+  chips = { taste: t.key, selection, order: [...new Set([...chosen, ...t.order])] };
+  return chips.order;
+}
+
+// The search field says when it's stuck to the top (it sits at -1px there,
+// so a sliver is out of view), and draws a band behind it (discover.css).
+let stuck = null; // { io, form }
+function watchStuck() {
+  const form = document.querySelector('#main .disc-search');
+  if (!form || stuck?.form === form || !('IntersectionObserver' in window)) return;
+  stuck?.io.disconnect();
+  const io = new IntersectionObserver(([e]) => e.target.classList.toggle('stuck', e.intersectionRatio < 1 && e.boundingClientRect.top < 1), { threshold: 1 });
+  io.observe(form);
+  stuck = { io, form };
 }
 
 // A selection that arrived from the URL (a link, Back) may sit past the
@@ -416,7 +539,7 @@ let chipsShown = null;
 function showChosen(d) {
   if (!lib || !wardrobeIn()) return;
   // (The order changes when the wardrobe does: the demo loading, a list switched.)
-  const key = `${selectedStyles(d).join()}|${tasteOf().order.join()}`;
+  const key = `${selectedStyles(d).join()}|${chips?.order.join()}`;
   if (key === chipsShown) return;
   chipsShown = key;
   // Once the fonts are in: they change the chips' widths.
@@ -440,21 +563,41 @@ function update(app, patch, { paint = true } = {}) {
   page.query = writeQuery({ ...readQuery(page.query), ...patch });
   // Under a bottle page (docked beside it on desktop), the entry below keeps
   // the old URL; carryOver brings the change back when the page closes.
-  if (state.route !== page) carried = { from: carried?.from ?? before, query: page.query };
+  if (state.route !== page) carried = { from: carried?.from ?? before, query: page.query, bottle: state.route?.arg ?? null };
   syncURL();
+  syncNav(page);
   if (paint) repaint(app);
 }
 
-let carried = null; // { from: the hash under a bottle page, query: what it became meanwhile }
+// The Discover tab leads to the page as it is now, so tapping it here only
+// scrolls to the top (the shell drew its link from the page as it opened).
+function syncNav(page) {
+  for (const a of document.querySelectorAll('#nav .nav-item[data-dest="discover"]')) a.setAttribute('href', routeHash(page));
+}
+
+let carried = null; // { from: the hash under a bottle page, query: what it became meanwhile, bottle: its id }
 function carryOver(route) {
-  if (!carried) return;
-  if (route.dest === 'discover' && routeHash(route) === carried.from) {
-    route.query = carried.query;
-    carried = null;
-    syncURL();
-    // The nav drew its link from the old query.
-    queueMicrotask(() => appRef?.render());
-  } else if (route.dest !== 'bottle') carried = null;
+  // Still beside the bottle page: nothing to bring back yet.
+  if (!carried || state.route?.dest === 'bottle') return;
+  // Only as that bottle page closes onto this page (the shell draws the page
+  // under it while the bottle page is still there): a later link to the old
+  // URL (Insights' "See more") starts as it says.
+  const closing = document.getElementById('bottle')?.dataset.id;
+  const back = closing != null && route.dest === 'discover' && routeHash(route) === carried.from;
+  const { query, bottle } = carried;
+  carried = null;
+  if (!back) return;
+  route.query = query;
+  syncURL();
+  syncNav(route);
+  // Focus goes back to what opened the bottle page, as it does with no change
+  // (the shell put it on the page's heading: to the shell, a new page), or to
+  // the list's title when the change took that bottle off it.
+  queueMicrotask(() => {
+    const opener = document.querySelector(`#disc-body [data-action="open"][data-id="${CSS.escape(bottle ?? '')}"]`);
+    if (opener) opener.focus({ preventScroll: true });
+    else document.querySelector('#disc-body .disc-title')?.focus({ preventScroll: true });
+  });
 }
 
 // The URL follows the state, except while a sheet's history entry is on
@@ -613,7 +756,8 @@ export const actions = {
     }
     const styles = toggleStyle(el.dataset.value, current());
     quietUntil = Date.now() + 1500;
-    chipsShown = `${styles.join()}|${tasteOf().order.join()}`; // the chip just tapped is in view
+    toggling = true; // the chips hold still
+    chipsShown = `${styles.join()}|${chips?.order.join()}`; // the chip just tapped is in view
     saveStyles(styles);
     ks.styles = T.PAGE;
     update(app, { styles });
@@ -626,15 +770,20 @@ export const actions = {
     update(app, { mode: el.dataset.value });
   },
   'disc-more'(el, app) {
+    // (Focusable while the next page loads, so focus has somewhere to stay.)
+    if (el.getAttribute('aria-disabled') === 'true') return;
     const list = el.dataset.value;
     focusAfter = { list, index: slots[list].result?.picks.length ?? 0 };
     ks[list] = Math.min(T.MAX_PICKS, ks[list] + T.PAGE);
     repaint(app);
   },
-  // Asks again: this list, and any other that failed beside it.
+  // Asks again: this list, and any other that failed beside it (a search's names too).
   'disc-retry'(el, app) {
     for (const [name, s] of Object.entries(slots)) if (name === el.dataset.value || s.status === 'error') s.key = null;
-    repaint(app);
+    const d = current();
+    if (searching(d) && state.discover.error) runSearch(app, d.q);
+    else repaint(app);
+    focusTitle();
   },
   'disc-want'(el, app) {
     const id = el.dataset.id;
@@ -681,17 +830,33 @@ export const actions = {
     document.querySelector(`.results [data-action="open"][data-id="${CSS.escape(record.id)}"]`)?.focus();
   },
   // The bottle page, at its smells-like section (what it copies, cheaper
-  // twins, siblings) once that has drawn.
+  // twins, siblings): scrolled to once it draws (a dataset bottle loads its
+  // record first), its heading focused once its answer is in, as Now's spray
+  // line opens the spray section. Watches until then, or until the page goes.
   'disc-dupes'(el, app) {
     const id = el.dataset.id;
     app.openBottle(id, null, el.closest('.bcard, .row')?.querySelector('.bcard-open, .row-main') ?? el);
-    const until = Date.now() + 2000;
+    const until = Date.now() + DUPES_WAIT_MS;
+    const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    let shown = false;
     const find = () => {
-      const section = document.querySelector('#bottle #bp-dupes, #bottle [data-section="dupes"]');
-      if (section) section.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-      else if (Date.now() < until && state.route?.dest === 'bottle' && state.route.arg === id) setTimeout(find, 100);
+      if (state.route?.dest !== 'bottle' || state.route.arg !== id) return;
+      const mark = document.querySelector('#bottle #bp-dupes, #bottle [data-section="dupes"], #bottle #dupes-title');
+      const section = mark?.closest('section') ?? mark;
+      if (section) {
+        const ready = section.getAttribute('aria-busy') !== 'true';
+        if (!shown || ready) section.scrollIntoView({ block: 'start', behavior });
+        shown = true;
+        if (ready) {
+          const head = mark.matches('h2, h3') ? mark : section.querySelector('h3');
+          if (head && !head.hasAttribute('tabindex')) head.setAttribute('tabindex', '-1');
+          head?.focus({ preventScroll: true });
+          return;
+        }
+      }
+      if (Date.now() < until) setTimeout(find, 120);
     };
-    setTimeout(find, 100);
+    setTimeout(find, 120);
   },
   'disc-by'(el, app) {
     update(app, { by: el.dataset.value });
@@ -709,13 +874,15 @@ export const actions = {
   'disc-seed-remove'(el, app) {
     const ids = seedIds(current()).filter(id => id !== el.dataset.id);
     update(app, { seeds: ids });
-    // Its chip went: focus the next one, or Add.
-    document.querySelector('#disc-body .seed-x, #disc-body .seed-add')?.focus();
+    // Its chip went: focus the next one, or Add, or the list's title.
+    (document.querySelector('#disc-body .seed-x, #disc-body .seed-add') ?? document.querySelector('#disc-body .disc-title'))?.focus();
   },
   'disc-seeds-open'(el, app) {
     app.openSheet({ kind: 'disc-seeds', query: '', results: null, busy: false, error: '' });
   },
   'disc-seed-toggle'(el, app) {
+    // (Not while the favorites it starts from are on their way.)
+    if (el.getAttribute('aria-disabled') === 'true') return;
     const id = el.dataset.id;
     const ids = seedIds(current());
     const next = ids.includes(id) ? ids.filter(x => x !== id) : ids.length < SEED_MAX ? [...ids, id] : ids;
@@ -724,12 +891,14 @@ export const actions = {
     const hit = state.sheet?.results?.find(r => r.id === id);
     if (hit?.stub && !findRecord(id)) fullRecords([hit]).then(([r]) => { if (r) { keepBottles([r]); repaint(app); } }, () => {});
     ks.like = T.PAGE;
+    // (The repaint redraws the sheet too: the row moves between Picked and the rest, keeping focus.)
     update(app, { seeds: next, tab: 'like' });
-    app.keepingFocus(el, '#sheet', () => app.updateSheet({}));
   },
   'disc-seeds-reset'(el, app) {
     ks.like = T.PAGE;
     update(app, { seeds: null });
+    // The link went with the picks: the list's title.
+    if (!el.isConnected) focusTitle();
   },
 
   // Filters.
@@ -751,18 +920,25 @@ export const actions = {
     // The switch reads "Hide discontinued", the filter "show them".
     setFilter(app, el, { [key]: !f[key] });
   },
+  // "Prefer great value": the switch, or the line over a list ("Show all").
   'disc-value'(el, app) {
-    setPreferValue(!shownPreferValue());
+    setPreferValue(el.dataset.value === 'off' ? false : !valueOn());
     for (const k of Object.keys(ks)) ks[k] = T.PAGE;
     const scope = el.closest('#sheet') ? '#sheet' : '#main';
     repaint(app);
-    app.refocus(el, scope);
+    if (!app.refocus(el, scope)) focusTitle();
   },
   'disc-filters-reset'(el, app) {
+    const inSheet = Boolean(el.closest('#sheet'));
+    // Back to the defaults: Prefer great value too (Discover's is off).
+    if (valueOn()) setPreferValue(null);
     setFilter(app, el, { ...NO_FILTERS });
-    const scope = el.closest('#sheet') ? '#sheet' : '#main';
-    // The Reset button went (nothing to reset): focus the panel's heading or the sheet's close.
-    if (!el.isConnected) document.querySelector(scope === '#sheet' ? '#sheet .sheet-close' : '#disc-filters-head')?.focus?.();
+    if (el.isConnected) return;
+    // The Reset button went (nothing to reset): the sheet's close, the panel's heading, or the list's title.
+    if (inSheet) return document.querySelector('#sheet .sheet-close')?.focus();
+    const head = document.getElementById('disc-filters-head');
+    if (head?.checkVisibility?.()) head.focus();
+    else focusTitle();
   },
 };
 
@@ -779,59 +955,65 @@ async function seedSearch(app, query) {
   app.updateSheet({ results, busy: false, error: results.length ? '' : error });
 }
 
-function seedRow(r, on) {
+function seedRow(r, on, { disabled = false } = {}) {
   const meta = [r.brand, r.year].filter(Boolean).map(esc).join(' · ');
-  return `<li class="row"><button class="row-main seed-pick" data-action="disc-seed-toggle" data-id="${esc(r.id)}" aria-pressed="${on}">
-      ${img(r)}<span class="row-text"><b>${esc(r.name)}</b><small>${meta}</small></span>
+  return `<li class="row"><button class="row-main seed-pick" data-action="disc-seed-toggle" data-id="${esc(r.id)}" aria-pressed="${on}"${disabled ? ' aria-disabled="true"' : ''}>
+      ${r.missing ? `<span class="seed-glyph">${icon.bottle}</span>` : img(r)}<span class="row-text"><b>${esc(r.name)}</b><small>${r.missing ? 'The library couldn’t find it' : meta}</small></span>
       <span class="check${on ? ' on' : ''}" aria-hidden="true">${icon.check}</span>
     </button></li>`;
 }
 
 /**
  * The seed picker: the bottles picked (first, always), any bottle from the
- * library by search, and owned ones by name. `picked`: the chosen ids'
- * records (null while one loads).
+ * library by search, and owned ones by name. `picked`: seedModel's seeds
+ * (records, stubs, `{ missing }`; null while one loads). `loading`: the
+ * favorites it starts from are on their way (nothing to toggle yet).
  */
-export function seedSheetHTML(sheet, { owned, chosen, picked = [] }) {
+export function seedSheetHTML(sheet, { owned, chosen, picked = [], loading = false }) {
   const q = normalize(sheet.query ?? '');
   const taken = new Set(chosen);
   const mine = owned.filter(f => !taken.has(f.id) && (!q || normalize(`${f.name} ${f.brand}`).includes(q)));
   const ownedIds = new Set(owned.map(f => f.id));
   const more = (sheet.results ?? []).filter(r => !ownedIds.has(r.id) && !taken.has(r.id));
-  const status = sheet.busy ? 'Searching…' : sheet.error ? sheet.error : '';
+  const status = loading ? 'Loading your favorites…' : sheet.busy ? 'Searching…' : sheet.error ? sheet.error : '';
+  const row = (r, on) => seedRow(r, on, { disabled: loading });
   return `<h2 class="sheet-title" id="disc-seeds-title">More like…</h2>
     <p class="lede muted">Pick up to ${SEED_MAX} bottles. The list finds bottles close to all of them.</p>
     <form class="search-form" data-form="disc-seed-search" role="search">
       <label class="filter">${icon.search}<input type="search" name="q" data-field="disc-seed-q" placeholder="Search any bottle" value="${esc(sheet.query ?? '')}" autocomplete="off" aria-label="Search bottles to start from"></label>
     </form>
-    ${picked.some(Boolean) ? `<p class="list-title">Picked</p><ul class="rows seed-rows">${picked.filter(Boolean).map(r => seedRow(r, true)).join('')}</ul>` : ''}
-    ${more.length ? `<p class="list-title">From the library</p><ul class="rows seed-rows">${more.map(r => seedRow(r, false)).join('')}</ul>` : ''}
+    ${picked.some(Boolean) ? `<p class="list-title">Picked</p><ul class="rows seed-rows">${picked.filter(Boolean).map(r => row(r, true)).join('')}</ul>` : ''}
+    ${more.length ? `<p class="list-title">From the library</p><ul class="rows seed-rows">${more.map(r => row(r, false)).join('')}</ul>` : ''}
     <p class="list-title">${q ? 'Yours that match' : 'Yours'}</p>
-    ${mine.length ? `<ul class="rows seed-rows">${mine.map(r => seedRow(r, false)).join('')}</ul>` : `<p class="muted small">${q ? 'None of yours match. Search finds any bottle.' : owned.length ? 'Every one of yours is picked.' : 'Your wardrobe is empty. Search for any bottle.'}</p>`}
+    ${mine.length ? `<ul class="rows seed-rows${loading ? ' loading' : ''}">${mine.map(r => row(r, false)).join('')}</ul>` : `<p class="muted small">${q ? 'None of yours match. Search finds any bottle.' : owned.length ? 'Every one of yours is picked.' : 'Your wardrobe is empty. Search for any bottle.'}</p>`}
     <div class="sheet-bar spread">
       <span class="muted" role="status">${esc(status || `${chosen.length} of ${SEED_MAX} picked`)}</span>
       <button class="btn primary" data-action="close-sheet">Done</button>
     </div>`;
 }
 
+// The filters sheet's live line: what the list on screen holds now.
 function filterStatus() {
   const d = current();
-  const s = searching(d) ? slots.notes : slots[d.tab === 'like' ? 'like' : 'styles'];
+  const name = searching(d) ? 'notes' : d.tab === 'like' ? 'like' : 'styles';
+  const s = slots[name];
   if (s.status === 'loading') return 'Finding bottles…';
   const n = s.result?.picks?.length;
   if (n == null) return '';
-  return n ? `${n}${n >= ks[searching(d) ? 'notes' : d.tab === 'like' ? 'like' : 'styles'] ? '+' : ''} bottles fit` : 'Nothing fits';
+  if (!n) return 'Nothing fits';
+  // A full page is the best of more: say what's shown, not a count it isn't.
+  return n < ks[name] ? `${plural(n, 'bottle')} fit` : `Showing the top ${n}`;
 }
 
 export const sheets = {
   'disc-filters'() {
     if (!discoverRoute()) return null;
     const d = current();
-    return sheetFrame('disc-filters-title', T.filterSheetHTML(d.filters, { preferValue: shownPreferValue(), mists: hasMists(), status: filterStatus() }));
+    return sheetFrame('disc-filters-title', T.filterSheetHTML(d.filters, { preferValue: valueOn(), mists: hasMists(), status: filterStatus() }));
   },
   'disc-seeds'(sheet) {
     if (!discoverRoute()) return null;
-    const d = current(), chosen = seedIds(d);
-    return sheetFrame('disc-seeds-title', seedSheetHTML(sheet, { owned: activeFragrances(), chosen, picked: seedModel(d).seeds }));
+    const d = current(), chosen = seedIds(d), m = seedModel(d);
+    return sheetFrame('disc-seeds-title', seedSheetHTML(sheet, { owned: activeFragrances(), chosen, picked: m.seeds, loading: m.loading }));
   },
 };

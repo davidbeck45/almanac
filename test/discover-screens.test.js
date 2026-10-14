@@ -7,14 +7,15 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { parseRoute, routeHash } from '../src/app/router.js';
 import {
-  KEYS, readQuery, writeQuery, poolFilters, filterCount, searchMode, NO_FILTERS, SAFE_MIN, SEED_MAX,
+  KEYS, readQuery, writeQuery, poolFilters, filterCount, searchMode, namedToCheck, WELL_KNOWN, NO_FILTERS, SAFE_MIN, SEED_MAX,
 } from '../src/views/discover/query.js';
 import * as T from '../src/views/discover/templates.js';
 import { bottleCardHTML } from '../src/ui/components.js';
 import { FILTERS } from '../src/discover.js';
 import { STYLES } from '../src/scent-styles.js';
 import { handlePool, newPoolCache } from '../src/pool-tasks.js';
-import { seedSheetHTML, sheets } from '../src/views/discover.js';
+import { fragranticaLibrary } from '../src/fragrantica.js';
+import { seedSheetHTML, sheets, NONE_FOUND } from '../src/views/discover.js';
 
 const PANES = { wear: ['now'], wardrobe: ['owned'], discover: [] };
 const viaURL = d => readQuery(parseRoute(routeHash({ dest: 'discover', query: writeQuery(d) }), PANES).query);
@@ -83,16 +84,42 @@ test('filters become the pool’s, and the Filters button counts them', () => {
   assert.equal(filterCount(NO_FILTERS), 0);
   assert.equal(filterCount(f), 8);
   assert.equal(filterCount(f, { mists: false }), 7);
+  assert.equal(filterCount(NO_FILTERS, { value: true }), 1, 'Prefer great value counts, though it lives in prefs');
 });
 
-test('a search reads as notes when every word is one, unless a bottle is named exactly that', () => {
+test('a search reads as notes when every word is one, unless a well-known bottle is named exactly that', () => {
   const notes = { terms: ['tobacco', 'vanilla'], unknown: [] };
+  const stub = (id, name, brand) => ({ id, name, brand, stub: true });
+  const tv = stub('1825', 'Tobacco Vanille', 'Tom Ford');
   assert.equal(searchMode({ q: 'tobacco vanilla' }, [], notes), 'notes');
-  assert.equal(searchMode({ q: 'tobacco vanille' }, [{ name: 'Tobacco Vanille', brand: 'Tom Ford' }], notes), 'names');
+  assert.equal(searchMode({ q: 'tobacco vanille' }, [tv], notes, () => 31666), 'names');
+  assert.equal(searchMode({ q: 'tobacco vanille' }, [tv], notes, () => 17), 'notes', 'a little-known bottle of that name doesn’t take the words');
+  assert.equal(searchMode({ q: 'tobacco vanille' }, [tv], notes), 'notes', 'nor one whose votes aren’t known');
+  assert.equal(searchMode({ q: 'tobacco vanille' }, [{ ...tv, stub: false }], notes), 'names', 'one on this device does');
+  assert.equal(searchMode({ q: 'tobacco vanille tom ford' }, [tv], notes), 'names', 'so does one named with its brand');
   assert.equal(searchMode({ q: 'fig' }, [{ name: 'Fig', brand: 'Somebody' }], { terms: ['fig'], unknown: [] }), 'notes', 'one word stays a note');
   assert.equal(searchMode({ q: 'aventus' }, [{ name: 'Aventus', brand: 'Creed' }], { terms: [], unknown: ['aventus'] }), 'names');
   assert.equal(searchMode({ q: 'iris leather' }, [], null), 'names', 'names until the notes answer is in');
-  assert.equal(searchMode({ q: 'tobacco vanille', by: 'notes' }, [{ name: 'Tobacco Vanille', brand: 'Tom Ford' }], notes), 'notes', 'a pick wins');
+  assert.equal(searchMode({ q: 'tobacco vanille', by: 'notes' }, [tv], notes, () => 31666), 'notes', 'a pick wins');
+  assert.deepEqual(namedToCheck('tobacco vanille', [tv, stub('2', 'Tobacco', 'X')], () => undefined), [tv], 'the votes it still needs');
+  assert.deepEqual(namedToCheck('tobacco vanille', [tv], () => 31666), []);
+});
+
+test('the brief’s note pairs read as notes, and famous names as names, on the real library', async () => {
+  const dir = new URL('../data/fragrantica/', import.meta.url);
+  const library = fragranticaLibrary(async path => (existsSync(new URL(path, dir)) ? readFileSync(new URL(path, dir), 'utf8') : null));
+  const reading = async (q, terms) => {
+    const hits = await library.search(q, 10);
+    const records = await library.records(namedToCheck(q, hits, () => undefined).map(r => r.id));
+    return searchMode({ q }, hits, { terms, unknown: [] }, id => records.get(id)?.ratingVotes ?? 0);
+  };
+  // Bottles are named these (Smoky Vanilla by Qhue, 5 votes; Amber Vanilla by The 7 Virtues, 822).
+  assert.equal(await reading('smoky vanilla', ['smoky', 'vanilla']), 'notes');
+  assert.equal(await reading('amber vanilla', ['amber', 'vanilla']), 'notes');
+  assert.equal(await reading('rose oud', ['rose', 'oud']), 'notes');
+  assert.equal(await reading('Tobacco Vanille', ['tobacco', 'vanilla']), 'names');
+  assert.equal(await reading('oud wood', ['oud', 'woody']), 'names');
+  assert.ok(WELL_KNOWN > 2000 && WELL_KNOWN < 9000);
 });
 
 // ---------- Templates ----------
@@ -122,6 +149,7 @@ test('a pick’s card: escaped, marked, and every action named', () => {
   const html = clean(T.pickCardHTML(pick('p1'), { selected: ['skin', 'intimate'], key: 'styles' }), 'card');
   assert.match(html, /data-action="open" data-ctx="" data-id="p1"/, 'photo and name open its page');
   for (const action of ['disc-want', 'disc-own', 'disc-dupes']) assert.ok(html.includes(`data-action="${action}" data-id="p1"`), action);
+  assert.match(html, /<span>Smells like<\/span>/);
   assert.match(html, /★ 4\.18/);
   assert.match(html, /Great value/);
   assert.match(html, /Risky buy/);
@@ -132,10 +160,14 @@ test('a pick’s card: escaped, marked, and every action named', () => {
   assert.match(html, /aria-pressed="false" aria-label="Want /);
   const lines = T.whyLines(pick('p1'), { max: 9 });
   assert.equal(lines.length, 5, 'nearest, what it copies, twin, twins and family');
-  assert.match(lines[0], /^Nearest you own: <button class="link-btn" data-action="open" data-ctx="" data-id="o1">/);
-  assert.match(lines[1], /Voters say it smells like .* \(314 to 54\)\.$/);
+  assert.match(lines[0], /^Nearest you own: <button class="link-btn" data-action="open" data-ctx="" data-id="o1">.*<\/button> \(a &lt;img.* dupe\), sharing /);
+  assert.match(lines[1], /^Most voters say it smells like .* by &lt;img[^.]*\.$/);
+  assert.ok(!/\d+ to \d+/.test(lines[1]), 'no raw vote tallies');
+  assert.match(T.whyLines(pick('p1', { nearest: { name: 'Liquid Brun', record: owned, traits: [], through: 'Althaïr' } }))[0], /\(an Althaïr dupe\)/);
   assert.match(lines[2], /^Cheaper twin: /);
   assert.match(lines[3], /^Twins: .* and /);
+  const five = T.whyLines(pick('p1', { alike: ['a1', 'a2', 'a3', 'a4', 'a5'].map(id => record(id, `Twin ${id}`)) }), { max: 9 });
+  assert.match(five[3], /^Twins: .*Twin a1.*, .*Twin a2.*, .*Twin a3<\/button> and 2 more\.$/, 'one “and”, then how many more');
   assert.equal(T.whyLines(pick('p1')).length, 4, 'four lines at most');
   // Owned and wanted.
   const mine = T.pickCardHTML(pick('p1'), { owned: 'In Mine', wanted: true });
@@ -154,6 +186,19 @@ test('a notes pick leads with what it matched; a more-like pick with what it sha
   assert.equal(like.at(-1), 'Fans of your picks like it too.');
   // Bare picks still render.
   clean(T.pickCardHTML({ id: 'b', record: record('b', 'Bare', { rating: 0, year: null }), styles: [], close: false, nearest: null, risk: { level: 'low', reasons: [] } }), 'bare card');
+});
+
+test('a pick with nothing voters link it to leaves out Smells like; a mist or an oil says so', () => {
+  const lone = pick('p5', { clonesOf: null, twin: null, alike: [] });
+  assert.ok(!T.pickCardHTML(lone).includes('disc-dupes'), 'nothing to show there');
+  assert.ok(T.hasDupes({ ...lone, record: { ...lone.record, extras: { like: ['9'] } } }), 'smells-like votes are something');
+  assert.equal(T.formatOf({ name: 'Twilight Body Spray' }), 'Body spray');
+  assert.equal(T.formatOf({ name: 'Amber Fragrance Oil' }), 'Perfume oil');
+  assert.equal(T.formatOf({ name: 'Aventus Oil' }), 'Perfume oil');
+  assert.equal(T.formatOf({ name: 'Bare Vanilla Fine Fragrance Mist' }), 'Body mist');
+  assert.equal(T.formatOf({ name: 'If You Musk', extras: { flags: ['mist'] } }), 'Body mist', 'the pool’s mist flag');
+  for (const name of ['Cashmere Mist', 'Iris Silver Mist', 'Oud Wood', 'Soil']) assert.equal(T.formatOf({ name }), null, name);
+  assert.match(T.pickCardHTML(pick('p6', { record: record('p6', 'Amber Fragrance Oil') })), /class="bcard-meta">[^<]*· 2020 · Perfume oil</);
 });
 
 test('marks say value and risk in words', () => {
@@ -183,7 +228,8 @@ test('a list: skeletons first, the old cards dimmed while a change loads, errors
   assert.ok(!T.picksHTML({ status: 'done', result: { picks } }, { ...opts, k: T.MAX_PICKS }).includes('disc-more'), 'nor one at the most');
   const updating = T.picksHTML({ status: 'loading', result: { picks } }, opts);
   assert.match(updating, /disc-grid updating" aria-busy="true"/);
-  assert.match(updating, /disc-more"[^>]*disabled/);
+  assert.match(updating, /disc-more"[^>]*aria-disabled="true"/, 'Show more stays focusable while the next page loads');
+  assert.ok(!/disc-more"[^>]*\sdisabled/.test(updating));
 });
 
 test('style chips: the chosen pressed, the rest folded on wide columns, a tip for each', () => {
@@ -207,16 +253,34 @@ test('style chips: the chosen pressed, the rest folded on wide columns, a tip fo
   assert.match(T.stylePickerHTML({ styles: STYLES, order, selected: [], mode: 'any' }), /Pick a style/);
 });
 
-test('seeds: chips to remove, Add until five, the way back to the defaults', () => {
+test('seeds: chips to remove, Add until five, the way back to the defaults, ones the library lost', () => {
   const r = record('s1');
-  const html = clean(T.seedsHTML({ seeds: [r, null], from: 'given', chosen: true, max: 5 }), 'seeds');
+  const html = clean(T.seedsHTML({ seeds: [r, null, { id: 'gone', missing: true }], max: 5, line: T.likeHead({ from: 'given', chosen: true }).line }), 'seeds');
   assert.match(html, /data-action="disc-seed-remove" data-id="s1"/);
   assert.match(html, /sk-seed/, 'a seed still loading');
+  assert.match(html, /Not found<\/span><\/span>\s*<button class="icon-btn seed-x" data-action="disc-seed-remove" data-id="gone"/, 'a seed the library lost, with its X');
   assert.match(html, /data-action="disc-seeds-reset"/);
   assert.match(html, /data-action="disc-seeds-open"/);
-  assert.ok(!T.seedsHTML({ seeds: Array(5).fill(r), from: 'given', chosen: true, max: 5 }).includes('disc-seeds-open'), 'no Add at five');
-  assert.match(T.seedsHTML({ seeds: [r], from: 'worn', chosen: false, max: 5 }), /most worn/);
-  assert.match(T.seedsHTML({ seeds: [r], from: 'rated', chosen: false, max: 5 }), /best-rated/);
+  assert.ok(!T.seedsHTML({ seeds: Array(5).fill(r), max: 5 }).includes('disc-seeds-open'), 'no Add at five');
+  assert.ok(!T.seedsHTML({ seeds: [], max: 5, addable: false }).includes('disc-seeds-open'), 'none when the message below asks for bottles');
+  assert.deepEqual(T.likeHead({ from: 'worn' }), { title: 'More like your most worn', line: 'Your most worn of the last 60 days.' });
+  assert.equal(T.likeHead({ from: 'rated' }).title, 'More like your best rated');
+  assert.equal(T.likeHead({ from: 'rated', none: true }).title, 'More like bottles you love', 'no “best-rated” over an empty row');
+  assert.equal(T.likeHead({ from: 'rated', none: true }).line, '');
+  assert.deepEqual(T.likeHead({ loading: true }), { title: 'More like your favorites', line: 'Loading your favorites…' });
+  // The pool's words when it finds none of a link's seeds: no Try again.
+  assert.match('None of those bottles are in the fragrance library.', NONE_FOUND);
+});
+
+test('a list says what it is, and when only great value shows', () => {
+  assert.equal(T.stylesTitle(['Skin scent', 'Clean', 'Intimate']), 'More skin scent, clean or intimate bottles');
+  assert.equal(T.stylesTitle(['Powdery & iris']), 'More powdery & iris bottles');
+  assert.equal(T.stylesTitle(['Clean', 'Intimate'], 'all'), 'Clean and intimate, all at once');
+  assert.match(clean(T.listTitleHTML(EVIL), 'title'), /^<h2 class="disc-title" tabindex="-1" data-focus="disc-title">&lt;img/);
+  assert.match(T.valueFloorHTML(), /Great value only.*data-action="disc-value" data-value="off">Show all/);
+  const offline = clean(T.searchErrorHTML(EVIL), 'search error');
+  assert.match(offline, /Couldn’t search/);
+  assert.match(offline, /data-action="disc-retry" data-value="notes"/);
 });
 
 test('filters: radio groups with one stop each, the value toggle as answered, mists only when known', () => {
@@ -235,19 +299,23 @@ test('filters: radio groups with one stop each, the value toggle as answered, mi
   assert.match(html, /data-id="mists"/);
   assert.ok(!T.filtersHTML(NO_FILTERS, { mists: false }).includes('data-id="mists"'));
   assert.match(T.filterButtonHTML({ ...NO_FILTERS, safe: true, lean: 'unisex' }), /aria-label="Filters, 2 on"/);
+  assert.match(T.filterButtonHTML(NO_FILTERS, { value: true }), /aria-label="Filters, 1 on"/, 'Prefer great value shows on the button');
+  assert.match(T.filterSheetHTML(NO_FILTERS, { preferValue: true, mists: true, status: '' }), /data-action="disc-filters-reset">Reset/, 'and Reset can turn it off');
   assert.ok(!/class="count"/.test(T.filterButtonHTML(NO_FILTERS)));
   clean(T.filterSheetHTML(NO_FILTERS, { preferValue: false, mists: true, status: EVIL }), 'filter sheet');
 });
 
 test('search: names with where they are, the two readings, typos and nothing found', () => {
-  const names = clean(T.namesHTML({ results: [record('n1'), record('n2')] }, new Map([['n2', `In ${EVIL}’s`]])), 'names');
+  const names = clean(T.namesHTML({ results: [record('n1'), record('n2')] }, new Map([['n2', `In ${EVIL}’s`]]), { wantedOf: id => id === 'n1' }), 'names');
   assert.equal((names.match(/data-action="own-result"/g) ?? []).length, 1);
-  assert.equal((names.match(/data-action="disc-dupes"/g) ?? []).length, 2);
+  assert.match(names, /data-action="disc-want" data-id="n1" aria-pressed="true"/, 'Want on every row');
+  assert.match(names, /data-action="disc-want" data-id="n2" aria-pressed="false"/);
+  assert.equal((names.match(/class="row wrap"/g) ?? []).length, 2, 'names get two lines');
   const toggle = T.modeToggleHTML('notes', { names: 'iris leather', notes: ['iris', 'leather'] });
   assert.match(toggle, /data-value="notes" aria-pressed="true"><span>By notes</);
   assert.match(toggle, /data-value="names" aria-pressed="false"><span>By name</);
   assert.equal(T.modeToggleHTML('notes', { names: null, notes: ['iris'] }), '', 'one reading needs no toggle');
-  assert.equal(T.searchTitleHTML('notes', { query: 'x', terms: ['iris', 'leather', 'smoke'] }), '<h2 class="disc-title">With iris, leather and smoke</h2>');
+  assert.equal(T.searchTitleHTML('notes', { query: 'x', terms: ['iris', 'leather', 'smoke'] }), '<h2 class="disc-title" tabindex="-1" data-focus="disc-title">With iris, leather and smoke</h2>');
   assert.match(clean(T.searchTitleHTML('names', { query: EVIL }), 'title'), /Names matching “&lt;img/);
   const note = T.notesNoteHTML({ corrected: [{ from: 'lavnder', to: 'lavender' }], suggested: [{ from: 'vanila', to: 'vanilla' }] }, 'vanila smoke');
   assert.match(note, /Showing lavender for “lavnder”\./);
@@ -261,8 +329,9 @@ test('the teaser: the thinnest gap and what fills it, a skeleton, nothing when i
   const r = record('g1');
   const report = { gaps: [{ title: 'Date Night on mild and warm nights' }], picks: [{ id: 'g1', record: r, fills: [{ title: 'Date Night on mild nights' }, { title: 'Cozy on mild nights' }] }] };
   const html = clean(T.teaserHTML({ status: 'done', result: report }), 'teaser');
-  assert.match(html, /Thinnest in your wardrobe: Date Night on mild and warm nights\./);
-  assert.match(html, /For Date Night on mild nights and 1 more/);
+  assert.match(html, /Bottles for what your wardrobe covers least\./);
+  assert.match(html, /<small>&lt;img[^<]*Oud&#39;s · Fills Date Night on mild nights \+1<\/small>/, 'its brand, then what it fills');
+  assert.equal(T.fillsLine({ fills: [{ title: 'Daily picks on hot nights' }] }), 'Fills everyday wear on hot nights');
   assert.match(html, /href="#\/wardrobe\/insights"/);
   assert.match(T.teaserHTML({ status: 'loading', result: null }), /teaser-sk/);
   assert.equal(T.teaserHTML({ status: 'error', result: null, error: 'x' }), '');
@@ -288,6 +357,15 @@ test('the seed picker: picked first, then the library’s hits, then yours', () 
   assert.equal((html.match(/data-id="m1"/g) ?? []).length, 1, 'an owned hit shows once, under yours');
   assert.match(html, /1 of 5 picked/);
   assert.match(seedSheetHTML({ query: '' }, { owned: [], chosen: [] }), /Your wardrobe is empty/);
+  // A library hit just picked shows under Picked while its record loads (the stub), and a lost one too.
+  const stub = { id: 'l1', name: 'Brun Noir', brand: 'X', stub: true };
+  const picking = seedSheetHTML({ query: 'brun', results: [stub] }, { owned: mine, chosen: ['l1', 'gone'], picked: [stub, { id: 'gone', missing: true, name: 'Not found' }] });
+  assert.match(picking, /Picked<\/p><ul class="rows seed-rows"><li class="row"><button class="row-main seed-pick" data-action="disc-seed-toggle" data-id="l1" aria-pressed="true"/);
+  assert.match(picking, /data-id="gone" aria-pressed="true"[\s\S]*The library couldn’t find it/);
+  // Before the favorites it starts from are in: nothing to toggle yet.
+  const early = seedSheetHTML({ query: '' }, { owned: mine, chosen: [], picked: [null, null, null], loading: true });
+  assert.match(early, /Loading your favorites…/);
+  assert.equal((early.match(/aria-disabled="true"/g) ?? []).length, mine.length);
   // Off Discover, its sheets close themselves.
   assert.equal(sheets['disc-filters'](), null);
 });
