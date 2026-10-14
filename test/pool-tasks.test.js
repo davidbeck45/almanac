@@ -83,7 +83,7 @@ test('report takes a climate, shares or "How you wear" settings, and a changed r
 
 test('check says whether a bottle is worth buying, by id or record, one or several', async () => {
   const tonka = await ask('check', { owned, id: '76063', liked: ['skin', 'gourmand', 'vanilla', 'nope'] });
-  assert.equal(tonka.verdict, 'Strong fit');
+  assert.equal(tonka.verdict, 'Good', 'a gourmand he likes the style of, though he’s covered');
   assert.equal(tonka.record.name, 'Shalimar Millésime Tonka');
   assert.ok(isRecord(tonka.record) && tonka.reasons.length >= 2 && tonka.preferValue === true);
   assert.ok(tonka.styles.some(s => s.id === 'vanilla'));

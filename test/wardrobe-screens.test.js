@@ -52,9 +52,10 @@ function hostile(report) {
   return r;
 }
 
+// Without Supremacy Collector's Edition his warm nights fall short: a report with real gaps.
 let report;
 test('Insights renders the report clean: the map, thin spots, strengths and suggestions', async () => {
-  report = await ask('report', { owned, k: 5 });
+  report = await ask('report', { owned: owned.filter(f => f.name !== 'Supremacy Collector\'s Edition Pour Homme'), k: 5 });
   const r = hostile(report);
   const mix = styles.styleMix(owned);
   const model = {
@@ -150,7 +151,9 @@ test('the headline reads plainly, and the thin spots name what fills them', () =
 test('a suggestion card shows its fills against your best, its facts and its actions', () => {
   const p = report.picks[0];
   const html = clean(insights.pickCardHTML(p, { wanted: false }), 'pick card');
-  for (const f of p.fills.filter(x => x.matters)) assert.ok(html.includes(placeOf(f.title)), f.title);
+  const fills = p.fills.filter(x => x.matters);
+  for (const f of fills.slice(0, 3)) assert.ok(html.includes(placeOf(f.title)), f.title);
+  if (fills.length > 3) assert.ok(html.includes(`And ${fills.length - 3} more situation`), 'the rest counted');
   assert.match(html, /★ \d\.\d\d · [\d,]+ votes/);
   assert.match(html, /Great value/, 'a value-filtered pick is great value');
   assert.match(html, /data-action="wish-toggle"[^>]*aria-pressed="false"/);
@@ -272,13 +275,13 @@ test('David starts on the styles he says he loves; liking some replaces them, an
 });
 
 test('the wishlist puts the best fits first and says what each would add', async () => {
-  const { checks } = await ask('check', { owned, records: ['76063', '98242', '9828', 'nope'], liked: discover.DEMO_LIKED });
+  const { checks } = await ask('check', { owned, records: ['124649', '98242', '9828', 'nope'], liked: discover.DEMO_LIKED });
   const wants = checks.map((c, i) => ({ id: String(c.id), added: `2026-10-0${i + 1}` }));
   const items = wishlist.sortWants([
     { want: { id: 'loading', added: '2026-10-09' }, record: null, check: undefined },
     ...checks.map((check, i) => ({ want: wants[i], record: check.record ?? null, check })),
   ]);
-  assert.equal(items[0].check.name, 'Shalimar Millésime Tonka', 'the strong fit leads');
+  assert.equal(items[0].check.name, 'Zenith', 'the strong fit leads');
   const ranks = items.filter(i => i.check && !i.check.missing).map(i => verdictRank(i.check.verdict));
   assert.deepEqual(ranks, [...ranks].sort((a, b) => a - b));
   assert.deepEqual(items.slice(-2).map(i => i.want.id), ['loading', 'nope'], 'unchecked and unknown ones wait at the end, as added');

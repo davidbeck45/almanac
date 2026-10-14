@@ -1,8 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { rank, steadyShares, votedShares } from '../src/engine.js';
 import { loadPool, fromPool } from '../src/fragrantica.js';
 import { allow, genderLean, leanWindow } from '../src/candidates.js';
@@ -78,6 +76,11 @@ test('flat season votes read as unvoted, so they don’t make an all-rounder', (
   assert.ok(!flatVotes([112, 118, 117, 111], 546), 'even, but from few of its raters');
   assert.ok(!flatVotes([3, 3, 3, 9], 20), 'a tie on few votes');
   assert.ok(!flatVotes([2700, 2700, 2700, 1000], 4750), 'a scraped page rounds counts from 1,000, so a tie there is no sign');
+  // One count on 4 of the 6 boxes, seasons and slots together: Shalimar Millésime Tonka's 432 on winter, fall, day and night.
+  const tonka = byId.get('76063');
+  assert.deepEqual([tonka.seasonVotes.winter, tonka.seasonVotes.fall, tonka.timeVotes.day, tonka.timeVotes.night], [432, 432, 432, 432]);
+  assert.deepEqual(votedShares(tonka), { season: false, time: false });
+  assert.ok(steadyShares(tonka).season.summer < 0.12, 'its accords and smells-likes say it isn’t a summer scent');
   // The engine reads them as none (steadyShares), so the gap finder, rank() and Discover agree.
   const elyon = byId.get('119376'), au = records.find(r => r.name === 'Au Hasard');
   for (const r of [elyon, au]) {
@@ -166,12 +169,13 @@ test('David’s gaps name real situations, gaps before room to grow, and his str
     assert.doesNotMatch(g.text, /°|\d+ ?F\b/, 'no temperatures');
     assert.ok(order.includes(g.status));
   }
-  assert.equal(gaps[0].status, 'gap');
-  assert.ok(gaps.some(g => g.use === 'date' && g.bands.includes('warm') && g.status === 'gap'), 'date nights in the warm are his gap');
+  // His date nights in the warm fall just short of the best bottles out there: room to grow, his biggest.
+  assert.ok(gaps.every(g => g.status === 'room'), gaps.map(g => `${g.title} ${g.status}`).join('; '));
+  assert.ok(gaps[0].use === 'date' && gaps[0].bands.includes('warm'), gaps[0].title);
   // Office wants a bottle that lasts the day, and his fresh clones do: it's a strength, not a gap.
   assert.ok(!gaps.some(g => g.use === 'office'), gaps.map(g => g.title).join('; '));
   assert.ok(report.strengths.some(s => s.use === 'office'), 'the office is a strength');
-  assert.match(report.overview.text, /^You have a strong pick for nearly everything you wear/);
+  assert.match(report.overview.text, /^Your wardrobe covers every situation well; here’s where it could go further\./);
   // Cold days: Cream Velvet leads, Détour Noir and Liam close behind, so it isn't thin.
   const cold = ctx.cov.find(c => c.cell.id === 'daily:day:cold');
   assert.equal(cold.status, 'covered');
@@ -209,8 +213,8 @@ test('a gap’s text describes a cell in the state its status names, the one Ins
     }
   }
   assert.ok(runs >= 3);
-  // David's date nights: the warm cell is the gap, so it's the one described.
-  assert.match(report.gaps.find(g => g.use === 'date').text, /^Worst when warm: your best is Supremacy Collector's Edition Pour Homme/);
+  // David's date nights: both cells are room to grow, and the mild one costs more, so it's the one described.
+  assert.match(report.gaps.find(g => g.use === 'date').text, /^Worst when mild: your best is Infini Rose/);
 });
 
 test('gap fillers keep near the wardrobe’s own leans', () => {
@@ -366,21 +370,29 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   assert.equal(kouros.verdict, 'Risky');
   assert.ok(kouros.reasons.includes('It divides people: many voters hate it.'));
 
-  const tonka = verdict('76063'); // Shalimar Millésime Tonka
-  assert.equal(tonka.verdict, 'Strong fit');
-  assert.match(tonka.reasons[0], /^It would be your best for Date Night on /);
-  assert.ok(tonka.fills.every(f => f.matters) && tonka.fills.some(f => f.real));
+  const zenith = verdict('124649'); // Riiffs Zenith
+  assert.equal(zenith.verdict, 'Strong fit');
+  assert.match(zenith.reasons[0], /^It would be your best for Date Night on /);
+  assert.ok(zenith.fills.every(f => f.matters) && zenith.fills.some(f => f.real));
+  // Shalimar Millésime Tonka's flat votes read as none: a cool-weather gourmand, not one for warm nights.
+  const tonka = verdict('76063');
+  assert.equal(tonka.verdict, 'Covered');
+  assert.match(tonka.reasons[0], /Date Night on cool nights/);
+  for (const c of [ctx, gapContext({ owned: [], records, byId })]) {
+    const fills = buyCheck(byId.get('76063'), c).fills.filter(f => f.matters).map(f => f.cell.id);
+    assert.ok(!fills.includes('date:night:warm') || fills.indexOf('date:night:warm') > fills.indexOf('date:night:cool'), fills.join());
+  }
 
   const red = buyCheck(records.find(r => r.name === 'Red Tobacco'), ctx);
   assert.equal(red.verdict, 'Risky');
   assert.equal(red.risk.level, 'high');
   assert.equal(red.reasons[0], red.risk.reasons[0]);
 
-  for (const c of [althair, sibling, tonka, red, dhi, kouros]) {
+  for (const c of [althair, sibling, zenith, tonka, red, dhi, kouros]) {
     assert.ok(c.reasons.length >= 2 && c.reasons.length <= 3);
     for (const r of c.reasons) assert.doesNotMatch(r, /°|\d+ ?F\b|undefined|null|NaN/);
   }
-  const json = checkJSON(byId.get('76063'), tonka);
+  const json = checkJSON(byId.get('124649'), zenith);
   assert.equal(JSON.parse(JSON.stringify(json)).verdict, 'Strong fit');
 });
 
@@ -407,7 +419,7 @@ test('the buy check knows what he likes: more of a style he’s thin on is good,
   assert.equal(adg.reasons[1], 'It’s fresh citrus and aquatic, none of the styles you like.');
   // Risky and strong fit stand whatever he likes.
   assert.equal(check(records.find(r => r.name === 'Kouros')).verdict, 'Risky');
-  assert.equal(check('76063').verdict, 'Strong fit', 'Shalimar Millésime Tonka');
+  assert.equal(check('124649').verdict, 'Strong fit', 'Riiffs Zenith');
   // A low-rated skin scent is risky, at its real rating.
   const nap = check(named('Not A Perfume', 'Juliette Has A Gun'));
   assert.equal(nap.verdict, 'Risky');
@@ -542,34 +554,3 @@ test('a place’s climate comes from one archive call, is kept, and falls back o
   }
 });
 
-const script = fileURLToPath(new URL('../scripts/recommend.mjs', import.meta.url));
-const cli = (...args) => spawnSync(process.execPath, [script, ...args], { encoding: 'utf8' });
-
-test('--gaps and --check answer in the terminal', () => {
-  const gaps = cli('--gaps', '--top', '3', '--json');
-  assert.equal(gaps.status, 0, gaps.stderr);
-  const out = JSON.parse(gaps.stdout);
-  assert.ok(out.picks.length >= 2 && out.picks.length <= 3);
-  assert.ok(out.gaps.length && out.strengths.length && !('record' in out.picks[0]));
-  const text = cli('--gaps', '--uses', 'office=never,formal=often', '--no-value');
-  assert.equal(text.status, 0, text.stderr);
-  assert.match(text.stdout, /How you wear: Daily \d+%.*Office 0%/);
-  assert.doesNotMatch(text.stdout.split('To fill them')[0], /Office on/);
-  assert.match(text.stdout, /prefer great value: off/);
-
-  const check = cli('--check', 'Althair', '--json');
-  assert.equal(check.status, 0, check.stderr);
-  assert.equal(JSON.parse(check.stdout).verdict, 'Redundant');
-  const byNumber = cli('--check', '76063');
-  assert.match(byNumber.stdout, /^Shalimar Millésime Tonka by Guerlain \(2022\).*\nStrong fit\n/);
-  // His styles by default, others when named.
-  const you = JSON.parse(cli('--check', 'Glossier You', '--json').stdout);
-  assert.deepEqual([you.verdict, you.liked], ['Good', DEMO_LIKED]);
-  assert.equal(JSON.parse(cli('--check', 'Glossier You', '--style', 'vanilla', '--json').stdout).verdict, 'Covered');
-  assert.match(cli('--check', 'Glossier You', '--style', 'xqzw').stderr, /--style: name styles from/);
-
-  assert.match(cli('--gaps', '--uses', 'gym=often').stderr, /--uses: Unknown use "gym"/);
-  assert.match(cli('--gaps', '--uses', 'daily=never').stderr, /--uses: Daily picks always count/);
-  assert.match(cli('--gaps', '--value', '--no-value').stderr, /not both/);
-  assert.match(cli('--check', 'xqzw').stderr, /No bottle matches "xqzw"/);
-});

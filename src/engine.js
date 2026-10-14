@@ -124,14 +124,18 @@ export function targetSeasonWeights(feelsF, date, lat = 40) {
 // slot) drew FLAT_TURNOUT of the raters or more and the shares sit within
 // FLAT_SPREAD (most raters ticked everything: Elyon Dubai's 2025 releases),
 // or 3 seasons, or both slots, carry one identical count of FLAT_SAME or
-// more (some Louis Vuitton pages: 765 on every season and both slots).
-// Read as votes, they make a perfect all-rounder of a rose-oud, so
-// steadyShares reads them as none. A page shows counts from 1,000 rounded
-// ("2.4k"), so scraped ties there are no sign.
+// more (some Louis Vuitton pages: 765 on every season and both slots), or
+// FLAT_ACROSS of the six boxes, seasons and slots together, do (Shalimar
+// Millésime Tonka: 432 on winter, fall, day and night). Read as votes, they
+// make a perfect all-rounder of a rose-oud, so steadyShares reads them as
+// none. A page shows counts from 1,000 rounded ("2.4k"), so scraped ties
+// there are no sign.
 const FLAT_SPREAD = 0.03;
 const FLAT_TURNOUT = 0.5;
 const FLAT_SAME = 50;
+const FLAT_ACROSS = 4;
 const exactCount = c => c < 1000 || c % 100 !== 0;
+const sameCount = (counts, times) => counts.some(c => c >= FLAT_SAME && exactCount(c) && counts.filter(x => x === c).length >= times);
 
 /** Whether vote counts ([winter, spring, summer, fall] or [day, night]) from `raters` raters say nothing. */
 export function flatVotes(counts, raters) {
@@ -139,7 +143,7 @@ export function flatVotes(counts, raters) {
   if (!n) return false;
   const lo = Math.min(...counts), hi = Math.max(...counts);
   if ((hi - lo) / n < FLAT_SPREAD && lo >= FLAT_TURNOUT * raters) return true;
-  return counts.some(c => c >= FLAT_SAME && exactCount(c) && counts.filter(x => x === c).length >= Math.min(3, counts.length));
+  return sameCount(counts, Math.min(3, counts.length));
 }
 
 /**
@@ -151,6 +155,7 @@ export function flatVotes(counts, raters) {
  */
 export function votedShares(frag) {
   const sv = frag.seasonVotes, tv = frag.timeVotes, raters = frag.ratingVotes ?? 0;
+  if (sv && tv && sameCount([sv.winter, sv.spring, sv.summer, sv.fall, tv.day, tv.night], FLAT_ACROSS)) return { season: false, time: false };
   const season = Boolean(sv) && !flatVotes([sv.winter, sv.spring, sv.summer, sv.fall], raters);
   const time = Boolean(tv) && !(sv && !season && flatVotes([tv.day, tv.night], raters));
   return { season, time };
