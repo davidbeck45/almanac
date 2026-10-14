@@ -10,7 +10,7 @@ import { icon, img, messageHTML, sectionHead, matchBadge } from '../../ui/compon
 import { askPool, warmPool } from '../../app/pool.js';
 import { state, findRecord, nowSlot, poolInputs } from '../../app/state.js';
 import { loadWants, saveWants, setWant, hasWant } from '../../wishlist.js';
-import { libNow, loadLib, likedFor, inputsKey, ownable, repaint, verdictBadge, verdictRank, fillsHTML } from './parts.js';
+import { libNow, loadLib, likedFor, inputsKey, ownable, repaint, listLoading, verdictBadge, verdictRank, fillsHTML } from './parts.js';
 
 const wish = {
   key: null, // the inputs and wants the checks answer
@@ -144,6 +144,8 @@ async function refresh(app) {
       return paint(app);
     }
   }
+  // Checks judge against the ranked list, so they wait for it.
+  if (listLoading()) return;
   const liked = likedFor(lib).ids;
   const key = JSON.stringify([inputsKey(lib), wants.map(w => w.id), liked]);
   if (key === wish.key) return;

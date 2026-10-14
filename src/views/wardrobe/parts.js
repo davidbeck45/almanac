@@ -46,6 +46,9 @@ export function repaint(app) {
 
 // ---------- Inputs ----------
 
+/** Whether the ranked list is still on its way (David's wardrobe at boot, a shared link): ask nothing yet. */
+export const listLoading = () => (viewingDemo() && !state.demo) || Boolean(state.shared?.loading);
+
 /**
  * The styles someone likes: { ids, stated } — the ones they hearted
  * (state.likedStyles), David's DEMO_LIKED on his wardrobe, else (stated

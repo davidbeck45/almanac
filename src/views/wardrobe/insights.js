@@ -15,7 +15,7 @@ import {
 } from '../../app/state.js';
 import { loadWants, setWant } from '../../wishlist.js';
 import {
-  libNow, loadLib, likedFor, taggedWears, inputsKey, ownable, repaint, ratingText, valueWord, riskText, fillsHTML, wantButton, nearestText,
+  libNow, loadLib, likedFor, taggedWears, inputsKey, ownable, repaint, listLoading, ratingText, valueWord, riskText, fillsHTML, wantButton, nearestText,
 } from './parts.js';
 
 // ---------- The pane's own state ----------
@@ -517,6 +517,7 @@ function insightsPane() {
   if (ins.libError) {
     return messageHTML({ glyph: icon.chart, title: 'Insights didn’t load', body: ins.libError, action: '<button class="btn primary" data-action="ins-retry">Try again</button>' });
   }
+  if (listLoading()) return insightsSkeletonHTML();
   if (!activeFragrances().length) {
     return messageHTML({
       glyph: icon.chart, title: 'Nothing to look at yet',
@@ -561,7 +562,7 @@ async function refresh(app) {
     }
     return paint(app);
   }
-  if (!activeFragrances().length) return;
+  if (listLoading() || !activeFragrances().length) return;
   const key = inputsKey();
   if (key === ins.key) return;
   const n = ++asked;
