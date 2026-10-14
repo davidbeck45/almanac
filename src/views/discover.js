@@ -887,10 +887,10 @@ export const actions = {
     const name = esc(record?.name ?? 'Bottle');
     if (hasWant(wants, id)) {
       wantUndo = null;
-      return app.showToast(`<span class="note">${name} is on your wishlist.</span><a class="btn secondary compact" href="#/wardrobe/wishlist">See it</a>`);
+      return app.showToast(`<span class="note">${name} is on your wishlist</span><a class="btn secondary compact" href="#/wardrobe/wishlist">See it</a>`);
     }
     wantUndo = { list: before, id };
-    app.showToast(`<span class="note">${name} removed from your wishlist.</span><button class="btn primary compact" data-action="disc-want-undo">Undo</button>`);
+    app.showToast(`<span class="note">${name} removed from your wishlist</span><button class="btn primary compact" data-action="disc-want-undo">Undo</button>`);
   },
   // The want list as it was; focus back on the heart that took it away.
   'disc-want-undo'(el, app) {
