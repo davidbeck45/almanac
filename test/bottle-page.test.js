@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { SECTIONS, bottlePageHTML, pooled, sectionsFor, linkId, likedStyleIds, likedTaste } from '../src/views/bottle.js';
-import { state, computeToday, keepBottles } from '../src/app/state.js';
+import { state, computeToday, nowSlot, keepBottles } from '../src/app/state.js';
 import '../src/views/sections.js';
 import { buyCheckHTML, checkable, fillGroups } from '../src/views/bottle-check.js';
 import { sprayHTML, figureSVG, sprayCount } from '../src/views/bottle-spray.js';
@@ -16,13 +16,15 @@ import { stylesHTML } from '../src/views/bottle-styles.js';
 import { dupesHTML } from '../src/views/bottle-dupes.js';
 import { crowdHTML, riskLine, wholePercents } from '../src/views/bottle-crowd.js';
 import { reviewsHTML } from '../src/views/bottle-reviews.js';
-import { compareHTML, compareModel, relation, leader, verdictHTML, pickerLists, pickerHTML, pickerMatches, MAX_COMPARE } from '../src/views/compare.js';
+import {
+  compareHTML, compareModel, relation, leader, verdictHTML, pickerLists, pickerHTML, pickerMatches, pickerStatus, andList, compare as comparePage, MAX_COMPARE,
+} from '../src/views/compare.js';
 import { parseRoute, routeHash, compareIds } from '../src/app/router.js';
 import { shareToken, customRecord } from '../src/custom.js';
 import { rank, comfortRange } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { summarize } from '../src/weather.js';
-import { esc } from '../src/ui.js';
+import { esc, matchPct } from '../src/ui.js';
 import { icon } from '../src/ui/components.js';
 import { syntheticForecast } from './fixtures.js';
 
@@ -712,14 +714,23 @@ test('compare ranks with your stars, and reads Now’s entries for bottles in it
     state.shared = null;
     state.wx = wx;
     computeToday();
-    const slot = state.today.night ? 'night' : 'day';
+    // Now's window (the day one at 4 pm), whichever it is.
+    const slot = nowSlot().win.slot;
     const [a, b] = state.contexts[slot].ranked.map(e => e.fragrance);
     const stranger2 = { ...byName('Sauvage'), id: '424242', name: 'Not owned' };
     state.bottles.set(stranger2.id, stranger2);
     const route = { dest: 'compare', arg: [a.id, b.id, stranger2.id].join(','), query: {} };
     let m = compareModel(route);
     assert.equal(m.bottles.filter(x => x.owned).length, 2);
-    if (m.now.win.slot === slot) assert.equal(m.now.entries.get(a.id), state.contexts[slot].entries.get(a.id), 'the % Now shows');
+    assert.equal(m.now.win, nowSlot().win);
+    assert.equal(m.now.entries.get(a.id), state.contexts[slot].entries.get(a.id), 'the % Now shows');
+    // By day the verdict is about tonight, and tonight's matches have a row of their own.
+    assert.equal(slot, 'day', 'the fixture’s Now is the day window');
+    assert.equal(m.tonight.entries.get(a.id), state.contexts.night.entries.get(a.id), 'tonight’s % as Now’s night list has it');
+    const page = compareHTML(m);
+    assert.match(page, /id="cmp-tonight">Match tonight</);
+    const tonightPct = `${matchPct(m.tonight.entries.get(a.id))}%`;
+    assert.ok(page.split('id="cmp-tonight"')[1].split('</section>')[0].includes(tonightPct), 'the verdict’s numbers show in a row');
     const before = m.occ.entries.get(stranger2.id).score;
     store.set('scentcast.skin', JSON.stringify({ [stranger2.id]: { rating: 1 } }));
     m = compareModel(route);
@@ -772,6 +783,34 @@ test('compare with… lists its family, the list it came from and your bottles, 
   assert.match(html, /data-field="cmp-query"/);
   assert.match(pickerHTML({ base: ['1', '2', '3'], query: '' }, lists), /Three is the most/);
   assert.match(pickerHTML({ base: [a.id], query: '' }, lists), /data-action="cmp-pick" data-id="o"/);
+
+  // What a screen reader hears as you search: searching, how many, or none.
+  const status = (sheet, ls = []) => pickerStatus({ base: [a.id], ...sheet }, ls);
+  assert.equal(status({ query: '' }), '', 'nothing typed, nothing said');
+  assert.equal(status({ query: 'aventus', results: null }), 'Searching…', 'until the library answers');
+  assert.equal(status({ query: 'aventus', results: [], busy: true }), 'Searching…');
+  assert.equal(status({ query: 'aventus', results: [] }, [{ records: [a, b] }, { records: [c] }]), '3 bottles found.');
+  assert.equal(status({ query: 'zzz', results: [] }), 'No bottles match “zzz”.');
+  assert.equal(status({ query: 'zzz', results: [], error: 'Can’t reach the fragrance library.' }), 'No bottles match “zzz”. Can’t reach the fragrance library.');
+  assert.equal(status({ query: 'j', results: null }, [{ records: [a] }]), '1 bottle found.', 'one letter: only your own bottles, no library search');
+  assert.equal(pickerStatus({ base: ['1', '2', '3'], query: 'x' }, []), '', 'full: nothing to search');
+  const live = pickerHTML({ base: [a.id], query: EVIL, results: [] }, []);
+  assert.match(live, /role="status" id="cmp-pick-live" data-say="No bottles match/, 'a status line in the sheet');
+});
+
+test('compare’s words: names listed with commas, and no tapping on a desktop', () => {
+  assert.deepEqual([andList([]), andList(['A']), andList(['A', 'B']), andList(['A', 'B', 'C'])], ['', 'A', 'A and B', 'A, B and C']);
+  const [a, b, c] = fragrances;
+  for (const f of [a, b, c]) state.bottles.set(f.id, f);
+  try {
+    assert.equal(comparePage.title({ arg: [a.id, b.id, c.id].join(',') }), `${a.name}, ${b.name} and ${c.name}`);
+    assert.equal(comparePage.title({ arg: '' }), 'Compare');
+  } finally {
+    state.bottles.clear();
+  }
+  const empty = compareHTML({ ids: [], bottles: [] });
+  assert.match(empty, /Open any bottle and choose Compare/);
+  assert.ok(!/\btap\b/i.test(empty));
 });
 
 test('the buy check reads the liked styles as Insights does: none liked is none, not the wardrobe’s leanings', async () => {

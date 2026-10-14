@@ -25,7 +25,8 @@ import {
 } from '../app/state.js';
 import { familyOf } from './bottle-dupes.js';
 import { riskLine } from './bottle-crowd.js';
-import { linkId } from './bottle.js';
+import { linkId, inSentence } from './bottle.js';
+import { liveHTML, speak } from './wardrobe/parts.js';
 
 export const MAX_COMPARE = 3;
 const ACCORDS_SHOWN = 5;
@@ -42,6 +43,8 @@ const pct = x => `${Math.round(x * 100)}%`;
 const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
 const hrefFor = ids => routeHash({ dest: 'compare', arg: ids.join(',') });
 const onCompare = () => state.base?.dest === 'compare';
+// "A and B", "A, B and C".
+export const andList = names => (names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0] ?? '');
 
 // ---------- The model ----------
 
@@ -97,7 +100,7 @@ function entriesFor(win, ready, { occasion = null, ctxKey = null } = {}) {
  * Everything the page shows, from the route and state: { ids, bottles:
  * [{ id, f, status: 'ready' | 'loading' | 'missing' | 'failed', owned }],
  * now and occ: { win, occasion?, entries: Map id -> ranked entry } (null
- * without a forecast), tonight: { win, ranked } (or null), waiting: the
+ * without a forecast), tonight: { win, ranked, entries } (or null), waiting: the
  * forecast is on its way, pairs: [{ a, b, text, sim, kind }], family: a lone
  * bottle's smells-like family (or null), back: the bottle page it came from
  * (a route, or null), about(f) }.
@@ -125,7 +128,7 @@ export function compareModel(route) {
     bottles,
     now: nowWin && has ? { win: nowWin, entries: entries(entriesFor(nowWin, ready, { ctxKey: nowWin.slot })) } : null,
     occ: occWin && has ? { win: occWin, occasion, entries: entries(entriesFor(occWin, ready, { occasion })) } : null,
-    tonight: nightWin && has ? { win: nightWin, ranked: entriesFor(nightWin, ready, { ctxKey: 'night' }) } : null,
+    tonight: nightWin && has ? tonightOf(nightWin, entriesFor(nightWin, ready, { ctxKey: 'night' })) : null,
     waiting: !state.wx && Boolean(state.loc) && !state.error,
     pairs,
     family: ids.length === 1 ? familyOf(ids[0]) ?? families.get(ids[0]) ?? null : null,
@@ -133,6 +136,9 @@ export function compareModel(route) {
     about: aboutFor,
   };
 }
+
+// Tonight's ranking (the verdict's) and its entries by id (its row's).
+const tonightOf = (win, ranked) => ({ win, ranked, entries: new Map(ranked.map(e => [e.fragrance.id, e])) });
 
 // ---------- Cells ----------
 
@@ -335,7 +341,7 @@ function windowsText(m) {
 export function compareHTML(m) {
   const { ids, bottles } = m;
   if (!ids.length) {
-    return messageHTML({ glyph: icon.compare, title: 'Compare up to three bottles', body: 'Open any bottle and tap Compare, or start here.',
+    return messageHTML({ glyph: icon.compare, title: 'Compare up to three bottles', body: 'Open any bottle and choose Compare, or start here.',
       action: `<button class="btn primary" data-action="cmp-add">${icon.plus}<span>Pick a bottle</span></button>` });
   }
   const back = m.back ? `<button class="btn tertiary compact cmp-back" data-action="cmp-back">${icon.back}<span>${esc(findRecord(m.back.arg)?.name ?? 'Back')}</span></button>` : '';
@@ -350,10 +356,13 @@ export function compareHTML(m) {
   }
   const pairs = m.pairs.filter(p => p.text);
   const scoreIn = ctx => shownAs(2, f => (ctx.entries.get(f.id) ? matchPct(ctx.entries.get(f.id)) / 100 : null));
+  // The verdict quotes tonight's matches: by day they get a row of their own.
+  const tonight = m.tonight && m.tonight.win !== m.now?.win ? m.tonight : null;
   const match = m.waiting && !m.now ? [skeletonRow('Match today', bottles), skeletonRow('For your occasion', bottles)]
     : [
       m.now && cmpRow(esc(matchLabel(m.now.win)), bottles, f => matchCell(m.now.entries.get(f.id)), { best: leader(bottles, scoreIn(m.now)), id: 'cmp-now' }),
-      m.occ && cmpRow(esc(`${m.occ.occasion.label} · ${m.occ.win.label.toLowerCase()}`), bottles, f => matchCell(m.occ.entries.get(f.id)), { best: leader(bottles, scoreIn(m.occ)), id: 'cmp-occ' }),
+      tonight && cmpRow(esc(matchLabel(tonight.win)), bottles, f => matchCell(tonight.entries.get(f.id)), { best: leader(bottles, scoreIn(tonight)), id: 'cmp-tonight' }),
+      m.occ && cmpRow(esc(`${m.occ.occasion.label} · ${inSentence(m.occ.win.label)}`), bottles, f => matchCell(m.occ.entries.get(f.id)), { best: leader(bottles, scoreIn(m.occ)), id: 'cmp-occ' }),
     ];
   const rows = [
     ...match,
@@ -468,7 +477,7 @@ function askFamily(app, id) {
   families.set(id, null);
   const landed = () => {
     if (onCompare()) redraw(app);
-    if (state.sheet?.kind === 'cmp-pick' && state.sheet.base?.[0] === id) app.keepingFocus(document.activeElement, '#sheet', () => app.updateSheet({}));
+    if (state.sheet?.kind === 'cmp-pick' && state.sheet.base?.[0] === id) redrawPicker(app, {});
   };
   poolInputs().then(inputs => askPool('dupes', { ...inputs, record: f }, { channel: 'cmp-family' }))
     .then(r => { if (!r.stale) families.set(id, r); else families.delete(id); landed(); }, () => families.delete(id));
@@ -508,7 +517,7 @@ export const compare = {
   id: 'compare',
   label: 'Compare',
   icon: 'compare',
-  title: r => compareIds(r.arg).map(id => findRecord(id)?.name).filter(Boolean).join(' and ') || 'Compare',
+  title: r => andList(compareIds(r.arg).map(id => findRecord(id)?.name).filter(Boolean)) || 'Compare',
   heading: () => 'Compare',
   render: (app, r) => {
     if (state.from?.dest === 'bottle') backTo = state.from;
@@ -571,6 +580,19 @@ export function pickerLists(sheet, { family = null, context = [], owned = [] } =
   return lists.filter(l => l.records.length);
 }
 
+/**
+ * What the picker's status line tells a screen reader as you type: '' with
+ * nothing typed, "Searching…" until the library answers (it's asked from two
+ * letters, after a pause), then how many bottles the lists hold, or none.
+ */
+export function pickerStatus(sheet, lists) {
+  const q = (sheet.query ?? '').trim();
+  if (!q || (sheet.base ?? []).length >= MAX_COMPARE) return '';
+  if (sheet.busy || (q.length >= 2 && sheet.results == null)) return 'Searching…';
+  const n = lists.reduce((sum, l) => sum + l.records.length, 0);
+  return [n ? `${plural(n, 'bottle')} found.` : `No bottles match “${q}”.`, sheet.error].filter(Boolean).join(' ');
+}
+
 export function pickerHTML(sheet, lists) {
   const full = (sheet.base ?? []).length >= MAX_COMPARE;
   const body = full ? '<p class="muted">Three is the most side by side. Remove one to add another.</p>'
@@ -579,6 +601,7 @@ export function pickerHTML(sheet, lists) {
   return sheetFrame('cmp-pick-title', `
     <h2 id="cmp-pick-title" class="sheet-title">${(sheet.base ?? []).length ? 'Compare with…' : 'Compare'}</h2>
     <label class="filter big cmp-search">${icon.search}<input type="search" data-field="cmp-query" value="${esc(sheet.query ?? '')}" placeholder="Search your bottles or Fragrantica" autocomplete="off" aria-label="Find a bottle" enterkeyhint="search"></label>
+    ${liveHTML('cmp-pick-live', pickerStatus(sheet, lists))}
     ${sheet.error ? `<p class="error">${esc(sheet.error)}</p>` : ''}
     <div class="cmp-pick">${body}</div>`);
 }
@@ -591,6 +614,13 @@ export const sheets = {
   })),
 };
 
+// The picker drawn again with `patch`, focus kept, and its status line
+// saying what the search found (speak: once per new message).
+function redrawPicker(app, patch, el = document.activeElement) {
+  app.keepingFocus(el, '#sheet', () => app.updateSheet(patch));
+  speak(document.getElementById('sheet'));
+}
+
 // Library matches for what's typed, after a pause; only the picker that asked takes them.
 let searchTimer = null;
 const SEARCH_AFTER = 250;
@@ -601,15 +631,15 @@ function searchLibrary(app, query) {
   searchTimer = setTimeout(async () => {
     const current = () => state.sheet?.kind === 'cmp-pick' && state.sheet.query === query;
     if (!current()) return;
-    app.keepingFocus(document.activeElement, '#sheet', () => app.updateSheet({ busy: true }));
+    redrawPicker(app, { busy: true });
     const { results, error } = await findBottles(query).catch(err => ({ results: [], error: err.message }));
-    if (current()) app.keepingFocus(document.activeElement, '#sheet', () => app.updateSheet({ results, error: results.length ? '' : error, busy: false }));
+    if (current()) redrawPicker(app, { results, error: results.length ? '' : error, busy: false });
   }, SEARCH_AFTER);
 }
 
 export const fields = {
   'cmp-query'(input, app) {
-    app.keepingFocus(input, '#sheet', () => app.updateSheet({ query: input.value, results: null, error: '' }));
+    redrawPicker(app, { query: input.value, results: null, error: '' }, input);
     searchLibrary(app, input.value);
   },
 };
@@ -649,7 +679,7 @@ export const actions = {
     removedFrom = before;
     app.navigate(hrefFor(ids), { replace: true });
     focusCard(before.indexOf(el.dataset.id));
-    app.showToast(`<span class="note">${esc(name)} removed.</span><button class="btn primary compact" data-action="cmp-undo">Undo</button>`);
+    app.showToast(`<span class="note">${esc(name)} removed</span><button class="btn primary compact" data-action="cmp-undo">Undo</button>`);
   },
   'cmp-undo'(el, app) {
     if (!removedFrom) return;
