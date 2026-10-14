@@ -2,8 +2,8 @@
 // cycle, event delegation into the views' action maps, the forecast, and
 // boot (src/main.js calls it). Browser-only. A view is a module in
 // src/views/ that exports its page or panes, templates, and maps of
-// actions, forms, fields and sheets; .sweep/notes/shell-map.md and CLAUDE.md
-// say how to add one.
+// actions, forms, fields, changes and sheets; CLAUDE.md ("Checking the UI")
+// says how to add one.
 import { summarize, getForecast, cachedForecast, forecastError } from '../weather.js';
 import { saveLocation } from '../location.js';
 import { parseShare } from '../collections.js';
