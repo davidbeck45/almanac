@@ -416,9 +416,9 @@ export const PLAN_MARGIN = 0.06;
 export const NUDGE_AFTER = 30;
 const NUDGE_EVERY = 3;
 
-// Moves the best neglected bottle within reach to the front (`nudged`), and
-// marks every neglected one within reach with its idle days (`parts.idle`).
-// Wears and plans before this window count; the journal starts at its first
+// Moves the best neglected bottle within reach to the front (`nudged`, with
+// its idle days as `parts.idle`), unless the top pick is one already. Wears
+// and plans before this window count; the journal starts at its first
 // logged wear.
 function nudgeIdle(scored, history, todayISO, slot) {
   let start = null;
@@ -429,17 +429,18 @@ function nudgeIdle(scored, history, todayISO, slot) {
     if (!last.has(h.id) || h.date > last.get(h.id)) last.set(h.id, h.date);
   }
   if (start === null || !scored.length) return;
-  const top = scored[0];
-  for (const s of scored) {
-    if (top.score - s.score > PLAN_MARGIN) break;
-    const idle = daysBetween(last.get(s.fragrance.id) ?? start, todayISO);
-    if (s.tier === top.tier && idle >= NUDGE_AFTER) s.parts.idle = idle;
-  }
-  const at = scored.findIndex(s => s.parts.idle);
-  if (at > 0) {
-    const [pick] = scored.splice(at, 1);
+  const idle = s => daysBetween(last.get(s.fragrance.id) ?? start, todayISO);
+  const [top] = scored;
+  if (idle(top) >= NUDGE_AFTER) return;
+  // Tiers fall in rank order, so the first bottle out of the top's tier ends the search.
+  for (let i = 1; i < scored.length && top.score - scored[i].score <= PLAN_MARGIN && scored[i].tier === top.tier; i++) {
+    const days = idle(scored[i]);
+    if (days < NUDGE_AFTER) continue;
+    const [pick] = scored.splice(i, 1);
     pick.nudged = true;
+    pick.parts.idle = days;
     scored.unshift(pick);
+    return;
   }
 }
 
