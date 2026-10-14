@@ -560,11 +560,11 @@ async function main() {
         const about = await loadAbout(record.id, datasetFile);
         if (about) record = { ...record, about };
       }
-      // The styles David loves (Discover's chips), or the ones named with --style.
+      // The styles David loves (Discover's chips; also `--style liked`), or the ones named with --style.
       let liked = DEMO_LIKED;
-      if (args.style) {
+      if (args.style && args.style.trim().toLowerCase() !== 'liked') {
         const found = findStyles(args.style);
-        if (found.unknown.length || !found.ids.length) fail(`--style: name styles from ${STYLES.map(s => s.label).join(', ')}`);
+        if (found.unknown.length || !found.ids.length) fail(`--style: name styles from ${STYLES.map(s => s.label).join(', ')}, or "liked"`);
         liked = found.ids;
       }
       const check = buyCheck(record, ctx, { liked });

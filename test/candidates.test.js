@@ -45,7 +45,7 @@ test('a bottle the dataset lacks has no signals, and reads as unknown', () => {
   assert.equal(s.known, false);
   assert.equal(s.value, null);
   assert.deepEqual([s.like, s.family, s.alt, s.flags], [[], [], [], []]);
-  assert.deepEqual(riskOf(mine), { level: 'unknown', reasons: ['There’s no crowd data on it yet.'] });
+  assert.deepEqual(riskOf(mine), { level: 'unknown', reasons: ['There’s no crowd data on it yet.'], major: false });
   assert.equal(genderLean(mine), 0);
   assert.equal(genderLean({ ...mine, gender: 'men' }), 0.68);
   // Without signals, Hawas Atlantis would pass for a safe buy.
@@ -235,7 +235,7 @@ test('risk names what makes a blind buy risky', () => {
   const sauvage = riskOf(at(31861));
   assert.equal(sauvage.level, 'medium', 'polarizing');
   assert.ok(riskOf(at(28286)).reasons.some(r => r.includes('voting campaign')));
-  assert.deepEqual(riskOf(at(9828)), { level: 'low', reasons: ['Reviewers say it was reformulated.'] });
+  assert.deepEqual(riskOf(at(9828)), { level: 'low', reasons: ['Reviewers say it was reformulated.'], major: false });
   assert.equal(riskOf(at(34696)).level, 'low');
   const levels = { low: 0, medium: 0, high: 0 };
   for (const r of records) levels[riskOf(r).level]++;

@@ -768,10 +768,12 @@ export function tasteOf(record, ctx, liked) {
  * KIN_SIM alike and placed in an owned bottle's family by voters). Risky
  * when riskOf says high. Covered when nothing it adds matters (the wardrobe
  * already does what it would) and it adds no liked style the wardrobe is
- * thin on. Risky when voters rate it under MIN_RATING. Strong fit when its
- * fills cut the named gaps by strongBar, with quality at or above the pool's
- * usual and low risk, and it isn't a body mist. Good otherwise: it fills
- * something, or brings more of a style you like.
+ * thin on (a body mist's style counts only with ctx.allow.mists). Risky when
+ * voters rate it under MIN_RATING, or when only its style speaks for it and
+ * riskOf has a major warning (not a safe blind buy, divisive). Strong fit
+ * when its fills cut the named gaps by strongBar, with quality at or above
+ * the pool's usual and low risk, and it isn't a body mist. Good otherwise:
+ * it fills something, or brings more of a style you like.
  */
 export function buyCheck(record, ctx, { liked = null } = {}) {
   const scored = sameFooting(poolRowOf(record, ctx.byId) ?? record);
@@ -797,11 +799,14 @@ export function buyCheck(record, ctx, { liked = null } = {}) {
   const lowRated = scored.ratingVotes >= RATED_VOTES && scored.rating < MIN_RATING;
   const taste = tasteOf(scored, ctx, liked);
   const mist = signalsOf(scored, ctx.byId).flags.includes('mist');
+  // Taste alone (it fills nothing) vouches only for a perfume, as suggestions
+  // leave mists out unless asked, and not past a warning that counts double.
+  const byTaste = !fills.length && Boolean(taste?.thin) && !(mist && !ctx.allow.mists);
   let verdict;
   if (twinOwned || lookalike) verdict = 'Redundant';
   else if (risk.level === 'high') verdict = 'Risky';
-  else if (!fills.length && !taste?.thin) verdict = 'Covered';
-  else if (lowRated) verdict = 'Risky';
+  else if (!fills.length && !byTaste) verdict = 'Covered';
+  else if (lowRated || (byTaste && risk.major)) verdict = 'Risky';
   else if (fills.length && realGain >= strongBar(ctx) && q.mult >= 1 && risk.level === 'low' && !mist) verdict = 'Strong fit';
   else verdict = 'Good';
 
@@ -847,7 +852,9 @@ export function buyCheck(record, ctx, { liked = null } = {}) {
     reasons.push(dupe ? `${dupe.text}.` : `It smells ${nov.sim >= 0.9 ? 'nearly the same as' : 'a lot like'} ${nearWho}.`,
       fillLine ? `Still, ${lower(fillLine)}` : `It would add nothing your ${same.name} doesn’t already do.`);
   } else if (verdict === 'Risky') {
-    reasons.push(...[lowRated && ratedLine, ...risk.reasons].filter(Boolean).slice(0, 2), fillLine ?? coveredLine);
+    const why = [lowRated && ratedLine, ...risk.reasons].filter(Boolean);
+    // Its warning, then what it would add: the style you like, or its fills.
+    reasons.push(...(byTaste ? [why[0], tasteLine, likeLine] : [...why.slice(0, 2), fillLine ?? coveredLine]));
   } else if (verdict === 'Covered') {
     reasons.push(coveredLine, tasteLine ?? likeLine, lowRated ? ratedLine : mistLine ?? (tasteLine ? likeLine : (twin && !twin.owned && twin.text) || ratedLine));
   } else {

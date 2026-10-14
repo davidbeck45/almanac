@@ -378,7 +378,17 @@ test('the buy check knows what he likes: more of a style he’s thin on is good,
   // A body mist says so, and is never a strong fit.
   const mist = check('87258'); // Phlur Vanilla Skin Fragrance Mist
   assert.ok(mist.reasons.includes('It’s a body mist: lighter and shorter-lived than a perfume.'));
-  for (const c of [you, precieux, adg, nap, tv, mist]) {
+  // Nor does his taste alone vouch for one, as suggestions leave mists out: Book Loft wears close, and
+  // he likes Intimate, but it's only Good once he lets mists in.
+  const loft = records.find(r => r.name === 'Book Loft');
+  assert.equal(check(loft, { liked: ['intimate'] }).verdict, 'Covered');
+  const open = buyCheck(loft, gapContext({ owned: wardrobe, records, byId, mists: true }), { liked: ['intimate'] });
+  assert.deepEqual([open.verdict, open.reasons[0]], ['Good', 'More of the close-wearing scents you like: you own 2.']);
+  // A skin scent reviewers warn about is risky, not good, when only its style speaks for it.
+  const mkk = check(named('Muscs Koublai Khan', 'Serge Lutens'));
+  assert.equal(mkk.verdict, 'Risky');
+  assert.deepEqual(mkk.reasons.slice(0, 2), ['Reviewers say it isn’t a safe blind buy.', 'More of the skin scents you like: you own 2.']);
+  for (const c of [you, precieux, adg, nap, tv, mist, mkk]) {
     assert.ok(c.reasons.length >= 2 && c.reasons.length <= 3, c.reasons.join(' | '));
     for (const r of c.reasons) assert.doesNotMatch(r, /°|\d+ ?F\b|undefined|null|NaN|severity|deficit/);
   }

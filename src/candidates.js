@@ -431,8 +431,11 @@ export function weakLongevity(record) {
 
 /**
  * How risky a blind buy it is: { level: 'low' | 'medium' | 'high' |
- * 'unknown', reasons }, reasons short plain sentences, the weightiest first.
- * A bottle with no crowd data (signalsOf known false) is unknown, and says so.
+ * 'unknown', reasons, major }, reasons short plain sentences, the weightiest
+ * first; `major` when one of them counts double (a voting campaign, not a
+ * safe blind buy, divisive, very few love it), a warning on its own rather
+ * than a quirk. A bottle with no crowd data (signalsOf known false) is
+ * unknown, and says so.
  */
 export function riskOf(record, byId = null) {
   const s = signalsOf(record, byId), found = [];
@@ -448,6 +451,7 @@ export function riskOf(record, byId = null) {
   if (weakLongevity(record)) add(1, 'It doesn’t last long.');
   const points = found.reduce((sum, r) => sum + r.points, 0);
   const reasons = found.sort((a, b) => b.points - a.points).map(r => r.text);
-  if (!s.known) return { level: 'unknown', reasons: [...reasons, 'There’s no crowd data on it yet.'] };
-  return { level: points >= RISK_HIGH ? 'high' : points >= RISK_MEDIUM ? 'medium' : 'low', reasons };
+  const major = found.some(r => r.points >= 2);
+  if (!s.known) return { level: 'unknown', reasons: [...reasons, 'There’s no crowd data on it yet.'], major };
+  return { level: points >= RISK_HIGH ? 'high' : points >= RISK_MEDIUM ? 'medium' : 'low', reasons, major };
 }
