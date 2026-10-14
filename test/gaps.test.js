@@ -40,7 +40,9 @@ test('a bottle’s fit in a cell is exactly rank()’s score in that weather', (
   ].map(([dateISO, slot, feelsF, dewF]) => ({ dateISO, slot, feelsF, dewF, lat: 40.7 }));
   const cc = cellsFor(climateSummary(windows, { perCell: 1 }));
   assert.equal(cc.cells.length, 55);
-  const bottles = [...wardrobe.map(sameFooting), ...records.filter((_, i) => i % 97 === 0)];
+  // Your stars too: a 1★ and a 5★ bottle score as rank() has them.
+  const rated = applySkin(wardrobe, { [owned('Cream Velvet').id]: { rating: 1 }, [owned('Terra').id]: { rating: 5 } });
+  const bottles = [...rated.map(sameFooting), ...records.filter((_, i) => i % 97 === 0)];
   const table = fitTable(bottles, cc);
   let worst = 0, checked = 0;
   cc.cells.forEach((cell, j) => {
@@ -95,11 +97,25 @@ test('flat season votes read as unvoted, so they don’t make an all-rounder', (
   for (const r of [elyon, au]) assert.notEqual(buyCheck(r, ctx).verdict, 'Strong fit', r.name);
 });
 
-test('your stars don’t move the pool reference', () => {
-  const rated = applySkin(wardrobe, { [owned('Cream Velvet').id]: { rating: 1 }, [owned('Terra').id]: { rating: 5 } });
+test('your stars move your own coverage, not the pool reference, and a bottle you dislike covers nothing', () => {
+  const ids = ['Cream Velvet', 'Amber Empire'].map(n => owned(n).id);
+  const rated = applySkin(wardrobe, { [ids[0]]: { rating: 1 }, [ids[1]]: { rating: 2 }, [owned('Terra').id]: { rating: 5 } });
   const again = gapContext({ owned: rated, records, byId });
-  assert.equal(again.table, ctx.table, 'the pool table is reused as is');
-  assert.deepEqual(again.ref.map(q => [...q]), ctx.ref.map(q => [...q]));
+  assert.deepEqual(again.ref.map(q => [...q]), ctx.ref.map(q => [...q]), 'the reference is the crowd’s');
+  // Neither is anyone's best or runner-up any more: Cozy on cold nights names another bottle.
+  const named = c => c.cov.flatMap(x => x.top.map(t => String(t.bottle.id)));
+  assert.ok(ids.every(id => named(ctx).includes(id)));
+  assert.ok(!ids.some(id => named(again).includes(id)));
+  const cozy = c => c.cov.find(x => x.cell.id === 'cozy:night:cold');
+  assert.ok(ids.includes(String(cozy(ctx).top[0].bottle.id)), cozy(ctx).top[0].bottle.name);
+  assert.ok(!ids.includes(String(cozy(again).top[0].bottle.id)));
+  assert.equal(again.worn.length, wardrobe.length - 2);
+  // Still his: it checks as owned.
+  assert.equal(buyCheck(byId.get(ids[1]), again).verdict, 'Redundant');
+  // A bottle he loves covers a little more, by what rank() adds for it.
+  const m = ctx.cc.cells.length, terra = i => wardrobe.findIndex(f => f.name === 'Terra') * m + i;
+  const k = again.worn.findIndex(f => f.name === 'Terra') * m;
+  assert.ok(ctx.cc.cells.every((_, j) => again.ownTable[k + j] > ctx.ownTable[terra(j)] + 0.019));
 });
 
 test('the default climate is small and has real windows in every slot and band', () => {

@@ -12,7 +12,7 @@
 // point come from real days). Owned bottles are measured against the
 // suggestion pool's scores in the same cell, every bottle read on the
 // pool's evidence (sameFooting).
-import { seasonFit, timeFit, weatherFit, quality, occasionRaw, occasionPart, scoreOf, targetSeasonWeights } from './engine.js';
+import { seasonFit, timeFit, weatherFit, quality, personalPart, occasionRaw, occasionPart, scoreOf, targetSeasonWeights, DISLIKED } from './engine.js';
 import { occasionById } from './occasions.js';
 import { similarity, sharedTraits } from './similar.js';
 import { styleScores, styleMix, styleById, topOf, closeOf } from './scent-styles.js';
@@ -190,9 +190,11 @@ const allFooted = records => footedLists.get(records) ?? footedLists.set(records
 
 /**
  * Every bottle's fit in every cell, row-major [bottle][cell]: rank()'s score
- * with no recent wears, averaged over the cell's windows. The score is linear
- * in the parts, so the season and weather fits are averaged per slot × band
- * and shared by every use, and occasionPart is worked out once per occasion.
+ * with no recent wears, averaged over the cell's windows, your stars included
+ * (`personal`: only owned records carry them, so the pool's table and
+ * reference stay the crowd's). The score is linear in the parts, so the
+ * season and weather fits are averaged per slot × band and shared by every
+ * use, and occasionPart is worked out once per occasion.
  */
 export function fitTable(bottles, { cells, slotBands }) {
   const m = cells.length, out = new Float32Array(bottles.length * m);
@@ -200,7 +202,7 @@ export function fitTable(bottles, { cells, slotBands }) {
   const occasions = [...new Set(cells.map(c => c.occasion).filter(Boolean))];
   const fit = new Map(), occ = new Map();
   bottles.forEach((b, i) => {
-    const q = quality(b);
+    const q = quality(b), personal = personalPart(b);
     const time = { day: timeFit(b, 'day'), night: timeFit(b, 'night') };
     for (const o of occasions) occ.set(o, occasionPart(occasionRaw(b, o), o));
     for (const k of keys) {
@@ -214,7 +216,7 @@ export function fitTable(bottles, { cells, slotBands }) {
     }
     for (let j = 0; j < m; j++) {
       const c = cells[j], [season, weather] = fit.get(c.sb);
-      const parts = { season, time: time[c.slot], weather, quality: q, occasion: c.occasion ? occ.get(c.occasion) : null };
+      const parts = { season, time: time[c.slot], weather, quality: q, occasion: c.occasion ? occ.get(c.occasion) : null, personal };
       out[i * m + j] = scoreOf(parts, c.occasion);
     }
   });
@@ -389,12 +391,15 @@ export function gapSummary(cov, { limit = Infinity, minWeight = MIN_WEIGHT, minD
 /**
  * One line on the whole wardrobe, before its gaps: { strongShare (the share
  * of wears with a strong pick), short (gap and thin cells named), text }.
+ * `owned`: how many bottles the wardrobe holds, liked or not.
  */
-export function overview(cov) {
+export function overview(cov, { owned = null } = {}) {
   const strongShare = cov.reduce((sum, c) => sum + (c.strong ? c.cell.weight : 0), 0);
   const listed = cov.filter(c => named(c));
   const short = listed.filter(c => c.status !== 'room').length;
-  const text = !cov.some(c => c.top.length) ? 'You don’t own anything yet, so every situation is open.'
+  const none = !cov.some(c => c.top.length);
+  const text = none && owned ? 'You rate everything you own 2★ or lower, so every situation is open.'
+    : none ? 'You don’t own anything yet, so every situation is open.'
     : short ? `You have a strong pick for ${strongShare >= 0.95 ? 'nearly everything' : `${pct(strongShare)} of what`} you wear; here’s where it falls short.`
       : listed.length ? 'Your wardrobe covers every situation well; here’s where it could go further.'
         : 'Your wardrobe covers every situation well.';
@@ -434,10 +439,13 @@ export function strengths(cov, { limit = 4, minWeight = MIN_WEIGHT } = {}) {
  * Everything the report and the buy check share, for one wardrobe, climate
  * and set of shares. records: the pool (fromPool); byId: id -> record over
  * them; owned: the wardrobe's records (a visitor's outside the pool with
- * `about` attached); preferValue: only suggest bottles valued PREFER_VALUE or
- * more (default from the wardrobe, preferValueDefault); mists: suggest body
- * mists and sprays too (allowContext). Every bottle is scored as sameFooting
- * has it.
+ * `about` attached, and `personal` for your stars, src/skin.js); preferValue:
+ * only suggest bottles valued PREFER_VALUE or more (default from the
+ * wardrobe, preferValueDefault); mists: suggest body mists and sprays too
+ * (allowContext). Every bottle is scored as sameFooting has it. Coverage
+ * counts the bottles you'd wear (`worn`): one you rate DISLIKED or lower
+ * covers nothing, as rank() all but benches it, though it still counts as
+ * owned (its twins are Redundant) and toward your styles.
  */
 export function gapContext({ owned, records, byId, summary = DEFAULT_CLIMATE, shares = null, preferValue = null, mists = false }) {
   summary ??= DEFAULT_CLIMATE;
@@ -454,12 +462,13 @@ export function gapContext({ owned, records, byId, summary = DEFAULT_CLIMATE, sh
     if (lean >= ctx.lean[0] && lean <= ctx.lean[1] && !flags.includes('brigaded') && (mists || !flags.includes('mist'))) rows.push(i);
   });
   const ref = poolReference(table, records.length, m, rows);
-  const ownTable = fitTable(owned.map(sameFooting), cc);
-  const cov = coverage(owned, ownTable, cc.cells, ref);
+  const worn = owned.filter(f => !(f.personal?.rating <= DISLIKED));
+  const ownTable = fitTable(worn.map(sameFooting), cc);
+  const cov = coverage(worn, ownTable, cc.cells, ref);
   const norms = poolNorms(records);
   const leans = owned.map(f => genderLean(f, byId));
   return {
-    owned, records, byId, summary, cc, table, rows, ref, ownTable, cov, norms,
+    owned, worn, records, byId, summary, cc, table, rows, ref, ownTable, cov, norms,
     allow: ctx,
     preferValue: prefer,
     valueSlope: valueSlope(owned, norms, byId),
@@ -474,12 +483,13 @@ export function gapContext({ owned, records, byId, summary = DEFAULT_CLIMATE, sh
 }
 
 // What the wardrobe has per cell, which suggestions add to: its best and
-// second best scores, who holds the best, how many strong bottles, and
-// whether the gap list names the cell (`short`: suggestions only count gains
-// there, so the gaps a report lists are the ones its picks fill).
+// second best scores, who holds the best (of the bottles you'd wear), how
+// many strong bottles, and whether the gap list names the cell (`short`:
+// suggestions only count gains there, so the gaps a report lists are the
+// ones its picks fill).
 function ownedState(ctx) {
   const m = ctx.cc.cells.length, s1 = new Float32Array(m), s2 = new Float32Array(m), who = new Array(m).fill(null);
-  ctx.owned.forEach((b, i) => {
+  ctx.worn.forEach((b, i) => {
     for (let j = 0; j < m; j++) {
       const x = ctx.ownTable[i * m + j];
       if (x > s1[j]) [s2[j], s1[j], who[j]] = [s1[j], x, b];
@@ -877,7 +887,7 @@ export function gapReport(ctx, { k = 5, gaps = Infinity } = {}) {
     valueSlope: round(ctx.valueSlope, 3),
     severity: round(ctx.severity, 5),
     gapSeverity: round(ctx.gapSeverity, 5),
-    overview: overview(ctx.cov),
+    overview: overview(ctx.cov, { owned: ctx.owned.length }),
     climate: Object.fromEntries(Object.entries(ctx.cc.slotBands).map(([key, sb]) => [key, sb.share])),
     coverage: ctx.cov.map(c => ({
       cell: c.cell.id, use: c.cell.use, slot: c.cell.slot, band: c.cell.band, title: cellLabel(c.cell),
