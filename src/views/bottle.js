@@ -165,26 +165,32 @@ export function keepReading(panel, at) {
 
 // ---------- The styles someone likes ----------
 
-let liked = { key: null, ids: null };
+let liked = { key: null, ids: null, stated: true };
 
 /**
  * The scent styles someone likes, as Insights, Discover and the Wishlist
- * read them (likedFor in src/views/wardrobe/parts.js): the ones hearted on
- * Insights (state.likedStyles; [] once every one is unliked), David's
- * DEMO_LIKED on his wardrobe, else the ones most of the bottles lean toward.
- * src/discover.js loads on demand.
+ * read them (likedFor in src/views/wardrobe/parts.js): { ids, stated }. The
+ * ones liked on Insights (state.likedStyles; [] once every one is unliked)
+ * or David's DEMO_LIKED on his wardrobe are stated; else they're the ones
+ * most of the bottles lean toward, a guess (`stated` false: the page says
+ * "a style you reach for", not "you like"). src/discover.js loads on demand.
  */
-export async function likedStyleIds(owned = activeFragrances()) {
+export async function likedTaste(owned = activeFragrances()) {
   const key = JSON.stringify([state.likedStyles ?? null, viewingDemo(), owned.map(f => f.id)]);
-  if (liked.key === key) return liked.ids;
+  if (liked.key === key) return liked;
   const { DEMO_LIKED, likedStyles } = await import('../discover.js');
   const stated = (state.likedStyles ?? (viewingDemo() ? DEMO_LIKED : null))?.filter(id => styleById(id));
-  liked = { key, ids: state.likedStyles?.length === 0 ? [] : stated?.length ? stated : likedStyles(owned).map(s => s.id) };
-  return liked.ids;
+  const none = state.likedStyles?.length === 0;
+  liked = { key, ids: none ? [] : stated?.length ? stated : likedStyles(owned).map(s => s.id), stated: none || Boolean(stated?.length) };
+  return liked;
 }
 
-/** likedStyleIds() as last worked out (null before), for templates. */
+/** likedTaste()'s style ids. */
+export const likedStyleIds = async (owned = activeFragrances()) => (await likedTaste(owned)).ids;
+
+/** likedTaste() as last worked out (ids null before), for templates. */
 export const likedNow = () => liked.ids;
+export const likedStatedNow = () => liked.stated;
 
 // ---------- Links ----------
 

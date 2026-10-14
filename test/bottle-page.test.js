@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { SECTIONS, bottlePageHTML, pooled, sectionsFor, linkId, likedStyleIds, actions as bottleActions } from '../src/views/bottle.js';
+import { SECTIONS, bottlePageHTML, pooled, sectionsFor, linkId, likedStyleIds, likedTaste } from '../src/views/bottle.js';
 import { state, computeToday } from '../src/app/state.js';
 import '../src/views/sections.js';
 import { buyCheckHTML, checkable, fillGroups } from '../src/views/bottle-check.js';
@@ -23,6 +23,7 @@ import { rank, comfortRange } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { summarize } from '../src/weather.js';
 import { esc } from '../src/ui.js';
+import { icon } from '../src/ui/components.js';
 import { syntheticForecast } from './fixtures.js';
 
 const { fragrances } = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url)));
@@ -235,6 +236,14 @@ test('the buy check: nothing for a bottle you own, a skeleton until it answers, 
   assert.match(liked, /Styles you like: Skin scent and Wears close/);
   const said = buyCheckHTML(m, { status: 'ready', result: { ...check, reasons: ['More of the skin scents you like: you own two.'], likedShown: ['skin'] } });
   assert.ok(!said.includes('A style you like'));
+  // Styles only guessed from the bottles: ones you reach for, and never the Want heart.
+  const leaning = buyCheckHTML(m, { status: 'ready', result: { ...check, likedShown: ['vanilla'] } }, { stated: false });
+  assert.match(leaning, /class="bc-liked leaning"/);
+  assert.match(leaning, /A style you reach for: Vanilla/);
+  assert.ok(!leaning.includes('you like'));
+  const reached = buyCheckHTML(m, { status: 'ready', result: { ...check, reasons: ['More of the vanilla scents you reach for: you own one.'], likedShown: ['vanilla'] } }, { stated: false });
+  assert.ok(!reached.includes('bc-liked'), 'the reason says it already');
+  for (const html of [liked, leaning]) assert.ok(!html.includes(icon.heartFill), 'the heart means Want');
 });
 
 test('fills group by use and time of day', () => {
@@ -307,6 +316,14 @@ test('styles link to Discover, and a quiet bottle says it wears close', () => {
   assert.equal(stylesHTML(modelOf({ ...evil, accords: {} })), '');
   assert.deepEqual(parseRoute('#/discover?styles=skin,clean', { discover: [] }).query, { styles: 'skin,clean' }, 'the router keeps the styles');
   clean(stylesHTML(modelOf(evil)), 'styles');
+  // A style you said you like says so; one only guessed from your bottles is one you reach for. No heart: it means Want.
+  const said = stylesHTML(modelOf(byName('Sandalwood & Musk')), ['skin'], { stated: true });
+  assert.match(said, /style-row liked/);
+  assert.match(said, /You like it/);
+  const guessed = stylesHTML(modelOf(byName('Sandalwood & Musk')), ['skin'], { stated: false });
+  assert.match(guessed, /You reach for it/);
+  assert.ok(!guessed.includes('You like it') && !guessed.includes('style-row liked'));
+  for (const html of [said, guessed]) assert.ok(!html.includes(icon.heartFill), 'the heart means Want');
 });
 
 // ---------- Smells like ----------
@@ -607,15 +624,23 @@ test('compare with… lists its family, the list it came from and your bottles, 
 
 test('the buy check reads the liked styles as Insights does: none liked is none, not the wardrobe’s leanings', async () => {
   const owned = fragrances.map(f => ({ ...f, id: String(f.id) }));
-  const before = state.likedStyles;
+  const before = state.likedStyles, active = state.active;
   try {
     state.likedStyles = [];
     assert.deepEqual(await likedStyleIds(owned), []);
+    assert.equal((await likedTaste(owned)).stated, true, 'none liked is a stated choice');
     state.likedStyles = ['oud', 'nope'];
     assert.deepEqual(await likedStyleIds(owned), ['oud']);
+    assert.equal((await likedTaste(owned)).stated, true);
     state.likedStyles = null;
     assert.ok((await likedStyleIds(owned)).length > 0, 'unset: the stated loves or the leanings');
+    // Unset on a list that isn't David's: the leanings, a guess.
+    state.active = 'mine';
+    const mine = await likedTaste(owned.slice(0, 1));
+    assert.ok(mine.ids.length > 0);
+    assert.equal(mine.stated, false, 'what the bottles lean toward isn’t something you said');
   } finally {
     state.likedStyles = before;
+    state.active = active;
   }
 });

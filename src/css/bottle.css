@@ -146,6 +146,8 @@
 .bc-reasons { display: grid; gap: var(--s-2); font-size: var(--fs-body); line-height: var(--lh-body); }
 .bc-liked { display: flex; align-items: center; gap: var(--s-2); color: var(--text-primary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
 .bc-liked svg { width: 14px; height: 14px; flex: none; color: var(--accent); }
+/* Styles only guessed from the wardrobe: a quiet mark, not the selection color. */
+.bc-liked.leaning svg, .style-liked.leaning svg { color: var(--text-tertiary); }
 .bc-fills .bp-sub { margin-bottom: var(--s-1); }
 .fill-chips { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-2); }
 .fill-chip, .fill-more { padding: var(--s-0) var(--s-3); border-radius: var(--r-pill); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }

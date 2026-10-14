@@ -762,7 +762,9 @@ export function tasteOf(record, ctx, liked) {
  * bottle, via, sim, link }, risk, twin, quality, taste }. It's scored as its
  * pool row when it has one, else as sameFooting has it, so a catalog record
  * and its pool row check alike. opts.liked: the style ids the person likes
- * (Discover's chips; DEMO_LIKED for David), which tasteOf reads.
+ * (Discover's chips; DEMO_LIKED for David), which tasteOf reads;
+ * opts.stated false when they're only what the wardrobe leans toward (the
+ * taste line then says "you reach for").
  * In order: Redundant when it duplicates something owned (owned, an owned
  * dupe's original or a twin of one, SAME_SIM alike to an owned bottle, or
  * KIN_SIM alike and placed in an owned bottle's family by voters). Risky
@@ -775,7 +777,7 @@ export function tasteOf(record, ctx, liked) {
  * the pool's usual and low risk, and it isn't a body mist. Good otherwise:
  * it fills something, or brings more of a style you like.
  */
-export function buyCheck(record, ctx, { liked = null } = {}) {
+export function buyCheck(record, ctx, { liked = null, stated = true } = {}) {
   const scored = sameFooting(poolRowOf(record, ctx.byId) ?? record);
   const state = ownedState(ctx), cells = ctx.cc.cells;
   const nov = novelty(scored, ctx.vecs, ctx.family);
@@ -823,12 +825,14 @@ export function buyCheck(record, ctx, { liked = null } = {}) {
   const ratedLine = lowRated ? `Voters rate it only ${scored.rating.toFixed(scored.rating.toFixed(1) >= MIN_RATING ? 2 : 1)}★.`
     : scored.ratingVotes ? `Rated ${scored.rating.toFixed(1)}★ by ${scored.ratingVotes.toLocaleString('en-US')} voters.`
       : 'There’s no crowd data on it yet.';
-  // What it adds to the styles you like ("More of the skin scents you like: you own 2."), or why not.
+  // What it adds to the styles you like ("More of the skin scents you like: you own 2."), or why not;
+  // styles only guessed from the wardrobe are ones you reach for.
   const styleLabels = taste?.styles.map(id => styleById(id).label.toLowerCase());
+  const like = stated ? 'you like' : 'you reach for';
   const tasteLine = !taste ? null
-    : taste.thin ? `More of the ${styleNoun(taste.style)} you like: you own ${countWord(taste.owned)}.`
+    : taste.thin ? `More of the ${styleNoun(taste.style)} ${like}: you own ${countWord(taste.owned)}.`
       : taste.style ? `You own ${taste.owned} ${styleNoun(taste.style)} already.`
-        : styleLabels.length ? `It’s ${list(styleLabels)}, none of the styles you like.` : 'It isn’t one of the styles you like.';
+        : styleLabels.length ? `It’s ${list(styleLabels)}, none of the styles ${like}.` : `It isn’t one of the styles ${like}.`;
   const mistLine = mist ? 'It’s a body mist: lighter and shorter-lived than a perfume.' : null;
   // Why it adds nothing: it fades where it would help, or where it does best
   // (closest to the wardrobe's best, in a cell that comes up) it's matched.

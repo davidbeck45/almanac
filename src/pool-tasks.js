@@ -24,7 +24,7 @@
 // used. By type, payload -> result:
 //   report   { owned, exclude?, summary?, shares? | uses?, preferValue?, mists?, k? }
 //            -> gapReport; each pick's twin and nearest carry their records
-//   check    { owned, exclude?, id | record (or ids | records), liked?, summary?, shares? | uses?, preferValue?, mists? }
+//   check    { owned, exclude?, id | record (or ids | records), liked?, stated?, summary?, shares? | uses?, preferValue?, mists? }
 //            -> checkJSON plus the bottle's record, styles and the liked styles it shows
 //               ({ checks } for several)
 //   liked    { owned, stated? } -> { styles: likedStyles with ids, from: 'stated' | 'wardrobe' }
@@ -290,7 +290,7 @@ const TASKS = {
       const record = await withAbout(cache, found, pool);
       // The liked styles judge it too (buyCheck's `liked`: a skin scent for
       // someone who loves them is more than "covered").
-      const check = buyCheck(record, ctx, { liked: liked.length ? liked : null }), out = checkJSON(record, check);
+      const check = buyCheck(record, ctx, { liked: liked.length ? liked : null, stated: p.stated !== false }), out = checkJSON(record, check);
       if (out.overlap) out.overlap.record = bare(check.overlap.bottle);
       if (out.twin) out.twin.record = check.twin.record;
       const scores = scoresOf(found, shown);
