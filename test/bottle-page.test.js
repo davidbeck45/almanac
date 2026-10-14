@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { SECTIONS, bottlePageHTML, pooled, sectionsFor, linkId, actions as bottleActions } from '../src/views/bottle.js';
+import { SECTIONS, bottlePageHTML, pooled, sectionsFor, linkId, likedStyleIds, actions as bottleActions } from '../src/views/bottle.js';
 import { state, computeToday } from '../src/app/state.js';
 import '../src/views/sections.js';
 import { buyCheckHTML, checkable, fillGroups } from '../src/views/bottle-check.js';
@@ -591,4 +591,19 @@ test('compare with… lists its family, the list it came from and your bottles, 
   assert.match(html, /data-field="cmp-query"/);
   assert.match(pickerHTML({ base: ['1', '2', '3'], query: '' }, lists), /Three is the most/);
   assert.match(pickerHTML({ base: [a.id], query: '' }, lists), /data-action="cmp-pick" data-id="o"/);
+});
+
+test('the buy check reads the liked styles as Insights does: none liked is none, not the wardrobe’s leanings', async () => {
+  const owned = fragrances.map(f => ({ ...f, id: String(f.id) }));
+  const before = state.likedStyles;
+  try {
+    state.likedStyles = [];
+    assert.deepEqual(await likedStyleIds(owned), []);
+    state.likedStyles = ['oud', 'nope'];
+    assert.deepEqual(await likedStyleIds(owned), ['oud']);
+    state.likedStyles = null;
+    assert.ok((await likedStyleIds(owned)).length > 0, 'unset: the stated loves or the leanings');
+  } finally {
+    state.likedStyles = before;
+  }
 });

@@ -170,15 +170,16 @@ let liked = { key: null, ids: null };
 /**
  * The scent styles someone likes, as Insights, Discover and the Wishlist
  * read them (likedFor in src/views/wardrobe/parts.js): the ones hearted on
- * Insights (state.likedStyles), David's DEMO_LIKED on his wardrobe, else the
- * ones most of the bottles lean toward. src/discover.js loads on demand.
+ * Insights (state.likedStyles; [] once every one is unliked), David's
+ * DEMO_LIKED on his wardrobe, else the ones most of the bottles lean toward.
+ * src/discover.js loads on demand.
  */
 export async function likedStyleIds(owned = activeFragrances()) {
   const key = JSON.stringify([state.likedStyles ?? null, viewingDemo(), owned.map(f => f.id)]);
   if (liked.key === key) return liked.ids;
   const { DEMO_LIKED, likedStyles } = await import('../discover.js');
   const stated = (state.likedStyles ?? (viewingDemo() ? DEMO_LIKED : null))?.filter(id => styleById(id));
-  liked = { key, ids: stated?.length ? stated : likedStyles(owned).map(s => s.id) };
+  liked = { key, ids: state.likedStyles?.length === 0 ? [] : stated?.length ? stated : likedStyles(owned).map(s => s.id) };
   return liked.ids;
 }
 
