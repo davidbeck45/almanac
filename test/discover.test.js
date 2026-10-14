@@ -14,6 +14,7 @@ import {
 } from '../src/discover.js';
 import { loadWants, saveWants, addWant, removeWant, hasWant, setWant, wantIdsToLoad } from '../src/wishlist.js';
 import { customRecord } from '../src/custom.js';
+import { applySkin } from '../src/skin.js';
 import { fitPoolStyles } from '../scripts/fit-pool-styles.mjs';
 
 const dir = new URL('../data/fragrantica/', import.meta.url);
@@ -243,6 +244,14 @@ test('default seeds: the most worn of the last 60 days, else the best rated', ()
   assert.equal(rated.from, 'rated');
   assert.equal(rated.seeds.length, 3);
   assert.ok(rated.seeds.every(f => f.rating >= 4.3));
+  // Your own stars come first, and a bottle you dislike is never a seed, by wears either.
+  const skin = { [rated.seeds[0].id]: { rating: 1 }, [rated.seeds[1].id]: { rating: 2 }, [owned('Infini Rose').id]: { rating: 5 } };
+  const mine = applySkin(wardrobe, skin);
+  const yours = defaultSeeds(mine);
+  assert.equal(yours.seeds[0].name, 'Infini Rose');
+  assert.ok(yours.seeds.every(f => !(f.personal?.rating <= 2)), yours.seeds.map(f => f.name).join());
+  const disliked = defaultSeeds(applySkin(wardrobe, { 94713: { rating: 1 } }), { history, todayISO: '2026-10-13' });
+  assert.deepEqual(disliked.seeds.map(f => f.name), ['Cedrus Blanc']);
 });
 
 test('notes and accords search: every term, forgiving how it’s typed', () => {

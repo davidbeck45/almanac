@@ -16,6 +16,7 @@ import {
 } from '../app/state.js';
 import { loadWants, saveWants, hasWant, setWant } from '../wishlist.js';
 import { occasionCounts } from '../history.js';
+import { skinStamp } from '../skin.js';
 import { normalize } from '../collections.js';
 import * as scentStyles from '../scent-styles.js';
 import { readQuery, writeQuery, poolFilters, filterCount, searchMode, namedToCheck, NO_FILTERS, SEED_MAX } from './discover/query.js';
@@ -171,7 +172,7 @@ const wardrobeIn = () => (state.shared ? !state.shared.loading : state.active ==
 // Each list's question. The report's also covers the place (its climate),
 // "How you wear" and the journal's occasions, as Insights' does.
 const notesKey = (d, filters) => JSON.stringify(['notes', d.q, filters, ks.notes, valueOn()]);
-const likeKey = (d, filters) => JSON.stringify(['like', d.seeds, d.seeds ? 0 : state.history.length, filters, ks.like, valueOn()]);
+const likeKey = (d, filters) => JSON.stringify(['like', d.seeds, d.seeds ? 0 : state.history.length, d.seeds ? '' : skinStamp(), filters, ks.like, valueOn()]);
 const stylesKey = (d, styles, filters) => JSON.stringify(['styles', styles, d.mode, filters, ks.styles, valueOn()]);
 const reportKey = () => JSON.stringify(['report', state.preferValue, state.loc?.lat ?? null, state.loc?.lon ?? null, lib.loadUses(), occasionCounts(state.history)]);
 // What every list asks with: the wardrobe, and Discover's value setting.

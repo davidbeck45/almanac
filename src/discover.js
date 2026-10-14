@@ -7,7 +7,7 @@
 // src/candidates.js what a bottle is worth, how new it would be and how risky.
 // Pure (no DOM, no fetch), so a module Worker can run it.
 import { ACCORDS, barStrength } from './accords.js';
-import { performanceRating, steadyShares } from './engine.js';
+import { performanceRating, steadyShares, DISLIKED } from './engine.js';
 import { fromPool } from './fragrantica.js';
 import { journalStats } from './history.js';
 import { STYLES, STYLE_MIN, STYLE_LEAN, WEARS_CLOSE, styleScores, topOf, leanOf, closeOf, styleMix } from './scent-styles.js';
@@ -636,17 +636,21 @@ function mergeTurns(ctx, lists, k, shares) {
 
 /**
  * Seeds for "more like what you love" when none are picked: the most worn
- * bottles of the last SEED_DAYS days (journalStats), else the best rated.
- * -> { seeds: records, from: 'worn' | 'rated' }
+ * bottles of the last SEED_DAYS days (journalStats), else the best rated:
+ * your own stars where you gave some (`personal.rating`, applySkin), the
+ * crowd's otherwise. A bottle you rate DISLIKED or lower is never a seed,
+ * however often worn. -> { seeds: records, from: 'worn' | 'rated' }
  */
 export function defaultSeeds(owned, { history = [], todayISO = null, n = SEED_COUNT } = {}) {
+  const liked = owned.filter(f => !(f.personal?.rating <= DISLIKED));
   if (history.length && todayISO) {
-    const byId = new Map(owned.map(f => [String(f.id), f]));
+    const byId = new Map(liked.map(f => [String(f.id), f]));
     const worn = journalStats(history, todayISO, SEED_DAYS).top.map(([id]) => byId.get(String(id))).filter(Boolean);
     if (worn.length) return { seeds: worn.slice(0, n), from: 'worn' };
   }
-  const rated = f => ((f.ratingVotes ?? 0) * (f.rating ?? 0) + SEED_PRIOR_VOTES * 4) / ((f.ratingVotes ?? 0) + SEED_PRIOR_VOTES);
-  return { seeds: [...owned].sort((a, b) => rated(b) - rated(a)).slice(0, n), from: 'rated' };
+  const rated = f => f.personal?.rating
+    ?? ((f.ratingVotes ?? 0) * (f.rating ?? 0) + SEED_PRIOR_VOTES * 4) / ((f.ratingVotes ?? 0) + SEED_PRIOR_VOTES);
+  return { seeds: [...liked].sort((a, b) => rated(b) - rated(a)).slice(0, n), from: 'rated' };
 }
 
 /**
