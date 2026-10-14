@@ -7,6 +7,9 @@ A quick look at what to wear from my own collection, based on today's weather, t
 - **Occasion** — Everyday, Office, Date Night, Night Out, Formal, Outdoors, Cozy, for daytime or tonight.
 - **Layering** — each bottle's detail sheet suggests which of your other bottles to layer it with, names the notes that complement each other, and says which to spray first.
 - **Wear this** — logs what you wore so picks rotate, fading over the next ten days. The wear journal shows a calendar, your most-worn bottles and the ones gathering dust.
+- **Trips and events** — the fewest bottles to pack for a city and dates, and which to wear when, with a dressier pick for a formal night; picks for any date ahead. Past the 16-day forecast it plans on typical weather for the dates. In the terminal for now (`--pack`, `--date`); app screens are next.
+- **How much to spray** — a count and where for each pick, from how loud and lasting the bottle is, the weather and the occasion. In the terminal for now (`--spray`, and on every pick).
+- **Your own ratings** — your stars, and whether a bottle lasts longer or sits closer on your skin than the crowd says, steer the picks. The engine reads them; the app's controls are next.
 - °F or °C (defaults from your locale), recent locations, and home-screen shortcuts for Today, Week and Occasion.
 - **Your own collection** — search every fragrance on Fragrantica (from [Le Decanteur's dataset](https://www.kaggle.com/datasets/ledecanteur/fragrantica-perfumes), CC BY-NC-SA 4.0), paste a list, or add a bottle no database has by picking its accords. Share it as a link. The demo shows my wardrobe.
 
@@ -21,8 +24,11 @@ MOCK=1 node worker/dev.mjs   # the old Fragella API on :8787, from saved respons
 node scripts/recommend.mjs --city "New York" --occasion date
 node scripts/recommend.mjs --city "New York" --week
 node scripts/recommend.mjs --layer "Liquid Brun"   # or --layer all
-node scripts/recommend.mjs --city "New York" --journal scentcast-journal.json   # rotate out recent wears
+node scripts/recommend.mjs --city "New York" --journal scentcast-journal.json   # rotate out recent wears, nudge in neglected ones
 node scripts/recommend.mjs --mix                   # the collection's scent styles
+node scripts/recommend.mjs --pack --city London --from 2026-12-10 --to 2026-12-19 --events "2026-12-15 night formal"
+node scripts/recommend.mjs --city Miami --date 2026-10-24 --occasion date   # any date: forecast, else typical weather
+node scripts/recommend.mjs --spray "Liquid Brun" --occasion date             # how many sprays, and where
 ```
 
 Live at **https://davidbeck45.github.io/scentcast/** (GitHub Pages from `main`; every push redeploys). Add it to your phone's home screen to use it like an app.
