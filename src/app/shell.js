@@ -14,15 +14,15 @@ import { loadAbout } from '../fragrantica.js';
 import { sceneTint, skyAccent } from '../scene.js';
 import { setTheme, theme, paint } from '../theme.js';
 import { esc, deg, plural } from '../ui.js';
-import { icon, segLinksHTML, messageHTML } from '../ui/components.js';
+import { icon, segLinksHTML, messageHTML, FALLBACK_THUMB } from '../ui/components.js';
 import { parseRoute, routeHash, sameRoute, legacyHash, go, HOME } from './router.js';
 import {
   state, computeToday, sourceRecords, knownBottles, library, setActive as chooseList,
-  addToMine as addRecord, markBottlesLoaded, keepBottles, loadFullRecord,
+  addToMine as addRecord, markBottlesLoaded, keepBottles, loadFullRecord, retryClimate,
 } from './state.js';
 import {
   registerSheets, renderSheet, openSheet, updateSheet, closeSheet, sheetPopped, sheetEntry, replacePageURL, refocus,
-  keepingFocus, showToast, hideToast, watchToast, morph, canMorph, visible, reducedMotion, SHEET_OUT_MS,
+  keepingFocus, showToast, hideToast, settleToast, watchToast, morph, canMorph, visible, reducedMotion, SHEET_OUT_MS,
 } from './sheets.js';
 import * as wearView from '../views/wear.js';
 import * as wardrobeView from '../views/wardrobe.js';
@@ -228,6 +228,26 @@ function headHTML(page, pane, r) {
     ${sub || quiet ? `<div class="head-bar">${sub}${quiet ? gear : ''}</div>` : ''}`;
 }
 
+// The head bar says when it's stuck under the top edge (.stuck), where
+// shell.css draws a band of the page's color behind it. A redraw keeps the
+// state it had, so the band doesn't blink.
+let headWatch = null; // { io, top }
+function watchHeadBar(stuck) {
+  const bar = $('#main .head-bar');
+  headWatch?.io.disconnect();
+  if (!bar || !('IntersectionObserver' in window)) return;
+  bar.classList.toggle('stuck', stuck);
+  // It sticks `top` px down (the safe area and a gap): it's stuck once it
+  // pokes above a root edge a pixel lower.
+  const top = parseFloat(getComputedStyle(bar).top) || 0;
+  if (headWatch?.top !== top) {
+    const io = new IntersectionObserver(([e]) => e.target.classList.toggle('stuck', e.intersectionRatio < 1 && e.boundingClientRect.top < top + 1),
+      { rootMargin: `${-(top + 1)}px 0px 0px 0px`, threshold: 1 });
+    headWatch = { io, top };
+  }
+  headWatch.io.observe(bar);
+}
+
 function heroAspect() {
   const el = $('#hero');
   return el.clientHeight ? el.clientWidth / el.clientHeight : 400 / 220;
@@ -257,8 +277,10 @@ function renderPage() {
   renderHero(r, page);
   const main = $('#main');
   const kept = keptScrolls();
+  const stuck = Boolean(main.querySelector('.head-bar.stuck'));
   main.innerHTML = `${headHTML(page, pane, r)}<div class="pane" data-pane="${esc(r.dest)}${r.pane ? `/${esc(r.pane)}` : ''}">${pane.render(app, r)}</div>`;
   for (const el of main.querySelectorAll('[data-keep-scroll]')) el.scrollLeft = kept.get(el.dataset.keepScroll) ?? 0;
+  watchHeadBar(stuck);
   main.classList.toggle('updating', state.updating);
   main.setAttribute('aria-busy', String(state.updating));
   pane.after?.(app, r);
@@ -296,7 +318,8 @@ function bottleModelFor(r) {
   const id = r.arg;
   const model = bottleView.bottleModel(r);
   if (model) {
-    if (/^\d+$/.test(id) && !askedAbout.has(id) && !state.aboutFailed.has(id)) {
+    // The wardrobe's and catalog's records carry theirs (`f.about`, the build's).
+    if (/^\d+$/.test(id) && !model.f.about && !askedAbout.has(id) && !state.aboutFailed.has(id)) {
       askedAbout.add(id);
       loadAbout(id).then(about => {
         state.about.set(id, about);
@@ -345,6 +368,7 @@ function bottleModelFor(r) {
 function setModal(on) {
   $('#page').inert = on;
   $('#nav').inert = on;
+  $('.skip-link').inert = on || Boolean(state.sheet);
   document.body.classList.toggle('sheet-open', on || Boolean(state.sheet));
 }
 
@@ -362,7 +386,7 @@ function renderBottle({ fresh = false, instant = false } = {}) {
   const modal = !docked();
   if (r?.dest !== 'bottle') {
     if (el.hidden) return;
-    el.classList.remove('open', 'entering');
+    el.classList.remove('open', 'entering', 'modal');
     $('#app').classList.remove('has-bottle');
     setModal(false);
     delete el.dataset.id;
@@ -488,14 +512,16 @@ function applyRoute(next, { quiet = false, instant = false } = {}) {
   }
   pushedBottle = false;
   // Closing a bottle page leaves the page under it as it was, focus back on
-  // what opened it; a new page (the rail, with the inspector open) is a
-  // navigation like any other.
+  // what opened it; a new page (a link out of the bottle page, the rail with
+  // the inspector open) is a navigation like any other. The bottle page goes
+  // first: as a dialog it keeps the page under it inert, and focus can't
+  // land on the new page's heading until it's gone.
   const changed = !sameRoute(state.base, next);
+  renderBottle({ instant });
   if (changed) {
     state.from = prev;
     setBase(next, { quiet });
   }
-  renderBottle({ instant });
   if (prev?.dest === 'bottle' && !changed && !refocus(bottleOpener)) $('#page-title')?.focus({ preventScroll: true });
   if (prev?.dest === 'bottle') bottleOpener = null;
   syncTitle();
@@ -509,6 +535,7 @@ function setBase(next, { quiet = false } = {}) {
   state.armed = null; // a "Tap again to…" doesn't survive leaving its page
   lastRoute[next.dest] = next;
   const newPane = !prev || scrollKey(prev) !== scrollKey(next);
+  if (newPane) settleToast();
   renderNav();
   renderPage();
   if (newPane && prev) {
@@ -545,11 +572,16 @@ window.addEventListener('hashchange', () => sync());
 
 // ---------- Weather ----------
 
+// The forecast boot asked for while the wardrobe loads: it doesn't need it.
+let early = null; // { loc, forecast: promise }
+
 // Opens on the saved forecast when there is one: fresh, it's all we need;
 // older, it shows under "Updating…", photos faded, until the new one arrives,
 // so the morning check doesn't wait on the network.
 async function refreshWeather({ force = false } = {}) {
   if (!state.loc) return;
+  const asked = !force && early?.loc === state.loc ? early.forecast : null;
+  early = null;
   state.error = null;
   if (!state.wx && !force) {
     const cached = cachedForecast(state.loc);
@@ -563,7 +595,7 @@ async function refreshWeather({ force = false } = {}) {
   state.updating = Boolean(state.wx);
   render();
   try {
-    state.forecast = await getForecast(state.loc, { force });
+    state.forecast = await (asked ?? getForecast(state.loc, { force }));
     state.wx = summarize(state.forecast);
   } catch (err) {
     if (state.wx) state.wx = { ...state.wx, stale: true };
@@ -575,12 +607,15 @@ async function refreshWeather({ force = false } = {}) {
   render();
 }
 
+// A place picked here replaces one pinned by ?loc=, which would bring the
+// old place back on a reload.
 async function setLocation(loc) {
   state.loc = loc;
   state.wx = null;
   state.slot = null;
   saveLocation(loc);
   closeSheet();
+  if (new URLSearchParams(location.search).has('loc')) replacePageURL(withoutParams('loc').href);
   await refreshWeather();
 }
 
@@ -612,11 +647,16 @@ async function openSharedLink(link) {
 function listen() {
   document.addEventListener('click', async e => {
     if (e.defaultPrevented) return;
+    // The toast's own controls (Undo, See it) put it away once followed; a
+    // toast waiting on a keyboard user goes with whatever they do next.
+    const inToast = e.target.closest('#toast');
+    if (!inToast) settleToast();
     const link = e.target.closest('a[href^="#/"]');
     if (link) {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
       e.preventDefault();
       navigate(link.getAttribute('href'));
+      if (inToast) hideToast();
       return;
     }
     const t = e.target.closest('[data-action]');
@@ -624,6 +664,8 @@ function listen() {
     const fn = ACTIONS[t.dataset.action];
     if (!fn) throw new Error(`No action called "${t.dataset.action}"`);
     await fn(t, app, e);
+    // (Unless the action put up a toast of its own in its place.)
+    if (inToast && t.isConnected) hideToast();
   });
 
   document.addEventListener('input', e => FIELDS[e.target.dataset?.field]?.(e.target, app));
@@ -704,8 +746,10 @@ function listen() {
     new IntersectionObserver(([e]) => $('#hero').classList.toggle('offscreen', !e.isIntersecting)).observe($('#hero'));
   }
 
-  // Back online: a bottle page that couldn't load tries again.
+  // Back online: a bottle page that couldn't load tries again, and so does
+  // the place's climate.
   window.addEventListener('online', () => {
+    retryClimate();
     if (state.route?.dest === 'bottle') retryBottle();
   });
 
@@ -714,6 +758,16 @@ function listen() {
     if (!state.wx || Date.now() - state.wx.fetchedAt > REFRESH_AFTER) refreshWeather();
     else { state.wx = summarize(state.forecast); render(); }
   });
+
+  // A bottle photo that doesn't load (offline with nothing saved, gone,
+  // blocked) shows the drawn bottle, not the browser's broken-image box.
+  document.addEventListener('error', e => {
+    const t = e.target;
+    if (!(t instanceof HTMLImageElement) || t.dataset.fallback) return;
+    t.dataset.fallback = '1';
+    t.removeAttribute('srcset');
+    t.src = FALLBACK_THUMB;
+  }, true);
 
   watchToast();
 }
@@ -749,6 +803,14 @@ export async function boot() {
   go(routeHash(first), { replace: true });
   renderTint();
   applyRoute(first, { quiet: true });
+  // A bottle page opened from a link, as a dialog: focus in it, not on the
+  // page behind (inert) or the body.
+  if (first.dest === 'bottle' && !docked()) $('#bottle .bp-close')?.focus({ preventScroll: true });
+  // A forecast that isn't fresh is asked for now, alongside the wardrobe.
+  if (state.loc && !cachedForecast(state.loc)?.fresh) {
+    early = { loc: state.loc, forecast: getForecast(state.loc) };
+    early.forecast.catch(() => {}); // refreshWeather hears it
+  }
   try {
     const [demo, catalog] = await Promise.all([
       fetch('data/collection.json').then(r => r.json()),
@@ -759,7 +821,7 @@ export async function boot() {
     state.catalog = catalog.fragrances;
   } catch {
     markBottlesLoaded();
-    $('#main').innerHTML = messageHTML({ glyph: icon.bottle, title: 'Collection missing', body: 'Couldn’t load data/collection.json.' });
+    $('#main').innerHTML = messageHTML({ glyph: icon.bottle, title: 'Collection missing', body: 'Couldn’t load David’s wardrobe. Check your connection and reload.' });
     return;
   }
   markBottlesLoaded();

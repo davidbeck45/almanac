@@ -8,6 +8,8 @@
 // parseRoute and routeHash are pure (test/router.test.js). The shell renders;
 // go() only changes the URL.
 
+import { occasionById } from '../occasions.js';
+
 export const HOME = '#/wear/now';
 
 // Old home-screen shortcuts open ?view=today|week|occasion.
@@ -17,6 +19,9 @@ const LEGACY_VIEWS = { today: '#/wear/now', week: '#/wear/week', occasion: '#/we
 const DISCOVER_KEYS = ['q', 'by', 'tab', 'styles', 'mode', 'seeds', 'season', 'time', 'lean', 'longevity', 'projection', 'safe', 'discontinued', 'mists'];
 // The query keys each kind of route keeps.
 const QUERY_KEYS = { bottle: ['ctx'], discover: DISCOVER_KEYS };
+// The panes that take an argument, and which ones they know: an unknown one
+// is dropped, so the shell rewrites the URL to the pane alone.
+const PANE_ARGS = { 'wear/occasion': id => Boolean(occasionById(id)) };
 
 /**
  * '#/wear/occasion/office' -> { dest: 'wear', pane: 'occasion', arg: 'office', query: {} }.
@@ -39,7 +44,8 @@ export function parseRoute(hash, panes) {
   if (!list) return parseRoute(HOME, panes);
   if (!list.length) return { dest, pane: null, arg: null, query };
   const pane = list.includes(first) ? first : list[0];
-  return { dest, pane, arg: pane === first ? second : null, query };
+  const arg = pane === first && second && PANE_ARGS[`${dest}/${pane}`]?.(second) ? second : null;
+  return { dest, pane, arg, query };
 }
 
 // Colons (dataset and context keys) and commas (the compare page's ids) read as they are.

@@ -4,7 +4,7 @@
 // "Fill a gap" teaser. Pure functions of their arguments (test/discover-
 // screens.test.js renders them in Node); src/views/discover.js feeds them.
 // Styles: src/css/discover.css, the cards' src/css/components.css (.bcard).
-import { esc, plural } from '../../ui.js';
+import { esc, plural, valueWord, riskWord, ratingMark } from '../../ui.js';
 import {
   icon, img, messageHTML, segHTML, switchHTML, rowHTML, sectionHead, bottleCardHTML, bottleCardSkeletonHTML, accordColor,
 } from '../../ui/components.js';
@@ -59,19 +59,17 @@ export function formatOf(r) {
   return r?.extras?.flags?.includes('mist') ? 'Body mist' : null;
 }
 
-/** Value for money in words: { text, tone } or null in the unremarkable middle. */
+/** Value for money in words (src/ui.js, as every screen says it): { text, tone } or null for a fair price. */
 export function valueMark(value) {
-  if (value == null) return null;
-  if (value >= 4) return { text: 'Great value', tone: 'good' };
-  if (value >= 3.5) return { text: 'Good value', tone: '' };
-  if (value < 2.5) return { text: 'Pricey', tone: '' };
-  return null;
+  const text = valueWord(value);
+  if (!text || text === 'Fair price') return null;
+  return { text, tone: text === 'Great value' ? 'good' : '' };
 }
 
 /** A blind buy's risk as a mark (medium and high only), the weightiest reason spoken. */
 export function riskMark(risk) {
   if (!risk || (risk.level !== 'medium' && risk.level !== 'high')) return null;
-  const text = risk.level === 'high' ? 'Risky buy' : 'Some risk';
+  const text = riskWord(risk.level);
   return { text, tone: 'warn', spoken: `${text}: ${risk.reasons[0] ?? ''}` };
 }
 
@@ -80,7 +78,7 @@ function marksOf(pick) {
   const rating = pick.rating ?? r.rating;
   const votes = pick.votes ?? r.ratingVotes;
   return [
-    rating ? { text: `★ ${rating.toFixed(2)}`, spoken: `Rated ${rating.toFixed(2)} of 5${votes ? ` by ${votes.toLocaleString('en-US')} voters` : ''}` } : null,
+    rating ? { text: ratingMark(rating), spoken: `Rated ${rating.toFixed(2)} of 5${votes ? ` by ${votes.toLocaleString('en-US')} voters` : ''}` } : null,
     valueMark(pick.value ?? r.extras?.value),
     riskMark(pick.risk),
   ].filter(Boolean);

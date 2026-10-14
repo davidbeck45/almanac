@@ -5,19 +5,16 @@
 // masculine), and who made it. Read from the record's signals (`extras`: pool
 // rows, the wardrobe's) and its about data (loadAbout, or the build's `about`).
 import { riskOf, signalsOf } from '../candidates.js';
-import { esc } from '../ui.js';
+import { esc, valueWord, riskWord } from '../ui.js';
 import { addSection, aboutOf } from './bottle.js';
 
-// Value for money, 1 (overpriced) to 5 (great value), in words: about the
-// pool's top eighth is great, under 2.4 pricey (.sweep/notes/data.md 5a).
-const VALUE_WORDS = [[4, 'Great value'], [3.4, 'Good value'], [2.4, 'Fair price'], [-Infinity, 'Pricey']];
 // Owners kept from KEEP_VOTES have-or-had votes; a keep lift past KEEP_HIGH
 // or under KEEP_LOW (the pool's bottom tenth) is worth saying.
 const KEEP_VOTES = 30;
 const KEEP_HIGH = 0.1;
 const KEEP_LOW = -0.085;
 // A low-risk bottle is a safe bet from this safety percentile (safer than
-// half the pool's popular bottles); under it, a fair bet.
+// half the pool's popular bottles); under it, a fair bet (riskWord, src/ui.js).
 const SAFE_BET = 50;
 // The crowd's lean, -1 feminine .. +1 masculine, in words past LEAN_WORD.
 const LEAN_WORD = 0.4;
@@ -27,7 +24,6 @@ const SENTIMENT = [['love', 'Love'], ['like', 'Like'], ['ok', 'OK'], ['dislike',
 const pct = x => `${Math.round(x * 100)}%`;
 const num = n => Number(n).toLocaleString('en-US');
 const compact = n => (n >= 10_000 ? `${Math.round(n / 1000)}K` : n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K` : String(n));
-const wordFor = (table, x) => table.find(([from]) => x >= from)[1];
 const lower = t => t.charAt(0).toLowerCase() + t.slice(1);
 const unstop = t => t.replace(/\.$/, '');
 
@@ -44,11 +40,11 @@ export function riskLine(f, about = null) {
   if (risk.level === 'unknown') return null;
   const s = signalsOf(record);
   if (risk.level !== 'low') {
-    return { level: risk.level, word: risk.level === 'high' ? 'Risky' : 'Some risk', line: s.flags.includes('polarizing') ? 'It divides people' : unstop(risk.reasons[0] ?? '') };
+    return { level: risk.level, word: riskWord(risk.level), line: s.flags.includes('polarizing') ? 'It divides people' : unstop(risk.reasons[0] ?? '') };
   }
   if (s.safe == null && !risk.reasons.length) return null;
   const caveat = risk.reasons[0] ? unstop(risk.reasons[0]) : '';
-  const word = s.safe != null && s.safe >= SAFE_BET ? 'Safe bet' : 'Fair bet';
+  const word = riskWord('low', s.safe);
   const odds = s.safe == null ? '' : s.safe >= SAFE_BET ? `Safer than ${s.safe}% of popular bottles` : 'Less safe than most popular bottles';
   const line = odds ? `${odds}${caveat ? `, though ${lower(caveat)}` : ''}` : caveat;
   return { level: 'low', word, line };
@@ -62,7 +58,7 @@ function tiles(f, about, owned) {
   const value = x.value ?? about?.value?.avg ?? null;
   if (value != null) {
     const votes = about?.value?.votes;
-    out.push(tile('Value for money', `${value.toFixed(1)}<small> of 5</small>`, [wordFor(VALUE_WORDS, value), votes && `${compact(votes)} votes`].filter(Boolean).join(' · ')));
+    out.push(tile('Value for money', `${value.toFixed(1)}<small> of 5</small>`, [valueWord(value), votes && `${compact(votes)} votes`].filter(Boolean).join(' · ')));
   }
   const o = about?.owners;
   if (o && o.have + o.had >= KEEP_VOTES) {

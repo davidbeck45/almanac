@@ -8,12 +8,45 @@ export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;'
 // Temperatures stay in °F everywhere else; only display converts.
 let units = 'F';
 export const setUnits = u => { units = u === 'C' ? 'C' : 'F'; };
-export const unitsNow = () => units;
 export const temp = f => Math.round(units === 'C' ? ((f - 32) * 5) / 9 : f);
 export const deg = f => `${temp(f)}°`;
 
 export const plural = (n, word, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
 export const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
+// An accord's key as a label: "Fresh spicy", "Champagne" (the data keeps its keys).
+export const accordLabel = a => a.charAt(0).toUpperCase() + a.slice(1).toLowerCase();
+
+// ---------- What voters say, in the same words on every screen ----------
+
+/**
+ * Voters' value for money (1–5) in words, or null: Great from 3.8, where
+ * "Prefer great value" draws its line (PREFER_VALUE in src/candidates.js,
+ * test/ui.test.js keeps them together), Good from 3.4, Fair price from 2.4
+ * (about the pool's bottom tenth is under it), else Pricey.
+ */
+export function valueWord(value) {
+  if (value == null || !Number.isFinite(value)) return null;
+  return value >= 3.8 ? 'Great value' : value >= 3.4 ? 'Good value' : value >= 2.4 ? 'Fair price' : 'Pricey';
+}
+
+/**
+ * A blind buy's risk in one word, or null with no crowd data: Risky (high),
+ * Some risk (medium), and a low risk a Safe bet from the 50th safety
+ * percentile (safer than half the pool's popular bottles), else a Fair bet.
+ */
+export function riskWord(level, safe = null) {
+  if (level === 'high') return 'Risky';
+  if (level === 'medium') return 'Some risk';
+  if (level === 'low') return safe != null && safe >= 50 ? 'Safe bet' : 'Fair bet';
+  return null;
+}
+
+/** "★ 4.49 · 10,377 votes" ("★ 4.49" without votes), or null without a rating. */
+export function ratingMark(rating, votes = 0) {
+  if (!(rating > 0)) return null;
+  const n = Number(votes) || 0;
+  return `★ ${rating.toFixed(2)}${n ? ` · ${n.toLocaleString('en-US')} ${n === 1 ? 'vote' : 'votes'}` : ''}`;
+}
 
 const MONTH_DAY = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 const WEEKDAY_SHORT = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' });

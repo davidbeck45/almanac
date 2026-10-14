@@ -4,14 +4,15 @@
 // user text only through esc(). Styles: src/css/components.css.
 import { accordColor as baseAccordColor } from '../accords.js';
 import { paint, paintAccord } from '../theme.js';
-import { esc, cap, matchPct, plural } from '../ui.js';
+import { esc, cap, matchPct, plural, accordLabel } from '../ui.js';
 
 // Accord colors in the current theme (src/theme.js).
 export const accordColor = name => paintAccord(name, baseAccordColor(name));
 
 // ---------- Photos ----------
 
-const FALLBACK_THUMB = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 170"><rect x="62" y="20" width="26" height="22" rx="4" fill="#3a3f4e"/><rect x="40" y="46" width="70" height="104" rx="18" fill="#2a2e3a" stroke="#4a5063" stroke-width="3"/></svg>')}`;
+// Also what a photo that fails to load turns into (src/app/shell.js).
+export const FALLBACK_THUMB = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 170"><rect x="62" y="20" width="26" height="22" rx="4" fill="#3a3f4e"/><rect x="40" y="46" width="70" height="104" rx="18" fill="#2a2e3a" stroke="#4a5063" stroke-width="3"/></svg>')}`;
 export const thumbSrc = f => (f.thumb ? esc(f.thumb) : FALLBACK_THUMB);
 // Decorative (alt=""): the bottle's name is always text nearby.
 export const img = (f, { lazy = true, cls = '' } = {}) =>
@@ -160,7 +161,7 @@ export function reasonsList(reasons, cls = '') {
 
 export function chips(accords, n = 3) {
   return `<div class="chips">${Object.keys(accords).slice(0, n)
-    .map(a => `<span class="chip" style="--c:${accordColor(a)}">${esc(a)}</span>`).join('')}</div>`;
+    .map(a => `<span class="chip" style="--c:${accordColor(a)}">${esc(accordLabel(a))}</span>`).join('')}</div>`;
 }
 
 // The one rank signal: the match as a ring and a number.
@@ -172,7 +173,8 @@ export function matchBadge(entry) {
 
 // A tier as star magnitude: one moonlight hue, S brightest.
 export const magDot = tier => `<span class="mag" data-tier="${esc(tier)}" aria-hidden="true"></span>`;
-const TIER_WORDS = { S: 'tier S', A: 'tier A', B: 'tier B', C: 'tier C' };
+// What a screen reader hears for a tier (sighted people see the dot).
+const TIER_WORDS = { S: 'top pick', A: 'strong', B: 'good' };
 
 // The magnitude shelf: bottles standing on a 1px shelf line with a caption
 // and a magnitude dot, B and C dimmed. Scrolls sideways on phones and stacks
@@ -181,7 +183,7 @@ export function shelfHTML(ranked, ctx, { wornId = null } = {}) {
   if (!ranked.length) return '';
   return `<ul class="shelf">${ranked.map(r => {
     const f = r.fragrance;
-    return `<li class="shelf-slot" data-tier="${r.tier}"><button class="shelf-item${wornId === f.id ? ' worn' : ''}" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(f.id)}" aria-label="${esc(`${f.name}, ${matchPct(r)}% match, ${TIER_WORDS[r.tier]}`)}">
+    return `<li class="shelf-slot" data-tier="${r.tier}"><button class="shelf-item${wornId === f.id ? ' worn' : ''}" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(f.id)}" aria-label="${esc([f.name, `${matchPct(r)}% match`, TIER_WORDS[r.tier]].filter(Boolean).join(', '))}">
       <span class="shelf-bottle">${img(f)}${magDot(r.tier)}</span>
       <span class="shelf-name">${esc(f.name)}</span>
     </button></li>`;
@@ -230,8 +232,8 @@ export function rowHTML(f, { meta = '', trailing = '', open = null, cls = '', at
 
 // A bottle to consider (Discover's picks; any suggestion): its photo stands
 // on a horizon line, and the photo, name and meta are one button that opens
-// its page (context `ctx`); screen readers hear the name as its label and
-// the marks as its description. `marks`: [{ text, tone: 'good' | 'warn' | '',
+// its page (context `ctx`); screen readers hear the name with its brand and
+// year (`meta`) as its label and the marks as its description. `marks`: [{ text, tone: 'good' | 'warn' | '',
 // spoken }] (rating, value, risk; `spoken` replaces the text for screen
 // readers). `tags`: [{ text, color, on, kind }] (style chips; `on` lights the
 // ones the list was asked for, kind 'close' draws the wears-close marker).
@@ -249,9 +251,9 @@ export function bottleCardHTML(f, { ctx = '', key = 'c', meta = '', marks = [], 
     ? `<ul class="bcard-tags" aria-label="Styles">${tags.map(t => `<li class="tag${t.on ? ' on' : ''}${t.kind ? ` ${esc(t.kind)}` : ''}"${t.color ? ` style="--c:${t.color}"` : ''}>${esc(t.text)}</li>`).join('')}</ul>`
     : '';
   return `<article class="bcard ${cls}">
-    <button class="bcard-open" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(f.id)}" aria-labelledby="${id}-n"${markHTML ? ` aria-describedby="${id}-m"` : ''}>
+    <button class="bcard-open" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(f.id)}" aria-labelledby="${id}-n${meta ? ` ${id}-b` : ''}"${markHTML ? ` aria-describedby="${id}-m"` : ''}>
       <span class="bcard-photo">${img(f)}</span>
-      <span class="bcard-title"><b class="bcard-name" id="${id}-n">${esc(f.name)}</b>${meta ? `<span class="bcard-meta">${meta}</span>` : ''}${markHTML}</span>
+      <span class="bcard-title"><b class="bcard-name" id="${id}-n">${esc(f.name)}</b>${meta ? `<span class="bcard-meta" id="${id}-b">${meta}</span>` : ''}${markHTML}</span>
     </button>
     ${corner ? `<div class="bcard-corner">${corner}</div>` : ''}
     ${tagHTML}

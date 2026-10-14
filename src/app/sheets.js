@@ -18,6 +18,9 @@ export function registerSheets(map) {
 }
 
 // `fresh` marks a sheet's first render, the one that animates its bars.
+// Focus inside the sheet stays on the replaced control's successor, else on
+// its form's first field (a Search button that went busy), else on Close:
+// never on the body, where the next Tab would start the sheet over.
 export function renderSheet({ keepScroll = false, fresh = false } = {}) {
   const el = $('#sheet');
   const s = state.sheet;
@@ -26,26 +29,57 @@ export function renderSheet({ keepScroll = false, fresh = false } = {}) {
   const scroll = keepScroll ? el.querySelector('.sheet-panel')?.scrollTop : 0;
   const html = render(s);
   if (html === null) return closeSheet();
+  const focused = el.contains(document.activeElement) ? document.activeElement : null;
+  const form = focused?.closest('form[data-form]')?.dataset.form;
   el.innerHTML = html;
   const panel = el.querySelector('.sheet-panel');
   if (fresh) panel.classList.add('fresh');
   if (keepScroll) panel.scrollTop = scroll;
+  if (focused && !refocus(focused, '#sheet')) {
+    const field = form && el.querySelector(`form[data-form="${CSS.escape(form)}"] :is(input:not([type="hidden"]), textarea)`);
+    (field || el.querySelector('.sheet-close'))?.focus({ preventScroll: true });
+  }
+}
+
+// Whether an element is on screen to take focus: rendered, and not behind a
+// dialog (inert).
+const focusable = e => !e.closest('[inert]') && (e.checkVisibility?.() ?? e.getClientRects().length > 0);
+
+// The element in `scope` that took over from `el` after a re-render: the
+// same tag with the same data attributes, else the same id, else (a form
+// field) the same name, else (a submit button) its form's. Of several, one
+// on screen with the same classes first: the rail's location button comes
+// before the page's own and is hidden on phones.
+function successor(el, scope) {
+  const tag = el.tagName.toLowerCase();
+  const data = Object.entries(el.dataset ?? {})
+    .map(([k, v]) => `[data-${k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)}="${CSS.escape(v)}"]`).join('');
+  const form = el.closest('form[data-form]')?.dataset.form;
+  const sel = data ? `${tag}${data}`
+    : el.id ? `#${CSS.escape(el.id)}`
+    : el.name ? `${tag}[name="${CSS.escape(el.name)}"]`
+    : el.type === 'submit' && form ? `form[data-form="${CSS.escape(form)}"] [type="submit"]`
+    : null;
+  if (!sel) return null;
+  const shown = [...document.querySelectorAll(`${scope} ${sel}`)].filter(focusable);
+  return shown.find(e => e.className === el.className) ?? shown[0] ?? null;
 }
 
 // Put focus back on an element a re-render replaced: itself if it survived,
-// else the element in `scope` with the same tag and data attributes. A text
-// field's successor gets the caret where it was. False when neither is
-// there (a hidden bottle's card, say).
+// else its successor (above). A text field's successor gets the caret where
+// it was. True only when focus landed: false when there's no successor (a
+// hidden bottle's card, say) or it can't take focus (hidden, disabled), so
+// callers fall back to the top of the region.
 export function refocus(el, scope = '#app') {
   if (!el || el === document.body) return false;
-  const attrs = Object.entries(el.dataset ?? {})
-    .map(([k, v]) => `[data-${k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)}="${CSS.escape(v)}"]`).join('');
-  const target = el.isConnected ? el : attrs ? document.querySelector(`${scope} ${el.tagName.toLowerCase()}${attrs}`) : null;
-  target?.focus({ preventScroll: true });
-  if (target && target !== el && 'selectionStart' in el) {
+  const target = el.isConnected ? el : successor(el, scope);
+  if (!target) return false;
+  target.focus({ preventScroll: true });
+  if (document.activeElement !== target) return false;
+  if (target !== el && 'selectionStart' in el) {
     try { target.setSelectionRange(el.selectionStart, el.selectionEnd); } catch {} // not every input type has a caret
   }
-  return Boolean(target);
+  return true;
 }
 
 // Views and sheets re-render whole, which replaces the control that asked for
@@ -102,12 +136,24 @@ export function sheetPopped() {
     then?.();
     return true;
   }
-  if (!state.sheet) return false;
+  if (!state.sheet) {
+    // A sheet's entry with no sheet open (Forward after the sheet closed, or
+    // Back onto one a link left behind): step back past it. Arrived by
+    // Forward, that undoes the step, as there's nothing ahead; by Back, it
+    // lands on the page the sheet was over.
+    if (!sheetEntry()) return false;
+    history.back();
+    return true;
+  }
   // Back from "Add it yourself" returns to the sheet it came from.
   if (state.sheet.kind === 'custom' && state.sheet.back) openSheet(state.sheet.back);
   else closeSheet({ fromHistory: true });
   return true;
 }
+
+// The bottle page is open as a dialog (under 1100px; docked beside the page
+// from there), which keeps the page under it inert and unscrolled.
+export const bottleDialog = () => state.route?.dest === 'bottle' && !matchMedia('(min-width: 1100px)').matches;
 
 // `instant` skips the slide.
 export function openSheet(sheet, { instant = false } = {}) {
@@ -122,16 +168,19 @@ export function openSheet(sheet, { instant = false } = {}) {
   el.hidden = false;
   document.body.classList.add('sheet-open');
   $('#app').inert = true;
+  $('.skip-link').inert = true;
   if (!wasOpen) {
     if (instant) el.classList.add('open');
     else requestAnimationFrame(() => el.classList.add('open'));
   }
   if (!sameKind) {
-    // Don't pop the keyboard on phones just for opening a sheet.
-    const typing = matchMedia('(hover: hover)').matches;
-    el.querySelector(typing ? 'input, textarea, .sheet-close' : '.sheet-close')?.focus({ preventScroll: true });
+    // A sheet with a text field opens on it, ready to type, where there's a
+    // keyboard; on phones on Close, so the keyboard doesn't pop up unasked.
+    const typing = matchMedia('(hover: hover)').matches && el.querySelector(TEXT_FIELD);
+    (typing || el.querySelector('.sheet-close'))?.focus({ preventScroll: true });
   }
 }
+const TEXT_FIELD = 'input:is([type="search"], [type="text"], :not([type])), textarea';
 
 export function updateSheet(patch) {
   if (!state.sheet) return;
@@ -152,10 +201,14 @@ export function closeSheet({ instant = false, fromHistory = false, then = null }
   const left = fromHistory || !dropSheetEntry();
   if (!left) afterLeaving = then;
   el.classList.remove('open');
-  if (!document.querySelector('#bottle.modal')) document.body.classList.remove('sheet-open');
+  // A bottle page open as a dialog keeps the page under it still.
+  const modal = bottleDialog();
+  if (!modal) document.body.classList.remove('sheet-open');
   $('#app').inert = false;
-  // Its opener gone, focus lands on the page's heading so Tab carries on from there.
-  if (!refocus(sheetOpener) && sheetOpener && sheetOpener !== document.body) $('#page-title')?.focus({ preventScroll: true });
+  $('.skip-link').inert = modal;
+  // Its opener gone, focus lands on the top of the page (or of the bottle
+  // page under the sheet) so Tab carries on from there.
+  if (!refocus(sheetOpener) && sheetOpener && sheetOpener !== document.body) focusTop();
   sheetOpener = null;
   const hide = () => { if (!state.sheet) { el.hidden = true; el.innerHTML = ''; } };
   if (instant) hide();
@@ -164,28 +217,48 @@ export function closeSheet({ instant = false, fromHistory = false, then = null }
 }
 
 // ---------- Toast ----------
-// It stays 5 s, held while it's hovered or focused (WCAG 2.2.1) and given a
-// few more seconds after. Callers pass HTML: escape names, and an Undo
-// button goes inside.
+// It stays 5 s, held while it's hovered or focused and given a few more
+// seconds after (WCAG 2.2.1). One with a control (Undo, See it) that a key
+// press brought up waits instead until the next thing done or the next page:
+// it's the last stop in the tab order, a long way off. Ctrl+Z (⌘Z) presses
+// its Undo from anywhere outside a text field. Following one of its controls
+// puts it away (the shell's clicks). Callers pass HTML: escape names, and an
+// Undo button goes inside.
 
 const TOAST_MS = 5000;
 let toastTimer;
+let toastWaits = false; // shown by a key press with a control in it: no timer
+let byKey = false; // the last input was a key press, not a pointer
 function armToast(ms = TOAST_MS) {
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(hideToast, ms);
+  if (!toastWaits) toastTimer = setTimeout(hideToast, ms);
 }
+const undoButton = () => [...$('#toast').querySelectorAll('button')].find(b => b.textContent.trim() === 'Undo');
 export function showToast(html) {
   const el = $('#toast');
   el.innerHTML = `${icon.check}${html}`;
   el.hidden = false;
+  // A message on two lines takes the rounded box, not the pill.
+  const text = el.querySelector(':scope > span');
+  el.classList.toggle('wrapped', Boolean(text) && text.getBoundingClientRect().height > 1.5 * parseFloat(getComputedStyle(text).lineHeight));
+  undoButton()?.setAttribute('aria-keyshortcuts', 'Control+Z Meta+Z');
+  toastWaits = byKey && Boolean(el.querySelector('button, a'));
   requestAnimationFrame(() => el.classList.add('show'));
   armToast();
 }
+// Focus inside it goes to the top of what's on screen as it goes, unless
+// the action that hid it moved focus itself.
 export function hideToast() {
   const el = $('#toast');
   clearTimeout(toastTimer);
+  toastWaits = false;
   el.classList.remove('show');
+  queueMicrotask(() => { if (el.contains(document.activeElement)) focusTop(); });
   setTimeout(() => { if (!el.classList.contains('show')) el.hidden = true; }, 200);
+}
+// A toast waiting for the next thing done (above) goes once it's done.
+export function settleToast() {
+  if (toastWaits && $('#toast').classList.contains('show')) hideToast();
 }
 export function watchToast() {
   const el = $('#toast');
@@ -195,6 +268,26 @@ export function watchToast() {
   el.addEventListener('focusin', hold);
   el.addEventListener('pointerleave', resume);
   el.addEventListener('focusout', e => { if (!el.contains(e.relatedTarget)) resume(); });
+  addEventListener('pointerdown', () => { byKey = false; }, true);
+  // A click that came from no pointer (Enter, Space, a screen reader's
+  // activation) counts as a key press.
+  addEventListener('click', e => { byKey = e.detail === 0; }, true);
+  addEventListener('keydown', e => {
+    byKey = true;
+    if (e.key.toLowerCase() !== 'z' || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+    if (!el.classList.contains('show') || e.target.closest?.('input, textarea, [contenteditable]')) return; // the field's own undo
+    const undo = undoButton();
+    if (!undo) return;
+    e.preventDefault();
+    undo.click();
+  }, true);
+}
+
+// The top of what's on screen: an open sheet's Close, the bottle page's
+// Close, else the page's heading.
+export function focusTop() {
+  const sel = state.sheet ? '#sheet .sheet-close' : state.route?.dest === 'bottle' ? '#bottle .bp-close' : '#page-title';
+  $(sel)?.focus({ preventScroll: true });
 }
 
 // ---------- The bottle's flight ----------

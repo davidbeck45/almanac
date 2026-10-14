@@ -4,7 +4,13 @@
 // App files always revalidate with the server: GitHub Pages lets browsers
 // keep files for 10 minutes, and a fresh main.js importing a stale module
 // fails to load at all.
-const CACHE = 'scentcast-v19';
+// A launch doesn't wait on a slow line, though: when the app's page hasn't
+// come within NETWORK_WAIT_MS, the saved page opens, and that page (and the
+// workers it starts) loads every app file from the same cache, so it's one
+// version throughout, never a mix. The cache catches up on a launch where
+// the network answers in time, or when a new sw.js installs.
+const CACHE = 'scentcast-v20';
+const NETWORK_WAIT_MS = 2500;
 // Dataset files (data/fragrantica/) load a shard at a time as people search
 // and add bottles; they keep their own small cache instead of the shell's.
 // Each Discover answer reads a few about shards (x/), so it holds plenty.
@@ -103,8 +109,11 @@ const SHELL = [
 const IMAGE_HOSTS = ['fimgs.net', 'cdn.fragella.com'];
 const KEEP = [CACHE, DATA_CACHE, POOL_CACHE, IMAGE_CACHE];
 
+// Install revalidates each file with the server (`no-cache`), so it never
+// takes a stale copy, but a file the page just loaded comes back as a
+// near-empty 304 instead of downloading again.
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(path => new Request(path, { cache: 'reload' })))).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(path => new Request(path, { cache: 'no-cache' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
@@ -121,11 +130,32 @@ async function trim(cache, max) {
   await Promise.all(keys.slice(0, Math.max(0, keys.length - max)).map(k => cache.delete(k)));
 }
 
+// The version a response is, by its ETag (else Last-Modified).
+const version = res => res.headers.get('etag') ?? res.headers.get('last-modified');
+
+// Saves a response. A capped cache always takes it (put moves it to the end,
+// so the shards in use stay); the others skip a file they already hold in
+// this version, rather than rewrite the whole app on every launch.
 async function put(name, key, res, max) {
   const cache = await caches.open(name);
+  if (!max) {
+    const saved = await cache.match(key);
+    if (saved && version(res) != null && version(saved) === version(res)) return;
+  }
   await cache.put(key, res);
   if (max) await trim(cache, max);
 }
+
+// Pages that opened from the cache (the network was late), and the workers
+// they started: their app files come from the cache too. Ids of clients
+// long gone fall off the front.
+const fromCache = new Set();
+function servedFromCache(id) {
+  if (!id) return;
+  fromCache.add(id);
+  if (fromCache.size > 30) fromCache.delete(fromCache.values().next().value);
+}
+const late = ms => new Promise(resolve => setTimeout(resolve, ms, 'late'));
 
 // The app's page, at the scope's root or as index.html.
 function isAppPage(url) {
@@ -148,14 +178,35 @@ self.addEventListener('fetch', e => {
     const data = url.pathname.includes('/data/fragrantica/');
     const pool = data && /\/data\/fragrantica\/pool[\w-]*\.json$/.test(url.pathname);
     const [store, max] = pool ? [POOL_CACHE, 0] : data ? [DATA_CACHE, DATA_MAX] : [CACHE, 0];
-    e.respondWith(
-      fetch(appPage ? req.url : req, { cache: 'no-cache' })
-        .then(res => {
-          if (res.ok) e.waitUntil(put(store, key, res.clone(), max));
-          return res;
-        })
-        .catch(async () => (await caches.match(key, { ignoreSearch: true })) ?? Response.error()),
-    );
+    const saved = () => caches.open(store).then(c => c.match(key, { ignoreSearch: true }));
+    const fresh = () => fetch(appPage ? req.url : req, { cache: 'no-cache' });
+    const keep = res => {
+      if (res.ok) e.waitUntil(put(store, key, res.clone(), max));
+      return res;
+    };
+    // A page that opened from the cache keeps to it (a worker it starts too).
+    if (store === CACHE && fromCache.has(e.clientId)) {
+      servedFromCache(e.resultingClientId);
+      e.respondWith(saved().then(hit => hit ?? fresh().then(keep)).catch(() => Response.error()));
+      return;
+    }
+    if (appPage) {
+      e.respondWith((async () => {
+        const page = fresh();
+        const hit = await saved();
+        if (!hit) return page.then(keep).catch(() => Response.error());
+        // The network's answer if it comes in time; else the saved app (and
+        // the late answer isn't saved: its files would be another version).
+        // A server error (an outage) counts as no answer.
+        const first = await Promise.race([page.catch(() => 'failed'), late(NETWORK_WAIT_MS)]);
+        if (first instanceof Response && first.ok) return keep(first);
+        page.catch(() => {});
+        servedFromCache(e.resultingClientId);
+        return hit;
+      })());
+      return;
+    }
+    e.respondWith(fresh().then(keep).catch(async () => (await saved()) ?? (await caches.match(key, { ignoreSearch: true })) ?? Response.error()));
   } else if (IMAGE_HOSTS.includes(url.hostname)) {
     e.respondWith(
       caches.match(req).then(hit => hit ?? fetch(req).then(res => {

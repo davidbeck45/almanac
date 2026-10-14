@@ -94,8 +94,11 @@
 .icon-btn.ghosted::after { background: none; }
 @media (hover: hover) { .icon-btn.ghosted:hover { color: var(--negative); } .icon-btn.ghosted:hover::after { background: color-mix(in srgb, var(--negative) 10%, transparent); } }
 
-/* Inline text buttons and links inside sentences: the padding grows the hit
-   area without moving the line. */
+/* Inline text buttons and links inside sentences. Their hit area grows
+   sideways but no taller than their own line (1lh): grown to 44px, links on
+   neighbouring lines covered each other, and a tap on one opened the next
+   (inline links in a sentence are exempt from the 24px minimum anyway). */
+:is(a, button).link-btn::before { inset-block: min(0px, calc(50% - 0.5lh)); } /* (outranks the shared rule above) */
 .link-btn {
   color: var(--text-secondary);
   text-decoration: underline;
@@ -574,7 +577,10 @@
   display: flex;
   align-items: center;
   gap: var(--s-3);
-  max-width: calc(100vw - 2 * var(--s-4));
+  /* As wide as its message on one line, up to the screen (it's centred from
+     the middle, so without a width it would wrap at half the screen). */
+  width: max-content;
+  max-width: min(100vw - 2 * var(--s-4), 560px);
   min-height: 48px;
   padding: var(--s-1) var(--s-1) var(--s-1) var(--s-4);
   border-radius: var(--r-pill);
@@ -590,11 +596,25 @@
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast > svg { width: 16px; height: 16px; flex: none; color: var(--positive); }
-.toast span { overflow: hidden; padding-right: var(--s-1); text-overflow: ellipsis; white-space: nowrap; }
-.toast:not(:has(button)) { padding-right: var(--s-5); }
-/* A longer note (what changed, and the way back) wraps instead. */
-.toast:has(.note) { width: min(100vw - 2 * var(--s-4), 460px); padding-block: var(--s-2); border-radius: var(--r-surface); }
-.toast .note { white-space: normal; font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.toast:not(:has(button, a)) { padding-right: var(--s-5); }
+/* The message wraps to two lines at most, so a long bottle name never cuts
+   off what happened to it ("… hidden from picks") before its Undo. A longer
+   note (what changed, and the way back) takes a wider toast. */
+.toast span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  min-width: 0;
+  padding-right: var(--s-1);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+.toast.wrapped, .toast:has(.note) { border-radius: var(--r-surface); } /* .wrapped: the shell saw it wrap */
+.toast:has(.note) { width: min(100vw - 2 * var(--s-4), 460px); padding-block: var(--s-2); }
+.toast .note { -webkit-line-clamp: 4; }
 
 /* ---------- Bottle cards ----------
    A bottle to consider: the photo stands on a horizon line in a well lit
@@ -749,4 +769,6 @@
   .shelf-bottle { border-bottom-color: CanvasText; }
   .nav, .subnav, .head-bar .gear-link::after, .toast { background: Canvas; border: 1px solid CanvasText; }
   .icon-btn::after { border: 1px solid ButtonText; }
+  /* Fields show focus by border and glow, which forced colors drop. */
+  .filter:focus-within, .name-field input:focus, textarea:focus, input:focus-visible { outline: 2px solid Highlight; outline-offset: 1px; }
 }
