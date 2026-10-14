@@ -1,12 +1,346 @@
-/* Discover: the search field and its results. Wave 4 adds styles, more like
-   this and notes search here. */
+/* Discover: the search field, the two ways to browse (by style, by bottle)
+   with their chips, the results (bottle cards, from src/css/components.css),
+   the filters (a side panel once the column is wide, a sheet before), the
+   "Fill a gap" teaser, and the seed picker sheet.
 
-.discover-search { position: sticky; top: calc(var(--s-2) + env(safe-area-inset-top)); z-index: 10; }
-.discover-search .filter { background: color-mix(in srgb, var(--surface-2) 92%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: 0 10px 24px -14px rgb(var(--shade) / 0.8); }
-.discover-list { padding-block: var(--s-3); }
-.discover-hint { margin: var(--s-1) var(--s-1) var(--s-2); }
-/* The live line: searching, the count, no matches. Empty, it takes no room. */
-.result-status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin: 0 var(--s-1) var(--s-1); }
-.result-status:empty { margin: 0; }
-.discover-list .rows { margin: 0 calc(-1 * var(--s-2)); }
-.discover-list .rows.results { margin-top: 0; }
+   The page takes a wider column than the others (--disc-col) so the filters
+   can sit beside two columns of cards. */
+
+body[data-route='discover'] .page > :is(#main, #foot) { --disc-col: 1120px; max-width: var(--disc-col); }
+
+/* ---------- Search ---------- */
+
+/* The field sticks to the top. Once it has (.stuck, from the view), a band
+   of the page's color fills in behind it, across the column and its
+   gutters, so the cards scrolling under it don't show above or through it. */
+.discover-search, .disc-search {
+  position: sticky;
+  top: -1px;
+  z-index: 10;
+  margin-top: calc(-1 * var(--s-2) - env(safe-area-inset-top));
+  padding-top: calc(var(--s-2) + env(safe-area-inset-top));
+}
+.disc-search::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0 calc(-1 * var(--s-4)) calc(-1 * var(--s-4));
+  background: linear-gradient(var(--surface-0) calc(100% - var(--s-5)), transparent);
+  opacity: 0;
+  transition: opacity var(--dur-2);
+  pointer-events: none;
+}
+.disc-search.stuck::before { opacity: 1; }
+@container page (min-width: 600px) { .disc-search::before { inset-inline: calc(-1 * var(--s-6)); } }
+.disc-search .filter { background: color-mix(in srgb, var(--surface-2) 92%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: 0 10px 24px -14px rgb(var(--shade) / 0.8); }
+@media (prefers-reduced-transparency: reduce) { .disc-search .filter { background: var(--surface-2); } }
+
+.disc-body { display: grid; min-width: 0; }
+.disc-line { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.disc-line .link-btn { color: var(--text-primary); }
+.disc-count { margin: 0 var(--s-1) var(--s-3); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+
+/* ---------- Layout ----------
+   One column, the filters in a sheet; from a 940px column, the filters in a
+   sticky side panel on the left (first in the markup too, so Tab meets them
+   where they sit). Narrower, the panel isn't there at all, for screen
+   readers either. */
+
+.disc-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s-6); }
+.disc-main { container: disc / inline-size; display: grid; align-content: start; gap: var(--s-4); min-width: 0; }
+.disc-side { display: none; }
+@container page (min-width: 940px) {
+  .disc-layout { grid-template-columns: 272px minmax(0, 1fr); align-items: start; }
+  .disc-layout.solo { grid-template-columns: minmax(0, 1fr); }
+  .disc-side {
+    display: grid;
+    align-content: start;
+    gap: var(--s-4);
+    min-width: 0;
+    position: sticky;
+    top: calc(var(--s-2) + var(--hit) + var(--s-5) + env(safe-area-inset-top));
+    max-height: calc(100vh - var(--hit) - var(--s-8));
+    max-height: calc(100dvh - var(--hit) - var(--s-8));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+  .disc-panel { padding: var(--s-4); border-radius: var(--r-surface); border: 1px solid var(--border-subtle); background: var(--surface-1); }
+  .filter-btn { display: none; }
+}
+.disc-panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); min-height: 36px; margin-bottom: var(--s-3); }
+.disc-panel-head h2 { font-family: var(--display); font-size: var(--fs-title-3); line-height: var(--lh-title-3); font-weight: 600; }
+.disc-panel-head h2:focus { outline: none; }
+
+/* The tabs (By style, By bottle) or a search's two readings, and Filters. */
+.disc-bar { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
+.disc-tabs, .disc-modes { flex: 1 1 auto; min-width: 0; }
+@container disc (min-width: 560px) { .disc-tabs, .disc-modes { flex: 0 1 320px; } .disc-bar { justify-content: space-between; } }
+.disc-modes button { min-width: 0; }
+.disc-title { overflow-wrap: anywhere; font-family: var(--display); font-size: var(--fs-title-3); line-height: var(--lh-title-3); font-weight: 600; letter-spacing: -0.01em; }
+.disc-title:focus { outline: none; }
+.disc-title:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: var(--r-control); }
+/* A list's title, and the line that says only great value shows. */
+.disc-list-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s-1) var(--s-3); margin-top: var(--s-1); }
+.disc-floor {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  min-height: 32px;
+  padding: 0 var(--s-1) 0 var(--s-3);
+  border-radius: var(--r-pill);
+  border: 1px solid color-mix(in srgb, var(--positive) 35%, transparent);
+  background: color-mix(in srgb, var(--positive) 9%, transparent);
+  color: var(--text-primary);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  font-weight: 600;
+}
+.disc-floor svg { width: 14px; height: 14px; color: var(--positive); }
+.disc-floor .link-btn { padding: 0 var(--s-2); color: var(--text-secondary); font-weight: 600; }
+@media (hover: hover) { .disc-floor .link-btn:hover { color: var(--text-primary); } }
+.filter-btn { min-height: 44px; padding: 0 var(--s-4); }
+.filter-btn .count {
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--s-1);
+  border-radius: var(--r-pill);
+  background: var(--text-primary);
+  color: var(--surface-0);
+  font-size: var(--fs-caption);
+  line-height: 1;
+  font-weight: 700;
+}
+
+/* ---------- By style: the chips ----------
+   A row that scrolls sideways on phones (the liked ones first, so they show
+   without scrolling), a wrapping field of them once there's room. Each
+   carries a dot of its style's color, and lights up in it when chosen. */
+
+.disc-styles { position: relative; display: grid; gap: var(--s-3); }
+.style-chips {
+  display: flex;
+  gap: var(--s-2);
+  margin: 0 calc(-1 * var(--s-4));
+  padding: var(--s-1) var(--s-4);
+  overflow-x: auto;
+  scroll-padding: 0 var(--s-4);
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  -webkit-mask: linear-gradient(90deg, transparent, #000 var(--s-4), #000 calc(100% - var(--s-7)), transparent);
+  mask: linear-gradient(90deg, transparent, #000 var(--s-4), #000 calc(100% - var(--s-7)), transparent);
+}
+.style-chips::-webkit-scrollbar { display: none; }
+/* "N more styles" folds the rest away on a wide column (phones scroll past them). */
+.styles-more { display: none; }
+@container disc (min-width: 560px) {
+  .style-chips { flex-wrap: wrap; margin: 0; padding: 0; overflow: visible; -webkit-mask: none; mask: none; }
+  .style-chip.extra { display: none; }
+  .disc-styles.all .style-chip.extra { display: inline-flex; }
+  .styles-more { display: inline-flex; }
+}
+.style-chip {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 36px;
+  padding: 0 var(--s-3);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  font-weight: 600;
+  white-space: nowrap;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  transition: background-color var(--dur-2), border-color var(--dur-2), color var(--dur-2), transform var(--dur-1) var(--ease-out);
+}
+.style-chip::before { content: ''; position: absolute; inset: min(0px, calc(50% - var(--hit) / 2)); }
+.style-chip::after { content: ''; order: -1; flex: none; width: 8px; height: 8px; border-radius: var(--r-round); background: var(--c); }
+.style-chip svg { display: none; width: 14px; height: 14px; flex: none; color: var(--c); }
+.style-chip:active { transform: scale(0.96); }
+@media (hover: hover) { .style-chip:hover:not(.on) { color: var(--text-primary); border-color: color-mix(in srgb, var(--text-primary) 24%, transparent); } }
+.style-chip.on {
+  border-color: color-mix(in srgb, var(--c) 60%, transparent);
+  background: color-mix(in srgb, var(--c) 17%, var(--surface-1));
+  color: var(--text-primary);
+}
+.style-chip.on::after { display: none; }
+.style-chip.on svg { display: block; }
+
+/* What a style is: over the chip held (touch) or hovered (mouse). */
+.disc-tip {
+  position: absolute;
+  z-index: 20;
+  width: max-content;
+  max-width: min(300px, 92%);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-control);
+  border: 1px solid var(--border-strong);
+  background: var(--toast-bg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--e-float);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - var(--s-2)));
+  animation: tip-in var(--dur-2) var(--ease-out);
+}
+@keyframes tip-in { from { opacity: 0; transform: translate(-50%, calc(-100% - var(--s-1))); } }
+@media (prefers-reduced-transparency: reduce) { .disc-tip { background: var(--surface-3); } }
+
+/* How to read a style's tip: hold it (touch) or point at it (mouse). */
+@media (hover: hover) { .hint-touch { display: none; } }
+@media (hover: none) { .hint-pointer { display: none; } }
+.disc-styles-foot { display: grid; gap: var(--s-2); }
+@container disc (min-width: 560px) { .disc-styles-foot { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--s-4); } .disc-styles-foot > .disc-line:only-child { grid-column: 1 / -1; } }
+.disc-combine { justify-self: start; }
+.disc-combine button { min-height: 32px; padding: 0 var(--s-3); font-size: var(--fs-footnote); }
+
+/* ---------- By bottle: the seeds ---------- */
+
+.disc-seeds { display: grid; gap: var(--s-2); }
+.seeds { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
+.seed {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  padding-left: var(--s-1);
+  border-radius: var(--r-pill);
+  border: 1px solid color-mix(in srgb, var(--ambient) 40%, transparent);
+  background: color-mix(in srgb, var(--ambient) 9%, var(--surface-1));
+}
+.seed-open { position: relative; display: inline-flex; align-items: center; gap: var(--s-2); min-width: 0; min-height: 40px; padding-right: var(--s-1); border-radius: var(--r-pill); }
+.seed-open::before { content: ''; position: absolute; inset: min(0px, calc(50% - var(--hit) / 2)); }
+.seed-open img { width: 26px; height: 32px; flex: none; object-fit: contain; filter: var(--drop-small); }
+.seed-open span { overflow: hidden; max-width: 180px; font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.seed-x { width: 40px; height: 40px; color: var(--text-secondary); }
+.seed-x::after { inset: 6px; background: none; }
+@media (hover: hover) { .seed-x:hover::after { background: var(--fill-strong); } }
+.seed-x svg { width: 14px; height: 14px; }
+.sk-seed { width: 136px; border-color: var(--border-subtle); background: none; }
+/* A seed the library couldn't find: dashed, quiet, with its X. */
+.seed.missing { border-style: dashed; border-color: var(--border-strong); background: none; color: var(--text-secondary); }
+.seed.missing .seed-open { padding-left: var(--s-2); }
+.seed.missing .seed-open svg { width: 18px; height: 18px; flex: none; }
+.sk-seed .sk { width: 112px; height: 18px; margin-left: var(--s-2); }
+.seed-add { min-height: 44px; }
+
+/* ---------- Results ---------- */
+
+.disc-list { display: grid; min-width: 0; }
+.disc-grid { display: grid; gap: var(--s-3); }
+@container disc (min-width: 600px) { .disc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-4); } }
+/* A change loading: the photos fade (text keeps its contrast) and a line
+   sweeps above the cards, as the forecast's update does. */
+.disc-grid.updating { position: relative; }
+.disc-grid.updating img { opacity: 0.45; }
+.disc-grid.updating::before {
+  content: '';
+  position: absolute;
+  left: 15%;
+  right: 15%;
+  top: calc(-1 * var(--s-2));
+  height: 2px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, transparent, var(--accent), transparent) 0 0 / 50% 100% no-repeat;
+  animation: sweep 1.4s ease-in-out infinite;
+}
+.disc-more { display: flex; justify-content: center; margin-top: var(--s-5); }
+.disc-list > .message { margin-top: var(--s-2); }
+/* The photos line up with the text above; the buttons stay inside the column.
+   Names in the display face, as on the cards, on up to two lines. */
+.disc-list .rows.results { margin: 0 0 0 calc(-1 * var(--s-2)); }
+@container disc (min-width: 600px) { .disc-list .rows.results { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--s-4); } }
+:is(.results, .disc-teaser) .row-text b {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-family: var(--display);
+  font-style: italic;
+  font-size: var(--fs-headline);
+  line-height: var(--lh-headline);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.results .row { gap: 0; }
+.results .own-btn { flex: none; }
+/* On a phone, I own it is a + (its name says the rest), so the name keeps the room. */
+@container disc (max-width: 459px) {
+  .results .own-btn { width: 44px; padding: 0; justify-content: center; }
+  .results .own-btn span, .results .owned-tag span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .results .owned-tag { padding: 0 var(--s-2); }
+}
+.disc-sk-chips { display: flex; gap: var(--s-2); overflow: hidden; }
+.disc-sk-chips .sk { flex: none; width: 112px; height: 36px; border-radius: var(--r-pill); }
+.disc-sk-rows { display: grid; gap: var(--s-2); }
+.disc-sk-rows .sk { height: 56px; border-radius: var(--r-control); }
+.disc-list > .disc-line { margin: 0 var(--s-1) var(--s-3); }
+
+/* ---------- Filters ---------- */
+
+.filters { display: grid; gap: var(--s-5); }
+.filter-label { margin-bottom: var(--s-2); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
+.opts { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.opt {
+  position: relative;
+  min-height: 34px;
+  padding: 0 var(--s-3);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-subtle);
+  background: var(--fill-faint);
+  color: var(--text-secondary);
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
+  font-weight: 600;
+  transition: background-color var(--dur-2), border-color var(--dur-2), color var(--dur-2);
+}
+.opt::before { content: ''; position: absolute; inset: min(0px, calc(50% - var(--hit) / 2)); }
+@media (hover: hover) { .opt:hover { color: var(--text-primary); } }
+.opt:is([aria-pressed='true'], [aria-checked='true']) {
+  border-color: var(--border-strong);
+  background: var(--surface-3);
+  color: var(--text-primary);
+  box-shadow: 0 2px 8px rgb(var(--shade) / 0.25);
+}
+.filter-switches { display: grid; border-top: 1px solid var(--border-subtle); }
+.filter-switch { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); min-height: 56px; padding: var(--s-2) 0; border-bottom: 1px solid var(--border-subtle); }
+.filter-switch:last-child { border-bottom: 0; }
+.filter-switch > span { display: grid; min-width: 0; }
+.filter-switch b { font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 600; }
+.filter-switch small { color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
+.filter-switch .switch { margin-right: 0; }
+.sheet .filters { margin-top: var(--s-2); }
+
+/* ---------- Fill a gap ----------
+   In the list after its first few cards, across the whole row. */
+
+.disc-teaser { grid-column: 1 / -1; padding-bottom: var(--s-3); }
+.disc-list > .disc-teaser { margin-top: var(--s-4); }
+.disc-teaser .section-head { margin-bottom: var(--s-1); }
+.disc-teaser .section-head .btn svg { width: 14px; height: 14px; }
+.teaser-lede { margin-bottom: var(--s-2); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.disc-teaser .rows { margin: 0 calc(-1 * var(--s-2)); }
+.teaser-sk { display: grid; gap: var(--s-2); margin-top: var(--s-2); }
+.teaser-sk .sk { height: 52px; border-radius: var(--r-control); }
+@container disc (min-width: 600px) { .disc-teaser .rows { grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: var(--s-3); } }
+
+/* ---------- The seed picker ---------- */
+
+.seed-rows { margin: 0 calc(-1 * var(--s-2)); }
+.seed-pick .check { margin-left: auto; }
+.seed-pick[aria-pressed='true'] .row-text b { color: var(--text-primary); }
+.seed-pick[aria-disabled='true'] { opacity: 0.5; cursor: default; }
+.seed-glyph { display: grid; flex: none; place-items: center; width: 34px; height: 38px; color: var(--text-tertiary); }
+.seed-glyph svg { width: 20px; height: 20px; }

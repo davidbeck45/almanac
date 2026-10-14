@@ -596,6 +596,117 @@
 .toast:has(.note) { width: min(100vw - 2 * var(--s-4), 460px); padding-block: var(--s-2); border-radius: var(--r-surface); }
 .toast .note { white-space: normal; font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 
+/* ---------- Bottle cards ----------
+   A bottle to consider: the photo stands on a horizon line in a well lit
+   from below by the sky's color (the hero's bottle on the hill, small), the
+   name in Fraunces italic, marks, style tags, why it's here, actions. The
+   Want toggle sits in the corner. */
+
+.bcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+  padding: var(--s-3);
+  border-radius: var(--r-surface);
+  border: 1px solid var(--border-subtle);
+  background: linear-gradient(180deg, var(--fill-faint), transparent 120px), var(--surface-1);
+  box-shadow: var(--e1);
+}
+.bcard-open {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s-3);
+  padding-right: var(--s-8);
+  border-radius: var(--r-control);
+  text-align: left;
+}
+.bcard-photo {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 92px;
+  padding-bottom: var(--s-2);
+  overflow: hidden;
+  border-radius: var(--r-control);
+  background: radial-gradient(80% 60% at 50% 100%, color-mix(in srgb, var(--ambient) 26%, transparent), transparent 72%), var(--surface-2);
+}
+.bcard-photo::after { content: ''; position: absolute; left: 10%; right: 10%; bottom: var(--s-2); height: 1px; background: linear-gradient(90deg, transparent, var(--border-strong), transparent); }
+.bcard-photo img { position: relative; z-index: 1; width: auto; max-width: 82%; height: 74px; object-fit: contain; object-position: bottom; filter: var(--drop-small); transition: transform var(--dur-3) var(--ease-out); }
+.bcard-title { display: grid; gap: var(--s-0); min-width: 0; }
+.bcard-name {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-family: var(--display);
+  font-size: var(--fs-title-3);
+  line-height: var(--lh-title-3);
+  font-style: italic;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-decoration: underline transparent;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1px;
+  transition: text-decoration-color var(--dur-2);
+}
+.bcard-meta { overflow: hidden; color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); text-overflow: ellipsis; white-space: nowrap; }
+.bcard-marks { display: flex; flex-wrap: wrap; gap: var(--s-0) var(--s-3); margin-top: var(--s-1); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; font-variant-numeric: tabular-nums; }
+.bcard-mark.good { color: var(--positive); }
+.bcard-mark.warn { color: var(--negative); }
+@media (hover: hover) {
+  .bcard-open:hover img { transform: translateY(-3px); }
+  .bcard-open:hover .bcard-name { text-decoration-color: color-mix(in srgb, var(--text-primary) 40%, transparent); }
+}
+.bcard-corner { position: absolute; top: var(--s-1); right: var(--s-1); }
+.bcard-tags { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-2); }
+.bcard-why { display: grid; gap: var(--s-1); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.bcard-why .link-btn { color: var(--text-primary); font-weight: 500; }
+.bcard-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-2); margin-top: auto; }
+.bcard-actions .btn.tertiary { margin-left: auto; }
+
+/* A style tag: a dot of the style's color; lit when the list was asked for
+   it. Wears close draws a ring instead: how it sits, not what it smells of. */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--s-0) var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--fill);
+  color: var(--text-secondary);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: 500;
+}
+.tag::before { content: ''; flex: none; width: 6px; height: 6px; border-radius: var(--r-round); background: var(--c, var(--text-tertiary)); }
+.tag.close::before { background: none; box-shadow: inset 0 0 0 1.5px var(--ambient); }
+.tag.match { --c: var(--ambient); font-weight: 600; }
+.tag.match::before { display: none; }
+.tag.on { background: color-mix(in srgb, var(--c, var(--ambient)) 15%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, var(--ambient)) 42%, transparent); color: var(--text-primary); }
+
+/* Want: a heart that fills in gold when the bottle is on the wishlist. */
+.want-btn { color: var(--text-secondary); }
+.want-btn::after { background: none; }
+@media (hover: hover) { .want-btn:hover { color: var(--text-primary); } .want-btn:hover::after { background: var(--fill); } }
+.want-btn[aria-pressed='true'] { color: var(--accent); }
+.want-btn[aria-pressed='true'] svg path { fill: currentColor; }
+
+.sk-bcard { box-shadow: none; }
+.sk-bcard .bcard-title { gap: var(--s-2); }
+.sk-bcard .sk-line.w30 { width: 30%; }
+.sk-bcard .bcard-why { gap: var(--s-2); }
+.sk-tag { width: 76px; height: 20px; border-radius: var(--r-pill); }
+.sk-btn { width: 104px; height: 36px; border-radius: var(--r-pill); }
+
+@media (forced-colors: active) {
+  .tag.on, .want-btn[aria-pressed='true'] { outline: 2px solid Highlight; outline-offset: 1px; }
+  .bcard { border: 1px solid CanvasText; }
+}
+
 /* ---------- Shared-link banner ---------- */
 
 .banner {
