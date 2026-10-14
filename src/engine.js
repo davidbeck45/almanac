@@ -64,6 +64,12 @@ const ACCORD_NOUN = {
   alcohol: 'boozy notes', anis: 'anise', camphor: 'camphor notes',
 };
 const nounOf = accord => ACCORD_NOUN[accord] ?? accord.toLowerCase();
+// Accords a reason names one of, not both ("Aquatic notes & marine notes").
+const NEAR_SAME = [
+  ['aquatic', 'marine', 'salty', 'ozonic'], ['warm spicy', 'soft spicy', 'fresh spicy', 'cinnamon'], ['fruity', 'tropical'],
+  ['nutty', 'almond'], ['floral', 'white floral', 'yellow floral', 'tuberose'],
+];
+const kinOf = accord => NEAR_SAME.find(group => group.includes(accord)) ?? [accord];
 const isPlural = noun => /s$/.test(noun) && !/(ss|us|is)$/.test(noun);
 const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
 // What cuts the heat. A light bottle without one of these (fruity, musky,
@@ -568,8 +574,11 @@ function reasonsFor(frag, parts, ctx) {
   else if (comfort >= 0.85) good(`Fits ${nowSeason} weather`, W.season * 0.5);
   else if (comfort < 0.55) bad(voted ? `Voted for ${fragSeason}, not ${nowSeason}` : `Better in ${fragSeason} than ${nowSeason}`, W.season * (1 - comfort));
 
-  const share = dayNight[slot];
-  if (share >= 0.62) good(slot === 'night' ? 'Built for nighttime' : 'Daytime favorite', W.time * share);
+  // As for seasons: "a favorite" only when voters said so.
+  const share = dayNight[slot], timeVoted = votedShares(frag).time;
+  if (share >= 0.62) {
+    good(slot === 'night' ? (timeVoted ? 'Built for nighttime' : 'A night scent') : (timeVoted ? 'Daytime favorite' : 'A daytime scent'), W.time * share);
+  }
   else if (share <= 0.38) bad(slot === 'night' ? 'Better in daylight' : 'More of a night scent', W.time * (1 - share));
 
   const h = heaviness(frag.accords);
@@ -592,7 +601,8 @@ function reasonsFor(frag, parts, ctx) {
     const contrib = Object.entries(frag.accords)
       .map(([a, s]) => [a, s * (occasion.profile[a] ?? 0)])
       .sort((x, y) => y[1] - x[1]);
-    const fits = contrib.filter(c => c[1] > 20).slice(0, 2).map(c => nounOf(c[0]));
+    const fits = contrib.filter(c => c[1] > 20).map(c => c[0])
+      .filter((a, i, list) => !list.slice(0, i).some(b => kinOf(b).includes(a))).slice(0, 2).map(nounOf);
     const clash = contrib.filter(c => c[1] < -20).at(-1)?.[0];
     const phrase = occasion.phrase ?? occasion.label.toLowerCase();
     const plural = fits.length > 1 || (fits.length && isPlural(fits[0]));
