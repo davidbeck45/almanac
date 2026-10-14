@@ -12,7 +12,7 @@
 // point come from real days). Owned bottles are measured against the
 // suggestion pool's scores in the same cell, every bottle read on the
 // pool's evidence (sameFooting).
-import { SEASONS, seasonFit, timeFit, weatherFit, quality, occasionRaw, occasionPart, scoreOf, targetSeasonWeights } from './engine.js';
+import { seasonFit, timeFit, weatherFit, quality, occasionRaw, occasionPart, scoreOf, targetSeasonWeights } from './engine.js';
 import { occasionById } from './occasions.js';
 import { similarity, sharedTraits } from './similar.js';
 import {
@@ -159,32 +159,16 @@ export const cellLabel = cell => cellTitle(cell.use, cell.slot, cell.band);
 // to 10, and the extra two moved owned bottles' occasion cells by up to 8
 // points, against a FILL_MARGIN of 2.
 export const MAX_ACCORDS = 8;
-// Season or day/night votes that say nothing: the least-voted season (or
-// slot) drew FLAT_TURNOUT of the raters or more and the shares sit within
-// FLAT_SPREAD (most raters ticked everything: Elyon Dubai's 2025 releases),
-// or 3 seasons, or both slots, carry one identical count of FLAT_SAME or
-// more (some Louis Vuitton pages: 765 on every season and both slots).
-// Read as votes, they make a perfect all-rounder of a rose-oud.
-const FLAT_SPREAD = 0.03;
-const FLAT_TURNOUT = 0.5;
-const FLAT_SAME = 50;
-
-/** Whether vote counts ([winter, spring, summer, fall] or [day, night]) from `raters` raters say nothing. */
-export function flatVotes(counts, raters) {
-  const n = counts.reduce((a, b) => a + b, 0);
-  if (!n) return false;
-  const lo = Math.min(...counts), hi = Math.max(...counts);
-  if ((hi - lo) / n < FLAT_SPREAD && lo >= FLAT_TURNOUT * raters) return true;
-  return counts.some(c => c >= FLAT_SAME && counts.filter(x => x === c).length >= Math.min(3, counts.length));
-}
+// Flat season or day/night votes read as none in the engine itself
+// (steadyShares), so rank(), the gap finder and Discover agree on them.
+export { flatVotes } from './engine.js';
 
 const footed = new WeakMap();
 /**
  * A record as the gap finder scores it, on the pool's evidence: no Parfumo
  * occasion votes (the pool has none, and a lucky vote shouldn't read as
- * coverage), its MAX_ACCORDS strongest accords, and flat votes (flatVotes)
- * zeroed, so steadyShares reads the prediction alone. Parfumo's longevity
- * and sillage stay: the pool has Fragrantica's, on the same scale. The same
+ * coverage) and its MAX_ACCORDS strongest accords. Parfumo's longevity and
+ * sillage stay: the pool has Fragrantica's, on the same scale. The same
  * record comes back when nothing changes.
  */
 export function sameFooting(record) {
@@ -196,9 +180,6 @@ export function sameFooting(record) {
   }
   const accords = Object.entries(record.accords ?? {});
   if (accords.length > MAX_ACCORDS) patch.accords = Object.fromEntries(accords.sort((a, b) => b[1] - a[1]).slice(0, MAX_ACCORDS));
-  const sv = record.seasonVotes, tv = record.timeVotes;
-  if (sv && flatVotes(SEASONS.map(s => sv[s]), record.ratingVotes)) patch.seasonVotes = { winter: 0, spring: 0, summer: 0, fall: 0 };
-  if (tv && flatVotes([tv.day, tv.night], record.ratingVotes)) patch.timeVotes = { day: 0, night: 0 };
   const out = Object.keys(patch).length ? { ...record, ...patch } : record;
   footed.set(record, out);
   return out;

@@ -120,6 +120,42 @@ export function targetSeasonWeights(feelsF, date, lat = 40) {
   return w;
 }
 
+// Season or day/night votes that say nothing: the least-voted season (or
+// slot) drew FLAT_TURNOUT of the raters or more and the shares sit within
+// FLAT_SPREAD (most raters ticked everything: Elyon Dubai's 2025 releases),
+// or 3 seasons, or both slots, carry one identical count of FLAT_SAME or
+// more (some Louis Vuitton pages: 765 on every season and both slots).
+// Read as votes, they make a perfect all-rounder of a rose-oud, so
+// steadyShares reads them as none. A page shows counts from 1,000 rounded
+// ("2.4k"), so scraped ties there are no sign.
+const FLAT_SPREAD = 0.03;
+const FLAT_TURNOUT = 0.5;
+const FLAT_SAME = 50;
+const exactCount = c => c < 1000 || c % 100 !== 0;
+
+/** Whether vote counts ([winter, spring, summer, fall] or [day, night]) from `raters` raters say nothing. */
+export function flatVotes(counts, raters) {
+  const n = counts.reduce((a, b) => a + b, 0);
+  if (!n) return false;
+  const lo = Math.min(...counts), hi = Math.max(...counts);
+  if ((hi - lo) / n < FLAT_SPREAD && lo >= FLAT_TURNOUT * raters) return true;
+  return counts.some(c => c >= FLAT_SAME && exactCount(c) && counts.filter(x => x === c).length >= Math.min(3, counts.length));
+}
+
+/**
+ * Whether a record's season and day/night votes say anything: { season,
+ * time }, false without votes or with flat ones. Day and night are only two
+ * choices, and half the raters ticking both is a bottle worn either way
+ * (Sauvage EDP, Bleu de Chanel Parfum), so day/night votes count as flat
+ * only on a page whose season votes are flat too.
+ */
+export function votedShares(frag) {
+  const sv = frag.seasonVotes, tv = frag.timeVotes, raters = frag.ratingVotes ?? 0;
+  const season = Boolean(sv) && !flatVotes([sv.winter, sv.spring, sv.summer, sv.fall], raters);
+  const time = Boolean(tv) && !(sv && !season && flatVotes([tv.day, tv.night], raters));
+  return { season, time };
+}
+
 // A split from few votes is noisy, so voted shares lean toward a prediction
 // (src/custom.js): what the accords predict, averaged with the votes of the
 // bottles voters say it smells like (`like`) when it has them. The prediction
@@ -128,7 +164,9 @@ export function targetSeasonWeights(feelsF, date, lat = 40) {
 // A dupe's original (`original`, from data/dupes.json) predicts its split
 // better: across the wardrobe's 18 dupes it strays about as far as 120 votes
 // would, for seasons and day/night alike. Both count toward the prior.
-// Fragella and hand-entered bottles are estimates already and pass through.
+// Flat votes (flatVotes) count as none, so the prediction (and an original)
+// decides. Fragella and hand-entered bottles are estimates already and pass
+// through.
 const ORIGINAL_PRIOR_VOTES = 120;
 const steadied = new WeakMap();
 
@@ -140,15 +178,16 @@ export function steadyShares(frag) {
   const ko = orig ? ORIGINAL_PRIOR_VOTES : 0;
   const est = predictedShares(frag.accords, frag.like);
   const k = frag.like ? PRIOR_VOTES.withLike : PRIOR_VOTES.accords;
+  const voted = votedShares(frag);
   // Season and day/night votes steady separately; a split nobody voted on is an estimate already.
   let season = frag.season, dayNight = frag.dayNight;
   if (frag.seasonVotes) {
-    const n = SEASONS.reduce((sum, s) => sum + frag.seasonVotes[s], 0);
+    const n = voted.season ? SEASONS.reduce((sum, s) => sum + frag.seasonVotes[s], 0) : 0;
     season = Object.fromEntries(SEASONS.map(s => [s,
       (n * frag.season[s] + k.season * est.season[s] + ko * (orig?.season[s] ?? 0)) / (n + k.season + ko)]));
   }
   if (frag.timeVotes) {
-    const tn = frag.timeVotes.day + frag.timeVotes.night;
+    const tn = voted.time ? frag.timeVotes.day + frag.timeVotes.night : 0;
     const night = (tn * frag.dayNight.night + k.night * est.night + ko * (orig?.dayNight.night ?? 0)) / (tn + k.night + ko);
     dayNight = { day: 1 - night, night };
   }
@@ -494,8 +533,8 @@ function reasonsFor(frag, parts, ctx) {
   const fragSeason = argmax(season);
   const peakShare = season[fragSeason];
   const comfort = SEASONS.reduce((sum, s) => sum + weights[s] * (season[s] / peakShare), 0);
-  // Only Fragrantica records carry votes; Fragella's and hand-entered seasons are estimates.
-  const voted = Boolean(frag.seasonVotes);
+  // Only Fragrantica records carry votes; Fragella's and hand-entered seasons are estimates, and so are flat votes.
+  const voted = votedShares(frag).season;
   if (fragSeason === nowSeason && peakShare >= 0.3) good(voted ? `Voted a ${nowSeason} scent` : `A ${nowSeason} scent`, W.season * peakShare * 2);
   else if (comfort >= 0.85 && peakShare < 0.3) good('Versatile across seasons', W.season * 0.4);
   else if (comfort >= 0.85) good(`Fits ${nowSeason} weather`, W.season * 0.5);

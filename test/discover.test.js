@@ -7,7 +7,7 @@ import { loadPool, loadPoolStyles, loadAbout, poolKey } from '../src/fragrantica
 import { STYLES, topOf, closeOf } from '../src/scent-styles.js';
 import { genderLean, signalsOf, ownedVectors } from '../src/candidates.js';
 import { similarity } from '../src/similar.js';
-import { performanceRating } from '../src/engine.js';
+import { performanceRating, steadyShares } from '../src/engine.js';
 import {
   DEMO_LIKED, LEAN_WINDOWS, STORED_MIN, discoverContext, scoresOf, findStyles, likedStyles, moreOfStyles, defaultSeeds, moreLike,
   parseNotes, searchNotes, dupesOf, originalFromVotes, whyLine, addCloneVotes,
@@ -264,13 +264,15 @@ test('asking for no picks gives none', () => {
 
 test('filters hold', () => {
   const ask = filters => searchNotes('vanilla', ctx, filters, { k: 25 }).results;
+  // Filters read the shares as rank() does (steadyShares).
+  const season = p => steadyShares(p.record).season, night = p => steadyShares(p.record).dayNight.night;
   for (const p of ask({ seasons: ['winter'] })) {
-    const s = p.record.season, best = Math.max(...Object.values(s));
+    const s = season(p), best = Math.max(...Object.values(s));
     assert.ok(s.winter >= 0.8 * best, p.record.name);
   }
-  for (const p of ask({ seasons: ['summer'] })) assert.ok(p.record.season.summer >= 0.8 * Math.max(...Object.values(p.record.season)), p.record.name);
-  for (const p of ask({ slot: 'night' })) assert.ok(p.record.dayNight.night >= 0.45, p.record.name);
-  for (const p of ask({ slot: 'day' })) assert.ok(p.record.dayNight.night < 0.45, p.record.name);
+  for (const p of ask({ seasons: ['summer'] })) assert.ok(season(p).summer >= 0.8 * Math.max(...Object.values(season(p))), p.record.name);
+  for (const p of ask({ slot: 'night' })) assert.ok(night(p) >= 0.45, p.record.name);
+  for (const p of ask({ slot: 'day' })) assert.ok(night(p) < 0.45, p.record.name);
   for (const lean of Object.keys(LEAN_WINDOWS)) {
     const [lo, hi] = LEAN_WINDOWS[lean];
     for (const p of ask({ lean })) assert.ok(genderLean(p.record) >= lo && genderLean(p.record) <= hi, `${lean}: ${p.record.name}`);
@@ -290,7 +292,7 @@ test('filters hold', () => {
   assert.throws(() => searchNotes('vanilla', ctx, { seasons: ['monsoon'] }), /Season/);
   // Style and example queries take the same filters.
   for (const p of moreOfStyles(['skin'], ctx, { k: 10, filters: { lean: 'masculine' } })) assert.ok(genderLean(p.record) >= 0.25);
-  for (const p of moreLike([owned('Liquid Brun')], ctx, { k: 10, filters: { slot: 'day' } })) assert.ok(p.record.dayNight.night < 0.45);
+  for (const p of moreLike([owned('Liquid Brun')], ctx, { k: 10, filters: { slot: 'day' } })) assert.ok(night(p) < 0.45);
 });
 
 test('the dupe explorer: originals, cheaper alternatives and smell-alikes', async () => {

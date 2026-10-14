@@ -7,7 +7,7 @@
 // src/candidates.js what a bottle is worth, how new it would be and how risky.
 // Pure (no DOM, no fetch), so a module Worker can run it.
 import { ACCORDS, barStrength } from './accords.js';
-import { performanceRating } from './engine.js';
+import { performanceRating, steadyShares } from './engine.js';
 import { fromPool } from './fragrantica.js';
 import { journalStats } from './history.js';
 import { STYLES, STYLE_MIN, STYLE_LEAN, WEARS_CLOSE, styleScores, topOf, leanOf, closeOf, styleMix } from './scent-styles.js';
@@ -73,7 +73,9 @@ const RATING_SLACK = 0.15;
 export const LEAN_WINDOWS = { feminine: [-1, -0.25], unisex: [-0.45, 0.45], masculine: [0.25, 1] };
 // A season fits from SEASON_NEAR of the bottle's best season's share; night
 // from NIGHT_SPLIT of its day/night votes (the pool's median is 0.38: voters
-// wear most bottles by day), day below it.
+// wear most bottles by day), day below it. Both read the shares as rank()
+// does (steadyShares: few votes lean toward the prediction, flat ones count
+// as none), so a filter agrees with the picks.
 const SEASONS = ['winter', 'spring', 'summer', 'fall'];
 const SEASON_NEAR = 0.8;
 const NIGHT_SPLIT = 0.45;
@@ -311,13 +313,14 @@ export function admitter(ctx, filters = {}) {
     const s = signalsOf(record, ctx.byId);
     if (f.hideDiscontinued && s.flags.includes('discontinued')) return false;
     if (f.minSafe != null && !(s.safe >= f.minSafe)) return false;
-    if (seasons) {
-      const best = Math.max(...SEASONS.map(x => record.season?.[x] ?? 0));
-      if (!seasons.some(x => (record.season?.[x] ?? 0) >= SEASON_NEAR * best)) return false;
-    }
-    if (f.slot) {
-      const night = record.dayNight?.night ?? 0.5;
-      if (f.slot === 'night' ? night < NIGHT_SPLIT : night >= NIGHT_SPLIT) return false;
+    if (seasons || f.slot) {
+      const { season, dayNight } = steadyShares(record);
+      if (seasons) {
+        const best = Math.max(...SEASONS.map(x => season?.[x] ?? 0));
+        if (!seasons.some(x => (season?.[x] ?? 0) >= SEASON_NEAR * best)) return false;
+      }
+      const night = dayNight?.night ?? 0.5;
+      if (f.slot && (f.slot === 'night' ? night < NIGHT_SPLIT : night >= NIGHT_SPLIT)) return false;
     }
     if (f.minLongevity != null || f.minSillage != null) {
       const p = performanceRating(record);

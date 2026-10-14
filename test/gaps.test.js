@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { rank, steadyShares } from '../src/engine.js';
+import { rank, steadyShares, votedShares } from '../src/engine.js';
 import { loadPool, fromPool } from '../src/fragrantica.js';
 import { allow } from '../src/candidates.js';
 import {
@@ -63,10 +63,7 @@ test('owned bottles stand on the pool’s footing: no Parfumo occasion votes, 8 
   assert.equal(same.seasonVotes, lb.seasonVotes, 'honest votes stay');
   const row = byId.get('31861');
   assert.equal(sameFooting(row), row, 'a pool row comes back as itself');
-  // No owned bottle's votes read as flat, and only a few dozen of the pool's.
-  assert.ok(wardrobe.every(f => sameFooting(f).seasonVotes === f.seasonVotes));
-  const flat = records.filter(r => sameFooting(r).seasonVotes !== r.seasonVotes);
-  assert.ok(flat.length >= 10 && flat.length <= 40, `${flat.length} flat`);
+  assert.ok(wardrobe.every(f => sameFooting(f).seasonVotes === f.seasonVotes && sameFooting(f).timeVotes === f.timeVotes), 'votes stay');
 });
 
 test('flat season votes read as unvoted, so they don’t make an all-rounder', () => {
@@ -76,13 +73,21 @@ test('flat season votes read as unvoted, so they don’t make an all-rounder', (
   assert.ok(!flatVotes([5500, 6600, 6400, 6200], 10377), 'Supremacy Collector’s Edition: a real all-rounder');
   assert.ok(!flatVotes([112, 118, 117, 111], 546), 'even, but from few of its raters');
   assert.ok(!flatVotes([3, 3, 3, 9], 20), 'a tie on few votes');
+  assert.ok(!flatVotes([2700, 2700, 2700, 1000], 4750), 'a scraped page rounds counts from 1,000, so a tie there is no sign');
+  // The engine reads them as none (steadyShares), so the gap finder, rank() and Discover agree.
   const elyon = byId.get('119376'), au = records.find(r => r.name === 'Au Hasard');
   for (const r of [elyon, au]) {
-    const same = sameFooting(r);
-    assert.deepEqual(Object.values(same.seasonVotes), [0, 0, 0, 0], r.name);
+    assert.deepEqual(votedShares(r), { season: false, time: false }, r.name);
+    assert.equal(sameFooting(r).seasonVotes, r.seasonVotes, 'the gap finder leaves them to the engine');
     const est = predictedShares(r.accords, r.like);
-    assert.ok(Math.abs(steadyShares(same).season.winter - est.season.winter) < 1e-9, 'the prediction alone');
+    assert.ok(Math.abs(steadyShares(r).season.winter - est.season.winter) < 1e-9, 'the prediction alone');
+    assert.ok(Math.abs(steadyShares(r).dayNight.night - est.night) < 1e-9);
   }
+  // No owned bottle's votes read as flat, and only a few dozen of the pool's; day and night only with the seasons.
+  assert.ok(wardrobe.every(f => votedShares(f).season && votedShares(f).time), 'Liam’s and Vintage Radio’s 2.4k day and night stand');
+  const flat = records.filter(r => !votedShares(r).season);
+  assert.ok(flat.length >= 10 && flat.length <= 40, `${flat.length} flat`);
+  assert.ok(records.every(r => !r.timeVotes || votedShares(r).time || !votedShares(r).season), 'Sauvage EDP’s even day and night stand');
   const picks = [ctx, gapContext({ owned: wardrobe, records, byId, preferValue: false })].flatMap(c => suggest(c, { k: 5 }));
   assert.ok(!picks.some(p => [elyon.id, au.id].includes(p.record.id)));
   for (const r of [elyon, au]) assert.notEqual(buyCheck(r, ctx).verdict, 'Strong fit', r.name);
