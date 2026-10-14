@@ -76,9 +76,28 @@ test('shared traits name what two bottles have in common, strongest first', () =
   const shared = sharedTraits(liquidBrun, althair);
   assert.ok(shared.length <= 4 && shared.length >= 3);
   assert.ok(shared.some(t => t.includes('vanilla')), shared.join(', '));
-  assert.equal(new Set(shared.map(t => t.split(' ').pop().replace(/[eys]+$/, ''))).size, shared.length, 'one name per thing');
   assert.deepEqual(sharedTraits(liquidBrun, althair, 2), shared.slice(0, 2));
   assert.ok(!sharedTraits(sauvage, angel).includes('vanilla'));
+});
+
+test('shared traits keep different things apart and leave out repeats', () => {
+  // Notes fold into the accord they name; kinds of notes and the spicy accords stay apart.
+  const a = { accords: { 'warm spicy': 80, 'fresh spicy': 80, vanilla: 70 }, notes: { base: ['Bourbon Vanilla', 'Green Notes', 'Sea Notes', 'Violet Leaf'] } };
+  const traits = sharedTraits(a, { ...a }, 10);
+  assert.deepEqual([...traits].sort(), ['bourbon vanilla', 'fresh spicy', 'green notes', 'sea notes', 'violet leaf', 'warm spicy']);
+  assert.deepEqual(sharedTraits({ accords: { fresh: 90, 'fresh spicy': 80, woody: 70 }, notes: { base: ['Woody Notes'] } },
+    { accords: { fresh: 90, 'fresh spicy': 80, woody: 70 }, notes: { base: ['Woody Notes'] } }), ['woody notes', 'fresh']);
+  // Across David's bottles and their nearest neighbours, no name repeats another.
+  const words = name => new Set(name.split(/[^a-z0-9]+/).filter(w => w && w !== 'notes').map(w => w.replace(/[eys]+$/, '')));
+  const within = (x, y) => [...x].every(w => y.has(w));
+  const sample = Array.from({ length: 1500 }, (_, k) => fromPool(pool, (k * 7) % pool.count));
+  for (const f of wardrobe) {
+    const near = sample.map(r => [r, similarity(f, r)]).sort((p, q) => q[1] - p[1]).slice(0, 5);
+    for (const [r] of near) {
+      const shown = sharedTraits(f, r).map(words);
+      assert.ok(shown.every((x, i) => shown.every((y, j) => i === j || !within(x, y))), `${f.name} / ${r.name}: ${sharedTraits(f, r)}`);
+    }
+  }
 });
 
 test('nearestOf finds the closest of a list', () => {

@@ -1,18 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { loadPool, fromPool } from '../src/fragrantica.js';
+import { loadPool, fromPool, fragranticaLibrary, loadAbout } from '../src/fragrantica.js';
 import { customRecord } from '../src/custom.js';
 import {
-  FAMILY_MULT, signalsOf, genderLean, leanWindow, allowContext, allow, poolNorms, candidateQuality,
-  valueSlope, preferValueDefault, familyIndex, cheaperTwin, riskOf,
+  FAMILY_MULT, MIN_RATING, poolRowOf, signalsOf, genderLean, leanWindow, allowContext, allow, poolNorms, candidateQuality,
+  valueSlope, preferValueDefault, familyIndex, ownedVectors, novelty, cheaperTwin, riskOf,
 } from '../src/candidates.js';
 
 const dir = new URL('../data/fragrantica/', import.meta.url);
-const pool = await loadPool(async path => {
+const load = async path => {
   const file = new URL(path, dir);
   return existsSync(file) ? readFileSync(file, 'utf8') : null;
-});
+};
+const pool = await loadPool(load);
 const records = Array.from({ length: pool.count }, (_, i) => fromPool(pool, i));
 const byId = new Map(records.map(r => [r.id, r]));
 const built = stem => JSON.parse(readFileSync(new URL(`../data/${stem}.json`, import.meta.url))).fragrances;
@@ -38,14 +39,59 @@ test('signals read the same from an owned record and its pool row', () => {
 
 test('a bottle the dataset lacks has no signals, and reads as unknown', () => {
   const mine = customRecord({ name: 'Mine', accords: ['vanilla', 'amber'] });
-  const s = signalsOf(mine);
+  const s = signalsOf(mine, byId);
   assert.equal(s.known, false);
   assert.equal(s.value, null);
   assert.deepEqual([s.like, s.family, s.alt, s.flags], [[], [], [], []]);
-  assert.deepEqual(riskOf(mine), { level: 'low', reasons: [] });
+  assert.deepEqual(riskOf(mine), { level: 'unknown', reasons: ['There’s no crowd data on it yet.'] });
   assert.equal(genderLean(mine), 0);
   assert.equal(genderLean({ ...mine, gender: 'men' }), 0.68);
-  assert.equal(signalsOf(mine), signalsOf(mine), 'cached');
+  // Without signals, Hawas Atlantis would pass for a safe buy.
+  assert.equal(riskOf({ ...at(112309), extras: undefined }).level, 'unknown');
+});
+
+test('about data stands in for the pool’s signals', () => {
+  for (const f of [...wardrobe, ...brooke]) {
+    const about = signalsOf({ id: 'x', about: f.about }), x = signalsOf(f);
+    assert.ok(Math.abs(about.value - x.value) <= 0.011, `${f.name} value ${about.value} ${x.value}`);
+    assert.deepEqual([about.lean, about.flags, about.like], [x.lean, x.flags, x.like], f.name);
+    assert.ok(about.family.every(id => x.family.includes(id)) && about.family.length >= x.family.length - 1, f.name);
+  }
+  const sauvage = { ...at(31861), extras: undefined, about: owned('Sauvage').about };
+  assert.equal(riskOf(sauvage).level, 'medium', 'polarizing, from its about flags');
+});
+
+test('a visitor’s bottles from r/ read their signals from the pool, else their about data', async () => {
+  const library = fragranticaLibrary(load);
+  for (const built of [wardrobe, brooke]) {
+    const loaded = await library.records(built.map(f => String(f.id)));
+    const plain = built.map(f => loaded.get(String(f.id)));
+    assert.ok(plain.every(r => r && !r.extras));
+    const visitor = await Promise.all(plain.map(async r => (byId.has(r.id) ? r : { ...r, about: await loadAbout(r.id, load) })));
+    assert.deepEqual(leanWindow(visitor, undefined, byId), leanWindow(built));
+    assert.ok(Math.abs(valueSlope(visitor, norms, byId) - valueSlope(built, norms)) < 0.005);
+    assert.equal(preferValueDefault(visitor, byId), preferValueDefault(built));
+    const theirs = familyIndex(byId, visitor), ours = familyIndex(byId, built);
+    if (built === brooke) assert.ok(records.every(r => theirs.dupeOf(r)?.kind === ours.dupeOf(r)?.kind));
+    // r/ has no curated originals: voters' links make Absolu Aventus a twin of Supremacy CE instead.
+    else assert.deepEqual([theirs.dupeOf(at(84112)).kind, ours.dupeOf(at(84112)).kind], ['near', 'original']);
+  }
+  const plain = [...(await library.records(brooke.map(f => String(f.id)))).values()];
+  assert.ok(leanWindow(plain)[1] < 0.5, 'without the pool, her unisex labels say little');
+  assert.ok(leanWindow(plain, undefined, byId)[1] > 0.7);
+});
+
+test('an owned bottle under another id is its pool row', () => {
+  const aventus = { ...at(9828), id: 'fg:creed-aventus', extras: undefined, source: 'fragella' };
+  assert.equal(poolRowOf(aventus, byId), at(9828));
+  assert.equal(signalsOf(aventus, byId), signalsOf(at(9828)));
+  assert.equal(allow(at(9828), allowContext([aventus], { byId })), false);
+  assert.equal(familyIndex(byId, [aventus]).dupeOf(at(9828)).kind, 'owned');
+  assert.equal(familyIndex(byId, [aventus]).dupeOf(at(34696)).kind, 'near');
+  // Hand-entered without a brand: a name alone doesn't make it a pool bottle.
+  assert.equal(poolRowOf(customRecord({ name: 'Aventus', accords: ['fruity'] }), byId), null);
+  assert.equal(poolRowOf(customRecord({ name: 'Aventus', brand: 'Creed', accords: ['fruity'] }), byId), at(9828));
+  assert.equal(poolRowOf({ id: '999999999', name: 'Aventus', brand: 'Creed' }, byId), null, 'another dataset bottle');
 });
 
 test('voters’ links mark twins, originals, versions and family of what David owns', () => {
@@ -72,6 +118,29 @@ test('voters’ links mark twins, originals, versions and family of what David o
   assert.notEqual(family.dupeOf(noir)?.kind, 'flanker', 'a version that smells different is a new direction');
   assert.equal(family.dupeOf(at(704)), null, 'Angel');
   assert.ok(family.near > 50 && family.near < 200 && family.family > 50 && family.family < 300, `${family.near} near, ${family.family} family`);
+  const kinds = {};
+  for (const r of records) {
+    const kind = family.dupeOf(r)?.kind;
+    kinds[kind] = (kinds[kind] ?? 0) + 1;
+  }
+  assert.deepEqual([kinds.near, kinds.family], [family.near, family.family], 'counts as placed');
+});
+
+test('novelty measures against owned bottles and their originals’ pool rows', () => {
+  const vecs = ownedVectors(wardrobe, byId);
+  assert.equal(vecs.length, wardrobe.length + wardrobe.filter(f => f.original).length);
+  assert.ok(vecs.every(v => v.vector.acc.size), 'originals compare by their pool rows');
+  const supremacy = owned("Supremacy Collector's Edition Pour Homme");
+  const absolu = novelty(at(84112), vecs, family);
+  assert.equal(absolu.nearest.via, supremacy);
+  assert.ok(absolu.sim > 0.99 && absolu.mult < 0.1);
+  const cdnim = novelty(at(34696), vecs, family);
+  assert.equal(cdnim.dupe.kind, 'family');
+  assert.ok(cdnim.mult <= 0.6 && cdnim.mult > 0.3, `${cdnim.mult}`);
+  const angel = novelty(at(704), vecs, family);
+  assert.equal(angel.dupe, null);
+  assert.ok(angel.mult > 0.9 && angel.sim < 0.65, `${angel.sim}`);
+  assert.equal(novelty(at(704), [], family).mult, 1);
 });
 
 test('a bottle outside the pool is placed by its own links', () => {
@@ -94,6 +163,7 @@ test('suggestions leave out owned bottles, originals, brigaded ones, low ratings
   assert.ok(lo <= genderLean(owned('Cream Velvet')) - 0.2 && hi === 1, `${lo}..${hi}`);
   assert.equal(allow(at(34696), allowContext(brooke)), false, 'too masculine for Brooke');
   assert.deepEqual(leanWindow(wardrobe.slice(0, 2)), [-1, 1], 'too few bottles to say');
+  assert.ok(allowContext(wardrobe).owned.size === wardrobe.length);
   assert.ok(allow(at(34696), allowContext(wardrobe.slice(0, 2))));
 });
 
@@ -104,6 +174,9 @@ test('quality counts rating, keeping and value, and value counts more for a clon
   assert.ok(hers < 0.1, `Brooke ${hers}`);
   assert.equal(preferValueDefault(wardrobe), true);
   assert.equal(preferValueDefault(brooke), false);
+  // One bottle says nothing about how someone buys.
+  assert.equal(valueSlope([at(34696)], norms), valueSlope([], norms));
+  assert.equal(preferValueDefault([at(34696), at(34696)]), false);
   for (const r of records.slice(0, 500)) {
     const q = candidateQuality(r, norms, { valueSlope: david });
     assert.ok(q.mult >= 0.5 && q.mult <= 1.52, `${r.name} ${q.mult}`);
@@ -123,6 +196,14 @@ test('a cheaper twin is a real, better-value clone', () => {
   assert.match(twin.text, /^Club de Nuit Intense Man by Armaf smells like it/);
   assert.equal(cheaperTwin(at(84109), byId).record.name, 'Liquid Brun', 'Althaïr');
   assert.equal(cheaperTwin(at(34696), byId), null, 'already the cheap one');
+  // David owns Althaïr's twin.
+  const ctx = allowContext(wardrobe, { byId });
+  assert.deepEqual([cheaperTwin(at(84109), byId, ctx).owned, cheaperTwin(at(84109), byId, ctx).text], [true, 'You own its twin, Liquid Brun.']);
+  assert.equal(cheaperTwin(at(9828), byId, ctx).owned, false);
+  for (const r of records) {
+    const twin = cheaperTwin(r, byId);
+    if (twin) assert.ok(twin.record.rating >= MIN_RATING, `${r.name}: ${twin.record.name} ${twin.record.rating}`);
+  }
 });
 
 test('risk names what makes a blind buy risky', () => {

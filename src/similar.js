@@ -4,11 +4,11 @@
 // voters smell each). Likeness is a cosine on each, mostly accords. Pure (no
 // DOM, no fetch), so a module Worker can run it over the whole pool.
 //
-// Checks on the dataset: Liquid Brun and Althaïr (its original) 0.9,
-// Club de Nuit Intense Man and Aventus 0.8, Atlantis Extrait and Liquid Brun
-// 0.1. Similarity misses some voted dupes (Supremacy Collector's Edition and
-// Absolu Aventus about 0.35), which the "smells like" links in
-// src/candidates.js catch.
+// Checks on the pool: Liquid Brun and Althaïr (its original) 0.92,
+// Club de Nuit Intense Man and Aventus 0.78, Atlantis Extrait and Liquid Brun
+// 0.12. Similarity misses some voted dupes (Supremacy Collector's Edition and
+// Absolu Aventus 0.31), which the "smells like" links in src/candidates.js
+// catch.
 import { barStrength } from './accords.js';
 
 // Accords carry a bottle's character; notes tell near neighbours apart.
@@ -101,31 +101,49 @@ export function centroid(items, weights = null) {
   return { acc: unit(acc), notes: unit(notes), names };
 }
 
-// One thing by its last word: "musky" and "Musk", "Bourbon Vanilla" and
-// "vanilla", "woody" and "Woods".
-const thing = name => name.split(' ').pop().replace(/[eys]+$/, '');
+// A note folds into the one-word accord its last word names ("Bourbon
+// Vanilla" into vanilla, "White Musk" into musky, "Guaiac Wood" into woody),
+// unless that word only names a kind ("Green Notes", "Violet Leaf").
+const KINDS = new Set('notes note leaf leaves tree trees flower flowers blossom blossoms'.split(' '));
+const stem = word => word.replace(/[eys]+$/, '');
+// What a name says, for leaving out one that adds nothing to a name already
+// listed ("fresh" beside "fresh spicy", "woody notes" beside "woody").
+const sayings = name => new Set(noteKey(name).split(' ').filter(w => w !== 'notes').map(stem));
+const within = (a, b) => [...a].every(w => b.has(w));
 
 /**
  * The strongest accords and notes two bottles share, by name, lowercase, for
  * copy like "shares vanilla, praline and musk". A shared note names the
- * thing over the accord it echoes. Accords come as Fragrantica names
- * ("warm spicy").
+ * accord it folds into; a name that only repeats one listed before it is left
+ * out. Accords come as Fragrantica names ("warm spicy").
  */
 export function sharedTraits(a, b, n = 4) {
   const x = scentVector(a), y = scentVector(b);
-  const things = new Map(); // thing -> { weight, accord, note: [name, weight] }
-  const offer = (name, weight, isNote) => {
-    const key = thing(name);
-    const t = things.get(key) ?? things.set(key, { weight: 0, accord: null, note: null }).get(key);
-    t.weight += weight;
-    if (!isNote) t.accord ??= name;
-    else if (!t.note || weight > t.note[1]) t.note = [name, weight];
-  };
-  for (const [k, w] of x.acc) if (y.acc.has(k)) offer(k.toLowerCase(), ACCORD_SHARE * w * y.acc.get(k), false);
-  for (const [k, w] of x.notes) {
-    if (y.notes.has(k)) offer((x.names.get(k) ?? y.names.get(k) ?? k).toLowerCase(), (1 - ACCORD_SHARE) * w * y.notes.get(k), true);
+  const items = [], accords = new Map(); // one-word accord stem -> its item
+  for (const [k, w] of x.acc) {
+    if (!y.acc.has(k)) continue;
+    const item = { name: k.toLowerCase(), weight: ACCORD_SHARE * w * y.acc.get(k), note: 0 };
+    items.push(item);
+    if (!item.name.includes(' ')) accords.set(stem(noteKey(item.name)), item);
   }
-  return [...things.values()].sort((p, q) => q.weight - p.weight).slice(0, n).map(t => t.note?.[0] ?? t.accord);
+  for (const [k, w] of x.notes) {
+    if (!y.notes.has(k)) continue;
+    const name = (x.names.get(k) ?? y.names.get(k) ?? k).toLowerCase(), weight = (1 - ACCORD_SHARE) * w * y.notes.get(k);
+    const head = k.split(' ').pop(), accord = KINDS.has(head) ? null : accords.get(stem(head));
+    if (!accord) items.push({ name, weight, note: weight });
+    else {
+      accord.weight += weight;
+      if (weight > accord.note) [accord.name, accord.note] = [name, weight];
+    }
+  }
+  const shown = [];
+  for (const { name } of items.sort((p, q) => q.weight - p.weight)) {
+    const says = sayings(name);
+    if (!says.size || shown.some(s => within(says, s.says) || within(s.says, says))) continue;
+    shown.push({ name, says });
+    if (shown.length === n) break;
+  }
+  return shown.map(s => s.name);
 }
 
 /** The closest of `vecs` (records or vectors) to `vec`: { index, sim }, index -1 when there are none. */
