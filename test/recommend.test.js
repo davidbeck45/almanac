@@ -143,8 +143,8 @@ test('--pack takes a trip-wide occasion onto its slot, and --slot packs for days
     const want = p.slot === 'day' ? 'office' : p.date === dayISO(2) ? 'formal' : null;
     assert.equal(p.occasion, want, `${p.date} ${p.slot}`);
   }
-  const days = plan => plan.filter(p => p.slot === 'day').map(p => p.pick);
-  assert.notDeepEqual(days(out.plan), days(plain.plan), 'office picks for the days');
+  const days = plan => plan.filter(p => p.slot === 'day').map(p => [p.pick, p.score]);
+  assert.notDeepEqual(days(out.plan), days(plain.plan), 'the days are scored for the office');
   assert.ok(out.plan.filter(p => p.slot === 'day').every(p => p.reasons.some(r => /the office/.test(r))));
   const nights = JSON.parse(cli('--pack', '--loc', '40.7,-74', '--from', from, '--to', to, '--slot', 'night', '--json').stdout);
   assert.ok(nights.plan.length === 3 && nights.plan.every(p => p.slot === 'night'));

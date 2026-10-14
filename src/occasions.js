@@ -32,7 +32,9 @@ export const OCCASIONS = [
     blurb: 'Close quarters, nothing loud',
     slot: 'day',
     phrase: 'the office',
-    performance: { sillage: -0.7, longevity: 0.3 },
+    // Moderate projection that lasts the working day: a quiet bottle counts
+    // only down to the engine's LESS_ENOUGH, and one that fades counts against.
+    performance: { sillage: -0.7, longevity: 0.5 },
     profile: {
       citrus: 0.6, fresh: 0.6, iris: 0.6, aromatic: 0.5, powdery: 0.5, musky: 0.5, green: 0.5, soapy: 0.5,
       'fresh spicy': 0.4, lavender: 0.4, woody: 0.4, aldehydic: 0.4, aquatic: 0.4, ozonic: 0.4, marine: 0.4,
@@ -143,4 +145,4 @@ export const occasionById = id => OCCASIONS.find(o => o.id === id);
 // The raw occasion fit (occasionRaw in src/engine.js) that reads as 0 and as 1:
 // its 2nd and 98th percentile over the dataset's 8,000 bottles with 500+
 // rating votes. Fitted by `node scripts/fit-occasions.mjs --write`.
-export const OCCASION_SCALE = { casual: [-0.026, 0.249], office: [-0.368, 0.533], date: [-0.236, 0.471], nightout: [-0.281, 0.552], formal: [-0.292, 0.401], outdoors: [-0.427, 0.423], cozy: [-0.189, 0.417] };
+export const OCCASION_SCALE = { casual: [-0.026, 0.249], office: [-0.383, 0.362], date: [-0.236, 0.471], nightout: [-0.281, 0.552], formal: [-0.336, 0.399], outdoors: [-0.427, 0.423], cozy: [-0.189, 0.417] };

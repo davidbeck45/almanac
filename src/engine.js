@@ -365,12 +365,25 @@ export function performanceLevel(frag, key) {
   return mine ? clamp(level + PERSONAL_SHIFT * Math.sign(mine), -1, 1) : level;
 }
 
+// A wish for less (a quiet bottle for the office) wants one that keeps to
+// itself, not one nobody can smell: the level counts down to LESS_ENOUGH,
+// and past it back the other way at LESS_BACK the rate. Counted all the way
+// down, a body mist that's gone by lunch was the best office pick.
+const LESS_ENOUGH = -0.3;
+const LESS_BACK = 0.5;
+const wished = (wish, level) => (wish < 0 && level < LESS_ENOUGH ? LESS_ENOUGH + LESS_BACK * (LESS_ENOUGH - level) : level);
+
 // What longevity and sillage add to a bottle's fit for the occasion: its
 // wish for each (`performance`, -1 quiet or fleeting .. +1 loud or lasting)
-// times the bottle's level.
-export function performanceFit(frag, occasion) {
+// times the bottle's level, a wish for less only down to LESS_ENOUGH.
+// `plain` reads the level as it is, for what reasons say ("Stays close to
+// the skin" is still true of a whisper).
+export function performanceFit(frag, occasion, { plain = false } = {}) {
   const wish = occasion.performance ?? {};
-  const part = key => PERFORMANCE_WEIGHT * (wish[key] ?? 0) * performanceLevel(frag, key);
+  const part = key => {
+    const w = wish[key] ?? 0, level = performanceLevel(frag, key);
+    return PERFORMANCE_WEIGHT * w * (plain ? level : wished(w, level));
+  };
   return { longevity: part('longevity'), sillage: part('sillage') };
 }
 
@@ -577,7 +590,7 @@ function reasonsFor(frag, parts, ctx) {
     // Longevity and sillage, where the occasion cares about them. A nudge of
     // your own says so ("Lasts longer on you") in place of the crowd's word
     // when they agree.
-    const perf = performanceFit(frag, occasion);
+    const perf = performanceFit(frag, occasion, { plain: true });
     const wish = occasion.performance ?? {};
     const said = {};
     for (const key of ['sillage', 'longevity']) {

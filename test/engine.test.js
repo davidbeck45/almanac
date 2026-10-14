@@ -241,6 +241,21 @@ test('office wants a quiet bottle and a night out a loud one', () => {
   assert.ok(!reasons('office', unrated).some(t => /skin|Projects/.test(t)));
 });
 
+test('office wants moderate projection that lasts the day, not a whisper that fades', () => {
+  const office = occasionById('office');
+  const base = fragrances.find(f => f.name === 'Cedrus Blanc');
+  // Parfumo's 0–10: 6.2 sillage and 6.6 longevity read -1, 7.04 sillage -0.3, 7.8 longevity the middle.
+  const at = (sillage, longevity) => occasionRaw({ ...base, parfumo: { sillage, longevity, votes: 1000 } }, office);
+  const moderate = at(7.04, 7.8);
+  assert.ok(moderate > at(6.2, 6.6) + 0.1, 'a body mist gone by lunch');
+  assert.ok(moderate > at(8.6, 7.8), 'a loud one');
+  assert.ok(moderate > at(6.2, 7.8) && at(6.2, 7.8) > at(8.6, 7.8), 'quieter than enough earns nothing more, and still beats loud');
+  assert.ok(at(7.04, 8.8) > moderate, 'lasting longer helps');
+  // The reason still says what it does.
+  const reasons = rank([{ ...base, parfumo: { sillage: 6.2, longevity: 6.6, votes: 1000 } }], mildFallNight, 'day', { occasion: office })[0].reasons.map(r => r.text);
+  assert.ok(reasons.includes('Stays close to the skin') && reasons.includes('Fades early'), reasons.join(' | '));
+});
+
 test('Parfumo occasion votes nudge a bottle toward what voters wear it for', () => {
   const base = fragrances.find(f => f.name === 'Liquid Brun');
   const night = occasionById('nightout'), office = occasionById('office');
@@ -277,10 +292,14 @@ test('bottles past the scale\'s top keep their order instead of tying at a perfe
   assert.ok(parts[0] > 0 && parts.at(-1) < 1);
   // Parfumo's occasion votes carry several owned bottles past the dataset's
   // 98th percentile; at most one per occasion should read as near-perfect.
+  // Office wants a bottle that lasts the day, which few of the dataset's
+  // fresh bottles do and David's fresh clones do: two of them pass it, in order.
   for (const id of ['casual', 'office', 'date', 'nightout', 'formal', 'outdoors', 'cozy']) {
     const occasion = occasionById(id);
     const top = fragrances.filter(f => String(f.id) !== '4310' && occasionPart(occasionRaw(f, occasion), occasion) >= 0.99);
-    assert.ok(top.length <= 1, `${id}: ${top.map(f => f.name).join(', ')}`);
+    assert.ok(top.length <= (id === 'office' ? 2 : 1), `${id}: ${top.map(f => f.name).join(', ')}`);
+    const parts = top.map(f => occasionPart(occasionRaw(f, occasion), occasion));
+    assert.equal(new Set(parts).size, parts.length, `${id}: no ties`);
   }
   // Amber Empire's date fit (accords and votes) beats Terra's; a hard cap tied them.
   const date = occasionById('date');

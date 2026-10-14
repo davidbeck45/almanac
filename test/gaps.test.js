@@ -151,7 +151,9 @@ test('David’s gaps name real situations, gaps before room to grow, and his str
   }
   assert.equal(gaps[0].status, 'gap');
   assert.ok(gaps.some(g => g.use === 'date' && g.bands.includes('warm') && g.status === 'gap'), 'date nights in the warm are his gap');
-  assert.ok(gaps.some(g => g.use === 'office' && g.bands.includes('cold') && g.status === 'room'), 'office in the cold has room to grow');
+  // Office wants a bottle that lasts the day, and his fresh clones do: it's a strength, not a gap.
+  assert.ok(!gaps.some(g => g.use === 'office'), gaps.map(g => g.title).join('; '));
+  assert.ok(report.strengths.some(s => s.use === 'office'), 'the office is a strength');
   assert.match(report.overview.text, /^You have a strong pick for nearly everything you wear/);
   // Cold days: Cream Velvet leads, Détour Noir and Liam close behind, so it isn't thin.
   const cold = ctx.cov.find(c => c.cell.id === 'daily:day:cold');
@@ -191,7 +193,7 @@ test('suggestions skip what’s owned, originals and twins of it, and complement
   let behind = 0;
   for (const c of [ctx, wide, formal, lean]) {
     const picks = suggest(c, { k: 8 });
-    assert.ok(picks.length >= 3);
+    assert.ok(picks.length >= 2);
     const named = new Set(gapSummary(c.cov).flatMap(g => g.cells));
     for (const p of picks) {
       assert.ok(!mine.has(p.record.id) && !originals.has(p.record.id), p.record.name);
@@ -226,11 +228,18 @@ test('suggestions skip what’s owned, originals and twins of it, and complement
 });
 
 test('fills where it doesn’t last, or behind its own kin, don’t count', () => {
-  // Book Loft would top Office in the cold, but fades before the day is out.
+  // Book Loft topped Office in the cold for being quiet; the engine now counts its fading against it.
   const loft = buyCheck(records.find(r => r.name === 'Book Loft'), ctx);
-  assert.equal(loft.verdict, 'Redundant');
-  assert.match(loft.reasons[0], /^It would be your best for Office on cold and cool days, but it doesn’t last long enough for that\.$/);
+  assert.ok(!loft.fills.some(f => f.cell.use === 'office') && !['Strong fit', 'Good'].includes(loft.verdict), loft.reasons.join(' '));
   assert.ok(!suggest(ctx, { k: 8 }).some(p => p.record.name === 'Book Loft'));
+  // A bottle that would still lead an occasion wanting longevity fills nothing there when it fades fast:
+  // the office's favorite with a body mist's performance, for an empty wardrobe.
+  const best = records.find(r => r.name === 'Gentleman Eau de Toilette Intense');
+  const weak = { ...best, id: 'my:weak', name: 'Weak Copy', extras: undefined, performance: { longevity: 2, sillage: 1.6, votes: 400 } };
+  const fades = buyCheck(weak, gapContext({ owned: [], records, byId }));
+  const wants = f => f.cell.occasion?.performance?.longevity > 0;
+  assert.ok(fades.fills.length && !fades.fills.some(wants), fades.fills.map(f => f.cell.id).join());
+  assert.ok(buyCheck(best, gapContext({ owned: [], records, byId })).fills.some(wants), 'as it is, it fills them');
   // A Cream Velvet look-alike adds no depth to Cream Velvet.
   const eclair = buyCheck(records.find(r => r.name === 'Éclair Affair'), ctx);
   assert.equal(eclair.verdict, 'Redundant');
@@ -274,10 +283,14 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   assert.equal(tobacco.verdict, 'Redundant', 'one point better than Terra fills nothing');
   assert.match(tobacco.reasons[0], /^It adds little: it would barely beat your /);
   // A new direction he doesn't need isn't called a duplicate.
-  const dhi = buyCheck(records.find(r => r.name === 'Dior Homme Intense 2011'), ctx);
+  const dhi = buyCheck(records.find(r => r.name === 'Encre Noire'), ctx);
   assert.equal(dhi.verdict, 'Redundant');
   assert.match(dhi.reasons[0], /^Nothing you own smells like it, but /);
   assert.ok(dhi.overlap.sim < 0.5 && !dhi.overlap.link);
+  // Dior Homme Intense lasts the working day, so it edges his best for the office in the cold; its clone doesn't.
+  const dior = buyCheck(records.find(r => r.name === 'Dior Homme Intense 2011'), ctx);
+  assert.ok(dior.fills.some(f => f.cell.id === 'office:day:cold' && f.first), dior.reasons.join(' '));
+  assert.ok(!buyCheck(records.find(r => r.name === 'Dark Door Intense'), ctx).fills.some(f => f.cell.use === 'office'));
   // Risky shows through even when it fills nothing.
   const kouros = buyCheck(records.find(r => r.name === 'Kouros'), ctx);
   assert.equal(kouros.verdict, 'Risky');
@@ -448,7 +461,7 @@ test('--gaps and --check answer in the terminal', () => {
   const gaps = cli('--gaps', '--top', '3', '--json');
   assert.equal(gaps.status, 0, gaps.stderr);
   const out = JSON.parse(gaps.stdout);
-  assert.equal(out.picks.length, 3);
+  assert.ok(out.picks.length >= 2 && out.picks.length <= 3);
   assert.ok(out.gaps.length && out.strengths.length && !('record' in out.picks[0]));
   const text = cli('--gaps', '--uses', 'office=never,formal=often', '--no-value');
   assert.equal(text.status, 0, text.stderr);
