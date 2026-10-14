@@ -18,7 +18,7 @@ import { icon, segLinksHTML, messageHTML } from '../ui/components.js';
 import { parseRoute, routeHash, sameRoute, legacyHash, go, HOME } from './router.js';
 import {
   state, computeToday, sourceRecords, knownBottles, library, setActive as chooseList,
-  addToMine as addRecord, markBottlesLoaded,
+  addToMine as addRecord, markBottlesLoaded, keepBottles, loadFullRecord,
 } from './state.js';
 import {
   registerSheets, renderSheet, openSheet, updateSheet, closeSheet, sheetPopped, sheetEntry, replacePageURL, refocus,
@@ -29,6 +29,7 @@ import * as wardrobeView from '../views/wardrobe.js';
 import * as discoverView from '../views/discover.js';
 import * as bottleView from '../views/bottle.js';
 import * as settingsView from '../views/settings.js';
+import * as compareView from '../views/compare.js';
 import '../views/sections.js';
 
 const REFRESH_AFTER = 20 * 60 * 1000;
@@ -36,10 +37,10 @@ const $ = sel => document.querySelector(sel);
 
 // ---------- The views ----------
 
-const VIEWS = [wearView, wardrobeView, discoverView, bottleView, settingsView];
+const VIEWS = [wearView, wardrobeView, discoverView, bottleView, settingsView, compareView];
 // The nav's destinations, in order, and every page a route can name.
 const DESTINATIONS = [wearView.wear, wardrobeView.wardrobe, discoverView.discover];
-const PAGES = Object.fromEntries([...DESTINATIONS, settingsView.settings].map(p => [p.id, p]));
+const PAGES = Object.fromEntries([...DESTINATIONS, settingsView.settings, compareView.compare].map(p => [p.id, p]));
 const PANES = Object.fromEntries(DESTINATIONS.map(d => [d.id, (d.panes ?? []).map(p => p.id)]));
 
 // One map per kind of handler, from every view and from bottle-page sections
@@ -281,12 +282,15 @@ const missing = new Set(); // ids the library answered for without them
 const failed = new Set(); // ids whose record didn't load (offline); retried on demand
 const loadingBottles = new Set();
 const askedAbout = new Set();
+const askedFull = new Set(); // pool records whose every note was asked for
 
 // The page's data, loading the record (dataset bottles opened from a link or
-// a search) and its about data (for wave 4's sections) when they're not here.
+// a search) and its about data (for the sections) when they're not here.
 // undefined while loading, null when there's no such bottle, false when it
 // couldn't load (the page offers to try again). About data that couldn't
-// load stays undefined and is asked for again on the next render.
+// load stays undefined and is asked for again on the next render. A record
+// a pool answer brought (its 8 strongest notes) swaps for its r/ record, all
+// its notes, keeping its signals.
 function bottleModelFor(r) {
   const id = r.arg;
   const model = bottleView.bottleModel(r);
@@ -297,6 +301,12 @@ function bottleModelFor(r) {
         state.about.set(id, about);
         if (state.route?.dest === 'bottle' && state.route.arg === id) renderBottle();
       }, () => askedAbout.delete(id));
+    }
+    if (model.f.source === 'fragrantica' && model.f.extras && state.bottles.get(id) === model.f && !askedFull.has(id)) {
+      askedFull.add(id);
+      loadFullRecord(id).then(() => {
+        if (state.route?.dest === 'bottle' && state.route.arg === id) renderBottle();
+      }, () => askedFull.delete(id));
     }
     return model;
   }
@@ -312,8 +322,11 @@ function bottleModelFor(r) {
   if (!loadingBottles.has(id)) {
     loadingBottles.add(id);
     library.records([id]).then(found => {
-      if (found.get(id)) state.bottles.set(id, found.get(id));
-      else missing.add(id);
+      // keepBottles: a pool answer landing meanwhile keeps its signals.
+      if (found.get(id)) {
+        keepBottles([found.get(id)]);
+        askedFull.add(id);
+      } else missing.add(id);
     }, () => failed.add(id)).finally(() => {
       loadingBottles.delete(id);
       if (state.route?.dest === 'bottle' && state.route.arg === id) renderBottle();
@@ -358,6 +371,7 @@ function renderBottle({ fresh = false, instant = false } = {}) {
   const opening = el.hidden;
   el.innerHTML = bottleView.bottlePageHTML(model, { modal });
   if (focused) refocus(focused, '#bottle');
+  if (model) bottleView.afterBottle(model, app);
   el.dataset.id = r.arg;
   const next = el.querySelector('.bp-panel');
   if (fresh && !sameBottle) next.classList.add('fresh');

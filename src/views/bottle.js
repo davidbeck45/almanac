@@ -3,14 +3,19 @@
 // places it, src/css/bottle.css draws it). It's built from SECTIONS, an
 // ordered registry: a new section registers itself from its own module with
 // addSection() and the shell imports that module (.sweep/notes/shell-map.md).
+// The sections in their own modules are src/views/bottle-*.js; the ones that
+// ask the suggestion pool keep their answers with pooled().
 import { rank, comfortRange, SEASONS } from '../engine.js';
 import { layerPicks } from '../layering.js';
 import { setHidden } from '../hidden.js';
+import { loadWants, hasWant, setWant } from '../wishlist.js';
+import { loadSkin } from '../skin.js';
 import { esc, deg, temp, matchPct, relativeDay } from '../ui.js';
 import { icon, img, bar, reasonsList, accordColor, wearButton, magDot, messageHTML, shelfHTML } from '../ui/components.js';
+import { askPool } from '../app/pool.js';
 import {
   state, findRecord, inSource, isActive, activeFragrances, viewingDemo, nowSlot, canWear, wornId,
-  wearInfo, todayISO,
+  wearInfo, todayISO, poolInputs,
 } from '../app/state.js';
 
 // ---------- The registry ----------
@@ -19,7 +24,9 @@ import {
  * Sections in page order: { id, order, render(model) -> HTML or '' }, and
  * optionally the handlers its markup names, as a view module exports them:
  * actions, forms, fields, changes, sheets. The shell merges those with the
- * views' (names are global: prefix them, e.g. 'skin-rate').
+ * views' (names are global: prefix them, e.g. 'bp-skin-rate'). `after(model,
+ * app)` runs once the page is on screen (each render), for a section that
+ * loads something and renders the page again when it's in.
  */
 export const SECTIONS = [];
 
@@ -29,14 +36,74 @@ export function addSection(section) {
   SECTIONS.sort((a, b) => a.order - b.order);
 }
 
+/** The sections' `after` hooks, for the shell to call once the page is drawn. */
+export function afterBottle(model, app) {
+  for (const s of SECTIONS) s.after?.(model, app);
+}
+
+// Whether the page on screen is still this bottle's (after an await).
+export const showing = id => state.route?.dest === 'bottle' && state.route.arg === id;
+
+// What a pool answer depends on besides the bottle: the wardrobe (switched
+// on and off), the place's climate, "How you wear" and "Prefer great value".
+const inputsKey = i => JSON.stringify([i.owned.map(f => f.id), i.exclude.map(f => f.id), i.summary, i.shares, i.preferValue]);
+
+/**
+ * A section's answers from the pool (src/app/pool.js), one per bottle, asked
+ * from its `after` hook: `ask(model, app)` asks `type` with poolInputs() and
+ * `payload(model)` (null: nothing to ask) on `channel`, once per bottle and
+ * inputs, and renders the page again when the answer lands. `get(id)` ->
+ * undefined before it's asked, else { status: 'loading' | 'ready' | 'error',
+ * result, error }; a changed wardrobe asks again and keeps the old result on
+ * screen meanwhile. `forget(id)` asks again on the next render (Try again).
+ */
+export function pooled(type, channel, payload) {
+  const answers = new Map();
+  const reading = new Set(); // ids waiting on poolInputs(), so a render meanwhile doesn't ask twice
+  async function ask(model, app) {
+    const id = model.f.id, own = payload(model);
+    if (!own || reading.has(id)) return;
+    reading.add(id);
+    let inputs;
+    try {
+      inputs = await poolInputs();
+    } finally {
+      reading.delete(id);
+    }
+    const key = `${inputsKey(inputs)}\n${JSON.stringify(own)}`;
+    const old = answers.get(id);
+    if (old?.key === key) return;
+    answers.set(id, { key, status: 'loading', result: old?.result ?? null, error: '' });
+    let next;
+    try {
+      const result = await askPool(type, { ...inputs, ...own }, { channel });
+      if (result.stale) {
+        // A newer question on the channel (another bottle's) replaced it: ask again next time.
+        if (answers.get(id)?.key === key) answers.delete(id);
+        return;
+      }
+      next = { key, status: 'ready', result, error: '' };
+    } catch (err) {
+      next = { key, status: 'error', result: null, error: err.message };
+    }
+    if (answers.get(id)?.key !== key) return;
+    answers.set(id, next);
+    if (showing(id)) app.renderBottle();
+  }
+  return { ask, get: id => answers.get(id), forget: id => answers.delete(id) };
+}
+
 /**
  * What every section gets:
  * { f: the record, entry: its ranked entry for the window (null without a
  *   forecast), solo: ranked on its own (not in the list on screen), ctx and
- *   ctxLabel: the list it was opened from, owned: in the collection being
- *   ranked, active: and switched on, worn, canWear, wears, todayISO, win,
- *   alts, partners, comfort, about: loadAbout()'s data (undefined while it
- *   loads, null when the dataset has none) }.
+ *   ctxLabel: the list it was opened from, occasion: that list's (or null),
+ *   owned: in the collection being ranked, active: and switched on, inMine,
+ *   worn, canWear, wears, todayISO, win, alts, partners, comfort, about:
+ *   loadAbout()'s data (undefined while it loads, null when the dataset has
+ *   none; the wardrobe's and catalog's records carry theirs as f.about),
+ *   wanted: on the want list, skin: your own rating and nudges (src/skin.js)
+ *   or null }.
  */
 export function bottleModel(route) {
   const id = route.arg;
@@ -59,6 +126,7 @@ export function bottleModel(route) {
     win,
     ctx: key,
     ctxLabel: win ? (ctx.occasion ? `${ctx.occasion.label} · ${win.label.toLowerCase()}` : win.label) : '',
+    occasion: ctx?.occasion ?? null,
     owned,
     inMine: state.mine.records.some(r => r.id === id),
     active,
@@ -70,8 +138,13 @@ export function bottleModel(route) {
     partners: others.length ? layerPicks(f, others, 3, win ?? undefined) : null,
     comfort: comfortRange(f),
     about: state.about.get(id),
+    wanted: hasWant(loadWants(), id),
+    skin: loadSkin()[id] ?? null,
   };
 }
+
+/** A bottle's about data: the build's (wardrobe, catalog) or loadAbout's; undefined while that loads. */
+export const aboutOf = m => m.f.about ?? m.about;
 
 // The whole page. `modal`: a dialog over the page (phones and tablets).
 // model: undefined while its record loads, null for a bottle no source has,
@@ -170,7 +243,13 @@ function summarySection({ entry, comfort, wears, todayISO: today, owned }) {
   </div>`;
 }
 
-function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned, inMine, active }) {
+// Want: a toggle (aria-pressed) that fills its heart once the bottle is on the list.
+function wantButton(f, wanted) {
+  const on = Boolean(wanted);
+  return `<button class="btn secondary want-btn${on ? ' on' : ''}" data-action="bp-want" data-id="${esc(f.id)}" aria-pressed="${on}">${on ? icon.heartFill : icon.heart}<span>${on ? 'Wanted' : 'Want'}<span class="visually-hidden">: ${esc(f.name)}</span></span></button>`;
+}
+
+function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned, inMine, active, wanted }) {
   // In Mine while another list is ranked: nothing to add.
   const own = inMine
     ? `<span class="owned-tag">${icon.check}In Mine</span>`
@@ -181,6 +260,8 @@ function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned, inMine,
     : `<button class="btn secondary" data-action="unhide" data-id="${esc(f.id)}">${icon.plus}<span>Back in rotation</span></button>`;
   return `<div class="bp-actions">
     ${owned ? (wearable && entry ? wearButton(entry, ctx, worn) : '') : own}
+    ${owned || inMine ? '' : wantButton(f, wanted)}
+    <button class="btn secondary" data-action="bp-compare" data-id="${esc(f.id)}" data-ctx="${esc(ctx ?? '')}">${icon.compare}<span>Compare</span></button>
     ${f.url ? `<a class="btn secondary" href="${esc(f.url)}" target="_blank" rel="noopener">Fragrantica ${icon.external}</a>` : ''}
     ${owned ? rotation : ''}
   </div>`;
@@ -291,5 +372,19 @@ export const actions = {
   },
   'bottle-retry'(el, app) {
     app.retryBottle();
+  },
+  // On the want list or off it (src/wishlist.js). A bottle the dataset can't
+  // load again by id keeps its whole record there.
+  'bp-want'(el, app) {
+    const f = findRecord(el.dataset.id);
+    if (!f) return;
+    const on = hasWant(setWant(f), f.id);
+    app.keepingFocus(el, '#bottle', app.renderBottle);
+    if (on) app.showToast(`<span>${esc(f.name)} is on your wishlist</span><a class="btn secondary compact" href="#/wardrobe/wishlist">See wishlist</a>`);
+    else app.hideToast();
+  },
+  // "Compare with…": the picker (src/views/compare.js), this bottle first.
+  'bp-compare'(el, app) {
+    app.openSheet({ kind: 'cmp-pick', base: [el.dataset.id], ctx: el.dataset.ctx || null, query: '', results: null });
   },
 };

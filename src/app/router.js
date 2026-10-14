@@ -1,8 +1,9 @@
 // Hash routes, so deep links and Back work without a server:
 //   #/wear/now | week | occasion[/<id>] | trip
 //   #/wardrobe/owned | wishlist | worn | insights
-//   #/discover[?q=…]
+//   #/discover[?q=…] or #/discover?styles=<id>,<id> (a style's "More like this")
 //   #/bottle/<id>[?ctx=<context key>]
+//   #/compare/<id>,<id>[,<id>]
 //   #/settings
 // parseRoute and routeHash are pure (test/router.test.js). The shell renders;
 // go() only changes the URL.
@@ -12,7 +13,7 @@ export const HOME = '#/wear/now';
 // Old home-screen shortcuts open ?view=today|week|occasion.
 const LEGACY_VIEWS = { today: '#/wear/now', week: '#/wear/week', occasion: '#/wear/occasion' };
 // The query keys each kind of route keeps.
-const QUERY_KEYS = { bottle: ['ctx'], discover: ['q'] };
+const QUERY_KEYS = { bottle: ['ctx'], discover: ['q', 'styles'] };
 
 /**
  * '#/wear/occasion/office' -> { dest: 'wear', pane: 'occasion', arg: 'office', query: {} }.
@@ -29,6 +30,8 @@ export function parseRoute(hash, panes) {
   const query = Object.fromEntries((QUERY_KEYS[dest] ?? []).filter(k => params.get(k)).map(k => [k, params.get(k)]));
   if (dest === 'bottle' && first) return { dest, pane: null, arg: first, query };
   if (dest === 'settings') return { dest, pane: null, arg: null, query: {} };
+  // Up to three bottles side by side; the order they were picked in.
+  if (dest === 'compare') return { dest, pane: null, arg: compareIds(first).join(',') || null, query: {} };
   const list = panes[dest];
   if (!list) return parseRoute(HOME, panes);
   if (!list.length) return { dest, pane: null, arg: null, query };
@@ -36,7 +39,11 @@ export function parseRoute(hash, panes) {
   return { dest, pane, arg: pane === first ? second : null, query };
 }
 
-const part = s => encodeURIComponent(s).replace(/%3A/gi, ':');
+// Colons (dataset and context keys) and commas (the compare page's ids) read as they are.
+const part = s => encodeURIComponent(s).replace(/%3A/gi, ':').replace(/%2C/gi, ',');
+
+/** The compare page's ids from its argument: distinct, at most three. */
+export const compareIds = arg => [...new Set(String(arg ?? '').split(',').map(s => s.trim()).filter(Boolean))].slice(0, 3);
 
 /** The canonical hash for a route: parseRoute(routeHash(r)) gives r back. */
 export function routeHash({ dest, pane = null, arg = null, query = {} }) {

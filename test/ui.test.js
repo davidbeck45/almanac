@@ -51,6 +51,9 @@ const model = {
   partners: layerPicks(evil, bottles.slice(1), 3, wx.day),
   comfort: comfortRange(evil),
   about: null,
+  occasion: null,
+  wanted: false,
+  skin: null,
 };
 
 test('every template renders clean: no undefined or NaN, names escaped', () => {

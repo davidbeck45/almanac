@@ -7,11 +7,12 @@ import * as wardrobe from '../src/views/wardrobe.js';
 import * as discover from '../src/views/discover.js';
 import * as bottle from '../src/views/bottle.js';
 import * as settings from '../src/views/settings.js';
+import * as compare from '../src/views/compare.js';
 import '../src/views/sections.js';
 
 // As src/app/shell.js merges them: the views' handlers and the bottle-page
 // sections' own.
-const VIEWS = [wear, wardrobe, discover, bottle, settings, ...bottle.SECTIONS];
+const VIEWS = [wear, wardrobe, discover, bottle, settings, compare, ...bottle.SECTIONS];
 // As src/app/shell.js builds it from the destinations.
 const PANES = Object.fromEntries([wear.wear, wardrobe.wardrobe, discover.discover].map(d => [d.id, (d.panes ?? []).map(p => p.id)]));
 const parse = hash => parseRoute(hash, PANES);
