@@ -11,6 +11,8 @@
 // { type: 'error', message }. owned are the wardrobe's engine records;
 // summary a climate summary (src/climate.js, DEFAULT_CLIMATE without);
 // shares from src/uses.js; preferValue null for the wardrobe's default.
+// handle() answers one message, for running it elsewhere (dev/gaps.html
+// times it on the main thread, where DevTools can throttle the CPU).
 import { loadPool, fromPool, loadAbout } from './fragrantica.js';
 import { poolRowOf } from './candidates.js';
 import { gapContext, gapReport, buyCheck, checkJSON, DEFAULT_CLIMATE } from './gaps.js';
@@ -70,7 +72,8 @@ async function contextFor({ owned, summary = DEFAULT_CLIMATE, shares = null, pre
   return ctx;
 }
 
-self.onmessage = async ({ data }) => {
+/** One message in, its answer out (never throws). */
+export async function handle(data) {
   const { id = null, type } = data;
   const ms = {};
   try {
@@ -79,17 +82,21 @@ self.onmessage = async ({ data }) => {
       const t = performance.now();
       const report = gapReport(ctx, { k: data.k ?? 5 });
       ms.report = performance.now() - t;
-      self.postMessage({ id, type, report, ms });
-    } else if (type === 'check') {
+      return { id, type, report, ms };
+    }
+    if (type === 'check') {
       const ctx = data.owned ? await contextFor(data, ms) : last?.ctx;
       if (!ctx) throw new Error('Run a report first, or send the wardrobe with the check.');
       // A pool bottle checks as the suggestions see it, with its signals.
       const [record] = await withAbout([ctx.byId.get(String(data.record.id)) ?? data.record], ctx.byId);
-      self.postMessage({ id, type, check: checkJSON(record, buyCheck(record, ctx)), ms });
-    } else {
-      throw new Error(`Unknown message type "${type}".`);
+      return { id, type, check: checkJSON(record, buyCheck(record, ctx)), ms };
     }
+    throw new Error(`Unknown message type "${type}".`);
   } catch (err) {
-    self.postMessage({ id, type: 'error', message: err.message });
+    return { id, type: 'error', message: err.message };
   }
-};
+}
+
+if (typeof WorkerGlobalScope === 'function' && self instanceof WorkerGlobalScope) {
+  self.onmessage = async ({ data }) => self.postMessage(await handle(data));
+}

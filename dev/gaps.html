@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Gap finder</title>
+<!--
+  Runs src/gaps-worker.js on the demo wardrobe and prints the report, a buy
+  check and how long each took (window.__result holds the timings for headless
+  runs). Serve the repo (npm run dev) and open /dev/gaps.html; ?value=0 turns
+  "Prefer great value" off, ?k=8 asks for more picks, ?check=<id> checks
+  another bottle (default Shalimar Millésime Tonka), and ?inline runs the
+  worker's code on the main thread instead: DevTools' CPU throttling
+  (Emulation.setCPUThrottlingRate) slows pages, not workers.
+-->
+<style>body { font: 13px/1.45 ui-monospace, monospace; margin: 1.5rem; } pre { white-space: pre-wrap; }</style>
+<pre id="out">Running…</pre>
+<script type="module">
+const params = new URLSearchParams(location.search);
+const out = document.getElementById('out');
+const pct = x => `${Math.round(x * 100)}%`;
+const t0 = performance.now();
+const owned = (await (await fetch('../data/collection.json')).json()).fragrances;
+let next = 0, ask;
+if (params.has('inline')) {
+  const { handle } = await import('../src/gaps-worker.js');
+  ask = async message => {
+    const data = await handle({ id: ++next, ...message });
+    if (data.type === 'error') throw new Error(data.message);
+    return data;
+  };
+} else {
+  const worker = new Worker(new URL('../src/gaps-worker.js', import.meta.url), { type: 'module' });
+  ask = message => new Promise((resolve, reject) => {
+    const id = ++next;
+    worker.addEventListener('message', function on({ data }) {
+      if (data.id !== id) return;
+      worker.removeEventListener('message', on);
+      data.type === 'error' ? reject(new Error(data.message)) : resolve(data);
+    });
+    worker.postMessage({ id, ...message });
+  });
+}
+const preferValue = params.has('value') ? params.get('value') === '1' : null;
+const k = Number(params.get('k') ?? 5);
+try {
+  const first = await ask({ type: 'report', owned, preferValue, k });
+  const t1 = performance.now();
+  const other = await ask({ type: 'report', owned, preferValue, k, shares: { daily: 0.3, casual: 0.1, office: 0, date: 0.2, nightout: 0.1, formal: 0.15, outdoors: 0.05, cozy: 0.1 } });
+  const t2 = performance.now();
+  const { check } = await ask({ type: 'check', record: { id: params.get('check') ?? '76063' } });
+  const t3 = performance.now();
+  window.__result = {
+    total: t1 - t0, worker: first.ms, otherShares: t2 - t1, otherSharesWorker: other.ms, check: t3 - t2,
+    heapMB: performance.memory ? performance.memory.usedJSHeapSize / 1e6 : null,
+  };
+  const r = first.report;
+  out.textContent = [
+    `First report ${Math.round(t1 - t0)} ms (pool ${Math.round(first.ms.pool)}, context ${Math.round(first.ms.context)}, report ${Math.round(first.ms.report)}); other shares ${Math.round(t2 - t1)} ms; check ${Math.round(t3 - t2)} ms`,
+    '', 'Strengths', ...r.strengths.map(s => `  ${s.text}`),
+    '', 'Gaps', ...r.gaps.map(g => `  ${g.title} (${g.status})\n    ${g.text}`),
+    '', 'Picks', ...r.picks.map((p, i) => `  ${i + 1}. ${p.name} by ${p.brand} · ${p.rating}★ · ${p.risk.level} risk\n${p.fills.filter(f => f.matters).slice(0, 3).map(f => `     ${f.title}: ${pct(f.to)} (your ${f.beats.name} ${pct(f.from)})`).join('\n')}`),
+    '', `Buy check: ${check.name} by ${check.brand}: ${check.verdict}`, ...check.reasons.map(x => `  ${x}`),
+  ].join('\n');
+} catch (err) {
+  window.__result = { error: err.message };
+  out.textContent = `Failed: ${err.message}`;
+}
+</script>
+</html>
