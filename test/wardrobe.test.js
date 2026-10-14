@@ -66,8 +66,8 @@ test('the accord chips are one Tab stop, and a chosen chip says its rank in word
   assert.equal((none.match(/tabindex="-1"/g) ?? []).length, all.length - 1);
   const two = wardrobe.customSheetHTML({ accords: ['cacao', 'amber'] }, 6);
   assert.deepEqual(stops(two), ['cacao'], 'the strongest chosen');
-  assert.match(two, /<b aria-hidden="true">1<\/b>cacao<span class="visually-hidden">, strongest<\/span>/);
-  assert.match(two, /<b aria-hidden="true">2<\/b>amber<span class="visually-hidden">, 2nd<\/span>/);
+  assert.match(two, /<b aria-hidden="true">1<\/b>Cacao<span class="visually-hidden">, strongest<\/span>/);
+  assert.match(two, /<b aria-hidden="true">2<\/b>Amber<span class="visually-hidden">, 2nd<\/span>/);
   assert.deepEqual(stops(wardrobe.customSheetHTML({ accords: ['cacao'], chip: 'amber' }, 6)), ['amber'], 'the one arrows moved to');
   // A full set disables the rest: the stop is never a disabled chip.
   const full = all.slice(0, 6);
