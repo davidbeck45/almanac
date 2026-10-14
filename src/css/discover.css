@@ -39,7 +39,7 @@ body[data-route='discover'] .page > :is(#main, #foot) { --disc-col: 1120px; max-
 .disc-body { display: grid; min-width: 0; }
 .disc-line { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .disc-line .link-btn { color: var(--text-primary); }
-.disc-count { margin: 0 var(--s-1) var(--s-3); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.disc-count { margin: 0 0 var(--s-3); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 
 /* ---------- Layout ----------
    One column, the filters in a sheet; from a 940px column, the filters in a
@@ -287,7 +287,7 @@ body[data-route='discover'] .page > :is(#main, #foot) { --disc-col: 1120px; max-
 .disc-sk-chips .sk { flex: none; width: 112px; height: 36px; border-radius: var(--r-pill); }
 .disc-sk-rows { display: grid; gap: var(--s-2); }
 .disc-sk-rows .sk { height: 56px; border-radius: var(--r-control); }
-.disc-list > .disc-line { margin: 0 var(--s-1) var(--s-3); }
+.disc-list > .disc-line { margin: 0 0 var(--s-3); }
 
 /* ---------- Filters ---------- */
 
@@ -296,6 +296,9 @@ body[data-route='discover'] .page > :is(#main, #foot) { --disc-col: 1120px; max-
 .opts { display: flex; flex-wrap: wrap; gap: var(--s-2); }
 .opt {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
   min-height: 34px;
   padding: 0 var(--s-3);
   border-radius: var(--r-pill);
@@ -308,13 +311,18 @@ body[data-route='discover'] .page > :is(#main, #foot) { --disc-col: 1120px; max-
   transition: background-color var(--dur-2), border-color var(--dur-2), color var(--dur-2);
 }
 .opt::before { content: ''; position: absolute; inset: min(0px, calc(50% - var(--hit) / 2)); }
+/* The chosen one says so with a check and the selection's gold, as the
+   style chips do with theirs: not by shade alone. */
+.opt svg { display: none; flex: none; width: 14px; height: 14px; color: var(--accent); }
 @media (hover: hover) { .opt:hover { color: var(--text-primary); } }
 .opt:is([aria-pressed='true'], [aria-checked='true']) {
-  border-color: var(--border-strong);
-  background: var(--surface-3);
+  padding-left: var(--s-2);
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
   color: var(--text-primary);
-  box-shadow: 0 2px 8px rgb(var(--shade) / 0.25);
 }
+.opt:is([aria-pressed='true'], [aria-checked='true']) svg { display: block; }
+@media (forced-colors: active) { .opt:is([aria-pressed='true'], [aria-checked='true']) { outline: 2px solid Highlight; outline-offset: -2px; } }
 .filter-switches { display: grid; border-top: 1px solid var(--border-subtle); }
 .filter-switch { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); min-height: 56px; padding: var(--s-2) 0; border-bottom: 1px solid var(--border-subtle); }
 .filter-switch:last-child { border-bottom: 0; }
@@ -335,7 +343,8 @@ body[data-route='discover'] .page > :is(#main, #foot) { --disc-col: 1120px; max-
 .disc-teaser .rows { margin: 0 calc(-1 * var(--s-2)); }
 .teaser-sk { display: grid; gap: var(--s-2); margin-top: var(--s-2); }
 .teaser-sk .sk { height: 52px; border-radius: var(--r-control); }
-@container disc (min-width: 600px) { .disc-teaser .rows { grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: var(--s-3); } }
+/* Side by side once there's room for each: two picks take two columns, not two of three. */
+@container disc (min-width: 600px) { .disc-teaser .rows { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); column-gap: var(--s-3); } }
 
 /* ---------- The seed picker ---------- */
 
