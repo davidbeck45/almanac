@@ -7,9 +7,9 @@ A quick look at what to wear from my own collection, based on today's weather, t
 - **Occasion** — Everyday, Office, Date Night, Night Out, Formal, Outdoors, Cozy, for daytime or tonight.
 - **Layering** — each bottle's detail sheet suggests which of your other bottles to layer it with, names the notes that complement each other, and says which to spray first.
 - **Wear this** — logs what you wore so picks rotate, fading over the next ten days. The wear journal shows a calendar, your most-worn bottles and the ones gathering dust.
-- **Trips and events** — the fewest bottles to pack for a city and dates, and which to wear when, with a dressier pick for a formal night; picks for any date ahead. Past the 16-day forecast it plans on typical weather for the dates. In the terminal for now (`--pack`, `--date`); app screens are next.
+- **Trips and events** — the fewest bottles to pack for a city and dates, and which to wear when, with a dressier pick for a formal night; picks for any date ahead. Past the forecast's first ten days it plans on typical weather for the dates. In the terminal for now (`--pack`, `--date`); app screens are next.
 - **How much to spray** — a count and where for each pick, from how loud and lasting the bottle is, the weather and the occasion. In the terminal for now (`--spray`, and on every pick).
-- **Your own ratings** — your stars, and whether a bottle lasts longer or sits closer on your skin than the crowd says, steer the picks. The engine reads them; the app's controls are next.
+- **Your own ratings** — your stars steer the picks (a bottle you rate 1★ sits out, a 5★ one wins near ties), and so does whether a bottle lasts longer or sits closer on your skin than the crowd says. The engine reads them; the app's controls are next.
 - °F or °C (defaults from your locale), recent locations, and home-screen shortcuts for Today, Week and Occasion.
 - **Your own collection** — search every fragrance on Fragrantica (from [Le Decanteur's dataset](https://www.kaggle.com/datasets/ledecanteur/fragrantica-perfumes), CC BY-NC-SA 4.0), paste a list, or add a bottle no database has by picking its accords. Share it as a link. The demo shows my wardrobe.
 
