@@ -144,6 +144,17 @@ test('suggestions skip what’s owned, originals and twins of it, and complement
   assert.ok(any.some(p => p.record.extras.value < 3.8), 'off, pricier bottles come in');
 });
 
+test('an empty wardrobe or a single bottle still gets a report and checks', () => {
+  for (const mine of [[], [owned('Liquid Brun')]]) {
+    const c = gapContext({ owned: mine, records, byId });
+    const r = gapReport(c, { k: 2 });
+    assert.equal(r.picks.length, 2);
+    assert.ok(r.gaps.length);
+    for (const id of ['76063', '84109', '31861']) assert.ok(buyCheck(byId.get(id), c).reasons.length);
+  }
+  assert.equal(gapReport(gapContext({ owned: [], records, byId })).gaps[0].text.endsWith('nothing you own fits here.'), true);
+});
+
 test('brigaded bottles are neither suggested nor part of the reference', () => {
   const sponge = byId.get('28286');
   assert.ok(sponge.extras.flags.includes('brigaded'));

@@ -340,9 +340,9 @@ async function main() {
     const pct = x => `${Math.round(x * 100)}%`;
     const stars = r => `${r.rating.toFixed(1)}★ from ${r.ratingVotes.toLocaleString('en-US')} votes`;
     const byLine = r => `${r.name} by ${r.brand}${r.year ? ` (${r.year})` : ''}`;
-    const fillLine = f => (f.first
-      ? `${f.title}: ${pct(f.to)}, over your ${f.beats.name} at ${pct(f.from)}`
-      : `${f.title}: ${pct(f.to)} as a second pick, behind your ${f.beats.name} at ${pct(f.from)}`);
+    const fillLine = f => (!f.beats ? `${f.title}: ${pct(f.to)}`
+      : f.first ? `${f.title}: ${pct(f.to)}, over your ${f.beats.name} at ${pct(f.from)}`
+        : `${f.title}: ${pct(f.to)} as a second pick, behind your ${f.beats.name} at ${pct(f.from)}`);
     const valueText = `prefer great value: ${ctx.preferValue ? 'on (only bottles voters value 3.8+)' : 'off'}`;
 
     if (args.check) {

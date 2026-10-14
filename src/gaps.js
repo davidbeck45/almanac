@@ -607,7 +607,7 @@ export function buyCheck(record, ctx) {
   const leanLine = lean < lo ? 'Voters call it more feminine than anything you own.'
     : lean > hi ? 'Voters call it more masculine than anything you own.' : null;
   // Why it adds little: where it comes closest to beating what's owned.
-  const barely = all.find(f => f.first && f.cell.weight >= MIN_WEIGHT);
+  const barely = all.find(f => f.first && f.beats && f.cell.weight >= MIN_WEIGHT);
   const littleLine = !all.length ? 'It wouldn’t beat anything you own, in any weather or occasion.'
     : barely ? `It adds little: it barely beats your ${barely.beats.name} for ${cellLabel(barely.cell)}.`
       : 'It adds little: it wouldn’t beat your best bottle anywhere.';
