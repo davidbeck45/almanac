@@ -389,7 +389,7 @@ async function main() {
     const k = args.top === undefined ? 5 : top;
     const report = gapReport(ctx, { k });
     if (args.json) {
-      const picks = report.picks.map(({ record, ...p }) => p);
+      const picks = report.picks.map(({ record, ...p }) => ({ ...p, fills: p.fills.filter(f => f.matters) }));
       console.log(JSON.stringify({ climate: where, bottles: fragrances.length, ...report, picks }, null, 2));
       return;
     }

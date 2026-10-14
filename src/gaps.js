@@ -675,7 +675,7 @@ export function gapReport(ctx, { k = 5, gaps = 6 } = {}) {
         record: p.record,
         gain: round(p.gain, 5),
         severityAfter: round(Math.max(0, left), 5),
-        value: round(p.value, 5),
+        merit: round(p.value, 5),
         quality: { mult: round(p.quality.mult, 3), rating: round(p.quality.rating, 2), keep: round(p.quality.keep, 3), value: round(p.quality.value, 2) },
         novelty: round(p.novelty.mult, 3),
         nearest: near ? { ...stub(near.record), via: near.record === near.via ? null : stub(near.via), sim: round(p.novelty.sim, 3) } : null,
