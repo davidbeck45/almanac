@@ -1,7 +1,8 @@
 // Wardrobe: the bottles you own (rotation switches, which list is ranked,
-// adding and sharing), what you wore (the journal), and the wishlist and
-// insights wave 4 builds. Also the add, paste and add-it-yourself sheets.
-// Styles: src/css/wardrobe.css.
+// adding and sharing), the ones you want (src/views/wardrobe/wishlist.js),
+// what you wore (the journal), and Insights: what the wardrobe still needs
+// (src/views/wardrobe/insights.js). Also the add, paste and add-it-yourself
+// sheets. Styles: src/css/wardrobe.css.
 import { ACCORDS } from '../accords.js';
 import { SEASONS } from '../engine.js';
 import { setHidden } from '../hidden.js';
@@ -16,6 +17,9 @@ import {
   state, activeFragrances, hiddenIn, viewingDemo, knownBottles, findRecord, journalData, library, findBottles,
   fullRecords, collectionLabel,
 } from '../app/state.js';
+import { warmPool } from '../app/pool.js';
+import * as insights from './wardrobe/insights.js';
+import * as wishlist from './wardrobe/wishlist.js';
 
 // ---------- Owned ----------
 
@@ -148,34 +152,24 @@ export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confir
   </section>`;
 }
 
-// ---------- Stubs for wave 4 ----------
-
-const stub = (glyph, title, body, action) => () => messageHTML({ glyph, title, body, action });
-
-// Each pane has its own heading, so a screen reader landing on it hears where it is.
+// Each pane has its own heading, so a screen reader landing on it hears where
+// it is. Every pane starts the suggestion pool loading (warmPool), so it's in
+// by the time Insights or the Wishlist asks.
 export const wardrobe = {
   id: 'wardrobe',
   label: 'Wardrobe',
   icon: 'wardrobe',
   panes: [
-    { id: 'owned', label: 'Owned', title: () => 'Owned', heading: () => collectionLabel(), render: ownedPane, after: applyFilter },
     {
-      id: 'wishlist',
-      label: 'Wishlist',
-      title: () => 'Wishlist',
-      heading: () => 'Wishlist',
-      render: stub(icon.heart, 'Your wishlist', 'Bottles you want, ranked by what they’d add to your shelf.',
-        `<a class="btn primary" href="#/discover">${icon.search}<span>Find bottles</span></a>`),
+      id: 'owned', label: 'Owned', title: () => 'Owned', heading: () => collectionLabel(), render: ownedPane,
+      after() { applyFilter(); warmPool(); },
     },
-    { id: 'worn', label: 'Worn', title: () => 'Worn', heading: () => 'Wear journal', render: () => wornHTML(journalData(), findRecord, { confirmClear: state.armed === 'journal-clear' }) },
+    wishlist.wishlistPaneDef,
     {
-      id: 'insights',
-      label: 'Insights',
-      title: () => 'Insights',
-      heading: () => 'Insights',
-      render: stub(icon.chart, 'What your shelf covers', 'The weather and occasions your bottles cover well, and the gaps worth filling.',
-        `<a class="btn secondary" href="#/wardrobe/worn">${icon.journal}<span>See what you wear</span></a>`),
+      id: 'worn', label: 'Worn', title: () => 'Worn', heading: () => 'Wear journal',
+      render: () => wornHTML(journalData(), findRecord, { confirmClear: state.armed === 'journal-clear' }), after: () => warmPool(),
     },
+    insights.insightsPaneDef,
   ],
 };
 
@@ -282,6 +276,7 @@ export const sheets = {
   add: s => addSheetHTML(s, new Set(state.mine.records.map(r => r.id))),
   import: s => importSheetHTML(s, MAX_IMPORT_LINES),
   custom: s => customSheetHTML(s, MAX_CUSTOM_ACCORDS),
+  ...insights.sheets,
 };
 
 // ---------- Search, paste, enter by hand ----------
@@ -501,8 +496,10 @@ export const actions = {
     app.closeShared();
     app.render();
   },
-  'journal-export'() {
-    const data = journalExport(state.history, state.loc, hiddenIn(true));
+  // With your own ratings and skin nudges (src/skin.js), for journal-check.
+  async 'journal-export'() {
+    const { loadSkin } = await import('../skin.js');
+    const data = journalExport(state.history, state.loc, hiddenIn(true), { skin: loadSkin() });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
     a.download = `scentcast-journal-${data.exported.slice(0, 10)}.json`;
@@ -519,6 +516,8 @@ export const actions = {
     app.render();
     app.showToast('<span>Wear history cleared</span>');
   },
+  ...insights.actions,
+  ...wishlist.actions,
 };
 
 export const forms = {
