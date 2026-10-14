@@ -245,7 +245,7 @@ test('a download that stalls fails as out of reach, and a refused one says so', 
     assert.equal((await answer).error, 'Can’t reach the fragrance library. Check your connection.');
     assert.ok(aborted > 0);
     status = 503;
-    assert.equal((await handlePool({ id: 2, type: 'warm' }, newPoolCache())).error, 'The fragrance library didn’t load (503).');
+    assert.equal((await handlePool({ id: 2, type: 'warm' }, newPoolCache())).error, 'The fragrance library didn’t load. Try again.', 'no status code in the sentence');
   } finally {
     globalThis.fetch = real;
   }

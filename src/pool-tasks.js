@@ -88,7 +88,7 @@ async function fetchLoad(path) {
     clearTimeout(timer);
   }
   if (res.status === 404) return null;
-  throw new Error(`The fragrance library didn’t load (${res.status}).`);
+  throw Object.assign(new Error(UNREADABLE), { detail: `HTTP ${res.status}` });
 }
 
 /**

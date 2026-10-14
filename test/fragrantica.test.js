@@ -133,3 +133,13 @@ test('season and day/night votes steady on their own when a row has only one', (
   assert.ok(steadyShares(seasonOnly).season.winter < 0.9);
   assert.equal(steadyShares(seasonOnly).dayNight, seasonOnly.dayNight);
 });
+
+test('a library file the server won’t give fails as a sentence without its status code', async () => {
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => new Response('busy', { status: 503 });
+  try {
+    await assert.rejects(fragranticaLibrary().search('sauvage'), err => err.message === 'The fragrance library didn’t load. Try again.' && err.detail === 'HTTP 503');
+  } finally {
+    globalThis.fetch = real;
+  }
+});

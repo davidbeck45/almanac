@@ -296,6 +296,7 @@ async function defaultLoad(path) {
     throw new Error('Can’t reach the fragrance library. Check your connection.');
   }
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`The fragrance library didn’t load (${res.status}).`);
+  // The status is for debugging, not for the sentence people read.
+  if (!res.ok) throw Object.assign(new Error('The fragrance library didn’t load. Try again.'), { detail: `HTTP ${res.status}` });
   return res.text();
 }
