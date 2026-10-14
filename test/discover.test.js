@@ -180,6 +180,20 @@ test('any of several styles takes turns, Intimate shapes them, and all of them w
   assert.throws(() => moreOfStyles(['skin'], ctx, { mode: 'most' }), /any or all/);
 });
 
+test('more like keeps to its seeds\' leans, not the whole wardrobe\'s', () => {
+  const lean = p => genderLean(p.record, ctx.byId);
+  const aventus = moreLike([at(9828)], ctx, { k: 20 });
+  assert.equal(aventus.length, 20);
+  assert.ok(aventus.every(p => lean(p) >= 0), aventus.filter(p => lean(p) < 0).map(p => `${p.record.name} ${lean(p)}`).join(', '));
+  const belle = ctx.records.find(r => r.name === 'La Vie Est Belle' && r.brand === 'Lancôme');
+  const picks = moreLike([belle], ctx, { k: 20 });
+  assert.ok(picks.length === 20 && picks.every(p => lean(p) <= 0), picks.filter(p => lean(p) > 0).map(p => `${p.record.name} ${lean(p)}`).join(', '));
+  // Seeds either side span both; a lean filter overrides them.
+  const both = moreLike([at(9828), belle], ctx, { k: 30 });
+  assert.ok(both.some(p => lean(p) < -0.25) && both.some(p => lean(p) > 0.25));
+  assert.ok(moreLike([at(9828)], ctx, { k: 10, filters: { lean: 'feminine' } }).every(p => lean(p) <= -0.25));
+});
+
 test('more like Liquid Brun and Amber Empire is warm vanilla and amber', () => {
   const picks = moreLike([owned('Liquid Brun'), owned('Amber Empire')], ctx, { k: 10 });
   assert.equal(picks.length, 10);

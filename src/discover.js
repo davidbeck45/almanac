@@ -57,8 +57,10 @@ const SEED_PRIOR_VOTES = 100;
 // mostly men's bottles gets a list of women's musks. Only picks scoring
 // LEAN_FLOOR of their style's best take turns; weaker ones follow, so a thin
 // band doesn't bring in bottles that barely match. A lean filter takes its
-// place; "more like" follows its seeds instead.
+// place. "More like" follows its seeds instead: it keeps to their leans,
+// widened by SEED_LEAN_MARGIN either side (More like Aventus stays masculine).
 const LEAN_EDGE = 0.25;
+const SEED_LEAN_MARGIN = 0.3;
 const LEAN_SPREAD = 0.85;
 const LEAN_FLOOR = 0.6;
 // A style's bottles are judged against their own median rating: voters rate
@@ -293,8 +295,12 @@ function normsFor(ctx, ratings) {
 
 // --------------------------------------------------------------- filters
 
-/** A filter test from FILTERS overrides; throws on a lean, season or slot it doesn't know. */
-export function admitter(ctx, filters = {}) {
+/**
+ * A filter test from FILTERS overrides; throws on a lean, season or slot it
+ * doesn't know. `lean` [lo, hi] stands in for the wardrobe's window when no
+ * lean filter is set.
+ */
+export function admitter(ctx, filters = {}, { lean = null } = {}) {
   const f = { ...FILTERS, ...filters };
   if (f.lean && !LEAN_WINDOWS[f.lean]) throw new Error(`Lean is feminine, unisex or masculine, not "${f.lean}".`);
   if (f.slot && f.slot !== 'day' && f.slot !== 'night') throw new Error(`Slot is day or night, not "${f.slot}".`);
@@ -305,7 +311,7 @@ export function admitter(ctx, filters = {}) {
     ...ctx.allowed,
     owned: f.excludeOwned ? ctx.allowed.owned : none,
     originals: f.excludeOwned ? ctx.allowed.originals : none,
-    lean: f.lean ? LEAN_WINDOWS[f.lean] : ctx.allowed.lean,
+    lean: f.lean ? LEAN_WINDOWS[f.lean] : lean ?? ctx.allowed.lean,
     minRating: f.minRating ?? 0,
     minValue: f.minValue,
     mists: Boolean(f.mists),
@@ -623,7 +629,8 @@ export function defaultSeeds(owned, { history = [], todayISO = null, n = SEED_CO
  * stands in as its pool row. The seeds themselves, owned bottles, their twins
  * and versions and anything over MAX_OWNED_SIM alike to an owned bottle stay
  * out, and a bottle voters link to one (family) counts its family multiplier:
- * more of the seeds' kind, not another copy of a bottle already owned. ->
+ * more of the seeds' kind, not another copy of a bottle already owned.
+ * Without a lean filter, picks keep to the seeds' leans (SEED_LEAN_MARGIN). ->
  * picks as describe() makes them, plus `sim` (to the seeds), `shares` and
  * `alsoLiked` (how many seeds list it).
  */
@@ -635,7 +642,9 @@ export function moreLike(seeds, ctx, { k = 10, filters = {}, alsoLiked = ALSO_LI
     return row ? { ...row, about: seed.about ?? row.about } : seed;
   }).filter(hasScent);
   if (!seeds.length || !(k >= 1)) return [];
-  const target = centroid(seeds), admits = admitter(ctx, filters);
+  const leans = seeds.map(seed => leanKnown(seed, ctx.byId)).filter(x => x != null);
+  const lean = leans.length ? [Math.max(-1, Math.min(...leans) - SEED_LEAN_MARGIN), Math.min(1, Math.max(...leans) + SEED_LEAN_MARGIN)] : null;
+  const target = centroid(seeds), admits = admitter(ctx, filters, { lean });
   const skip = new Set();
   const liked = new Map();
   for (const seed of seeds) {
