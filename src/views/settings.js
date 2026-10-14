@@ -1,6 +1,6 @@
 // Settings (#/settings, behind the gear): location, units, theme, which list
 // is ranked and sharing it, the journal export, and where the data comes
-// from. Also the location sheet. Styles: src/css/wardrobe.css (.settings).
+// from. Also the location sheet. Styles: src/css/shell.css (.set-*).
 import { loadRecent, deviceLocation, searchCities } from '../location.js';
 import { setTheme, theme } from '../theme.js';
 import { esc, plural, setUnits } from '../ui.js';
@@ -21,14 +21,15 @@ const group = (title, rows) => `<section class="set-group" aria-labelledby="set-
     <h2 id="set-${title.toLowerCase().replace(/\W+/g, '-')}">${esc(title)}</h2>
     <div class="set-rows">${rows}</div>
   </section>`;
-const row = (label, control, note = '') => `<div class="set-row"><span class="set-label">${label}${note ? `<small>${note}</small>` : ''}</span>${control}</div>`;
+const row = (label, control, { glyph = '', note = '' } = {}) => `<div class="set-row">
+    <span class="set-label">${glyph}<span class="set-text">${label}${note ? `<small>${note}</small>` : ''}</span></span>${control}
+  </div>`;
 
 export function settingsHTML({ loc, units, themeName, active, mineCount, shared, on, total, wears, updated, stale, credits }) {
-  const place = loc ? `${esc(loc.name)}${loc.region ? `<small>${esc(loc.region)}</small>` : ''}` : 'Not set';
   return `
     ${group('Weather', `
-      ${row(`${icon.pin}<span>${place}</span>`, `<button class="btn secondary compact" data-action="location">Change</button>`)}
-      ${row(`${icon.refresh}<span>Forecast</span>`, `<button class="btn tertiary compact" data-action="refresh">Refresh</button>`, updated ? `${stale ? 'Offline · ' : ''}Updated ${esc(updated)}` : '')}
+      ${row(loc ? esc(loc.name) : 'Not set', '<button class="btn secondary compact" data-action="location">Change</button>', { glyph: icon.pin, note: loc?.region ? esc(loc.region) : '' })}
+      ${row('Forecast', '<button class="btn tertiary compact" data-action="refresh">Refresh</button>', { glyph: icon.refresh, note: updated ? `${stale ? 'Offline · ' : ''}Updated ${esc(updated)}` : '' })}
     `)}
     ${group('Display', `
       ${row('Temperature', segHTML([{ value: 'F', label: '°F', on: units === 'F' }, { value: 'C', label: '°C', on: units === 'C' }], { action: 'units', label: 'Temperature units' }))}
@@ -40,7 +41,7 @@ export function settingsHTML({ loc, units, themeName, active, mineCount, shared,
       ${row(`<a class="set-link" href="#/wardrobe/owned">${on} of ${plural(total, 'bottle')} in rotation</a>`, `<button class="btn tertiary compact" data-action="share" ${on ? '' : 'disabled'}>${icon.share}Share</button>`)}
     `)}
     ${group('Wear journal', `
-      ${row(`<a class="set-link" href="#/wardrobe/worn">${plural(wears, 'wear')} logged</a>`, `<button class="btn tertiary compact" data-action="journal-export" ${wears ? '' : 'disabled'}>${icon.download}Export</button>`, 'Stays on this device')}
+      ${row(`<a class="set-link" href="#/wardrobe/worn">${plural(wears, 'wear')} logged</a>`, `<button class="btn tertiary compact" data-action="journal-export" ${wears ? '' : 'disabled'}>${icon.download}Export</button>`, { note: 'Stays on this device' })}
     `)}
     ${group('About', `<p class="set-credits">${credits}</p><p class="set-credits">Scentcast picks from your own bottles with the weather, time of day and occasion. Everything you add stays on this device.</p>`)}`;
 }

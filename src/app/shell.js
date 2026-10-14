@@ -80,12 +80,17 @@ const docked = () => WIDE.matches;
 
 // ---------- Collections that touch the URL ----------
 
+// This page's URL without some query parameters, the rest left as typed
+// (URLSearchParams would re-encode the commas in ?loc=).
+function withoutParams(...names) {
+  const url = new URL(location.href);
+  url.search = url.search.slice(1).split('&').filter(p => p && !names.includes(decodeURIComponent(p.split('=')[0]))).join('&');
+  return url;
+}
+
 function closeShared() {
   state.shared = null;
-  const url = new URL(location.href);
-  url.searchParams.delete('c');
-  url.searchParams.delete('n');
-  replacePageURL(url.href);
+  replacePageURL(withoutParams('c', 'n').href);
 }
 
 function setActive(active) {
@@ -134,14 +139,14 @@ function renderNav() {
   const now = state.wx?.now;
   const items = DESTINATIONS.map(d => {
     const href = routeHash(lastRoute[d.id] ?? parseRoute(`#/${d.id}`, PANES));
-    return `<li><a class="nav-item" href="${esc(href)}"${here === d.id ? ' aria-current="page"' : ''}>${icon[d.icon]}<span>${esc(d.label)}</span></a></li>`;
+    return `<li><a class="nav-item" href="${esc(href)}" data-dest="${d.id}"${here === d.id ? ' aria-current="page"' : ''}>${icon[d.icon]}<span>${esc(d.label)}</span></a></li>`;
   }).join('');
   $('#nav').innerHTML = `
     <a class="wordmark" href="#/wear/now" aria-label="Scentcast, what to wear now">Scentcast</a>
     <ul class="nav-items">${items}</ul>
     <div class="nav-foot">
       <button class="nav-loc" data-action="location" aria-label="Change location: ${esc(state.loc?.name ?? 'not set')}">${icon.pin}<span><b>${esc(state.loc?.name ?? 'Set location')}</b>${now ? `<small>${deg(now.tempF)} · ${esc(now.label)}</small>` : ''}</span></button>
-      <a class="nav-item nav-settings" href="#/settings"${here === 'settings' ? ' aria-current="page"' : ''}>${icon.gear}<span>Settings</span></a>
+      <a class="nav-item nav-settings" href="#/settings" data-dest="settings"${here === 'settings' ? ' aria-current="page"' : ''}>${icon.gear}<span>Settings</span></a>
     </div>`;
 }
 
@@ -408,7 +413,9 @@ function sync() {
   const next = parseRoute(location.hash, PANES);
   const canonical = routeHash(next);
   if (location.hash !== canonical) go(canonical, { replace: true });
-  if (next.dest === 'bottle' && state.route?.dest !== 'bottle') pushedBottle = false;
+  // Forward onto a bottle page, or a typed one: the page before is its own
+  // entry, so closing can go Back to it.
+  if (next.dest === 'bottle' && state.route?.dest !== 'bottle') pushedBottle = true;
   transition(next);
 }
 
@@ -609,8 +616,7 @@ export async function boot() {
   // ?view=week from the old home-screen shortcuts: the same pane as a route.
   const legacy = legacyHash(params);
   if (legacy) {
-    const url = new URL(location.href);
-    url.searchParams.delete('view');
+    const url = withoutParams('view');
     if (!location.hash) url.hash = legacy;
     history.replaceState(null, '', url);
   }

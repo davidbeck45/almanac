@@ -58,7 +58,7 @@ export function heroHTML({ loc, wx, loading, error, updating }, { aspect, compac
     : '';
   let body;
   if (now) {
-    const status = updating ? '<span class="hero-status updating">Updating…</span>' : wx.stale ? '<span class="hero-status">Offline · showing the last forecast</span>' : '';
+    const status = updating ? '<span class="hero-status updating">Updating…</span>' : wx.stale ? '<span class="hero-status">Offline</span>' : '';
     body = `<div class="hero-wx">
       <div class="hero-temp">${temp(now.tempF)}<span class="deg">°</span></div>
       <div class="hero-meta">

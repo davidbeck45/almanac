@@ -188,7 +188,7 @@ export function segHTML(items, { action, label, cls = '' }) {
 
 // Sub-navigation: the same look as segHTML, but links (it changes the route).
 export function segLinksHTML(items, { label, cls = '' }) {
-  return `<nav class="seg seg-links ${cls}" aria-label="${esc(label)}">${items.map(i => `<a href="${esc(i.href)}"${i.on ? ' aria-current="page"' : ''}>${i.icon ?? ''}<span>${esc(i.label)}</span></a>`).join('')}</nav>`;
+  return `<nav class="seg seg-links ${cls}" aria-label="${esc(label)}">${items.map(i => `<a href="${esc(i.href)}" data-href="${esc(i.href)}"${i.on ? ' aria-current="page"' : ''}>${i.icon ?? ''}<span>${esc(i.label)}</span></a>`).join('')}</nav>`;
 }
 
 export function switchHTML({ on, label, action, id }) {

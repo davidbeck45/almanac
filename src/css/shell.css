@@ -267,8 +267,8 @@
 .set-row + .set-row { border-top: 1px solid var(--border-subtle); }
 .set-label { display: flex; align-items: center; gap: var(--s-3); min-width: 0; }
 .set-label > svg { width: 18px; height: 18px; flex: none; color: var(--ambient); }
-.set-label span { display: grid; min-width: 0; }
-.set-label small { display: block; color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.set-text { display: grid; min-width: 0; }
+.set-text small { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .set-link { color: var(--text-primary); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
 .set-rows > .notice { margin: var(--s-3) var(--s-4) 0; }
 .set-credits { padding: var(--s-3) var(--s-4); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
