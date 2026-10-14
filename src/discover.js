@@ -305,13 +305,21 @@ export function whyLine(pick) {
   if (pick.alsoLiked) parts.push('fans of your picks like it too');
   if (pick.risk.level !== 'low') parts.push(`${pick.risk.level} risk: ${pick.risk.reasons[0]?.replace(/\.$/, '').toLowerCase() ?? ''}`);
   if (pick.twin) parts.push(`cheaper twin: ${pick.twin.record.name}`);
+  if (pick.alike?.length) parts.push(`twins: ${pick.alike.map(r => r.name).join(", ")}`);
   return parts.map((p, i) => (i ? lower(p, 1) : p)).join('; ');
+}
+
+// Two picks voters call one scent (a family link either way), or over
+// MAX_OWNED_SIM alike: the list shows one, with the other as its `alike`.
+function twins(a, b) {
+  return signalsOf(a).family.includes(b.id) || signalsOf(b).family.includes(a.id) || similarity(a, b) > MAX_OWNED_SIM;
 }
 
 // The k best of `scored` ([{ record, bound }], bound an upper bound of the
 // final score), sorted by bound: each is placed by `final(record, bound)` ->
 // { score, … } | null (left out), walking down only while a bound can still
-// beat the k-th score.
+// beat the k-th score. A twin of a pick joins its `alike` (the better scored
+// of the two leads).
 function lazyTop(scored, k, final) {
   scored.sort((a, b) => b.bound - a.bound);
   const out = [];
@@ -319,7 +327,12 @@ function lazyTop(scored, k, final) {
     if (out.length >= k && item.bound <= out[k - 1].score) break;
     const placed = final(item.record, item.bound);
     if (!placed) continue;
-    out.push(placed);
+    const i = out.findIndex(p => twins(p.record, placed.record));
+    if (i >= 0) {
+      const [lead, other] = placed.score > out[i].score ? [placed, out[i]] : [out[i], placed];
+      lead.alike = [...(lead.alike ?? []), other.record, ...(other.alike ?? [])];
+      out[i] = lead;
+    } else out.push(placed);
     out.sort((a, b) => b.score - a.score);
     if (out.length > k) out.length = k;
   }
