@@ -17,6 +17,11 @@ const GENDER = { f: 'women', m: 'men', u: 'women and men' };
 const NOTE_TIERS = { t: 'top', m: 'mid', b: 'base', f: 'all' };
 const NOTE_TIER_KEYS = ['t', 'm', 'b', 'f'];
 const SEASONS = ['winter', 'spring', 'summer', 'fall'];
+// Search: a bottle whose whole name was typed ranks as if it had WHOLE_LIFT
+// times its votes, plus WHOLE_FLOOR (a new bottle typed exactly still leads
+// hits with a few votes).
+const WHOLE_LIFT = 50;
+const WHOLE_FLOOR = 10;
 
 const round3 = x => Math.round(x * 1000) / 1000;
 
@@ -222,8 +227,11 @@ export function fragranticaLibrary(load = defaultLoad) {
 
   // Matches as light records for the result list ({ id, name, brand, year,
   // thumb, stub }): bottles whose whole name was typed first, then the most
-  // voted. Without a bottle matching every word, ones missing a single word
-  // ("MFK Baccarat Rouge 540", a typo). `records` loads the full ones.
+  // voted. A whole-name hit far less voted than another hit doesn't lead (it
+  // counts WHOLE_LIFT times its votes): a 0-vote clone named "Baccarat Rouge"
+  // follows MFK's Baccarat Rouge 540. Without a bottle matching every word,
+  // ones missing a single word ("MFK Baccarat Rouge 540", a typo). `records`
+  // loads the full ones.
   async function search(query, limit = 8) {
     const words = normalize(query).split(' ').filter(w => w.length > 1);
     if (!words.length) return [];
@@ -234,16 +242,18 @@ export function fragranticaLibrary(load = defaultLoad) {
     const full = [], near = [];
     for (const line of text.split('\n')) {
       if (!line) continue;
-      const [id, name, brand, year] = line.split('\t');
+      const [id, name, brand, year, votes] = line.split('\t');
       const hay = normalize(`${name} ${brand}`);
       const missed = words.filter(w => !hay.includes(w)).length;
       if (!missed || (missed === 1 && words.length > 1)) {
-        (missed ? near : full).push({ id, name, brand: brandCase(brand), year: Number(year) || null, thumb: thumbOf(id), stub: true });
+        const hit = { id, name, brand: brandCase(brand), year: Number(year) || null, thumb: thumbOf(id), stub: true };
+        (missed ? near : full).push({ hit, votes: Number(votes) || 0 });
       }
     }
-    const hits = full.length ? full : near;
-    const whole = hits.filter(h => nameMatches(query, h));
-    return [...whole, ...hits.filter(h => !whole.includes(h))].slice(0, limit);
+    const rankOf = ({ hit, votes }) => (nameMatches(query, hit) ? (votes + WHOLE_FLOOR) * WHOLE_LIFT : votes);
+    return (full.length ? full : near).map(h => ({ ...h, rank: rankOf(h) }))
+      .sort((a, b) => b.rank - a.rank || b.votes - a.votes)
+      .slice(0, limit).map(h => h.hit);
   }
 
   // Map of id -> record for the ids the dataset has.

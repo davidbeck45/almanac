@@ -81,10 +81,13 @@ const EXCLUDE_MAX = 3;
 export function matchBottles(fragrances, text) {
   const q = normalize(text);
   if (!q) return [];
-  const exact = fragrances.filter(f => normalize(f.name) === q);
+  // A year the dataset puts after a name ("Opium (1977)") isn't part of it.
+  const nameOf = f => normalize(String(f.name).replace(/\s*\(\d{4}\)\s*$/, ''));
+  const exact = fragrances.filter(f => nameOf(f) === q);
   if (exact.length) return exact;
-  const has = q.replace(/ /g, '').length >= PART_MIN ? hay => hay.includes(q) : hay => ` ${hay} `.includes(` ${q} `);
-  return fragrances.filter(f => has(normalize(f.name)) || has(normalize(`${f.name} ${f.brand}`)));
+  // A number matches whole: "212" isn't "2121", nor "21" "212".
+  const has = q.replace(/ /g, '').length >= PART_MIN && !/^\d+$/.test(q) ? hay => hay.includes(q) : hay => ` ${hay} `.includes(` ${q} `);
+  return fragrances.filter(f => has(nameOf(f)) || has(`${nameOf(f)} ${normalize(f.brand)}`));
 }
 
 // "The week ahead" and "Today" both run in time order: tonight before tomorrow's daytime.
@@ -103,6 +106,36 @@ const datasetFile = async path => {
 function fail(message) {
   console.error(message);
   process.exit(1);
+}
+
+const byLine = r => `${r.name} by ${r.brand}${r.year ? ` (${r.year})` : ''}`;
+
+/**
+ * A dataset bottle by name, as --check, --styles, --more-like and --dupes
+ * find one: the suggestion pool's (`records`, `byId`; an exact name first,
+ * else every name holding it, the most voted used), else the dataset's
+ * search, a pool bottle it finds as its pool row. -> record or null.
+ */
+export async function datasetBottle(name, records, byId) {
+  const hits = matchBottles(records, name).sort((a, b) => b.ratingVotes - a.ratingVotes);
+  if (hits.length > 1) {
+    console.error(`"${name}" matches ${hits.length} bottles (${hits.slice(0, 4).map(byLine).join('; ')}${hits.length > 4 ? '…' : ''}); using the most voted. Give more of the name, or its id, for another.`);
+  }
+  if (hits.length) return hits[0];
+  const library = fragranticaLibrary(datasetFile);
+  const [hit] = await library.search(name, 1);
+  return hit ? byId.get(hit.id) ?? (await library.records([hit.id])).get(hit.id) ?? null : null;
+}
+
+// The suggestion pool's records, made once.
+let poolRecords = null;
+async function poolBottles() {
+  if (!poolRecords) {
+    const parsed = await loadPool(datasetFile);
+    const records = Array.from({ length: parsed.count }, (_, i) => fromPool(parsed, i));
+    poolRecords = { records, byId: new Map(records.map(r => [r.id, r])) };
+  }
+  return poolRecords;
 }
 
 const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s ?? '') && !Number.isNaN(Date.parse(`${s}T12:00:00Z`))
@@ -415,15 +448,10 @@ async function main() {
 
   // One bottle's style scores: the collection first, then the Fragrantica dataset.
   if (args.styles) {
-    let [f] = matchBottles(fragrances, args.styles);
+    let [f] = matchBottles(wardrobe, args.styles);
     if (!f) {
-      const dir = new URL('../data/fragrantica/', import.meta.url);
-      const library = fragranticaLibrary(async path => {
-        const file = new URL(path, dir);
-        return existsSync(file) ? readFileSync(file, 'utf8') : null;
-      });
-      const [hit] = await library.search(args.styles, 1);
-      if (hit) f = (await library.records([hit.id])).get(hit.id);
+      const { records, byId } = await poolBottles();
+      f = await datasetBottle(args.styles, records, byId);
     }
     if (!f) fail(`No bottle matches "${args.styles}"`);
     const scores = styleScores(f);
@@ -579,14 +607,11 @@ async function main() {
       if (climate.local) [summary, where] = [climate.summary, place.name];
       else console.error(`Couldn't get the climate for ${place.name} (${climate.error}); using the default climate.`);
     }
-    const parsed = await loadPool(datasetFile);
-    const records = Array.from({ length: parsed.count }, (_, i) => fromPool(parsed, i));
-    const byId = new Map(records.map(r => [r.id, r]));
+    const { records, byId } = await poolBottles();
     const preferValue = args.value ? true : args['no-value'] ? false : null;
     const ctx = excluding(gapContext({ owned: fragrances, records, byId, summary, shares, preferValue, mists: args.mists }), 'allow', hidden);
     const pct = x => `${Math.round(x * 100)}%`;
     const stars = r => (r.ratingVotes ? `${ratingText(r.rating)}★ from ${r.ratingVotes.toLocaleString('en-US')} votes` : 'no ratings yet');
-    const byLine = r => `${r.name} by ${r.brand}${r.year ? ` (${r.year})` : ''}`;
     // The bottle a fill beats or backs up: owned, or an earlier suggestion.
     const whose = f => (f.beatsPick ? `${f.beats.name} (suggested above)` : `your ${f.beats.name}`);
     const fillLine = f => (!f.beats ? `${f.title}: ${pct(f.to)}`
@@ -596,21 +621,14 @@ async function main() {
 
     if (args.check) {
       const q = args.check.trim();
-      let record = null;
-      if (/^\d+$/.test(q)) record = byId.get(q) ?? (await fragranticaLibrary(datasetFile).records([q])).get(q) ?? null;
-      else {
-        const hits = matchBottles(records, q).sort((a, b) => b.ratingVotes - a.ratingVotes);
-        if (hits.length > 1) {
-          console.error(`"${q}" matches ${hits.length} bottles (${hits.slice(0, 4).map(byLine).join('; ')}${hits.length > 4 ? '…' : ''}); checking the most voted. Give more of the name, or its id, for another.`);
-        }
-        record = hits[0] ?? null;
-        if (!record) {
-          // The dataset's search forgives more (a word missed, a brand typed);
-          // a pool bottle it finds checks as its pool row.
-          const library = fragranticaLibrary(datasetFile);
-          const [hit] = await library.search(q, 1);
-          record = hit ? byId.get(hit.id) ?? (await library.records([hit.id])).get(hit.id) : matchBottles(wardrobe, q)[0] ?? null;
-        }
+      const byNumber = async id => byId.get(id) ?? (await fragranticaLibrary(datasetFile).records([id])).get(id) ?? null;
+      // "id:1881" is an id; a bare number is a name when a bottle has it
+      // (1881, 4711, 212), else an id.
+      const asId = /^id:\s*(\d+)$/i.exec(q)?.[1];
+      let record = asId ? await byNumber(asId) : await datasetBottle(q, records, byId) ?? matchBottles(wardrobe, q)[0] ?? null;
+      if (!asId && /^\d+$/.test(q)) {
+        if (record) console.error(`Reading "${q}" as a name (${byLine(record)}); give id:${q} for the bottle with that id.`);
+        else record = await byNumber(q);
       }
       if (!record) fail(`No bottle matches "${q}"`);
       // Outside the pool, a bottle's signals come from its about data.
@@ -834,15 +852,13 @@ async function discover(args, fragrances, { slot, count, history, hidden }) {
   const ctx = excluding(discoverContext(pool, fragrances, { styles }), 'allowed', hidden);
   const library = fragranticaLibrary(datasetFile);
   // A typed name: the wardrobe first (switched-off bottles too), then the
-  // pool, then the whole dataset (with its about data).
+  // pool by votes, then the whole dataset (with its about data), as --check.
   const findAny = async name => {
     const mine = matchBottles([...fragrances, ...hidden], name);
     if (mine.length > 1) console.error(`"${name}" matches ${mine.map(f => f.name).join(', ')}; using ${mine[0].name}. Give more of the name for another.`);
     if (mine.length) return mine[0];
-    const [hit] = await library.search(name, 1);
-    if (!hit) return null;
-    const record = ctx.byId.get(hit.id) ?? (await library.records([hit.id])).get(hit.id);
-    return record && { ...record, about: await loadAbout(hit.id, datasetFile) };
+    const record = await datasetBottle(name, ctx.records, ctx.byId);
+    return record && { ...record, about: await loadAbout(record.id, datasetFile) };
   };
 
   const line = (r, extra) => [r.name, r.brand, r.year, r.rating ? `${r.rating.toFixed(2)}★` : null,

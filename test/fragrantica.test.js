@@ -4,6 +4,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fromFragrantica, fragranticaLibrary, loadPool, fromPool, brandCase } from '../src/fragrantica.js';
 import { performanceRating, steadyShares } from '../src/engine.js';
 import { DATASET_VERSION } from '../src/profiles.js';
+import { nameMatches } from '../src/collections.js';
 
 const dir = new URL('../data/fragrantica/', import.meta.url);
 const library = fragranticaLibrary(async path => {
@@ -44,6 +45,18 @@ test('search finds a bottle by brand and name, whole names first', async () => {
   assert.equal(brx.name, 'Baccarat Rouge 540', 'a word the bottle lacks is forgiven when nothing has them all');
   assert.deepEqual(await library.search('qqqxzzv'), []);
   assert.deepEqual(await library.search('a'), []);
+});
+
+test('a famous bottle leads its 0-vote namesakes, whatever year the dataset puts after its name', async () => {
+  const first = async q => (await library.search(q))[0];
+  assert.deepEqual([(await first('ombre leather')).name, (await first('ombre leather')).brand], ['Ombré Leather (2018)', 'Tom Ford']);
+  assert.equal((await first('baccarat rouge')).name, 'Baccarat Rouge 540', 'Nish Parfum’s clone named Baccarat Rouge follows');
+  assert.equal((await first('opium')).name, 'Opium (1977)', 'the whole name typed leads Black Opium');
+  assert.equal((await first('khamrah')).name, 'Khamrah');
+  // A pasted list ticks the hit whose name was typed: the famous one.
+  for (const [q, brand] of [['ombre leather', 'Tom Ford'], ['opium', 'Yves Saint Laurent']]) {
+    assert.equal((await library.search(q)).find(h => nameMatches(q, h))?.brand, brand, q);
+  }
 });
 
 test('brands written in capitals read in title case, as the build writes them; short acronyms stay', async () => {

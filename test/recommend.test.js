@@ -29,6 +29,10 @@ test('bottle names match exactly first, else by part', () => {
   assert.deepEqual(matchBottles(fragrances, 'detour').map(f => f.name), ['Détour Noir'], 'accents don’t matter');
   assert.ok(matchBottles(fragrances, 'blanc').length >= 3);
   assert.deepEqual(matchBottles(fragrances, 'zzz'), []);
+  const named = [{ name: 'Opium (1977)', brand: 'Yves Saint Laurent' }, { name: '212 VIP', brand: 'Carolina Herrera' }, { name: '2121', brand: 'X' }];
+  assert.deepEqual(matchBottles(named, 'opium').map(f => f.name), ['Opium (1977)'], 'a year after the name isn’t part of it');
+  assert.deepEqual(matchBottles(named, '212').map(f => f.name), ['212 VIP'], 'a number matches whole');
+  assert.deepEqual(matchBottles(named, '1977'), []);
 });
 
 test('names match as the app searches them: any apostrophe, whole words for a short part', () => {

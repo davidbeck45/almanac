@@ -63,6 +63,9 @@ test('a fuzzy search hit counts only when its name was typed', () => {
   assert.ok(nameMatches('Supremacy Collectors Edition', { name: "Supremacy Collector's Edition" }));
   assert.ok(!nameMatches('Liquid Brun', { name: 'Liquid Illusion' }));
   assert.ok(!nameMatches('Caramellino Litoralle Aromatica', { name: 'Caramello' }));
+  assert.ok(nameMatches('Ombre Leather', { name: 'Ombré Leather (2018)' }), 'the dataset’s year needn’t be typed');
+  assert.ok(nameMatches('Opium 1977', { name: 'Opium (1977)' }));
+  assert.ok(!nameMatches('Opium', { name: 'Opium Pour Homme' }));
 });
 
 test('share links carry hand-entered bottles alongside catalog ids', () => {

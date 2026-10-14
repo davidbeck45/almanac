@@ -76,9 +76,10 @@ export function localMatches(query, records, limit = 5) {
 // Whether a search hit is plausibly the bottle someone typed: every word of its
 // name was typed (a plural counts). Online search is fuzzy and returns its
 // nearest guess even for bottles it doesn't have ("Caramello" for "Caramellino").
+// A year the dataset puts after a name ("Ombré Leather (2018)") needn't be typed.
 export function nameMatches(query, record) {
   const typed = normalize(query).split(' ');
-  const words = normalize(record.name).split(' ').filter(w => w.length > 1);
+  const words = normalize(String(record.name).replace(/\s*\(\d{4}\)\s*$/, '')).split(' ').filter(w => w.length > 1);
   return words.length > 0 && words.every(w => typed.some(t => t === w || t === `${w}s`));
 }
 
