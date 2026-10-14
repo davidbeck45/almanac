@@ -198,7 +198,8 @@ function ensure(app, d) {
 // A search whose words are all notes reads as notes, unless a bottle named
 // exactly that is one people mean by them (searchMode): a name hit carries
 // no votes, so the pool's `records` says how many rated it (from its rows,
-// which the notes question loaded, or r/). id -> rating votes.
+// which the notes question loaded; the pool holds every well-known bottle,
+// so one it lacks counts as 0). id -> rating votes.
 const namedVotes = new Map();
 const namedAsked = new Set();
 const votesOf = id => namedVotes.get(id);
@@ -213,7 +214,7 @@ function checkNamed(app, d) {
   if (!ask.length) return;
   for (const r of ask) namedAsked.add(r.id);
   const ids = ask.map(r => r.id);
-  askPool('records', { ids }).then(({ records, missing }) => {
+  askPool('records', { ids, poolOnly: true }).then(({ records, missing }) => {
     for (const r of records) namedVotes.set(String(r.id), r.ratingVotes ?? 0);
     for (const id of missing) namedVotes.set(String(id), 0);
   }, () => {

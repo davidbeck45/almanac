@@ -6,14 +6,18 @@
 // it looks up that window's weather where it was worn (Open-Meteo's archive,
 // or its forecast API for the last few days the archive lacks), ranks the
 // wardrobe the app was choosing from (the demo minus the device's hidden
-// bottles) with the earlier wears as rotation, and reports where the worn
-// bottle landed. Wears of bottles outside the demo are skipped.
+// bottles, with the export's own ratings and skin nudges) for the occasion
+// it was logged for, with the earlier wears as rotation, and reports where
+// the worn bottle landed. Wears of bottles outside the demo are skipped, and
+// so are wears whose weather couldn't load (counted).
 // Weather data by Open-Meteo.com (CC BY 4.0).
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { rank } from '../src/engine.js';
-import { windowOn } from '../src/weather.js';
+import { windowOn, forecastError } from '../src/weather.js';
 import { parseJournal } from '../src/history.js';
+import { occasionById } from '../src/occasions.js';
+import { applySkin } from '../src/skin.js';
 
 const HOURLY = 'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code';
 const DAY_MS = 86_400_000;
@@ -21,20 +25,23 @@ const isoDaysAgo = n => new Date(Date.now() - n * DAY_MS).toISOString().slice(0,
 
 async function getJSON(url) {
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Open-Meteo request failed (${res.status}): ${url}`);
+  if (!res.ok) throw Object.assign(new Error(`Open-Meteo request failed (${res.status})`), { status: res.status });
   return res.json();
 }
 
-// Hourly weather at one place over [from, to], archive first, recent days from the forecast API.
+// Hourly weather at one place over [from, to], archive first, recent days
+// from the forecast API. A request that fails leaves its days out (their
+// wears count as without weather), its error in `errors`.
 async function hourlyAt(lat, lon, from, to) {
   const base = { latitude: lat, longitude: lon, hourly: HOURLY, temperature_unit: 'fahrenheit', timezone: 'auto' };
-  const parts = [];
+  const parts = [], errors = [];
+  const get = url => getJSON(url).then(p => parts.push(p), err => errors.push(err));
   const archiveEnd = to < isoDaysAgo(5) ? to : isoDaysAgo(5);
   if (from <= archiveEnd) {
-    parts.push(await getJSON(`https://archive-api.open-meteo.com/v1/archive?${new URLSearchParams({ ...base, start_date: from, end_date: archiveEnd })}`));
+    await get(`https://archive-api.open-meteo.com/v1/archive?${new URLSearchParams({ ...base, start_date: from, end_date: archiveEnd })}`);
   }
   if (to > isoDaysAgo(8)) {
-    parts.push(await getJSON(`https://api.open-meteo.com/v1/forecast?${new URLSearchParams({ ...base, past_days: 10, forecast_days: 1 })}`));
+    await get(`https://api.open-meteo.com/v1/forecast?${new URLSearchParams({ ...base, past_days: 10, forecast_days: 1 })}`);
   }
   // Merge by hour, keeping the first source with a value.
   const rows = new Map();
@@ -48,6 +55,7 @@ async function hourlyAt(lat, lon, from, to) {
   return {
     latitude: parts[0]?.latitude ?? lat,
     hourly: { time, ...Object.fromEntries(HOURLY.split(',').map(k => [k, time.map(t => rows.get(t)[k])])) },
+    errors,
   };
 }
 
@@ -59,13 +67,15 @@ const placeOf = (journal, h) => (h.lat !== undefined ? { lat: h.lat, lon: h.lon 
 
 /**
  * Where each wear's bottle landed, ranked as the app would have: the demo
- * minus the device's hidden bottles, the earlier wears as rotation.
+ * minus the device's hidden bottles, with the export's ratings and skin
+ * nudges, for the occasion the wear was logged for (Occasion's list; Today
+ * and the Week log 'daily'), the earlier wears as rotation.
  * journal: parseJournal's shape. windowFor(wear, place) -> weather window or null.
  * -> { rows, skipped }
  */
 export function rankWears(journal, demo, windowFor) {
   // The app keeps ids as strings (main.js, history.js); data/collection.json has numbers.
-  const bottles = demo.map(f => (typeof f.id === 'string' ? f : { ...f, id: String(f.id) }));
+  const bottles = applySkin(demo.map(f => (typeof f.id === 'string' ? f : { ...f, id: String(f.id) })), journal.skin ?? {});
   const byId = new Map(bottles.map(f => [f.id, f]));
   const hidden = new Set(journal.hidden);
   const wears = journalWears(journal);
@@ -78,11 +88,12 @@ export function rankWears(journal, demo, windowFor) {
     const win = windowFor(h, at);
     if (!win) { skipped.noWeather++; continue; }
     const pool = bottles.filter(f => !hidden.has(f.id) || f === worn);
-    const ranked = rank(pool, win, h.slot, { history: wears.slice(0, i), todayISO: h.date });
+    const occasion = h.occasion && h.occasion !== 'daily' ? occasionById(h.occasion) ?? null : null;
+    const ranked = rank(pool, win, h.slot, { occasion, history: wears.slice(0, i), todayISO: h.date });
     const at1 = ranked.findIndex(r => r.fragrance === worn) + 1;
     const entry = ranked[at1 - 1];
     rows.push({
-      date: h.date, slot: h.slot, feelsF: Math.round(win.feelsF), dewF: Math.round(win.dewF), condition: win.condition,
+      date: h.date, slot: h.slot, occasion: occasion?.id ?? null, feelsF: Math.round(win.feelsF), dewF: Math.round(win.dewF), condition: win.condition,
       worn: worn.name, rank: at1, of: ranked.length, tier: entry.tier, top: ranked[0].fragrance.name,
       reasons: entry.reasons.map(r => `${r.tone === 'good' ? '+' : '-'} ${r.text}`),
     });
@@ -104,11 +115,23 @@ export function summarizeRows(rows, skipped) {
   };
 }
 
+function fail(message) {
+  console.error(message);
+  process.exit(1);
+}
+
 async function main() {
-  const { values: args, positionals: [file] } = parseArgs({ allowPositionals: true, options: { json: { type: 'boolean', default: false } } });
-  if (!file) { console.error('usage: node scripts/journal-check.mjs JOURNAL.json [--json]'); process.exit(1); }
-  const journal = parseJournal(JSON.parse(readFileSync(file, 'utf8')));
-  if (!journal) { console.error(`${file} is not a Scentcast journal export`); process.exit(1); }
+  let args, file;
+  try {
+    ({ values: args, positionals: [file] } = parseArgs({ allowPositionals: true, options: { json: { type: 'boolean', default: false } } }));
+  } catch (err) {
+    fail(`${err.message}\nusage: node scripts/journal-check.mjs JOURNAL.json [--json]`);
+  }
+  if (!file) fail('usage: node scripts/journal-check.mjs JOURNAL.json [--json]');
+  let text, journal = null;
+  try { text = readFileSync(file, 'utf8'); } catch { fail(`Can't read ${file}`); }
+  try { journal = parseJournal(JSON.parse(text)); } catch {}
+  if (!journal) fail(`${file} isn't a Scentcast journal export (the wear journal's Export button)`);
   const demo = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url))).fragrances;
 
   // One weather fetch per place, covering its wears.
@@ -122,7 +145,13 @@ async function main() {
     if (h.date > p.to) p.to = h.date;
     places.set(key, p);
   }
-  for (const p of places.values()) p.weather = await hourlyAt(p.lat, p.lon, p.from, p.to);
+  // A request that failed: say so once, and count its wears as without weather.
+  const failed = new Set();
+  for (const p of places.values()) {
+    p.weather = await hourlyAt(p.lat, p.lon, p.from, p.to);
+    for (const err of p.weather.errors) failed.add(err.status ? forecastError(err) : 'Can’t reach Open-Meteo. Check your connection and try again.');
+  }
+  for (const message of failed) console.error(`${message} Wears it would cover are skipped.`);
 
   const { rows, skipped } = rankWears(journal, demo, (h, at) => windowOn(places.get(`${at.lat},${at.lon}`).weather, h.date, h.slot));
   const summary = summarizeRows(rows, skipped);
@@ -131,7 +160,8 @@ async function main() {
     return;
   }
   for (const r of rows) {
-    console.log(`${r.date} ${r.slot.padEnd(5)} ${String(r.feelsF).padStart(3)}°F dew ${String(r.dewF).padStart(2)}  ${r.worn.padEnd(24)} #${r.rank}/${r.of} ${r.tier}${r.rank > 1 ? `   (top: ${r.top})` : ''}`);
+    const occasion = r.occasion ? ` · ${occasionById(r.occasion).label}` : '';
+    console.log(`${r.date} ${r.slot.padEnd(5)} ${String(r.feelsF).padStart(3)}°F dew ${String(r.dewF).padStart(2)}  ${r.worn.padEnd(24)} #${r.rank}/${r.of} ${r.tier}${r.rank > 1 ? `   (top: ${r.top})` : ''}${occasion}`);
   }
   const s = summary;
   console.log(`\n${s.wears} wears checked (skipped: ${s.skipped.notInDemo} outside the demo, ${s.skipped.noPlace} without a place, ${s.skipped.noWeather} without weather)`);

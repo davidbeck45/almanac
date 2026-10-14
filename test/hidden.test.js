@@ -12,6 +12,16 @@ beforeEach(() => {
   };
 });
 
+test('a stored list that doesn’t read leaves the other one be', () => {
+  store.set('scentcast.hidden', JSON.stringify(['12', '34']));
+  store.set('scentcast.shown', '{broken');
+  const h = loadHidden();
+  assert.deepEqual([...h.hidden], ['12', '34'], 'the device’s own hides survive a broken shown list');
+  assert.ok(hiddenFor(h, true).has('4310'), 'and the defaults stay hidden');
+  store.set('scentcast.hidden', '"not a list"');
+  assert.deepEqual([...loadHidden().hidden], []);
+});
+
 test('the default hidden bottles tidy the demo only', () => {
   const h = loadHidden(); // a first visit
   assert.deepEqual([...hiddenFor(h, true)], DEFAULT_HIDDEN);

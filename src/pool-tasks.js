@@ -28,15 +28,19 @@
 //            -> checkJSON plus the bottle's record, styles and the liked styles it shows
 //               ({ checks } for several)
 //   liked    { owned, stated? } -> { styles: likedStyles with ids, from: 'stated' | 'wardrobe' }
-//   styles   { owned, exclude?, styles, mode?, k?, filters?, preferValue? } -> { styles, mode, picks }
-//   moreLike { owned, exclude?, seeds? (ids or records; else the most worn: history, todayISO), k?, filters?, preferValue? }
+//   styles   { owned, exclude?, styles, mode?, k?, filters?, preferValue?, cloneVotes? } -> { styles, mode, picks }
+//   moreLike { owned, exclude?, seeds? (ids or records; else the most worn: history, todayISO), k?, filters?, preferValue?, cloneVotes? }
 //            -> { seeds, from: 'given' | 'worn' | 'rated', picks }
-//   notes    { owned, exclude?, query, filters?, k?, preferValue? } -> searchNotes' fields, its results as `picks`
+//   notes    { owned, exclude?, query, filters?, k?, preferValue?, cloneVotes? } -> searchNotes' fields, its results as `picks`
 //   dupes    { owned, exclude?, id | record } -> { record, original, cheaper, siblings }
-//   records  { ids } -> { records (pool rows once the pool is in, else r/), missing }
+//   records  { ids, poolOnly? } -> { records (pool rows once the pool is in, else r/), missing }; poolOnly
+//            waits for the pool and sends only its rows, the rest missing (no r/ loads: rating votes
+//            for a bottle the pool lacks are under 500, so a miss is never well known)
 //   warm     {} -> { count }: loads the pool
 // Picks are src/discover.js's (record, styles, nearest, clonesOf, twin,
-// alike, risk, …) with `why`, the line whyLine writes.
+// alike, risk, …) with `why`, the line whyLine writes. cloneVotes: true adds
+// the smells-like votes behind each `clonesOf` (addCloneVotes; one about
+// shard per cloning pick), which nothing the app shows reads.
 import { loadPool, fromPool, loadPoolStyles, loadAbout, fragranticaLibrary } from './fragrantica.js';
 import { poolRowOf, preferValueDefault, familyIndex, ownedVectors, PREFER_VALUE } from './candidates.js';
 import { gapContext, gapReport, buyCheck, checkJSON, DEFAULT_CLIMATE } from './gaps.js';
@@ -191,12 +195,16 @@ function ownedFor(cache, p, pool) {
   });
 }
 
-// A context with the switched-off bottles counted as owned wherever owned
-// ones are left out (`allowKey`'s owned and originals, the smells-like
-// family, the look-alike vectors), but not in what the wardrobe covers,
-// leans toward or likes: never suggested back, nor their twins, originals
-// or look-alikes, and checks call them owned.
-function excluding(ctx, allowKey, hidden) {
+/**
+ * A context with the switched-off bottles (`hidden`, records) counted as
+ * owned wherever owned ones are left out (`allowKey`'s owned and originals,
+ * the smells-like family, the look-alike vectors), but not in what the
+ * wardrobe covers, leans toward or likes: never suggested back, nor their
+ * twins, originals or look-alikes, and checks call them owned. `allowKey`
+ * is 'allow' for gapContext's, 'allowed' for discoverContext's. The CLI's
+ * --exclude goes through it too.
+ */
+export function excluding(ctx, allowKey, hidden) {
   if (!hidden.length) return ctx;
   const allowed = ctx[allowKey], owned = new Set(allowed.owned), originals = new Set(allowed.originals);
   for (const f of hidden) {
@@ -258,11 +266,13 @@ async function recordFor(cache, { id, record }, pool, owned) {
 }
 const target = x => (x && typeof x === 'object' ? { record: x } : { id: x });
 
-// Picks with the smells-like votes for what each copies, and their why line.
-async function finish(cache, picks) {
-  await Promise.all(picks.filter(pick => pick.clonesOf).map(async pick => addCloneVotes(pick, await aboutOf(cache, pick.id))));
+// Picks with their why line, and when asked (`cloneVotes`) the smells-like
+// votes for what each copies.
+async function finish(cache, picks, { cloneVotes = false } = {}) {
+  if (cloneVotes) await Promise.all(picks.filter(pick => pick.clonesOf).map(async pick => addCloneVotes(pick, await aboutOf(cache, pick.id))));
   return picks.map(pick => ({ ...pick, why: whyLine(pick) }));
 }
+const finishing = p => ({ cloneVotes: p.cloneVotes === true });
 
 const recordOf = (ctx, id) => ctx.owned.find(f => f.id === String(id)) ?? ctx.byId.get(String(id)) ?? null;
 // A record without the about data attached here for its signals.
@@ -325,7 +335,7 @@ const TASKS = {
     const { ctx, preferValue } = await discoverFor(cache, p, ms);
     const styles = (p.styles ?? []).filter(id => STYLE_IDS.has(id)), mode = p.mode ?? 'any';
     const filters = valueFilters(p.filters, preferValue);
-    const picks = await timed(ms, 'task', () => finish(cache, moreOfStyles(styles, ctx, { mode, k: p.k ?? 10, filters })));
+    const picks = await timed(ms, 'task', () => finish(cache, moreOfStyles(styles, ctx, { mode, k: p.k ?? 10, filters }), finishing(p)));
     return { styles, mode, picks, preferValue };
   },
 
@@ -341,7 +351,7 @@ const TASKS = {
     // "Fans also like" reads the seeds' about data.
     const withLikes = await Promise.all(seeds.map(async s => (s.about ? s : { ...s, about: await aboutOf(cache, s.id) })));
     const filters = valueFilters(p.filters, preferValue);
-    const picks = await timed(ms, 'task', () => finish(cache, moreLike(withLikes, ctx, { k: p.k ?? 10, filters })));
+    const picks = await timed(ms, 'task', () => finish(cache, moreLike(withLikes, ctx, { k: p.k ?? 10, filters }), finishing(p)));
     return { seeds: seeds.map(bare), from, picks, preferValue };
   },
 
@@ -349,7 +359,7 @@ const TASKS = {
     const { ctx, preferValue } = await discoverFor(cache, p, ms);
     const query = String(p.query ?? '');
     const { results, ...found } = await timed(ms, 'task', () => searchNotes(query, ctx, valueFilters(p.filters, preferValue), { k: p.k ?? 10 }));
-    const picks = await timed(ms, 'task', () => finish(cache, results));
+    const picks = await timed(ms, 'task', () => finish(cache, results, finishing(p)));
     return { query, ...found, picks, preferValue };
   },
 
@@ -369,11 +379,11 @@ const TASKS = {
   async records(p, cache) {
     const ids = [...new Set((p.ids ?? []).map(String))];
     // The pool's rows carry their signals, once it's in (this never waits for
-    // it); the rest load from r/.
-    const pool = cache.ready;
+    // it, unless asked for only its rows); the rest load from r/.
+    const pool = p.poolOnly ? await poolOf(cache) : cache.ready;
     const out = new Map(ids.flatMap(id => (pool?.byId.has(id) ? [[id, pool.byId.get(id)]] : [])));
     const rest = ids.filter(id => !out.has(id));
-    if (rest.length) for (const [id, r] of await cache.library.records(rest)) out.set(id, r);
+    if (rest.length && !p.poolOnly) for (const [id, r] of await cache.library.records(rest)) out.set(id, r);
     return { records: ids.filter(id => out.has(id)).map(id => out.get(id)), missing: ids.filter(id => !out.has(id)) };
   },
 

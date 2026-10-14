@@ -262,6 +262,36 @@ test('records never waits for the pool: r/ records before it’s in, its rows af
   assert.ok((await handlePool({ id: 3, type: 'records', payload: { ids: ['76063'] } }, fresh)).result.records[0].extras);
 });
 
+test('lists don’t fetch about data for vote counts nobody shows, and poolOnly records skip r/', async () => {
+  const paths = [];
+  const counted = newPoolCache({ load: path => { paths.push(path); return load(path); } });
+  const run = async (type, payload) => {
+    const answer = await handlePool({ id: 1, type, payload }, counted);
+    assert.equal(answer.error, undefined, answer.error);
+    return answer.result;
+  };
+  await run('warm', {});
+  const fetched = prefix => paths.filter(p => p.startsWith(prefix)).length;
+  paths.length = 0;
+  // By bottle and a notes search, with picks that copy something.
+  const plain = [...(await run('moreLike', { owned, seeds: ['9828'], k: 10 })).picks, ...(await run('notes', { owned, query: 'amber vanilla', k: 10 })).picks];
+  const copies = plain.filter(p => p.clonesOf);
+  assert.ok(copies.length, 'some picks copy a bottle');
+  assert.ok(copies.every(p => p.clonesOf.up == null && !/\(\d+ to \d+\)/.test(p.why)));
+  // Aventus's own about data is read for "fans also like"; nothing for the picks.
+  assert.equal(fetched('x/'), 1, paths.join(' '));
+  paths.length = 0;
+  const voted = (await run('moreLike', { owned, seeds: ['9828'], k: 10, cloneVotes: true })).picks.filter(p => p.clonesOf);
+  assert.ok(voted.some(p => p.clonesOf.up > 0) && fetched('x/') > 0, 'asked for, the votes come');
+
+  // A name search asks whether its exact hits are well known: pool rows only.
+  paths.length = 0;
+  const { records, missing } = await run('records', { ids: ['76063', '12807', 'my:x'], poolOnly: true });
+  assert.deepEqual(records.map(r => r.name), ['Shalimar Millésime Tonka']);
+  assert.deepEqual(missing, ['12807', 'my:x']);
+  assert.equal(fetched('r/'), 0);
+});
+
 // ---------------------------------------------------------------- the server
 
 // Waits (real time) until `fn()` holds.

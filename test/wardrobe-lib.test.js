@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 // A device's storage with one want on it, and just enough of a page.
-const store = new Map([['scentcast.want', JSON.stringify([{ id: '1', added: '2026-10-01', record: { id: '1', name: 'Test Bottle', brand: 'Test', accords: { woody: 80 } } }])]]);
+const store = new Map([['scentcast.want', JSON.stringify([{ id: '1', added: '2026-10-01', record: { id: '1', name: 'Test Bottle', brand: 'Test', accords: { woody: 80 }, season: { winter: 0.25, spring: 0.25, summer: 0.25, fall: 0.25 }, dayNight: { day: 0.5, night: 0.5 } } }])]]);
 Object.defineProperty(globalThis, 'localStorage', {
   configurable: true,
   value: { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k) },

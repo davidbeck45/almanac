@@ -11,9 +11,17 @@ export const DEFAULT_HIDDEN = [
 
 const isDefault = id => DEFAULT_HIDDEN.includes(id);
 
+// A stored id list: null when there's none, [] when it doesn't read (so a
+// broken one of the two keys doesn't take the other with it).
 function read(key) {
   const stored = localStorage.getItem(key);
-  return stored === null ? null : JSON.parse(stored).map(String);
+  if (stored === null) return null;
+  try {
+    const list = JSON.parse(stored);
+    return Array.isArray(list) ? list.map(String) : [];
+  } catch {
+    return [];
+  }
 }
 
 // { hidden, shown }: the device's own hides, and the defaults it turned back

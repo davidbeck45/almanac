@@ -26,16 +26,22 @@
 // first N picks. Every bottle in the wardrobe counts, Jake included (these
 // answers are for David); --demo leaves out DEFAULT_HIDDEN like the site does
 // for a first-time visitor. Bottles hidden in the app live in the phone's
-// storage; pass them via --exclude (part of a name is enough). A journal
-// export also carries his own ratings and skin nudges, and turns on the
-// rotation nudge (a bottle unworn for a month takes a slot it nearly wins).
+// storage; pass them via --exclude (part of a name is enough), or with the
+// journal export, which carries them. Like the app, picks leave switched-off
+// bottles out, and suggestions and checks count them as owned (never
+// suggested back; "You own it."). A journal export also carries his own
+// ratings and skin nudges, and turns on the rotation nudge (a bottle unworn
+// for a month takes a slot it nearly wins), and the gap finder reads its
+// wears' occasions into the use shares.
 import { readFileSync, existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { rank, planWindows, comfortRange } from '../src/engine.js';
 import { layerPicks, byPick } from '../src/layering.js';
 import { OCCASIONS } from '../src/occasions.js';
 import { DEFAULT_HIDDEN } from '../src/hidden.js';
-import { parseJournal } from '../src/history.js';
+import { parseJournal, occasionCounts } from '../src/history.js';
+import { normalize } from '../src/collections.js';
+import { excluding } from '../src/pool-tasks.js';
 import { fetchForecast, summarize, week, tripWindows } from '../src/weather.js';
 import { searchCities } from '../src/location.js';
 import { STYLES, STYLE_STRONG, WEARS_CLOSE, styleById, styleScores, topOf, leanOf, closeOf, styleMix } from '../src/scent-styles.js';
@@ -44,7 +50,7 @@ import { applySkin } from '../src/skin.js';
 import { packTrip, withEvents, picksFor, tripOccasion } from '../src/pack.js';
 import { sprayGuide } from '../src/spray.js';
 import { doubles } from '../src/doubles.js';
-import { gapContext, gapReport, buyCheck, checkJSON, cellLabel, DEFAULT_CLIMATE, USES, useLabel } from '../src/gaps.js';
+import { gapContext, gapReport, buyCheck, checkJSON, cellLabel, ratingText, DEFAULT_CLIMATE, USES, useLabel } from '../src/gaps.js';
 import { fetchClimate } from '../src/climate.js';
 import { parseUses, sharesFrom } from '../src/uses.js';
 import {
@@ -61,16 +67,24 @@ export function findOccasion(text) {
   return OCCASIONS.find(o => [o.id, o.label, ...(o.aliases ?? [])].some(n => squash(n) === q)) ?? null;
 }
 
+// Part of a name matches inside words from PART_MIN letters; shorter, only
+// whole words ("a" isn't every bottle with an a in its name).
+const PART_MIN = 3;
+// An --exclude term matching more bottles than this is a slip, not a choice.
+const EXCLUDE_MAX = 3;
+
 /**
- * Bottles a typed name picks out: an exact name first, else every name that
- * contains it (case and accents aside).
+ * Bottles a typed name picks out: an exact name first, else every name (or
+ * name and brand) that contains it. Case, accents and punctuation aside, as
+ * the app's search: "L'Homme Ideal" is L’Homme Idéal.
  */
 export function matchBottles(fragrances, text) {
-  const norm = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
-  const q = norm(text);
+  const q = normalize(text);
   if (!q) return [];
-  const exact = fragrances.filter(f => norm(f.name) === q);
-  return exact.length ? exact : fragrances.filter(f => norm(f.name).includes(q) || norm(`${f.name} ${f.brand}`).includes(q));
+  const exact = fragrances.filter(f => normalize(f.name) === q);
+  if (exact.length) return exact;
+  const has = q.replace(/ /g, '').length >= PART_MIN ? hay => hay.includes(q) : hay => ` ${hay} `.includes(` ${q} `);
+  return fragrances.filter(f => has(normalize(f.name)) || has(normalize(`${f.name} ${f.brand}`)));
 }
 
 // "The week ahead" and "Today" both run in time order: tonight before tomorrow's daytime.
@@ -105,10 +119,10 @@ const MAX_AHEAD_DAYS = 365;
  * --events "2026-10-20 night formal; 2026-10-21 date night" -> [{ dateISO,
  * slot, occasion }]. Each is a date, then an occasion (id or label), with an
  * optional day or night before or after it ("formal night"); without one the
- * occasion's own slot. Throws with a message for the user.
+ * occasion's own slot. One per window. Throws with a message for the user.
  */
 export function parseEvents(text) {
-  return String(text ?? '').split(';').map(s => s.trim()).filter(Boolean).map(part => {
+  const events = String(text ?? '').split(';').map(s => s.trim()).filter(Boolean).map(part => {
     const [dateISO, ...rest] = part.split(/\s+/);
     if (!isDate(dateISO)) throw new Error(`--events: "${part}" doesn't start with a date (YYYY-MM-DD)`);
     // "night out" and "date night" are occasions; "night formal" and "formal night" a slot and one.
@@ -122,6 +136,13 @@ export function parseEvents(text) {
     }
     return { dateISO, slot, occasion };
   });
+  const seen = new Set();
+  for (const e of events) {
+    const key = `${e.dateISO} ${e.slot}`;
+    if (seen.has(key)) throw new Error(`--events: two events on the ${e.slot} of ${e.dateISO}; give each day or night one`);
+    seen.add(key);
+  }
+  return events;
 }
 
 // Standard situations for --spray without a place.
@@ -196,26 +217,37 @@ async function main() {
   if (args.date && daysFrom(today, args.date) > MAX_AHEAD_DAYS) fail(`--date ${args.date} is more than a year out`);
   if (args.date && args.week) fail('--date picks for one day; leave out --week');
 
-  let fragrances = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url))).fragrances
+  let wardrobe = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url))).fragrances
     .map(f => ({ ...f, id: String(f.id) }));
-  if (args.demo) fragrances = fragrances.filter(f => !DEFAULT_HIDDEN.includes(f.id));
+  // Switched off: --demo's defaults, --exclude's bottles and the journal's.
+  const off = new Set(args.demo ? DEFAULT_HIDDEN : []);
   for (const term of args.exclude.split(',').map(s => s.trim()).filter(Boolean)) {
-    const hits = matchBottles(fragrances, term);
+    const hits = matchBottles(wardrobe, term);
     if (!hits.length) console.error(`--exclude "${term}" matches no bottle; nothing left out for it`);
+    else if (hits.length > EXCLUDE_MAX) fail(`--exclude "${term}" matches ${hits.length} bottles (${hits.map(f => f.name).join(', ')}); give more of the name`);
     else if (hits.length > 1) console.error(`--exclude "${term}" leaves out ${hits.map(f => f.name).join(', ')}`);
-    fragrances = fragrances.filter(f => !hits.includes(f));
+    for (const f of hits) off.add(f.id);
   }
 
-  let history = [];
+  let history = [], journal = null;
   if (args.journal) {
-    let journal = null;
-    try { journal = parseJournal(JSON.parse(readFileSync(args.journal, 'utf8'))); } catch {}
+    let text;
+    try { text = readFileSync(args.journal, 'utf8'); } catch { fail(`Can't read ${args.journal}`); }
+    try { journal = parseJournal(JSON.parse(text)); } catch {}
     if (!journal) fail(`${args.journal} isn't a Scentcast journal export (the wear journal's Export button)`);
     history = journal.history.filter(h => !h.planned);
-    fragrances = applySkin(fragrances, journal.skin);
+    wardrobe = applySkin(wardrobe, journal.skin);
+    for (const id of journal.hidden) off.add(id);
   }
   // With a journal, a bottle left unworn for a month takes a slot it nearly wins.
   const nudge = history.length > 0;
+  // Picks rank the bottles switched on; suggestions and checks count the rest as owned (`hidden`).
+  const fragrances = wardrobe.filter(f => !off.has(f.id)), hidden = wardrobe.filter(f => off.has(f.id));
+  const suggesting = Boolean(args.gaps || args.check || args.style || args['more-like'] || args.notes || args.dupes);
+  if (!fragrances.length && !suggesting && !args.styles) {
+    const by = [args.exclude.trim() && '--exclude', journal?.hidden.length && 'the journal', args.demo && '--demo'].filter(Boolean).join(' and ');
+    fail(`Nothing left to rank: ${by} ${by.includes(' and ') ? 'leave' : 'leaves'} out all ${wardrobe.length} bottles`);
+  }
 
   const findBottle = name => {
     const hits = matchBottles(fragrances, name);
@@ -431,7 +463,10 @@ async function main() {
     if (!Number.isInteger(max) || max < 1 || max > 6) fail(`--max takes 1 to 6 bottles, not "${args.max}"`);
     let events;
     try { events = parseEvents(args.events); } catch (err) { fail(err.message); }
-    for (const e of events) if (e.dateISO < args.from || e.dateISO > args.to) fail(`--events: ${e.dateISO} is outside the trip`);
+    for (const e of events) {
+      if (e.dateISO < args.from || e.dateISO > args.to) fail(`--events: ${e.dateISO} is outside the trip`);
+      if (slot && e.slot !== slot) fail(`--events: the ${e.occasion.label} on ${e.dateISO} is at ${e.slot === 'day' ? 'day' : 'night'}, and --slot ${slot} packs for ${slot === 'day' ? 'days' : 'nights'} only`);
+    }
 
     // --slot packs for only days or nights; --occasion goes on every window of
     // its slot (a work trip's days) that has no event of its own.
@@ -528,10 +563,11 @@ async function main() {
   // --loc: one archive call) or, without one, the ten temperate cities'.
   if (args.gaps || args.check) {
     if (args.value && args['no-value']) fail('Pass --value or --no-value, not both');
+    // "How you wear", refined by the journal's wears as the app's Insights does.
     let shares = null;
-    if (args.uses) {
+    if (args.uses || history.length) {
       try {
-        shares = sharesFrom(parseUses(args.uses));
+        shares = sharesFrom(parseUses(args.uses ?? ''), history.length ? occasionCounts(history) : null);
       } catch (err) {
         fail(`--uses: ${err.message}`);
       }
@@ -547,9 +583,9 @@ async function main() {
     const records = Array.from({ length: parsed.count }, (_, i) => fromPool(parsed, i));
     const byId = new Map(records.map(r => [r.id, r]));
     const preferValue = args.value ? true : args['no-value'] ? false : null;
-    const ctx = gapContext({ owned: fragrances, records, byId, summary, shares, preferValue, mists: args.mists });
+    const ctx = excluding(gapContext({ owned: fragrances, records, byId, summary, shares, preferValue, mists: args.mists }), 'allow', hidden);
     const pct = x => `${Math.round(x * 100)}%`;
-    const stars = r => `${r.rating.toFixed(1)}★ from ${r.ratingVotes.toLocaleString('en-US')} votes`;
+    const stars = r => (r.ratingVotes ? `${ratingText(r.rating)}★ from ${r.ratingVotes.toLocaleString('en-US')} votes` : 'no ratings yet');
     const byLine = r => `${r.name} by ${r.brand}${r.year ? ` (${r.year})` : ''}`;
     // The bottle a fill beats or backs up: owned, or an earlier suggestion.
     const whose = f => (f.beatsPick ? `${f.beats.name} (suggested above)` : `your ${f.beats.name}`);
@@ -569,9 +605,11 @@ async function main() {
         }
         record = hits[0] ?? null;
         if (!record) {
+          // The dataset's search forgives more (a word missed, a brand typed);
+          // a pool bottle it finds checks as its pool row.
           const library = fragranticaLibrary(datasetFile);
           const [hit] = await library.search(q, 1);
-          record = hit ? (await library.records([hit.id])).get(hit.id) : matchBottles(fragrances, q)[0] ?? null;
+          record = hit ? byId.get(hit.id) ?? (await library.records([hit.id])).get(hit.id) : matchBottles(wardrobe, q)[0] ?? null;
         }
       }
       if (!record) fail(`No bottle matches "${q}"`);
@@ -607,6 +645,7 @@ async function main() {
     }
 
     const k = args.top === undefined ? 5 : top;
+    if (k < 1) fail('--top takes 1 or more for --gaps');
     const report = gapReport(ctx, { k });
     if (args.json) {
       const picks = report.picks.map(({ record, ...p }) => ({ ...p, fills: p.fills.filter(f => f.matters) }));
@@ -642,7 +681,7 @@ async function main() {
   if (args.style || args['more-like'] || args.notes || args.dupes) {
     const count = args.top === undefined ? 10 : top;
     if (count < 1) fail('--top takes 1 or more for --style, --more-like, --notes and --dupes');
-    await discover(args, fragrances, { slot, count, history });
+    await discover(args, fragrances, { slot, count, history, hidden });
     return;
   }
 
@@ -779,7 +818,7 @@ async function main() {
 // the wardrobe as it stands (--exclude and --demo apply).
 const SEASON_NAMES = ['winter', 'spring', 'summer', 'fall'];
 
-async function discover(args, fragrances, { slot, count, history }) {
+async function discover(args, fragrances, { slot, count, history, hidden }) {
   const seasons = args.season ? args.season.toLowerCase().split(',').map(s => s.trim().replace(/^autumn$/, 'fall')).filter(Boolean) : null;
   for (const s of seasons ?? []) if (!SEASON_NAMES.includes(s)) fail(`--season takes ${SEASON_NAMES.join(', ')} (comma separated), not "${s}"`);
   const lean = args.lean?.toLowerCase();
@@ -792,11 +831,12 @@ async function discover(args, fragrances, { slot, count, history }) {
   const filters = { seasons, slot: slot ?? null, lean: lean ?? null, minValue, mists: args.mists, ...(minRating !== undefined && { minRating }) };
 
   const [pool, styles] = await Promise.all([loadPool(datasetFile), loadPoolStyles(datasetFile)]);
-  const ctx = discoverContext(pool, fragrances, { styles });
+  const ctx = excluding(discoverContext(pool, fragrances, { styles }), 'allowed', hidden);
   const library = fragranticaLibrary(datasetFile);
-  // A typed name: the wardrobe first, then the pool, then the whole dataset (with its about data).
+  // A typed name: the wardrobe first (switched-off bottles too), then the
+  // pool, then the whole dataset (with its about data).
   const findAny = async name => {
-    const mine = matchBottles(fragrances, name);
+    const mine = matchBottles([...fragrances, ...hidden], name);
     if (mine.length > 1) console.error(`"${name}" matches ${mine.map(f => f.name).join(', ')}; using ${mine[0].name}. Give more of the name for another.`);
     if (mine.length) return mine[0];
     const [hit] = await library.search(name, 1);
@@ -929,8 +969,8 @@ const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,N
        node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,NAME]) --date YYYY-MM-DD [--occasion ID] [--slot day|night] [--journal FILE] [--json]
        node scripts/recommend.mjs --pack (--city NAME | --loc LAT,LON[,NAME]) --from YYYY-MM-DD --to YYYY-MM-DD [--max N] [--events "DATE [day|night] OCCASION; …"] [--json]
        node scripts/recommend.mjs --spray NAME [--city NAME | --loc LAT,LON[,NAME]] [--date YYYY-MM-DD] [--occasion ID] [--slot day|night] [--json]
-       node scripts/recommend.mjs --gaps [--city NAME | --loc LAT,LON[,NAME]] [--uses USE=never|sometimes|often,…] [--value | --no-value] [--mists] [--top N] [--exclude NAME,NAME] [--demo] [--json]
-       node scripts/recommend.mjs --check NAME|ID [--city NAME | --loc LAT,LON[,NAME]] [--uses …] [--value | --no-value] [--style STYLE,STYLE] [--json]
+       node scripts/recommend.mjs --gaps [--city NAME | --loc LAT,LON[,NAME]] [--uses USE=never|sometimes|often,…] [--value | --no-value] [--mists] [--top N] [--exclude NAME,NAME] [--journal FILE] [--demo] [--json]
+       node scripts/recommend.mjs --check NAME|ID [--city NAME | --loc LAT,LON[,NAME]] [--uses …] [--value | --no-value] [--style STYLE,STYLE] [--exclude NAME,NAME] [--journal FILE] [--json]
        node scripts/recommend.mjs (--style STYLE,STYLE|liked [--all] | --more-like NAME,NAME|favorites | --notes "NOTE NOTE") [--season S,S] [--slot day|night] [--lean feminine|unisex|masculine] [--min-value V] [--min-rating R] [--mists] [--top N] [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --dupes NAME [--top N] [--json]`;
 

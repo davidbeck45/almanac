@@ -206,7 +206,7 @@ export const STYLES = [
   },
   {
     id: 'vanilla', label: 'Vanilla', kind: 'scent',
-    blurb: 'Vanilla front and centre, from boozy-dark to creamy-soft.',
+    blurb: 'Vanilla front and center, from boozy-dark to creamy-soft.',
     ACC: 0.8, NOTE: 0.4,
     acc: { vanilla: 1 },
     notes: [[N.vanilla, 1], [/tonka|benzoin/, 0.3], [/heliotrope|coumarin/, 0.15]],
@@ -216,7 +216,7 @@ export const STYLES = [
   },
   {
     id: 'amber', label: 'Amber', kind: 'scent',
-    blurb: 'Warm, resinous and glowing: labdanum, benzoin, myrrh, the old "oriental".',
+    blurb: 'Warm, resinous and glowing: labdanum, benzoin, myrrh, the old “oriental”.',
     ACC: 0.7, NOTE: 0.35,
     // The amber accord counts only as far as the bottle is warm (warmAmber):
     // ambroxan reads "amber" too, in Sauvage and Not A Perfume.

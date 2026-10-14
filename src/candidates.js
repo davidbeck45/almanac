@@ -78,7 +78,11 @@ export const PREFER_VALUE = 3.8;
 // longevity under WEAK_LONGEVITY on Parfumo's scale (the pool's bottom tenth)
 // from WEAK_VOTES votes. RISK_HIGH points or more is high, RISK_MEDIUM medium:
 // one minor reason (reformulated, hard to find) is still low, and says so.
+// The AI summary's "not a safe blind buy" counts double unless the crowd's own
+// votes disagree: from a safety percentile of SAFE_TRUSTED (Terre d'Hermès
+// sits at 82) it counts once.
 const SAFE_LOW = 20;
+const SAFE_TRUSTED = 65;
 const SAFE_VERY_LOW = 8;
 const KEEP_LOW = -0.085;
 const WEAK_LONGEVITY = 6.2;
@@ -441,7 +445,7 @@ export function riskOf(record, byId = null) {
   const s = signalsOf(record, byId), found = [];
   const add = (points, text) => found.push({ points, text });
   if (s.flags.includes('brigaded')) add(2, 'Its rating looks inflated by a voting campaign.');
-  if (s.flags.includes('notBlindBuy')) add(2, 'Reviewers say it isn’t a safe blind buy.');
+  if (s.flags.includes('notBlindBuy')) add(s.safe >= SAFE_TRUSTED ? 1 : 2, 'Reviewers say it isn’t a safe blind buy.');
   if (s.flags.includes('polarizing')) add(2, 'It divides people: many voters hate it.');
   else if (s.safe != null && s.safe < SAFE_LOW) add(s.safe < SAFE_VERY_LOW ? 2 : 1, 'Fewer voters love it than most.');
   if (s.keep != null && s.keep < KEEP_LOW) add(1, 'Owners often let it go.');
@@ -452,6 +456,8 @@ export function riskOf(record, byId = null) {
   const points = found.reduce((sum, r) => sum + r.points, 0);
   const reasons = found.sort((a, b) => b.points - a.points).map(r => r.text);
   const major = found.some(r => r.points >= 2);
-  if (!s.known) return { level: 'unknown', reasons: [...reasons, 'There’s no crowd data on it yet.'], major };
+  // A bottle newer than the dataset can carry a rating, just none of these.
+  const none = record.ratingVotes > 0 ? 'No safety or value votes on it yet.' : 'There’s no crowd data on it yet.';
+  if (!s.known) return { level: 'unknown', reasons: [...reasons, none], major };
   return { level: points >= RISK_HIGH ? 'high' : points >= RISK_MEDIUM ? 'medium' : 'low', reasons, major };
 }

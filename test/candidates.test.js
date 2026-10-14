@@ -46,6 +46,8 @@ test('a bottle the dataset lacks has no signals, and reads as unknown', () => {
   assert.equal(s.value, null);
   assert.deepEqual([s.like, s.family, s.alt, s.flags], [[], [], [], []]);
   assert.deepEqual(riskOf(mine), { level: 'unknown', reasons: ['There’s no crowd data on it yet.'], major: false });
+  // A bottle newer than the dataset has a rating, so it isn't told it has no crowd data.
+  assert.deepEqual(riskOf({ ...mine, rating: 3.6, ratingVotes: 140 }).reasons, ['No safety or value votes on it yet.']);
   assert.equal(genderLean(mine), 0);
   assert.equal(genderLean({ ...mine, gender: 'men' }), 0.68);
   // Without signals, Hawas Atlantis would pass for a safe buy.
@@ -237,6 +239,14 @@ test('risk names what makes a blind buy risky', () => {
   assert.ok(riskOf(at(28286)).reasons.some(r => r.includes('voting campaign')));
   assert.deepEqual(riskOf(at(9828)), { level: 'low', reasons: ['Reviewers say it was reformulated.'], major: false });
   assert.equal(riskOf(at(34696)).level, 'low');
+  // The summary's "not a safe blind buy" counts once where most voters love it
+  // (Terre d'Hermès, Dior Homme Parfum), and double where few do (Libre).
+  for (const id of [17, 27417]) {
+    const risk = riskOf(at(id));
+    assert.equal(risk.level, 'medium', `${at(id).name}: ${risk.reasons.join(' ')}`);
+    assert.ok(risk.reasons.some(r => r.includes('blind buy')) && !risk.major);
+  }
+  assert.ok(riskOf(at(56077)).level === 'high' && riskOf(at(56077)).major);
   const levels = { low: 0, medium: 0, high: 0 };
   for (const r of records) levels[riskOf(r).level]++;
   assert.ok(levels.high < 0.12 * records.length && levels.low > 0.6 * records.length, JSON.stringify(levels));

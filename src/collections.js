@@ -11,10 +11,25 @@ const ACTIVE_KEY = 'scentcast.active';
 const MAX_SHARED = 80;
 const MAX_IMPORT_LINES = 15;
 
+const isObject = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
+
+/**
+ * Whether a stored record has what ranking reads: an id, a name, accords,
+ * season and day/night shares. Mine and the want list keep only these, so
+ * a record stored in another shape is left out rather than breaking a screen.
+ */
+export const usableRecord = r => isObject(r) && (typeof r.id === 'string' ? r.id !== '' : Number.isFinite(r.id))
+  && typeof r.name === 'string' && isObject(r.accords) && Object.keys(r.accords).length > 0
+  && isObject(r.season) && isObject(r.dayNight);
+
 export function loadMine() {
   try {
     const mine = JSON.parse(localStorage.getItem(MINE_KEY));
-    return { name: mine?.name ?? '', records: mine?.records ?? [] };
+    const records = Array.isArray(mine?.records) ? mine.records.filter(usableRecord) : [];
+    return {
+      name: typeof mine?.name === 'string' ? mine.name : '',
+      records: records.map(r => (typeof r.id === 'string' ? r : { ...r, id: String(r.id) })),
+    };
   } catch {
     return { name: '', records: [] };
   }

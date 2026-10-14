@@ -13,6 +13,7 @@ import {
   parseNotes, searchNotes, dupesOf, originalFromVotes, whyLine, addCloneVotes,
 } from '../src/discover.js';
 import { loadWants, saveWants, addWant, removeWant, hasWant, setWant, wantIdsToLoad } from '../src/wishlist.js';
+import { customRecord } from '../src/custom.js';
 import { fitPoolStyles } from '../scripts/fit-pool-styles.mjs';
 
 const dir = new URL('../data/fragrantica/', import.meta.url);
@@ -180,6 +181,20 @@ test('any of several styles takes turns, Intimate shapes them, and all of them w
   assert.throws(() => moreOfStyles(['skin'], ctx, { mode: 'most' }), /any or all/);
 });
 
+test('more like keeps to its seeds\' leans, not the whole wardrobe\'s', () => {
+  const lean = p => genderLean(p.record, ctx.byId);
+  const aventus = moreLike([at(9828)], ctx, { k: 20 });
+  assert.equal(aventus.length, 20);
+  assert.ok(aventus.every(p => lean(p) >= 0), aventus.filter(p => lean(p) < 0).map(p => `${p.record.name} ${lean(p)}`).join(', '));
+  const belle = ctx.records.find(r => r.name === 'La Vie Est Belle' && r.brand === 'Lancôme');
+  const picks = moreLike([belle], ctx, { k: 20 });
+  assert.ok(picks.length === 20 && picks.every(p => lean(p) <= 0), picks.filter(p => lean(p) > 0).map(p => `${p.record.name} ${lean(p)}`).join(', '));
+  // Seeds either side span both; a lean filter overrides them.
+  const both = moreLike([at(9828), belle], ctx, { k: 30 });
+  assert.ok(both.some(p => lean(p) < -0.25) && both.some(p => lean(p) > 0.25));
+  assert.ok(moreLike([at(9828)], ctx, { k: 10, filters: { lean: 'feminine' } }).every(p => lean(p) <= -0.25));
+});
+
 test('more like Liquid Brun and Amber Empire is warm vanilla and amber', () => {
   const picks = moreLike([owned('Liquid Brun'), owned('Amber Empire')], ctx, { k: 10 });
   assert.equal(picks.length, 10);
@@ -243,6 +258,16 @@ test('notes and accords search: every term, forgiving how it’s typed', () => {
     assert.deepEqual([read.unknown, read.corrected], [[], [{ from: typo, to: meant }]], typo);
     same(typo, meant);
   }
+  // A four-letter word that names nothing reads through a swap of two neighbours.
+  for (const [typo, meant] of [['irsi', 'iris'], ['msuk', 'musk'], ['rsoe', 'rose']]) {
+    const read = parseNotes(`${typo} leather`, ctx);
+    assert.deepEqual([read.unknown, read.corrected], [[], [{ from: typo, to: meant }]], typo);
+    same(typo, meant);
+  }
+  assert.equal(searchNotes('irsi leather', ctx, {}, { k: 5 }).results.length, 5);
+  // Only a swap, only in a word that names nothing: real four-letter names stay, and other slips don't guess.
+  for (const word of ['rose', 'musk', 'lime', 'pear', 'wood']) assert.deepEqual(parseNotes(word, ctx).corrected, [], word);
+  for (const word of ['irus', 'muks', 'qzxw']) assert.deepEqual([parseNotes(word, ctx).corrected, parseNotes(word, ctx).unknown], [[], [word]], word);
   // One that names a rare note stays as typed, with the common name as a suggestion: "vanila" is a misspelt note.
   assert.deepEqual(searchNotes('vanila', ctx).suggested, [{ from: 'vanila', to: 'vanilla' }]);
   assert.deepEqual(parseNotes('vanilla', ctx).suggested, []);
@@ -401,7 +426,7 @@ test('the want list keeps ids, and whole records for bottles the dataset can’t
   globalThis.localStorage = { getItem: k => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) };
   assert.deepEqual(loadWants(), []);
   let wants = addWant([], at(48681), { note: 'Try at Nordstrom', added: '2026-10-01' });
-  wants = addWant(wants, { id: 'my:abc', name: 'Mine', brand: 'Me', source: 'custom', accords: { vanilla: 80 } });
+  wants = addWant(wants, customRecord({ id: 'my:abc', name: 'Mine', brand: 'Me', accords: ['vanilla'] }));
   wants = addWant(wants, '9828');
   assert.deepEqual(wants.map(w => w.id), ['9828', 'my:abc', '48681']);
   assert.equal(wants[2].record, undefined, 'a dataset bottle keeps only its id');
@@ -425,6 +450,10 @@ test('the want list keeps ids, and whole records for bottles the dataset can’t
   assert.equal(loadWants()[0].note, 'sample first');
   store.set('scentcast.want', '{broken');
   assert.deepEqual(loadWants(), []);
+  // A kept record without what ranking reads is dropped, and the bottle loads again by its id.
+  store.set('scentcast.want', JSON.stringify([{ id: '69541', record: { id: '69541' } }, 'x', null, { record: { id: 'my:q', name: 'Q' } }]));
+  assert.deepEqual(loadWants().map(w => [w.id, 'record' in w]), [['69541', false], ['my:q', false]]);
+  assert.deepEqual(wantIdsToLoad(loadWants()), ['69541', 'my:q']);
 });
 
 beforeEach(() => { delete globalThis.localStorage; });

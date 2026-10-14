@@ -67,7 +67,19 @@ test('malformed share tokens are rejected, not half-loaded', () => {
     `my:abc~${b64(['Name', '', ['woody'], [0, 0, 0, 0], 50])}`,
     `my:ABC<x>~${b64(['Name', '', ['woody'], [25, 25, 25, 25], 50])}`,
     `fg:abc~${b64(['Name', '', ['woody'], [25, 25, 25, 25], 50])}`,
+    // Shares that aren't finite numbers would make every score NaN.
+    'my:inf~WyJJbmZpbml0ZSIsIkIiLFsid29vZHkiXSxbMWU5OTksMSwxLDFdLDUwXQ',
+    `my:abc~${b64(['Name', '', ['woody'], ['x', 25, 25, 25], 50])}`,
+    `my:abc~${b64(['Name', '', ['woody'], [25, 25, 25, 25], 'night'])}`,
+    `my:abc~${b64(['Name', '', ['woody'], [25, 25, 25, 25], 150])}`,
+    `my:abc~${b64(['Name', '', ['__proto__'], [25, 25, 25, 25], 50])}`,
   ]) assert.equal(fromShareToken(bad), null, bad);
+  // A share over 100 counts as 100, and an accord named twice counts once, at the top strength.
+  const big = fromShareToken(`my:abc~${b64(['Name', '', ['woody', 'woody', 'woody', 'amber'], [400, 100, 0, 0], 50])}`);
+  assert.deepEqual(big.season, { winter: 0.5, spring: 0.5, summer: 0, fall: 0 });
+  assert.deepEqual(big.accords, { woody: 100, amber: 88 });
+  assert.deepEqual(customRecord({ name: 'X', accords: ['woody', 'woody'] }).accords, { woody: 100 });
+  for (const n of [...Object.values(big.season), big.dayNight.day, big.dayNight.night]) assert.ok(Number.isFinite(n));
 });
 
 test('reasons for a hand-entered bottle don’t claim votes', () => {

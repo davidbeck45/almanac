@@ -237,6 +237,14 @@ for (const [a, b, v] of PAIRS) {
   COMPLEMENT.set(`${b}|${a}`, v);
 }
 
+// The same, by family: COMPLEMENT_OF.get(a).get(b).
+const COMPLEMENT_OF = new Map();
+for (const [key, v] of COMPLEMENT) {
+  const [a, b] = key.split('|');
+  if (!COMPLEMENT_OF.has(a)) COMPLEMENT_OF.set(a, new Map());
+  COMPLEMENT_OF.get(a).set(b, v);
+}
+
 /** The pairing rule for two families, or undefined when the table has none. */
 export const complementOf = (a, b) => COMPLEMENT.get(`${a}|${b}`);
 
@@ -346,19 +354,25 @@ export function layerProfile(frag) {
   return { profile, notesBy, noteWeight, faint };
 }
 
+// Each bottle's profile, with what every pairing reads off it.
 const profiles = new WeakMap();
 const profileOf = frag => {
-  if (!profiles.has(frag)) profiles.set(frag, layerProfile(frag));
+  if (!profiles.has(frag)) {
+    const p = layerProfile(frag);
+    const share = list => list.reduce((s, f) => s + (p.profile[f] ?? 0), 0);
+    profiles.set(frag, { ...p, entries: Object.entries(p.profile), sweet: share(SWEET), marine: share(MARINE) });
+  }
   return profiles.get(frag);
 };
 
 const cosine = (p, q) => {
   let dot = 0, np = 0, nq = 0;
-  for (const f of new Set([...Object.keys(p), ...Object.keys(q)])) {
-    dot += (p[f] ?? 0) * (q[f] ?? 0);
-    np += (p[f] ?? 0) ** 2;
+  for (const f in p) {
+    dot += p[f] * (q[f] ?? 0);
+    np += p[f] ** 2;
     nq += (q[f] ?? 0) ** 2;
   }
+  for (const f in q) if (!(f in p)) nq += q[f] ** 2;
   return np && nq ? dot / Math.sqrt(np * nq) : 0;
 };
 
@@ -392,6 +406,50 @@ function communityPair(frag, other) {
   return theirs ? { consensus: theirs.consensus, via: theirs.via ? [...theirs.via].reverse() : null } : null;
 }
 
+// The pair's score and what the reasons are drawn from, without the reasons.
+function scorePair(frag, other, conditions) {
+  const a = profileOf(frag), b = profileOf(other);
+
+  // Complement: every family pair across the two, weighted by both shares.
+  let complement = 0, clash = 0, best = null;
+  for (const [fa, pa] of a.entries) {
+    const rules = COMPLEMENT_OF.get(fa);
+    if (!rules) continue;
+    for (const [fb, pb] of b.entries) {
+      if (fa === fb) continue;
+      const c = pa * pb * (rules.get(fb) ?? 0);
+      if (c < 0) clash -= c;
+      else complement += c;
+      if (c > 0 && (!best || c > best.c)) best = { c, fa, fb };
+    }
+  }
+
+  // Bridge: overlap in families.
+  let bridge = 0;
+  for (const [f, pa] of a.entries) bridge += Math.min(pa, b.profile[f] ?? 0);
+
+  const similarity = cosine(a.profile, b.profile);
+  const [ha, hb] = [heaviness(frag.accords), heaviness(other.accords)];
+
+  // Across the demo and catalog, complement runs about 0.33 (10th percentile) to 0.51 (90th).
+  const complementScore = clamp((complement - COMPLEMENT_FLOOR) / COMPLEMENT_SPAN, 0, 1);
+  const bridgeScore = bridge < 0.15 ? bridge / 0.15 : bridge <= 0.45 ? 1 : clamp(1 - (bridge - 0.45) / 0.4, 0, 1);
+  const contrastScore = clamp(Math.abs(ha - hb) / 0.4, 0, 1);
+  const tooAlike = similarity > 0.85;
+  const bothSweet = a.sweet > 0.35 && b.sweet > 0.35;
+  const bothMarine = !tooAlike && a.marine > 0.12 && b.marine > 0.12;
+  // Without the weather, two heavy scents are marked down as a cold-nights-only pair.
+  const bothHeavy = !conditions && ha > 0.55 && hb > 0.55;
+  const fit = conditions ? blendFit(frag, other, conditions) : null;
+  const offWeather = conditions ? BLEND_DAMPING * Math.max(0, BLEND_OK - fit) : 0;
+  const model = clamp(
+    0.5 * complementScore + 0.25 * bridgeScore + 0.25 * contrastScore
+      - Math.min(0.3, clash * 4) - (tooAlike ? 0.25 : 0) - (bothSweet ? 0.12 : 0) - (bothMarine ? 0.12 : 0)
+      - (bothHeavy ? 0.12 : 0) - offWeather,
+    0, 1);
+  return { a, b, model, best, bridge, clash, ha, hb, fit, contrastScore, tooAlike, bothSweet, bothMarine, bothHeavy };
+}
+
 /**
  * How well `other` layers with `frag`, for the weather when `conditions` are given.
  * `common`: notes too common in the collection to tie two bottles together.
@@ -400,57 +458,17 @@ function communityPair(frag, other) {
  *      pair doesn't suit the weather, reasons: [{ text, tone }], first: the one to spray first }
  */
 export function layerPair(frag, other, conditions = null, { common = null } = {}) {
-  const a = profileOf(frag), b = profileOf(other);
-
-  // Complement: every family pair across the two, weighted by both shares.
-  let complement = 0, clash = 0, best = null;
-  for (const [fa, pa] of Object.entries(a.profile)) {
-    for (const [fb, pb] of Object.entries(b.profile)) {
-      if (fa === fb) continue;
-      const c = pa * pb * (COMPLEMENT.get(`${fa}|${fb}`) ?? 0);
-      if (c < 0) clash -= c;
-      else complement += c;
-      if (c > 0 && (!best || c > best.c)) best = { c, fa, fb };
-    }
-  }
-
-  // Bridge: overlap in families, and notes both actually list.
-  let bridge = 0;
-  for (const [f, pa] of Object.entries(a.profile)) bridge += Math.min(pa, b.profile[f] ?? 0);
+  const { a, b, model, best, bridge, clash, ha, hb, fit, contrastScore, tooAlike, bothSweet, bothMarine, bothHeavy } = scorePair(frag, other, conditions);
   // Shared notes, the ones both bottles carry most strongly first; a note
   // voters barely smell in either one doesn't tie them together.
   const shared = n => Math.min(a.noteWeight[n], b.noteWeight[n]);
   const sharedNotes = Object.keys(a.noteWeight)
     .filter(n => b.noteWeight[n] && !GENERIC_NOTE.test(n) && !a.faint.has(n) && !b.faint.has(n) && !common?.has(n))
     .sort((x, y) => shared(y) - shared(x));
-
-  const similarity = cosine(a.profile, b.profile);
-  const [ha, hb] = [heaviness(frag.accords), heaviness(other.accords)];
-  const sweetA = SWEET.reduce((s, f) => s + (a.profile[f] ?? 0), 0);
-  const sweetB = SWEET.reduce((s, f) => s + (b.profile[f] ?? 0), 0);
-  const marineA = MARINE.reduce((s, f) => s + (a.profile[f] ?? 0), 0);
-  const marineB = MARINE.reduce((s, f) => s + (b.profile[f] ?? 0), 0);
-
-  // Across the demo and catalog, complement runs about 0.33 (10th percentile) to 0.51 (90th).
-  const complementScore = clamp((complement - COMPLEMENT_FLOOR) / COMPLEMENT_SPAN, 0, 1);
-  const bridgeScore = bridge < 0.15 ? bridge / 0.15 : bridge <= 0.45 ? 1 : clamp(1 - (bridge - 0.45) / 0.4, 0, 1);
-  const contrastScore = clamp(Math.abs(ha - hb) / 0.4, 0, 1);
-  const tooAlike = similarity > 0.85;
-  const bothSweet = sweetA > 0.35 && sweetB > 0.35;
-  const bothMarine = !tooAlike && marineA > 0.12 && marineB > 0.12;
-  // Without the weather, two heavy scents are marked down as a cold-nights-only pair.
-  const bothHeavy = !conditions && ha > 0.55 && hb > 0.55;
-  const fit = conditions ? blendFit(frag, other, conditions) : null;
-  const offWeather = conditions ? BLEND_DAMPING * Math.max(0, BLEND_OK - fit) : 0;
   const isOff = conditions !== null && fit < BLEND_OFF;
   const voted = communityPair(frag, other);
   const weatherShare = conditions ? clamp((fit - BLEND_FLOOR) / (BLEND_OK - BLEND_FLOOR), 0, 1) : 1;
   const community = voted && { ...voted, boost: COMMUNITY_WEIGHT * voted.consensus / 100 * weatherShare };
-  const model = clamp(
-    0.5 * complementScore + 0.25 * bridgeScore + 0.25 * contrastScore
-      - Math.min(0.3, clash * 4) - (tooAlike ? 0.25 : 0) - (bothSweet ? 0.12 : 0) - (bothMarine ? 0.12 : 0)
-      - (bothHeavy ? 0.12 : 0) - offWeather,
-    0, 1);
 
   const reasons = [];
   if (best) {
@@ -504,29 +522,63 @@ export function commonNotes(collection) {
   return new Set([...counts].filter(([, c]) => c >= COMMON_NOTE_MIN && c > COMMON_NOTE_SHARE * collection.length).map(([n]) => n));
 }
 
-// Each bottle's average pairing score across the collection, before Parfumo's
-// votes (scores are symmetric), and the collection's common notes.
-let meansFor = { key: '', means: new Map(), overall: 0, common: new Set() };
-function pairingMeans(collection) {
-  const key = collection.map(f => f.id).join(',');
-  if (meansFor.key === key) return meansFor;
-  const sums = new Map(collection.map(f => [f.id, 0]));
-  for (let i = 0; i < collection.length; i++) {
-    for (let j = i + 1; j < collection.length; j++) {
-      const { model } = layerPair(collection[i], collection[j]);
-      sums.set(collection[i].id, sums.get(collection[i].id) + model);
-      sums.set(collection[j].id, sums.get(collection[j].id) + model);
+// The model's score (before Parfumo's votes; scores are symmetric) for every
+// pair in the last collection asked about, and each bottle's sum over the
+// rest. The bottle page passes the collection without the open bottle, so
+// each open asks about a different list: any list within the kept one reads
+// its averages off these in O(n) instead of redoing the n² pass.
+let pairsFor = { records: [], at: new Map(), scores: new Float64Array(0), sums: new Float64Array(0) };
+function pairScores(records) {
+  const n = records.length, scores = new Float64Array(n * n), sums = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const { model } = scorePair(records[i], records[j], null);
+      scores[i * n + j] = scores[j * n + i] = model;
+      sums[i] += model;
+      sums[j] += model;
     }
   }
-  const n = Math.max(1, collection.length - 1);
-  const means = new Map([...sums].map(([id, sum]) => [id, sum / n]));
+  return { records, at: new Map(records.map((f, i) => [f.id, i])), scores, sums };
+}
+
+// Positions of `collection`'s records among the kept ones, or null when one isn't kept.
+const keptAt = collection => {
+  const at = collection.map(f => pairsFor.at.get(f.id));
+  return at.every((i, k) => i !== undefined && pairsFor.records[i] === collection[k]) ? at : null;
+};
+
+/**
+ * Each bottle's average pairing score across the rest of `collection`, before
+ * Parfumo's votes, their overall average, and the collection's common notes.
+ * `frag` is the bottle being paired: when it isn't in the list, it joins the
+ * kept pairs, so opening each bottle of a collection in turn reuses them.
+ */
+export function pairingMeans(collection, frag = null) {
+  let at = keptAt(collection);
+  // Fewer than three in four of the kept bottles: worth a fresh pass.
+  if (!at || collection.length < 0.75 * pairsFor.records.length) {
+    const joins = frag && !collection.some(f => f.id === frag.id);
+    pairsFor = pairScores(joins ? [...collection, frag] : collection);
+    at = keptAt(collection);
+  }
+  const { records, scores, sums } = pairsFor, n = records.length;
+  // A kept bottle outside the list doesn't count toward anyone's average.
+  const inside = new Set(at);
+  const left = records.flatMap((f, i) => (inside.has(i) ? [] : [i]));
+  const per = Math.max(1, collection.length - 1);
+  const means = new Map(collection.map((f, k) => {
+    const i = at[k];
+    return [f.id, left.reduce((sum, j) => sum - scores[i * n + j], sums[i]) / per];
+  }));
   const overall = [...means.values()].reduce((a, b) => a + b, 0) / Math.max(1, means.size);
-  meansFor = { key, means, overall, common: commonNotes(collection) };
-  return meansFor;
+  return { means, overall, common: commonNotes(collection) };
 }
 
 // Best first: pairs that suit the weather before any that don't, then by rank.
 export const byPick = (x, y) => x.offWeather - y.offWeather || y.rank - x.rank;
+
+// The last answer: a page drawn twice asks twice.
+let lastPicks = { frag: null, collection: [], limit: 0, conditions: null, picks: [] };
 
 /**
  * The best partners for `frag` among `collection`, best first, for the weather
@@ -535,8 +587,11 @@ export const byPick = (x, y) => x.offWeather - y.offWeather || y.rank - x.rank;
  * off for the weather comes after every pair that isn't.
  */
 export function layerPicks(frag, collection, limit = 3, conditions = null) {
-  const { means, overall, common } = pairingMeans(collection);
-  return collection
+  const last = lastPicks;
+  if (last.frag === frag && last.limit === limit && last.conditions === conditions
+    && last.collection.length === collection.length && last.collection.every((f, i) => f === collection[i])) return [...last.picks];
+  const { means, overall, common } = pairingMeans(collection, frag);
+  const picks = collection
     .filter(f => f.id !== frag.id)
     .map(f => {
       const pair = layerPair(frag, f, conditions, { common });
@@ -547,4 +602,6 @@ export function layerPicks(frag, collection, limit = 3, conditions = null) {
     .filter(p => p.rank >= MIN_SCORE)
     .sort(byPick)
     .slice(0, limit);
+  lastPicks = { frag, collection: [...collection], limit, conditions, picks };
+  return [...picks];
 }

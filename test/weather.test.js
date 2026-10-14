@@ -67,6 +67,11 @@ test('the saved forecast opens the app: fresh as is, older dimmed while it refre
     assert.equal(cachedForecast(loc, now), null);
     save(now, { lat: 1, lon: 2 });
     assert.equal(cachedForecast(loc, now), null, 'another place');
+    // A saved entry of another shape is no forecast, rather than an error at boot.
+    for (const bad of [{ key: '3:40.71,-74.01' }, { key: '3:40.71,-74.01', forecast: { fetchedAt: 'soon' } }, [1, 2], 'x']) {
+      store.set('scentcast.weather', JSON.stringify(bad));
+      assert.equal(cachedForecast(loc, now), null, JSON.stringify(bad));
+    }
   } finally {
     delete globalThis.localStorage;
   }

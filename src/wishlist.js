@@ -4,6 +4,8 @@
 // loads from r/ (or the pool) like a share link's; any other (hand-entered,
 // a catalog or demo bottle newer than the dataset) keeps its full record, as
 // "mine" does, so it works offline and never needs another lookup.
+import { usableRecord } from './collections.js';
+
 const KEY = 'scentcast.want';
 const MAX_WANTS = 200;
 const MAX_NOTE = 140;
@@ -11,14 +13,15 @@ const MAX_NOTE = 140;
 // Today on this device's calendar.
 const today = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-// One stored entry, tidied: string id, a date, a short note, a record when kept.
+// One stored entry, tidied: string id, a date, a short note, a record when
+// kept and whole (usableRecord; else the id loads it again).
 function entry(raw) {
   const id = raw?.id ?? raw?.record?.id;
   if (id == null || id === '') return null;
   const out = { id: String(id), added: typeof raw.added === 'string' ? raw.added : today() };
   const note = typeof raw.note === 'string' ? raw.note.trim().slice(0, MAX_NOTE) : '';
   if (note) out.note = note;
-  if (raw.record && typeof raw.record === 'object') out.record = { ...raw.record, id: String(id) };
+  if (usableRecord(raw.record)) out.record = { ...raw.record, id: String(id) };
   return out;
 }
 

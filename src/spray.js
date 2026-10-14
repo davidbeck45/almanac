@@ -113,7 +113,7 @@ export function sprayGuide(record, conditions, occasion = null, skin = null) {
   const strength = concentrationOf(frag.name);
   if (strength) {
     const rated = (performanceRating(frag)?.votes ?? 0) >= RATED_VOTES;
-    add(strength.sprays * (rated ? 0.5 : 1), strength.why, `it's ${strength.why.charAt(0).toLowerCase()}${strength.why.slice(1)}`);
+    add(strength.sprays * (rated ? 0.5 : 1), strength.why, `it’s ${strength.why.charAt(0).toLowerCase()}${strength.why.slice(1)}`);
   }
 
   const feels = conditions?.feelsF ?? 65;

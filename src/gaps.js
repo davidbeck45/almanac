@@ -367,11 +367,13 @@ const named = (c, opts) => namedAs(c.cell.weight, c.status, c.deficit, opts);
  * Every one by default: suggestions fill these cells and no others.
  * -> [{ cells (ids), use, slot, bands, status ('gap' | 'thin' | 'room', the
  * most serious among them), severity, weight, title ("Formal on cold and
- * cool nights"), text (about the one that costs most) }]
+ * cool nights"), text (about the cell in that state that costs most) }]
  */
 export function gapSummary(cov, { limit = Infinity, minWeight = MIN_WEIGHT, minDeficit = MIN_DEFICIT } = {}) {
   return runsOf(cov, c => named(c, { minWeight, minDeficit })).map(run => {
-    const worst = run.reduce((a, b) => (b.severity > a.severity ? b : a));
+    // The cell in the worst state (a gap before room to grow), the costliest
+    // of those, as Insights opens on: the text describes the status it gives.
+    const worst = run.reduce((a, b) => (STATUS_ORDER.indexOf(b.status) - STATUS_ORDER.indexOf(a.status) || a.severity - b.severity) < 0 ? b : a);
     const bands = run.map(c => c.cell.band);
     const line = shortfall(worst);
     return {
@@ -577,11 +579,14 @@ const RISK_MULT = { low: 1, unknown: 1, medium: 0.85, high: 0 };
 const RISK_REASON = 0.9;
 const riskMult = risk => RISK_MULT[risk.level] * RISK_REASON ** risk.reasons.length;
 // A suggestion leaning past the wardrobe's own range (its 10th to 90th
-// percentile) counts for less, by how far past: allow() lets in a wider
-// window, and Brooke's picks drifted more masculine than anything she owns.
+// percentile) counts for less, LEAN_PAST times how far past: allow() lets in
+// a wider window, and fresh men's bottles fill a gourmand wardrobe's office
+// days so well that at 1 × Brooke's picks went more masculine than anything
+// she owns (Ralph's Club New York, 0.23 past, kept 0.77 of its merit).
+const LEAN_PAST = 2.5;
 const leanMult = (record, ctx) => {
   const lean = genderLean(record, ctx.byId), [lo, hi] = ctx.leanSpan;
-  return Math.max(0, 1 - Math.max(0, lo - lean, lean - hi));
+  return Math.max(0, 1 - LEAN_PAST * Math.max(0, lo - lean, lean - hi));
 };
 // Kin of an earlier pick (a family link either way) counts as a near twin.
 const PICK_KIN = 0.15;
@@ -685,6 +690,9 @@ const RATED_VOTES = 50;
 const LIKE_SIM = 0.5;
 // The lean past the wardrobe's own extremes that earns "more masculine than anything you own".
 const LEAN_NOTE = 0.1;
+
+/** A rating as the buy check writes it: one decimal, two where one would round it up to MIN_RATING ("only 3.75★", not "3.8★"). */
+export const ratingText = rating => rating.toFixed(rating < MIN_RATING && rating.toFixed(1) >= MIN_RATING ? 2 : 1);
 
 // What a strong fit's real gain must reach for a wardrobe: STRONG_GAIN, or
 // the pool's top STRONG_TOP of gains, whichever is more. Once per context.
@@ -820,8 +828,8 @@ export function buyCheck(record, ctx, { liked = null } = {}) {
   const lean = genderLean(scored, ctx.byId), [lo, hi] = ctx.leanRange ?? [-Infinity, Infinity];
   const leanLine = lean < lo - LEAN_NOTE ? 'Voters call it more feminine than anything you own.'
     : lean > hi + LEAN_NOTE ? 'Voters call it more masculine than anything you own.' : null;
-  const ratedLine = lowRated ? `Voters rate it only ${scored.rating.toFixed(scored.rating.toFixed(1) >= MIN_RATING ? 2 : 1)}★.`
-    : scored.ratingVotes ? `Rated ${scored.rating.toFixed(1)}★ by ${scored.ratingVotes.toLocaleString('en-US')} voters.`
+  const ratedLine = lowRated ? `Voters rate it only ${ratingText(scored.rating)}★.`
+    : scored.ratingVotes ? `Rated ${ratingText(scored.rating)}★ by ${scored.ratingVotes.toLocaleString('en-US')} voters.`
       : 'There’s no crowd data on it yet.';
   // What it adds to the styles you like ("More of the skin scents you like: you own 2."), or why not.
   const styleLabels = taste?.styles.map(id => styleById(id).label.toLowerCase());

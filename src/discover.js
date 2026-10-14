@@ -57,8 +57,10 @@ const SEED_PRIOR_VOTES = 100;
 // mostly men's bottles gets a list of women's musks. Only picks scoring
 // LEAN_FLOOR of their style's best take turns; weaker ones follow, so a thin
 // band doesn't bring in bottles that barely match. A lean filter takes its
-// place; "more like" follows its seeds instead.
+// place. "More like" follows its seeds instead: it keeps to their leans,
+// widened by SEED_LEAN_MARGIN either side (More like Aventus stays masculine).
 const LEAN_EDGE = 0.25;
+const SEED_LEAN_MARGIN = 0.3;
 const LEAN_SPREAD = 0.85;
 const LEAN_FLOOR = 0.6;
 // A style's bottles are judged against their own median rating: voters rate
@@ -293,8 +295,12 @@ function normsFor(ctx, ratings) {
 
 // --------------------------------------------------------------- filters
 
-/** A filter test from FILTERS overrides; throws on a lean, season or slot it doesn't know. */
-export function admitter(ctx, filters = {}) {
+/**
+ * A filter test from FILTERS overrides; throws on a lean, season or slot it
+ * doesn't know. `lean` [lo, hi] stands in for the wardrobe's window when no
+ * lean filter is set.
+ */
+export function admitter(ctx, filters = {}, { lean = null } = {}) {
   const f = { ...FILTERS, ...filters };
   if (f.lean && !LEAN_WINDOWS[f.lean]) throw new Error(`Lean is feminine, unisex or masculine, not "${f.lean}".`);
   if (f.slot && f.slot !== 'day' && f.slot !== 'night') throw new Error(`Slot is day or night, not "${f.slot}".`);
@@ -305,7 +311,7 @@ export function admitter(ctx, filters = {}) {
     ...ctx.allowed,
     owned: f.excludeOwned ? ctx.allowed.owned : none,
     originals: f.excludeOwned ? ctx.allowed.originals : none,
-    lean: f.lean ? LEAN_WINDOWS[f.lean] : ctx.allowed.lean,
+    lean: f.lean ? LEAN_WINDOWS[f.lean] : lean ?? ctx.allowed.lean,
     minRating: f.minRating ?? 0,
     minValue: f.minValue,
     mists: Boolean(f.mists),
@@ -623,7 +629,8 @@ export function defaultSeeds(owned, { history = [], todayISO = null, n = SEED_CO
  * stands in as its pool row. The seeds themselves, owned bottles, their twins
  * and versions and anything over MAX_OWNED_SIM alike to an owned bottle stay
  * out, and a bottle voters link to one (family) counts its family multiplier:
- * more of the seeds' kind, not another copy of a bottle already owned. ->
+ * more of the seeds' kind, not another copy of a bottle already owned.
+ * Without a lean filter, picks keep to the seeds' leans (SEED_LEAN_MARGIN). ->
  * picks as describe() makes them, plus `sim` (to the seeds), `shares` and
  * `alsoLiked` (how many seeds list it).
  */
@@ -635,7 +642,9 @@ export function moreLike(seeds, ctx, { k = 10, filters = {}, alsoLiked = ALSO_LI
     return row ? { ...row, about: seed.about ?? row.about } : seed;
   }).filter(hasScent);
   if (!seeds.length || !(k >= 1)) return [];
-  const target = centroid(seeds), admits = admitter(ctx, filters);
+  const leans = seeds.map(seed => leanKnown(seed, ctx.byId)).filter(x => x != null);
+  const lean = leans.length ? [Math.max(-1, Math.min(...leans) - SEED_LEAN_MARGIN), Math.min(1, Math.max(...leans) + SEED_LEAN_MARGIN)] : null;
+  const target = centroid(seeds), admits = admitter(ctx, filters, { lean });
   const skip = new Set();
   const liked = new Map();
   for (const seed of seeds) {
@@ -700,8 +709,12 @@ for (const [word, more] of Object.entries(BROADER)) addAlias(word, more);
 // TYPO_MIN_LETTERS. A word that names nothing is read so. One that names only
 // notes on under RARE_TERM bottles stays as typed, with the near name as a
 // suggestion when that's on TYPO_GAIN times as many: "vanila" is a misspelt
-// note on 43 bottles, but clover isn't clove.
+// note on 43 bottles, but clover isn't clove. A word of TYPO_SWAP_LETTERS
+// (iris, musk, rose) is read so only through a swap of two neighbours
+// ("irsi"), and only when it names nothing: any other edit turns too many
+// short words into a note.
 const TYPO_MIN_LETTERS = 5;
+const TYPO_SWAP_LETTERS = 4;
 const RARE_TERM = 100;
 const TYPO_GAIN = 10;
 
@@ -723,6 +736,14 @@ function editDistance(a, b, max) {
     [prev2, prev] = [prev, row];
   }
   return prev[b.length];
+}
+
+// Whether b is a with two neighbouring letters swapped.
+function swapped(a, b) {
+  if (a.length !== b.length) return false;
+  let i = 0;
+  while (i < a.length && a[i] === b[i]) i++;
+  return i < a.length - 1 && a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2);
 }
 
 // The note names search knows: the pool's and the wardrobe's, by their roots,
@@ -753,21 +774,25 @@ function termOf(text, vocab) {
   return { text, accords, notes: new Set(matched.map(v => v.name)), reach };
 }
 
-// The name a mistyped word most likely means (TYPO_MIN_LETTERS and up), as a
-// term reaching more than `reach` × TYPO_GAIN bottles, or null.
+// The name a mistyped word most likely means (TYPO_MIN_LETTERS and up, or a
+// swap in a TYPO_SWAP_LETTERS word that names nothing), as a term reaching
+// more than `reach` × TYPO_GAIN bottles, or null.
 function retype(word, reach, vocab) {
-  if (word.length < TYPO_MIN_LETTERS || /\d/.test(word)) return null;
+  if (/\d/.test(word)) return null;
+  const short = word.length < TYPO_MIN_LETTERS;
+  if (short && (word.length !== TYPO_SWAP_LETTERS || reach > 0)) return null;
   const max = word.length <= 6 ? 1 : 2, w = root(word);
   let best = null;
   for (const entry of vocab.words) {
-    const d = editDistance(w, entry, max);
+    const d = short ? (swapped(w, entry) ? 1 : max + 1) : editDistance(w, entry, max);
     if (d > max || d === 0) continue;
     const term = termOf(entry, vocab);
     if (term.reach > Math.max(reach * TYPO_GAIN, 0) && (!best || d < best.d || (d === best.d && term.reach > best.term.reach))) best = { d, term };
   }
   if (!best) return null;
-  // Show the name as the bottles have it ("lavender", not its root).
-  const named = [...best.term.accords][0] ?? vocab.find(v => v.roots.join(' ') === best.term.text)?.name;
+  // Show the name as the bottles have it ("lavender", not its root; the note
+  // "musk" before the accord "musky").
+  const named = vocab.find(v => v.roots.join(' ') === best.term.text)?.name ?? [...best.term.accords][0];
   return { ...best.term, text: named ? plain(named) : best.term.text };
 }
 

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { importLines, localMatches, nameMatches, parseShare, shareURL } from '../src/collections.js';
+import { importLines, localMatches, nameMatches, parseShare, shareURL, loadMine, usableRecord } from '../src/collections.js';
 import { customRecord, fromShareToken } from '../src/custom.js';
 
 const catalog = JSON.parse(readFileSync(new URL('../data/catalog.json', import.meta.url))).fragrances;
@@ -73,4 +73,24 @@ test('share links carry hand-entered bottles alongside catalog ids', () => {
   assert.equal(link.name, 'Sis');
   assert.equal(link.ids[0], catalog[0].id.toString());
   assert.equal(fromShareToken(link.ids[1]).name, 'Caramellino');
+});
+
+test('Mine keeps only records it can rank, whatever was stored', () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: k => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) };
+  try {
+    const good = customRecord({ name: 'Lone', accords: ['woody'] });
+    for (const stored of [{ records: 'x' }, { records: [null] }, { records: [{ id: 'my:abc', name: 'Lone' }] }, [1, 2], 'x', null]) {
+      store.set('scentcast.mine', JSON.stringify(stored));
+      assert.deepEqual(loadMine().records, [], JSON.stringify(stored));
+    }
+    store.set('scentcast.mine', JSON.stringify({ name: 'Me', records: [good, { ...demo[0] }, { id: 7, name: 7 }] }));
+    const mine = loadMine();
+    assert.deepEqual(mine.records.map(r => r.name), ['Lone', demo[0].name]);
+    assert.equal(mine.records[1].id, String(demo[0].id), 'ids as strings, as the app keeps them');
+    assert.equal(mine.name, 'Me');
+    assert.ok(catalog.every(usableRecord) && demo.every(usableRecord));
+  } finally {
+    delete globalThis.localStorage;
+  }
 });
