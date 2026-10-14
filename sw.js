@@ -43,6 +43,7 @@ const SHELL = [
   'src/layering.js',
   'src/scent-styles.js',
   'src/skin.js',
+  'src/pack.js',
   'src/theme.js',
   'fonts/fraunces.woff2',
   'fonts/fraunces-italic.woff2',
