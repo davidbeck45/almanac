@@ -30,6 +30,8 @@
 .bp-title .brand { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .rating { margin-top: var(--s-2); color: var(--accent); font-size: var(--fs-body); font-weight: 600; font-variant-numeric: tabular-nums; }
 .rating span { margin-left: var(--s-1); color: var(--text-secondary); font-size: var(--fs-footnote); font-weight: 400; }
+/* With no stars before it, it lines up with the name and brand. */
+.rating .by-hand { margin-left: 0; }
 .performance, .inspired { margin-top: var(--s-0); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .inspired a { color: var(--text-primary); }
 .performance span { color: var(--text-tertiary); }

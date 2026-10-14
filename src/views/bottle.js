@@ -302,7 +302,7 @@ const strength = width => (width >= 85 ? 'dominant' : width >= 65 ? 'strong' : w
 function headSection({ f, entry, ctxLabel, solo }) {
   const meta = [f.brand, f.year, GENDER[f.gender]].filter(Boolean).map(esc).join(' · ');
   const ratingLine = f.source === 'custom'
-    ? '<span>Entered by hand</span>'
+    ? '<span class="by-hand">Entered by hand</span>'
     : !f.rating ? 'Unrated'
     : `★ ${f.rating.toFixed(2)} <span>${esc(f.source === 'fragella' ? 'Fragella rating' : `${f.ratingVotes.toLocaleString()} votes`)}</span>`;
   // Parfumo's 0–10 ratings when we have them, else Fragrantica's votes, else
