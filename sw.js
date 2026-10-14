@@ -51,6 +51,8 @@ const SHELL = [
   'src/gaps-worker.js',
   'src/uses.js',
   'src/climate.js',
+  'src/discover.js',
+  'src/wishlist.js',
   'src/theme.js',
   'fonts/fraunces.woff2',
   'fonts/fraunces-italic.woff2',

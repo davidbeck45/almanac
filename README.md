@@ -32,6 +32,10 @@ node scripts/recommend.mjs --city Miami --date 2026-10-24 --occasion date   # an
 node scripts/recommend.mjs --spray "Liquid Brun" --occasion date             # how many sprays, and where
 node scripts/recommend.mjs --gaps --city Houston    # what the wardrobe is missing there, and what fills it
 node scripts/recommend.mjs --check "Le Male Le Parfum"   # worth buying?
+node scripts/recommend.mjs --style "skin,clean,intimate" --all   # bottles to buy that are all three
+node scripts/recommend.mjs --more-like "Liquid Brun,Amber Empire"
+node scripts/recommend.mjs --notes "iris leather" --season winter
+node scripts/recommend.mjs --dupes "Aventus"       # its original, cheaper alternatives and smell-alikes
 ```
 
 Live at **https://davidbeck45.github.io/scentcast/** (GitHub Pages from `main`; every push redeploys). Add it to your phone's home screen to use it like an app.
