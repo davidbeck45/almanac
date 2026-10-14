@@ -288,19 +288,24 @@ const askedFull = new Set(); // pool records whose every note was asked for
 // a search) and its about data (for the sections) when they're not here.
 // undefined while loading, null when there's no such bottle, false when it
 // couldn't load (the page offers to try again). About data that couldn't
-// load stays undefined and is asked for again on the next render. A record
+// load stays undefined, marked in state.aboutFailed (the sections say so)
+// until Try again or the connection comes back. A record
 // a pool answer brought (its 8 strongest notes) swaps for its r/ record, all
 // its notes, keeping its signals.
 function bottleModelFor(r) {
   const id = r.arg;
   const model = bottleView.bottleModel(r);
   if (model) {
-    if (/^\d+$/.test(id) && !askedAbout.has(id)) {
+    if (/^\d+$/.test(id) && !askedAbout.has(id) && !state.aboutFailed.has(id)) {
       askedAbout.add(id);
       loadAbout(id).then(about => {
         state.about.set(id, about);
         if (state.route?.dest === 'bottle' && state.route.arg === id) renderBottle();
-      }, () => askedAbout.delete(id));
+      }, () => {
+        askedAbout.delete(id);
+        state.aboutFailed.add(id);
+        if (state.route?.dest === 'bottle' && state.route.arg === id) renderBottle();
+      });
     }
     if (model.f.source === 'fragrantica' && model.f.extras && state.bottles.get(id) === model.f && !askedFull.has(id)) {
       askedFull.add(id);
@@ -316,7 +321,9 @@ function bottleModelFor(r) {
   if (isCustomId(id)) {
     const f = fromShareToken(id);
     if (!f) return null;
+    // By its token (the route) and its own id (what its page's buttons name).
     state.bottles.set(id, f);
+    if (!state.bottles.has(f.id)) state.bottles.set(f.id, f);
     return bottleView.bottleModel(r);
   }
   if (!loadingBottles.has(id)) {
@@ -343,6 +350,7 @@ function setModal(on) {
 
 function retryBottle() {
   failed.clear();
+  state.aboutFailed.clear();
   renderBottle();
 }
 
@@ -366,11 +374,17 @@ function renderBottle({ fresh = false, instant = false } = {}) {
   const panel = el.querySelector('.bp-panel');
   const sameBottle = el.dataset.id === r.arg;
   const scroll = sameBottle ? panel?.scrollTop ?? 0 : 0;
+  // The section the reader is at stays where it is, however much the ones
+  // above it grow (an answer landing turns a skeleton into a card).
+  const reading = sameBottle && panel ? bottleView.readingAt(panel) : null;
   const focused = sameBottle && el.contains(document.activeElement) ? document.activeElement : null;
   const model = bottleModelFor(r);
   const opening = el.hidden;
   el.innerHTML = bottleView.bottlePageHTML(model, { modal });
-  if (focused) refocus(focused, '#bottle');
+  // Focus on its successor, else on the element with its id, else the close button: never the body.
+  if (focused && !refocus(focused, '#bottle')) {
+    ((focused.id && document.getElementById(focused.id)) || $('#bottle .bp-close'))?.focus({ preventScroll: true });
+  }
   if (model) bottleView.afterBottle(model, app);
   el.dataset.id = r.arg;
   const next = el.querySelector('.bp-panel');
@@ -379,6 +393,7 @@ function renderBottle({ fresh = false, instant = false } = {}) {
   // and another bottle in its place fades in.
   if (!modal && !sameBottle && !opening) next.classList.add('swap');
   next.scrollTop = scroll;
+  if (reading) bottleView.keepReading(next, reading);
   el.classList.toggle('modal', modal);
   $('#app').classList.toggle('has-bottle', !modal);
   setModal(modal);
@@ -475,7 +490,10 @@ function applyRoute(next, { quiet = false, instant = false } = {}) {
   // what opened it; a new page (the rail, with the inspector open) is a
   // navigation like any other.
   const changed = !sameRoute(state.base, next);
-  if (changed) setBase(next, { quiet });
+  if (changed) {
+    state.from = prev;
+    setBase(next, { quiet });
+  }
   renderBottle({ instant });
   if (prev?.dest === 'bottle' && !changed && !refocus(bottleOpener)) $('#page-title')?.focus({ preventScroll: true });
   if (prev?.dest === 'bottle') bottleOpener = null;

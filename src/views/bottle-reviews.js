@@ -3,6 +3,7 @@
 // cons, each with how many members agreed), credited as theirs.
 import { esc } from '../ui.js';
 import { addSection, aboutOf } from './bottle.js';
+import { aboutErrorHTML } from './bottle-crowd.js';
 
 const num = n => Number(n).toLocaleString('en-US');
 
@@ -11,8 +12,9 @@ const item = ({ text, up }, tone) => `<li class="${tone}"><span>${esc(text)}</sp
 /** The section for a bottle's model: a skeleton while its about data loads, '' when there's no summary. */
 export function reviewsHTML(m) {
   const about = aboutOf(m);
-  const head = '<h3 id="reviews-title">Pros and cons <span class="h3-aside quiet">Fragrantica members’ summary</span></h3>';
+  const head = '<h3 id="reviews-title">Pros and cons</h3>';
   if (about === undefined && /^\d+$/.test(m.f.id)) {
+    if (m.aboutFailed) return `<section class="bp-section" aria-labelledby="reviews-title">${head}${aboutErrorHTML()}</section>`;
     return `<section class="bp-section" aria-labelledby="reviews-title" aria-busy="true">${head}<span class="visually-hidden">Loading</span>
       <span class="sk sk-line w70"></span><span class="sk sk-line"></span><span class="sk sk-line w40"></span></section>`;
   }
@@ -20,7 +22,7 @@ export function reviewsHTML(m) {
   if (!pros.length && !cons.length) return '';
   return `<section class="bp-section" aria-labelledby="reviews-title">${head}
     <ul class="pros-cons">${pros.map(p => item(p, 'pro')).join('')}${cons.map(c => item(c, 'con')).join('')}</ul>
-    <p class="bp-credit">Fragrantica’s summary of its members’ reviews, from Le Decanteur’s dataset.</p>
+    <p class="bp-credit">Fragrantica members’ summary of their reviews, from Le Decanteur’s dataset.</p>
   </section>`;
 }
 

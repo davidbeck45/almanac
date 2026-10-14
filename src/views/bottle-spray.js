@@ -1,6 +1,8 @@
-// The bottle page's spray guide (order 250): how many sprays and where, for
-// the window and occasion the page is about (src/spray.js sprayGuide, with
-// your own "on my skin" nudges), on a small figure.
+// The bottle page's spray guide (order 250; after what it smells like for a
+// bottle you don't own): how many sprays and where, for the window and
+// occasion the page is about (src/spray.js sprayGuide, with your own "on my
+// skin" nudges), on a small figure. Now's spray line opens the page here
+// (#bp-spray).
 import { sprayGuide } from '../spray.js';
 import { esc, cap } from '../ui.js';
 import { addSection } from './bottle.js';
@@ -32,22 +34,28 @@ export function figureSVG(where) {
   </svg>`;
 }
 
+/** A guide's spray count in words: "2 sprays", "2–3 sprays". */
+export function sprayCount(guide) {
+  const [lo, hi] = guide.sprays;
+  return lo === hi ? `${lo} spray${lo === 1 ? '' : 's'}` : `${lo}–${hi} sprays`;
+}
+
+/** The guide for a bottle's model, with its skin nudges. */
+export const guideFor = m => sprayGuide(m.f, m.win, m.occasion, m.skin && { longevity: m.skin.longevity, sillage: m.skin.sillage });
+
 /** The section for a bottle's model: '' when it has no accords to judge by. */
 export function sprayHTML(m) {
   if (!Object.keys(m.f.accords ?? {}).length) return '';
-  const skin = m.skin && { longevity: m.skin.longevity, sillage: m.skin.sillage };
-  const g = sprayGuide(m.f, m.win, m.occasion, skin);
-  const [lo, hi] = g.sprays;
-  const count = lo === hi ? `${lo} spray${lo === 1 ? '' : 's'}` : `${lo}–${hi} sprays`;
+  const g = guideFor(m);
   // The guide's text opens with the count ("2–3 sprays, on the neck…"); the rest is where and why.
   const rest = cap(g.text.replace(/^[^,]*,\s*/, ''));
   const when = m.win ? (m.occasion ? `${m.occasion.label} · ${m.win.label.toLowerCase()}` : m.win.label) : '';
-  return `<section class="bp-section" aria-labelledby="spray-title">
-    <h3 id="spray-title">How much to spray${when ? ` <span class="h3-aside">${esc(when)}</span>` : ''}</h3>
-    <div class="spray">
+  return `<section class="bp-section" id="bp-spray" aria-labelledby="spray-title">
+    <h3 id="spray-title" tabindex="-1">How much to spray${when ? ` <span class="h3-aside">${esc(when)}</span>` : ''}</h3>
+    <div class="spray-guide">
       ${figureSVG(g.where)}
       <div class="spray-text">
-        <p class="spray-count">${esc(count)}</p>
+        <p class="spray-count">${esc(sprayCount(g))}</p>
         <p class="spray-where">${esc(rest)}</p>
         ${g.note ? `<p class="spray-note">${esc(g.note)}</p>` : ''}
       </div>
@@ -55,4 +63,4 @@ export function sprayHTML(m) {
   </section>`;
 }
 
-addSection({ id: 'spray', order: 250, render: sprayHTML });
+addSection({ id: 'spray', order: 250, shopOrder: 800, render: sprayHTML });

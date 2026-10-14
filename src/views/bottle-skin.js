@@ -1,13 +1,15 @@
 // The bottle page's "On my skin" (order 260), for a bottle you own: your own
 // stars and how it wears on you against the crowd's votes (src/skin.js).
 // Stars move it in picks and the nudges tune its spray guide; saving ranks
-// everything again and says where the bottle moved in the list it was
-// opened from ("Now 3rd for tonight, was 1st").
+// everything again and says what changed: where the bottle moved in the list
+// it was opened from ("Now 3rd for tonight, was 1st"), or the spray guide's
+// new count.
 import { setSkin } from '../skin.js';
 import { esc } from '../ui.js';
 import { icon, segHTML } from '../ui/components.js';
-import { addSection, showing } from './bottle.js';
-import { state, nowSlot } from '../app/state.js';
+import { addSection, bottleModel } from './bottle.js';
+import { guideFor, sprayCount } from './bottle-spray.js';
+import { state, nowSlot, findRecord } from '../app/state.js';
 
 const STARS = [1, 2, 3, 4, 5];
 const LASTS = [[-1, 'Shorter'], [0, 'As expected'], [1, 'Longer']];
@@ -41,14 +43,14 @@ export function skinHTML(m, change = '') {
   if (!m.owned && !m.inMine) return '';
   const id = esc(m.f.id);
   const rating = m.skin?.rating ?? null;
-  const stars = STARS.map(n => `<button type="button" class="star${rating && n <= rating ? ' lit' : ''}" role="radio" aria-checked="${n === rating}" tabindex="${n === (rating ?? 1) ? 0 : -1}" data-action="bp-skin-rate" data-value="${n}" aria-label="${n} star${n === 1 ? '' : 's'}">${icon.star}</button>`).join('');
+  const stars = STARS.map(n => `<button type="button" class="skin-star${rating && n <= rating ? ' lit' : ''}" role="radio" aria-checked="${n === rating}" tabindex="${n === (rating ?? 1) ? 0 : -1}" data-action="bp-skin-rate" data-value="${n}" aria-label="${n} star${n === 1 ? '' : 's'}">${icon.star}</button>`).join('');
   const seg = (items, now, action, label) => segHTML(items.map(([value, text]) => ({ value, label: text, on: value === now })), { action, label, cls: 'wide' });
   return `<section class="bp-section" aria-labelledby="skin-title">
     <h3 id="skin-title" tabindex="-1">On my skin</h3>
-    <div class="skin">
+    <div class="skin-box">
       <div class="skin-row">
         <span class="skin-label" id="skin-stars-label">Your rating</span>
-        <div class="stars" role="radiogroup" aria-labelledby="skin-stars-label">${stars}</div>
+        <div class="skin-stars" role="radiogroup" aria-labelledby="skin-stars-label">${stars}</div>
         ${rating ? `<button class="link-btn skin-clear" data-action="bp-skin-clear" data-id="${id}">Clear</button>` : ''}
       </div>
       <div class="skin-row stacked"><span class="skin-label">How long it lasts on me</span>${seg(LASTS, m.skin?.longevity ?? 0, 'bp-skin-lasts', 'How long it lasts on you')}</div>
@@ -77,8 +79,9 @@ function placeIn(key, id) {
 }
 
 function save(el, app, patch) {
-  const id = state.route?.arg;
-  if (!id || !showing(id)) return;
+  const arg = state.route?.dest === 'bottle' ? state.route.arg : null;
+  if (!arg) return;
+  const id = findRecord(arg)?.id ?? arg;
   const key = state.contexts[state.route.query.ctx] ? state.route.query.ctx : nowSlot()?.win.slot;
   const before = placeIn(key, id);
   const next = setSkin(id, patch);
@@ -86,8 +89,10 @@ function save(el, app, patch) {
   if ('skin' in state) state.skin = next;
   changes.clear();
   app.render();
-  const ctx = state.contexts[key];
-  changes.set(id, moveText(before, placeIn(key, id), listLabel(ctx?.win, ctx?.occasion)));
+  // Stars move it in the list; how it wears on you changes the spray guide.
+  const ctx = state.contexts[key], model = bottleModel(state.route);
+  changes.set(id, 'rating' in patch ? moveText(before, placeIn(key, id), listLabel(ctx?.win, ctx?.occasion))
+    : model && Object.keys(model.f.accords ?? {}).length ? `Spray guide updated: ${sprayCount(guideFor(model))}.` : '');
   app.keepingFocus(el, '#bottle', app.renderBottle);
   if (!el.isConnected && !document.activeElement?.closest?.('#bottle')) document.querySelector('#skin-title')?.focus({ preventScroll: true });
 }
@@ -97,10 +102,13 @@ addSection({
   order: 260,
   render: m => skinHTML(m, changeFor(m.f.id)),
   actions: {
-    // The same star again takes the rating off.
-    'bp-skin-rate'(el, app) {
+    // The same star tapped again takes the rating off. Keys (Space, Enter,
+    // arrows, Home, End) only ever choose, as on a native radio: Clear clears.
+    'bp-skin-rate'(el, app, event) {
       const stars = Number(el.dataset.value);
-      save(el, app, { rating: el.getAttribute('aria-checked') === 'true' ? null : stars });
+      const again = el.getAttribute('aria-checked') === 'true';
+      if (again && !(event?.detail > 0)) return;
+      save(el, app, { rating: again ? null : stars });
     },
     'bp-skin-clear'(el, app) {
       save(el, app, { rating: null });

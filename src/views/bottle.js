@@ -4,17 +4,20 @@
 // ordered registry: a new section registers itself from its own module with
 // addSection() and the shell imports that module (.sweep/notes/shell-map.md).
 // The sections in their own modules are src/views/bottle-*.js; the ones that
-// ask the suggestion pool keep their answers with pooled().
+// ask the suggestion pool keep their answers with pooled(), and draw again
+// on their own when an answer lands (redrawSection).
 import { rank, comfortRange, SEASONS } from '../engine.js';
 import { layerPicks } from '../layering.js';
 import { setHidden } from '../hidden.js';
-import { loadWants, hasWant, setWant } from '../wishlist.js';
-import { loadSkin } from '../skin.js';
+import { loadWants, saveWants, hasWant, setWant } from '../wishlist.js';
+import { loadSkin, applySkin } from '../skin.js';
+import { isCustomId, shareToken } from '../custom.js';
+import { styleById } from '../scent-styles.js';
 import { esc, deg, temp, matchPct, relativeDay } from '../ui.js';
 import { icon, img, bar, reasonsList, accordColor, wearButton, magDot, messageHTML, shelfHTML } from '../ui/components.js';
 import { askPool } from '../app/pool.js';
 import {
-  state, findRecord, inSource, isActive, activeFragrances, viewingDemo, nowSlot, canWear, wornId,
+  state, findRecord, inSource, isActive, activeFragrances, sourceRecords, viewingDemo, nowSlot, canWear, wornId,
   wearInfo, todayISO, poolInputs,
 } from '../app/state.js';
 
@@ -26,7 +29,9 @@ import {
  * actions, forms, fields, changes, sheets. The shell merges those with the
  * views' (names are global: prefix them, e.g. 'bp-skin-rate'). `after(model,
  * app)` runs once the page is on screen (each render), for a section that
- * loads something and renders the page again when it's in.
+ * loads something and draws again when it's in. `shopOrder`: its place on
+ * the page of a bottle you don't own, when that differs (what it smells
+ * like comes before how to spray it).
  */
 export const SECTIONS = [];
 
@@ -36,49 +41,66 @@ export function addSection(section) {
   SECTIONS.sort((a, b) => a.order - b.order);
 }
 
+/** The sections in the order a bottle's page shows them: owned, or shopping for it. */
+export function sectionsFor(model) {
+  const mine = model.owned || model.inMine;
+  const at = s => (mine ? s.order : s.shopOrder ?? s.order);
+  return [...SECTIONS].sort((a, b) => at(a) - at(b));
+}
+
 /** The sections' `after` hooks, for the shell to call once the page is drawn. */
 export function afterBottle(model, app) {
   for (const s of SECTIONS) s.after?.(model, app);
 }
 
-// Whether the page on screen is still this bottle's (after an await).
+// Whether the page on screen is still this bottle's (after an await). `id`:
+// the route's argument (a hand-entered bottle's is its share token).
 export const showing = id => state.route?.dest === 'bottle' && state.route.arg === id;
 
 // What a pool answer depends on besides the bottle: the wardrobe (switched
 // on and off), the place's climate, "How you wear" and "Prefer great value".
 const inputsKey = i => JSON.stringify([i.owned.map(f => f.id), i.exclude.map(f => f.id), i.summary, i.shares, i.preferValue]);
+// A payload's part of the key: a record counts by its id (its notes may
+// arrive later; the answer doesn't change with them).
+const payloadKey = own => JSON.stringify(own, (k, v) => (k === 'record' && v && typeof v === 'object' ? String(v.id) : v));
 
 /**
  * A section's answers from the pool (src/app/pool.js), one per bottle, asked
  * from its `after` hook: `ask(model, app)` asks `type` with poolInputs() and
  * `payload(model)` (null: nothing to ask) on `channel`, once per bottle and
- * inputs, and renders the page again when the answer lands. `get(id)` ->
- * undefined before it's asked, else { status: 'loading' | 'ready' | 'error',
- * result, error }; a changed wardrobe asks again and keeps the old result on
- * screen meanwhile. `forget(id)` asks again on the next render (Try again).
+ * inputs, and draws again when the answer lands: the section alone
+ * (`section`, its id: redrawSection), else the page. `prepare(model,
+ * inputs)` adds to the payload what needs an await (the liked styles).
+ * `get(id)` -> undefined before it's asked, else { status: 'loading' |
+ * 'ready' | 'error', result, error }; a changed wardrobe asks again and keeps
+ * the old result on screen meanwhile. `forget(id)` asks again on the next
+ * render (Try again). `ask` in the options stands in for askPool (tests).
  */
-export function pooled(type, channel, payload) {
+export function pooled(type, channel, payload, { section = null, prepare = null, ask: askFn = askPool } = {}) {
   const answers = new Map();
   const reading = new Set(); // ids waiting on poolInputs(), so a render meanwhile doesn't ask twice
   async function ask(model, app) {
-    const id = model.f.id, own = payload(model);
-    if (!own || reading.has(id)) return;
+    const id = model.f.id, base = payload(model);
+    if (!base || reading.has(id)) return;
     reading.add(id);
-    let inputs;
+    let inputs, own;
     try {
       inputs = await poolInputs();
+      own = prepare ? { ...base, ...(await prepare(model, inputs)) } : base;
     } catch {
       return;
     } finally {
       reading.delete(id);
     }
-    const key = `${inputsKey(inputs)}\n${JSON.stringify(own)}`;
+    const key = `${inputsKey(inputs)}\n${payloadKey(own)}`;
     const old = answers.get(id);
     if (old?.key === key) return;
     answers.set(id, { key, status: 'loading', result: old?.result ?? null, error: '' });
+    // Asked again with an answer on screen: it dims (the section draws so).
+    if (old?.result && showing(model.arg ?? id) && section) redrawSection(section, app);
     let next;
     try {
-      const result = await askPool(type, { ...inputs, ...own }, { channel });
+      const result = await askFn(type, { ...inputs, ...own }, { channel });
       if (result.stale) {
         // A newer question on the channel (another bottle's) replaced it: ask again next time.
         if (answers.get(id)?.key === key) answers.delete(id);
@@ -90,10 +112,85 @@ export function pooled(type, channel, payload) {
     }
     if (answers.get(id)?.key !== key) return;
     answers.set(id, next);
-    if (showing(id)) app.renderBottle();
+    if (!showing(model.arg ?? id)) return;
+    // The answer brought the bottle's signals (value, safety: the crowd block
+    // reads them), so the record changed: the whole page, reader kept in place.
+    if (section && findRecord(id) === model.f) redrawSection(section, app);
+    else app.renderBottle();
   }
   return { ask, get: id => answers.get(id), forget: id => answers.delete(id) };
 }
+
+/**
+ * Draws one section again where it stands (its answer landed), the rest of
+ * the page and focus in it untouched. A section above the reader that grows
+ * or shrinks doesn't move what they're reading: the next one holds its place.
+ * The whole page when the section isn't on it.
+ */
+export function redrawSection(id, app) {
+  const slot = globalThis.document?.querySelector(`#bottle [data-section="${id}"]`);
+  const section = SECTIONS.find(s => s.id === id);
+  const model = slot && section && state.route?.dest === 'bottle' ? bottleModel(state.route) : null;
+  if (!model) return app.renderBottle();
+  const panel = slot.closest('.bp-panel');
+  const focused = slot.contains(document.activeElement) ? document.activeElement : null;
+  const next = slot.getBoundingClientRect().top < panel.getBoundingClientRect().top ? slot.nextElementSibling : null;
+  const before = next?.getBoundingClientRect().top;
+  slot.innerHTML = section.render(model);
+  if (next) panel.scrollTop += next.getBoundingClientRect().top - before;
+  // A control that went: its successor, else the section's heading.
+  if (focused && !focused.isConnected && !app.refocus(focused, '#bottle')) {
+    (slot.querySelector('h3[tabindex]') ?? panel.querySelector('.bp-close'))?.focus({ preventScroll: true });
+  }
+}
+
+/**
+ * Where the reader is in a panel: the first section that starts in view (a
+ * section cut off at the top may be the one about to grow), else the one
+ * filling it, and its offset from the top. Null at the top of the page.
+ */
+export function readingAt(panel) {
+  if (panel.scrollTop <= 0) return null;
+  const top = panel.getBoundingClientRect().top;
+  const slots = [...panel.querySelectorAll(':scope > [data-section]')].map(slot => [slot, slot.getBoundingClientRect()]).filter(([, r]) => r.height);
+  const [slot, r] = slots.find(([, r]) => r.top >= top - 1) ?? slots.find(([, r]) => r.bottom > top) ?? [];
+  return slot ? { id: slot.dataset.section, offset: r.top - top } : null;
+}
+
+/** Scrolls a panel drawn again so the section the reader was at sits where it did (readingAt). */
+export function keepReading(panel, at) {
+  const slot = at && panel.querySelector(`:scope > [data-section="${at.id}"]`);
+  if (slot) panel.scrollTop += slot.getBoundingClientRect().top - panel.getBoundingClientRect().top - at.offset;
+}
+
+// ---------- The styles someone likes ----------
+
+let liked = { key: null, ids: null };
+
+/**
+ * The scent styles someone likes, as Insights, Discover and the Wishlist
+ * read them (likedFor in src/views/wardrobe/parts.js): the ones hearted on
+ * Insights (state.likedStyles), David's DEMO_LIKED on his wardrobe, else the
+ * ones most of the bottles lean toward. src/discover.js loads on demand.
+ */
+export async function likedStyleIds(owned = activeFragrances()) {
+  const key = JSON.stringify([state.likedStyles ?? null, viewingDemo(), owned.map(f => f.id)]);
+  if (liked.key === key) return liked.ids;
+  const { DEMO_LIKED, likedStyles } = await import('../discover.js');
+  const stated = (state.likedStyles ?? (viewingDemo() ? DEMO_LIKED : null))?.filter(id => styleById(id));
+  liked = { key, ids: stated?.length ? stated : likedStyles(owned).map(s => s.id) };
+  return liked.ids;
+}
+
+/** likedStyleIds() as last worked out (null before), for templates. */
+export const likedNow = () => liked.ids;
+
+// ---------- Links ----------
+
+// The id a link names a bottle by: a hand-entered bottle in no list travels
+// whole (its share token), so its page opens after a reload too.
+const inLists = id => [...sourceRecords(), ...state.mine.records].some(f => f.id === id);
+export const linkId = f => (isCustomId(f.id) && !String(f.id).includes('~') && !inLists(f.id) && f.accords ? shareToken(f) : f.id);
 
 /**
  * What every section gets:
@@ -105,7 +202,8 @@ export function pooled(type, channel, payload) {
  *   loadAbout()'s data (undefined while it loads, null when the dataset has
  *   none; the wardrobe's and catalog's records carry theirs as f.about),
  *   wanted: on the want list, skin: your own rating and nudges (src/skin.js)
- *   or null }.
+ *   or null, aboutFailed: its about data couldn't load (offline), arg: the
+ *   route's argument }. A bottle ranked on its own counts your stars.
  */
 export function bottleModel(route) {
   const id = route.arg;
@@ -117,7 +215,7 @@ export function bottleModel(route) {
   if (!f) return null;
   const solo = !entry;
   const win = ctx?.win ?? null;
-  if (!entry && win) entry = rank([f], win, win.slot, { occasion: ctx.occasion, history: state.history, todayISO: win.dateISO })[0];
+  if (!entry && win) entry = rank(applySkin([f], loadSkin()), win, win.slot, { occasion: ctx.occasion, history: state.history, todayISO: win.dateISO })[0];
   const owned = inSource(id);
   const active = isActive(id);
   const others = activeFragrances().filter(o => o.id !== id);
@@ -141,7 +239,9 @@ export function bottleModel(route) {
     comfort: comfortRange(f),
     about: state.about.get(id),
     wanted: hasWant(loadWants(), id),
-    skin: loadSkin()[id] ?? null,
+    skin: loadSkin()[f.id] ?? null,
+    aboutFailed: state.aboutFailed.has(id),
+    arg: id,
   };
 }
 
@@ -171,7 +271,8 @@ export function bottlePageHTML(model, { modal = true } = {}) {
     return notice('Couldn’t load', { glyph: icon.cloud, title: 'Couldn’t load this bottle', body: 'The fragrance library needs a connection. It tries again when you’re back online.',
       action: `<button class="btn primary" data-action="bottle-retry">${icon.refresh}<span>Try again</span></button>` });
   }
-  return frame(SECTIONS.map(s => s.render(model)).join(''));
+  // Each section in a slot of its own, so an answer that lands draws only it.
+  return frame(sectionsFor(model).map(s => `<div class="bp-slot" data-section="${s.id}">${s.render(model)}</div>`).join(''));
 }
 
 // ---------- Sections ----------
@@ -199,12 +300,12 @@ function headSection({ f, entry, ctxLabel, solo }) {
   // Parfumo's 0–10 ratings when we have them, else Fragrantica's votes, else Fragella's words.
   const pf = f.parfumo, fv = f.performance;
   const performance = pf
-    ? `Longevity ${pf.longevity.toFixed(1)} · Sillage ${pf.sillage.toFixed(1)} <span>of 10 on <a href="${esc(pf.url)}" target="_blank" rel="noopener">Parfumo</a></span>`
+    ? `Longevity ${pf.longevity.toFixed(1)} · Sillage ${pf.sillage.toFixed(1)} <span>of 10 on <a href="${esc(pf.url)}" target="_blank" rel="noopener" data-focus="bp-parfumo">Parfumo</a></span>`
     : fv
     ? `Longevity ${fv.longevity.toFixed(1)} of 5 · Sillage ${fv.sillage.toFixed(1)} of 4 <span>on Fragrantica</span>`
     : [f.longevity, f.sillage && `${f.sillage} sillage`].filter(Boolean).map(esc).join(' · ');
   const o = f.original;
-  const inspired = o ? `<p class="inspired">Inspired by ${o.url ? `<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.name)}</a>` : esc(o.name)} · ${esc(o.brand)}</p>` : '';
+  const inspired = o ? `<p class="inspired">Inspired by ${o.url ? `<a href="${esc(o.url)}" target="_blank" rel="noopener" data-focus="bp-inspired">${esc(o.name)}</a>` : esc(o.name)} · ${esc(o.brand)}</p>` : '';
   const kicker = entry && !solo ? `<p class="kicker">${magDot(entry.tier)}${esc(ctxLabel)}</p>` : '';
   return `<header class="bp-head" style="--accord:${accordColor(Object.keys(f.accords)[0])}">
     <div class="bp-bottle">${img(f, { lazy: false })}</div>
@@ -248,7 +349,7 @@ function summarySection({ entry, comfort, wears, todayISO: today, owned }) {
 // Want: a toggle (aria-pressed) that fills its heart once the bottle is on the list.
 function wantButton(f, wanted) {
   const on = Boolean(wanted);
-  return `<button class="btn secondary want-btn${on ? ' on' : ''}" data-action="bp-want" data-id="${esc(f.id)}" aria-pressed="${on}">${on ? icon.heartFill : icon.heart}<span>${on ? 'Wanted' : 'Want'}<span class="visually-hidden">: ${esc(f.name)}</span></span></button>`;
+  return `<button class="btn secondary bp-want${on ? ' on' : ''}" data-action="bp-want" data-id="${esc(f.id)}" aria-pressed="${on}">${on ? icon.heartFill : icon.heart}<span>${on ? 'Wanted' : 'Want'}<span class="visually-hidden">: ${esc(f.name)}</span></span></button>`;
 }
 
 function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned, inMine, active, wanted }) {
@@ -263,8 +364,8 @@ function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned, inMine,
   return `<div class="bp-actions">
     ${owned ? (wearable && entry ? wearButton(entry, ctx, worn) : '') : own}
     ${owned || inMine ? '' : wantButton(f, wanted)}
-    <button class="btn secondary" data-action="bp-compare" data-id="${esc(f.id)}" data-ctx="${esc(ctx ?? '')}">${icon.compare}<span>Compare</span></button>
-    ${f.url ? `<a class="btn secondary" href="${esc(f.url)}" target="_blank" rel="noopener">Fragrantica ${icon.external}</a>` : ''}
+    <button class="btn secondary" data-action="bp-compare" data-id="${esc(linkId(f))}" data-ctx="${esc(ctx ?? '')}">${icon.compare}<span>Compare</span></button>
+    ${f.url ? `<a class="btn secondary" href="${esc(f.url)}" target="_blank" rel="noopener" data-focus="bp-fragrantica">Fragrantica ${icon.external}</a>` : ''}
     ${owned ? rotation : ''}
   </div>`;
 }
@@ -332,18 +433,24 @@ function notesSection({ f }) {
   return layers ? `<section class="bp-section"><h3>Notes</h3><div class="pyramid">${layers}</div></section>` : '';
 }
 
-// Orders leave room between them for wave 4's sections (shell-map.md lists them).
+// Orders leave room between them for wave 4's sections (shell-map.md lists
+// them). Shopping for a bottle, what it smells like (accords and notes, its
+// styles and look-alikes, what voters say) comes before how to wear it
+// (spray, layering): `shopOrder`.
 addSection({ id: 'head', order: 0, render: headSection });
 addSection({ id: 'summary', order: 100, render: summarySection });
 addSection({ id: 'actions', order: 150, render: actionsSection });
 addSection({ id: 'why', order: 200, render: whySection });
 addSection({ id: 'alts', order: 300, render: altsSection });
-addSection({ id: 'layering', order: 400, render: layeringSection });
-addSection({ id: 'accords', order: 500, render: accordsSection });
+addSection({ id: 'layering', order: 400, shopOrder: 850, render: layeringSection });
+addSection({ id: 'accords', order: 500, shopOrder: 360, render: accordsSection });
 addSection({ id: 'seasons', order: 600, render: seasonsSection });
-addSection({ id: 'notes', order: 700, render: notesSection });
+addSection({ id: 'notes', order: 700, shopOrder: 370, render: notesSection });
 
 // ---------- Actions ----------
+
+// The want list before the last bottle came off it, for Undo.
+let wantsBefore = null;
 
 export const actions = {
   // Any bottle, from any list: data-id, and data-ctx for the list it's in.
@@ -375,15 +482,31 @@ export const actions = {
   'bottle-retry'(el, app) {
     app.retryBottle();
   },
-  // On the want list or off it (src/wishlist.js). A bottle the dataset can't
-  // load again by id keeps its whole record there.
+  // On the want list or off it (src/wishlist.js), as the Wishlist's own Want
+  // does (wish-toggle): the page beside it draws too, and taking a bottle off
+  // can be undone. A bottle the dataset can't load again by id keeps its
+  // whole record there.
   'bp-want'(el, app) {
     const f = findRecord(el.dataset.id);
     if (!f) return;
+    const before = loadWants();
     const on = hasWant(setWant(f), f.id);
-    app.keepingFocus(el, '#bottle', app.renderBottle);
-    if (on) app.showToast(`<span>${esc(f.name)} is on your wishlist</span><a class="btn secondary compact" href="#/wardrobe/wishlist">See wishlist</a>`);
-    else app.hideToast();
+    app.keepingFocus(el, '#bottle', app.render);
+    if (!on) {
+      wantsBefore = before;
+      return app.showToast(`<span>${esc(f.name)} removed from your wishlist</span><button class="btn primary compact" data-action="bp-want-undo">Undo</button>`);
+    }
+    wantsBefore = null;
+    const onList = state.base?.dest === 'wardrobe' && state.base.pane === 'wishlist';
+    app.showToast(onList ? `<span>${esc(f.name)} is on your wishlist</span>`
+      : `<span class="note">${esc(f.name)} is on your wishlist.</span><a class="btn secondary compact" href="#/wardrobe/wishlist">See it</a>`);
+  },
+  'bp-want-undo'(el, app) {
+    if (!wantsBefore) return;
+    saveWants(wantsBefore);
+    wantsBefore = null;
+    app.render();
+    app.hideToast();
   },
   // "Compare with…": the picker (src/views/compare.js), this bottle first.
   'bp-compare'(el, app) {
