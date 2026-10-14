@@ -496,12 +496,12 @@ export const actions = {
     app.keepingFocus(el, '#bottle', app.render);
     if (!on) {
       wantsBefore = before;
-      return app.showToast(`<span class="note">${esc(f.name)} removed from your wishlist.</span><button class="btn primary compact" data-action="bp-want-undo">Undo</button>`);
+      return app.showToast(`<span class="note">${esc(f.name)} removed from your wishlist</span><button class="btn primary compact" data-action="bp-want-undo">Undo</button>`);
     }
     wantsBefore = null;
     const onList = state.base?.dest === 'wardrobe' && state.base.pane === 'wishlist';
     app.showToast(onList ? `<span>${esc(f.name)} is on your wishlist</span>`
-      : `<span class="note">${esc(f.name)} is on your wishlist.</span><a class="btn secondary compact" href="#/wardrobe/wishlist">See it</a>`);
+      : `<span class="note">${esc(f.name)} is on your wishlist</span><a class="btn secondary compact" href="#/wardrobe/wishlist">See it</a>`);
   },
   'bp-want-undo'(el, app) {
     if (!wantsBefore) return;

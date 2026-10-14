@@ -135,7 +135,8 @@ const placeWords = c => `${c.band} ${SLOT_WORD[c.slot]}`;
 export const bandColumns = bands => bands.map(b => ({
   id: b.id,
   label: cap(b.id),
-  range: b.lo === -Infinity ? `<${deg(b.hi)}` : b.hi === Infinity ? `${deg(b.lo)}+` : `${temp(b.lo)}–${deg(b.hi)}`,
+  // A narrow column wraps a range after its dash, never before the plus (a word joiner).
+  range: b.lo === -Infinity ? `<${deg(b.hi)}` : b.hi === Infinity ? `${deg(b.lo)}\u2060+` : `${temp(b.lo)}–${deg(b.hi)}`,
 }));
 
 /**
@@ -182,7 +183,7 @@ export function coverageHTML(report, { uses, bands, cell, slot, fresh = false })
       ${LEGEND.map(s => `<li>${vial(s)}<span>${STATUS_WORD[s]}</span></li>`).join('')}
       <li>${vial('covered', { rare: true })}<span>Rarely comes up</span></li>
     </ul>
-    <p class="muted small cov-note">Fuller is better covered. A mark at the top means your best falls short of the best out there. Tap one to see your bottles there.</p>
+    <p class="muted small cov-note">Fuller is better covered. A mark at the top means your best falls short of the best out there. Select one to see your bottles there.</p>
     ${picked ? cellDetailHTML(picked, report) : ''}
   </div>`;
 }
@@ -222,12 +223,14 @@ export function cellDetailHTML(c, report, resolve = findRecord) {
   </div>`;
 }
 
-// A thin spot's line: your best there, and how far the best go.
+// A thin spot's line: your best there, and what the top bottles there average.
 function thinLine(c) {
   const best = c?.top[0];
   if (!best) return 'Nothing you own fits here.';
   if (c.status === 'thin') return `Only ${best.name} is strong here, at ${pct(best.score)}%.`;
-  return `Your best: ${best.name}, ${pct(best.score)}%. The best out there reach ${pct(c.target)}%.`;
+  // The target is the mean of the pool's top bottles there, not the most
+  // any reaches: a suggestion can beat it.
+  return `Your best: ${best.name}, ${pct(best.score)}%. Top bottles here average ${pct(c.target)}%.`;
 }
 
 /**
@@ -412,11 +415,15 @@ export function usesSheetHTML({ uses, settings, tagged = 0 }) {
 }
 
 /** While the library loads: the headline, the map and a card, in outline. */
+// The map in outline, shaped like the table it becomes: 8 uses by 5 bands,
+// one slot at a time under 600px of page, day and night side by side from
+// there (all 80 vials; wardrobe.css hides the second 40 below it).
+const mapSkeleton = (attrs = '') => `<div class="card sk-cov"${attrs}><span class="sk sk-line w40"></span><div class="sk-grid">${'<span class="sk sk-vial"></span>'.repeat(80)}</div></div>`;
+
 export function insightsSkeletonHTML() {
-  const cells = Array.from({ length: 40 }, () => '<span class="sk sk-vial"></span>').join('');
   return `<div class="insights" aria-busy="true" aria-label="Loading insights">
     <div class="ins-top"><span class="sk sk-line w70 sk-head"></span><span class="sk sk-line w40"></span></div>
-    <div class="card sk-cov"><span class="sk sk-line w40"></span><div class="sk-grid">${cells}</div></div>
+    ${mapSkeleton()}
     <div class="card sk-card"><span class="sk sk-line w40"></span><span class="sk sk-row"></span></div>
   </div>`;
 }
@@ -432,7 +439,7 @@ export function insightsHTML(m) {
   const h3 = { level: 3 };
   const situations = m.error && !r
     ? `<div class="card ins-error">${messageHTML({ glyph: icon.chart, title: 'Couldn’t work out your gaps', body: m.error, action: '<button class="btn primary" data-action="ins-retry">Try again</button>' })}</div>`
-    : !r ? `<div class="card sk-cov" aria-busy="true" aria-label="Working out your gaps"><span class="sk sk-line w40"></span><div class="sk-grid">${'<span class="sk sk-vial"></span>'.repeat(40)}</div></div>`
+    : !r ? mapSkeleton(' aria-busy="true" aria-label="Working out your gaps"')
       : `<section class="card ins-cov" aria-labelledby="cov-title">
         ${sectionHead('What you’re covered for', '', { ...h3, id: 'cov-title' })}
         ${coverageHTML(r, { uses: m.uses, bands: m.bands, cell: m.cell, slot: m.slot, fresh: m.fresh })}
@@ -443,7 +450,7 @@ export function insightsHTML(m) {
         ${strongHTML(r)}
       </section>
       <section class="ins-fill" aria-labelledby="fill-title">
-        ${sectionHead('Bottles that would fill the gaps', '<p>Picked as a set: each covers a situation the others don’t.</p>', { ...h3, id: 'fill-title' })}
+        ${sectionHead('Bottles that would fill the gaps', '<p>Picked as a set: each adds what the ones above it don’t.</p>', { ...h3, id: 'fill-title' })}
         ${picksHTML(r, { wants: m.wants, ownedLabel: m.ownedLabel })}
       </section>`;
   const h = r ? headline(r) : null;
@@ -864,8 +871,10 @@ export const actions = {
     if (!record) return;
     setWant(id, false);
     app.own(record);
-    // Its card made way for the new list's report.
-    document.getElementById('page-title')?.focus();
+    // The card stays (with its owned tag) until the new report lands: focus
+    // its name, which repaint() hands on to the section's heading if it goes.
+    const name = document.querySelector(`.ins-pick .pick-name-btn[data-id="${CSS.escape(id)}"]`);
+    (name ?? document.getElementById('page-title'))?.focus();
   },
   'ins-mix-all'(el, app) {
     ins.allStyles = !ins.allStyles;
