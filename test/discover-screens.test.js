@@ -60,8 +60,8 @@ test('the URL reads as typed: commas in lists, the Insights link, junk left out'
   // Insights links here with exactly this.
   assert.deepEqual(readQuery(parseRoute('#/discover?styles=skin,clean,intimate', PANES).query).styles, ['skin', 'clean', 'intimate']);
   assert.deepEqual(readQuery(parseRoute('#/discover?styles=skin%2Cclean', PANES).query).styles, ['skin', 'clean'], 'escaped commas too');
-  const junk = readQuery({ styles: 'skin,nope,skin', mode: 'most', tab: 'x', season: 'monsoon,winter', time: 'dusk', lean: 'both', longevity: '11', projection: 'loud', safe: 'yes', by: 'x' });
-  assert.deepEqual(junk.styles, ['skin']);
+  const junk = readQuery({ styles: 'skin,whiteFloral,skin,<b>,none', mode: 'most', tab: 'x', season: 'monsoon,winter', time: 'dusk', lean: 'both', longevity: '11', projection: 'loud', safe: 'yes', by: 'x' });
+  assert.deepEqual(junk.styles, ['skin', 'whiteFloral'], 'ids by shape (the view keeps the ones STYLES has)');
   assert.equal(junk.mode, 'any');
   assert.equal(junk.tab, 'styles');
   assert.equal(junk.by, null);
@@ -147,6 +147,8 @@ test('a pick’s card: escaped, marked, and every action named', () => {
 test('a notes pick leads with what it matched; a more-like pick with what it shares', () => {
   const notes = T.pickCardHTML(pick('p2', { matched: [{ term: 'iris', name: 'orris root', via: 'note', strength: 0.8 }, { term: 'leather', name: 'leather', via: 'accord', strength: 0.9 }] }));
   assert.match(notes, /<li class="tag on match">Orris root<\/li><li class="tag on match">Leather<\/li>/);
+  const leather = T.pickCardHTML(pick('p4', { matched: [{ term: 'leather', name: 'leather', via: 'accord', strength: 0.9 }], styles: [{ id: 'leather', label: 'Leather', score: 0.8 }] }));
+  assert.equal((leather.match(/>Leather</g) ?? []).length, 1, 'a match and a style of the same name show once');
   const like = T.whyLines(pick('p3', { shares: ['vanilla', 'amber', 'sweet'], alsoLiked: 2, family: null }), { max: 9 });
   assert.equal(like[0], 'Shares vanilla, amber and sweet with your picks.');
   assert.equal(like.at(-1), 'Fans of your picks like it too.');
@@ -186,7 +188,7 @@ test('a list: skeletons first, the old cards dimmed while a change loads, errors
 
 test('style chips: the chosen pressed, the rest folded on wide columns, a tip for each', () => {
   const order = STYLES.map(s => s.id);
-  const html = clean(T.stylePickerHTML({ order, selected: ['skin', 'boozy'], mode: 'all', owned: { skin: [EVIL, 'Meant To Be Seen'] } }), 'chips');
+  const html = clean(T.stylePickerHTML({ styles: STYLES, order, selected: ['skin', 'boozy'], mode: 'all', owned: { skin: [EVIL, 'Meant To Be Seen'] } }), 'chips');
   assert.equal((html.match(/aria-pressed="true"/g) ?? []).length, 2 + 1, 'two chips and the All segment');
   assert.match(html, /data-value="boozy" aria-pressed="true"/);
   assert.ok(!/class="style-chip on extra"/.test(html), 'a chosen chip never folds away');
@@ -196,12 +198,13 @@ test('style chips: the chosen pressed, the rest folded on wide columns, a tip fo
   assert.match(html, /data-action="disc-mode" data-value="all" aria-pressed="true"/);
   assert.equal((html.match(/id="disc-tip-/g) ?? []).length, order.length);
   assert.match(html, /You own 2: &lt;img/);
-  assert.match(T.styleTip('clean', ['Cedrus Blanc']), /You own Cedrus Blanc\.$/);
-  assert.match(T.styleTip('oud', []), /You don’t own one yet\.$/);
-  const one = T.stylePickerHTML({ order, selected: ['clean'], mode: 'any' });
+  const style = id => STYLES.find(s => s.id === id);
+  assert.match(T.styleTip(style('clean'), ['Cedrus Blanc']), /^Soap, .* You own Cedrus Blanc\.$/);
+  assert.match(T.styleTip(style('oud'), []), /You don’t own one yet\.$/);
+  const one = T.stylePickerHTML({ styles: STYLES, order, selected: ['clean'], mode: 'any' });
   assert.ok(!one.includes('disc-mode'), 'one style needs no Any/All');
   assert.match(one, /Soap, laundry/, 'one style says what it is');
-  assert.match(T.stylePickerHTML({ order, selected: [], mode: 'any' }), /Pick a style/);
+  assert.match(T.stylePickerHTML({ styles: STYLES, order, selected: [], mode: 'any' }), /Pick a style/);
 });
 
 test('seeds: chips to remove, Add until five, the way back to the defaults', () => {

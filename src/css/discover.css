@@ -152,6 +152,9 @@ body[data-route='discover'] .page > :is(#main, #foot) { --disc-col: 1120px; max-
 @keyframes tip-in { from { opacity: 0; transform: translate(-50%, calc(-100% - var(--s-1))); } }
 @media (prefers-reduced-transparency: reduce) { .disc-tip { background: var(--surface-3); } }
 
+/* How to read a style's tip: hold it (touch) or point at it (mouse). */
+@media (hover: hover) { .hint-touch { display: none; } }
+@media (hover: none) { .hint-pointer { display: none; } }
 .disc-styles-foot { display: grid; gap: var(--s-2); }
 @container disc (min-width: 560px) { .disc-styles-foot { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--s-4); } .disc-styles-foot > .disc-line:only-child { grid-column: 1 / -1; } }
 .disc-combine { justify-self: start; }

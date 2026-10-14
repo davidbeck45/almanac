@@ -14,8 +14,6 @@ import {
   state, findBottles, fullRecords, ownedIn, findRecord, activeFragrances, viewingDemo, poolInputs, setPreferValue, todayISO,
   loadFullRecord, keepBottles,
 } from '../app/state.js';
-import { DEMO_LIKED, FILTERS, likedStyles } from '../discover.js';
-import { STYLES, styleMix, styleScores } from '../scent-styles.js';
 import { loadWants, hasWant, setWant } from '../wishlist.js';
 import { normalize } from '../collections.js';
 import { readQuery, writeQuery, poolFilters, filterCount, searchMode, NO_FILTERS, SEED_MAX } from './discover/query.js';
@@ -23,18 +21,31 @@ import * as T from './discover/templates.js';
 
 const MIN_QUERY = 3;
 const TYPING_MS = 320;
-// The logic knows body mists once src/discover.js FILTERS has the key.
-const HAS_MISTS = 'mists' in FILTERS;
-// The styles someone picked, kept on this device: they start Discover next time.
+// The styles last picked here, kept on this device: they start Discover next time.
 const STYLES_KEY = 'scentcast.styles';
-const STYLE_IDS = new Set(STYLES.map(s => s.id));
 // How long a press makes a style chip say what it is.
 const HOLD_MS = 450;
 
-export function loadSavedStyles() {
+// ---------- Modules loaded on demand ----------
+// The scent styles and src/discover.js (DEMO_LIKED, likedStyles, FILTERS)
+// stay out of the boot graph, as Wardrobe's panes keep them: the page shows
+// skeletons until they're in. The pool's worker loads its own copies.
+
+let lib = null, libLoading = null;
+function loadLib(app) {
+  libLoading ??= Promise.all([import('../discover.js'), import('../scent-styles.js')]).then(([discover, styles]) => {
+    lib = { ...discover, ...styles };
+    repaint(app);
+  }, () => { libLoading = null; });
+  return libLoading;
+}
+// The logic knows body mists once src/discover.js FILTERS has the key.
+const hasMists = () => Boolean(lib && 'mists' in lib.FILTERS);
+
+function loadSavedStyles() {
   try {
     const ids = JSON.parse(localStorage.getItem(STYLES_KEY));
-    return Array.isArray(ids) ? ids.filter(id => STYLE_IDS.has(id)) : null;
+    return Array.isArray(ids) ? ids : null;
   } catch {
     return null;
   }
@@ -91,32 +102,37 @@ function load(app, name, key, ask) {
 const discoverRoute = () => (state.base?.dest === 'discover' ? state.base : null);
 const current = () => readQuery(discoverRoute()?.query ?? {});
 const searching = d => d.q.length >= MIN_QUERY;
-const filtersFor = d => poolFilters(d.filters, { mists: HAS_MISTS });
+const filtersFor = d => poolFilters(d.filters, { mists: hasMists() });
 
 // What the wardrobe likes, worked out once per wardrobe: the chips it starts
-// on (saved ones, else David's stated loves on the demo, else what most of
-// its bottles lean toward), their order (those first, then the wardrobe's
-// own leanings, then the rest), and which owned bottles are each style.
+// on (the styles hearted on Insights, state.likedStyles; else the ones last
+// picked here; else David's stated loves on the demo, DEMO_LIKED; else what
+// most of its bottles lean toward), their order (those first, then the
+// wardrobe's own leanings, then the rest), and which owned bottles are each
+// style. Needs the lib.
 let taste = null;
 function tasteOf() {
-  const key = `${ownedKey()}|${viewingDemo()}`;
+  const known = new Set(lib.STYLES.map(s => s.id));
+  const hearted = state.likedStyles?.filter(id => known.has(id));
+  const saved = loadSavedStyles()?.filter(id => known.has(id));
+  const chosen = hearted?.length ? hearted : saved?.length ? saved : null;
+  // (Not keyed on the chips picked here: the order holds still while they change.)
+  const key = `${ownedKey()}|${viewingDemo()}|${hearted?.join() ?? ''}`;
   if (taste?.key === key) return taste;
   const owned = activeFragrances();
   const memo = new Map();
-  const scores = f => memo.get(f) ?? memo.set(f, styleScores(f)).get(f);
-  const saved = loadSavedStyles();
-  const stated = saved?.length ? saved : viewingDemo() ? DEMO_LIKED : null;
-  const liked = likedStyles(owned, { stated, scores }).map(s => s.id);
-  const leaning = likedStyles(owned, { scores, k: 6 }).map(s => s.id);
-  const start = saved?.length ? saved : liked;
-  const order = [...new Set([...start, ...leaning, ...STYLES.map(s => s.id)])];
-  const mix = styleMix(owned, scores);
+  const scores = f => memo.get(f) ?? memo.set(f, lib.styleScores(f)).get(f);
+  const leaning = lib.likedStyles(owned, { scores, k: 6 }).map(s => s.id);
+  const start = chosen ?? (viewingDemo() ? lib.likedStyles(owned, { stated: lib.DEMO_LIKED, scores }).map(s => s.id) : leaning.slice(0, 3));
+  const order = [...new Set([...start, ...leaning, ...lib.STYLES.map(s => s.id)])];
+  const mix = lib.styleMix(owned, scores);
   const names = new Map(owned.map(f => [f.id, f.name]));
-  const own = Object.fromEntries(STYLES.map(s => [s.id, (s.id === 'intimate' ? mix.intimateIds : mix.ids[s.id] ?? []).map(id => names.get(id))]));
-  taste = { key, start, order, owned: own };
+  const own = Object.fromEntries(lib.STYLES.map(s => [s.id, (s.id === 'intimate' ? mix.intimateIds : mix.ids[s.id] ?? []).map(id => names.get(id))]));
+  taste = { key, start, order, owned: own, known };
   return taste;
 }
-const selectedStyles = d => d.styles ?? tasteOf().start;
+// The chosen styles: the URL's (the ones STYLES has), else where the wardrobe starts.
+const selectedStyles = d => (d.styles ? d.styles.filter(id => tasteOf().known.has(id)) : tasteOf().start);
 
 // The bottles "more like" starts from: chosen ones, else the answer's defaults.
 function seedIds(d) {
@@ -129,7 +145,8 @@ const wardrobeIn = () => (state.shared ? !state.shared.loading : state.active ==
 
 // Asks for whatever the page shows that it doesn't have yet.
 function ensure(app, d) {
-  if (!wardrobeIn()) return;
+  if (!lib) loadLib(app);
+  if (!wardrobeIn() || !lib) return;
   const filters = filtersFor(d), pv = state.preferValue;
   if (searching(d)) {
     const k = ks.notes;
@@ -206,7 +223,7 @@ const shownPreferValue = () => [slots.styles, slots.like, slots.notes, slots.rep
   .map(s => s.result?.preferValue).find(v => typeof v === 'boolean') ?? state.preferValue ?? false;
 
 function emptyHTML(d, what) {
-  if (filterCount(d.filters, { mists: HAS_MISTS })) {
+  if (filterCount(d.filters, { mists: hasMists() })) {
     return messageHTML({
       glyph: icon.filter,
       title: 'Nothing fits every filter',
@@ -238,11 +255,11 @@ function listHTML(d, name, empty, { teaser = false } = {}) {
 }
 
 function sideHTML(d) {
-  const n = filterCount(d.filters, { mists: HAS_MISTS });
+  const n = filterCount(d.filters, { mists: hasMists() });
   return `<aside class="disc-side" aria-label="Filters">
       <section class="disc-panel" aria-labelledby="disc-filters-head">
         <header class="disc-panel-head"><h2 id="disc-filters-head" tabindex="-1">Filters</h2>${n ? '<button class="btn tertiary compact" data-action="disc-filters-reset">Reset</button>' : ''}</header>
-        ${T.filtersHTML(d.filters, { preferValue: shownPreferValue(), mists: HAS_MISTS, prefix: 'dfs' })}
+        ${T.filtersHTML(d.filters, { preferValue: shownPreferValue(), mists: hasMists(), prefix: 'dfs' })}
       </section>
     </aside>`;
 }
@@ -260,8 +277,8 @@ function seedModel(d) {
 }
 
 function browseHTML(d) {
-  // Until the wardrobe is in, the shapes of what's coming (not "Pick a style").
-  if (!wardrobeIn()) {
+  // Until the wardrobe and the lib are in, the shapes of what's coming (not "Pick a style").
+  if (!wardrobeIn() || !lib) {
     return `<div class="disc-layout"><div class="disc-main" aria-busy="true">
         <div class="disc-sk-chips">${'<span class="sk"></span>'.repeat(4)}</div>
         <div class="disc-grid">${bottleCardSkeletonHTML(4)}</div>
@@ -281,12 +298,12 @@ function browseHTML(d) {
       ? messageHTML({ glyph: icon.bottle, title: 'Pick bottles you love', body: 'Get more like them: one bottle, or a few to blend.', action: `<button class="btn primary" data-action="disc-seeds-open">${icon.plus}<span>Pick bottles</span></button>` })
       : listHTML(d, 'like', emptyHTML(d, 'like'), { teaser: true });
   } else {
-    head = T.stylePickerHTML({ order: t.order, selected, mode: d.mode, owned: t.owned, all: allStyles });
+    head = T.stylePickerHTML({ styles: lib.STYLES, order: t.order, selected, mode: d.mode, owned: t.owned, all: allStyles });
     list = selected.length ? listHTML(d, 'styles', emptyHTML(d, d.mode === 'all' ? 'all' : 'styles'), { teaser: true }) : T.teaserHTML(slots.report, { wantedOf: wantedOf() });
   }
   return `<div class="disc-layout">
       <div class="disc-main">
-        <div class="disc-bar">${tabs}${T.filterButtonHTML(d.filters, { mists: HAS_MISTS })}</div>
+        <div class="disc-bar">${tabs}${T.filterButtonHTML(d.filters, { mists: hasMists() })}</div>
         <h2 class="visually-hidden">${d.tab === 'like' ? 'More like these bottles' : 'More of these styles'}</h2>
         ${head}
         <div class="disc-list">${list}</div>
@@ -315,7 +332,8 @@ function searchHTML(d) {
     results = `${T.notesNoteHTML(notes, d.q)}${listHTML(d, 'notes', emptyHTML(d, 'notes'))}`;
     titled = true;
   } else if (names.results?.length || names.error) {
-    results = `<p class="disc-count muted">${T.statusHTML(names)}</p>${T.namesHTML(names, nameOwners())}`;
+    // The title says what's listed; the line stays for an offline or failed search.
+    results = `${names.offline || names.error ? `<p class="disc-count muted">${T.statusHTML(names)}</p>` : ''}${T.namesHTML(names, nameOwners())}`;
     titled = Boolean(names.results?.length);
   } else if (names.results && (notesSlot.status === 'done' || notesSlot.status === 'error')) {
     results = T.noMatchHTML(d.q);
@@ -324,7 +342,7 @@ function searchHTML(d) {
   }
   return `<div class="disc-layout${notesShown ? '' : ' solo'}">
       <div class="disc-main">
-        ${toggle || notesShown ? `<div class="disc-bar">${toggle}${notesShown ? T.filterButtonHTML(d.filters, { mists: HAS_MISTS }) : ''}</div>` : ''}
+        ${toggle || notesShown ? `<div class="disc-bar">${toggle}${notesShown ? T.filterButtonHTML(d.filters, { mists: hasMists() }) : ''}</div>` : ''}
         ${titled ? T.searchTitleHTML(mode, { query: d.q, terms: notes?.terms }) : '<h2 class="visually-hidden">Search results</h2>'}
         <div class="disc-list">${results}</div>
       </div>
@@ -396,6 +414,7 @@ function after(app) {
 // strip's edge on a phone: scroll its first chip into view, once per selection.
 let chipsShown = null;
 function showChosen(d) {
+  if (!lib || !wardrobeIn()) return;
   // (The order changes when the wardrobe does: the demo loading, a list switched.)
   const key = `${selectedStyles(d).join()}|${tasteOf().order.join()}`;
   if (key === chipsShown) return;
@@ -806,7 +825,7 @@ export const sheets = {
   'disc-filters'() {
     if (!discoverRoute()) return null;
     const d = current();
-    return sheetFrame('disc-filters-title', T.filterSheetHTML(d.filters, { preferValue: shownPreferValue(), mists: HAS_MISTS, status: filterStatus() }));
+    return sheetFrame('disc-filters-title', T.filterSheetHTML(d.filters, { preferValue: shownPreferValue(), mists: hasMists(), status: filterStatus() }));
   },
   'disc-seeds'(sheet) {
     if (!discoverRoute()) return null;

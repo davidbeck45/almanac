@@ -8,7 +8,6 @@ import { esc, plural } from '../../ui.js';
 import {
   icon, img, messageHTML, segHTML, switchHTML, rowHTML, sectionHead, bottleCardHTML, bottleCardSkeletonHTML, accordColor,
 } from '../../ui/components.js';
-import { STYLES } from '../../scent-styles.js';
 import { SEASONS, LONGEVITY, PROJECTION, filterCount, NO_FILTERS } from './query.js';
 
 // Cards a list asks for at a time, and at most.
@@ -26,9 +25,7 @@ const STYLE_HUES = {
   whiteFloral: 'white floral', rose: 'rose', floral: 'floral', powdery: 'powdery', woody: 'woody', spicy: 'warm spicy',
   fruity: 'fruity', chypre: 'mossy', boozy: 'rum',
 };
-const STYLE_BY_ID = new Map(STYLES.map(s => [s.id, s]));
 export const styleColor = id => accordColor(STYLE_HUES[id] ?? 'powdery');
-export const styleLabel = id => STYLE_BY_ID.get(id)?.label ?? id;
 
 const listed = items => (items.length < 3 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
 const metaOf = r => [r.brand, r.year].filter(Boolean).map(esc).join(' · ');
@@ -108,9 +105,11 @@ export function pickCardHTML(pick, { owned = null, wanted = false, selected = []
   const r = pick.record;
   // A notes search's matches lead, lit: the note or accord as the bottle names it ("orris root").
   const matched = [...new Set((pick.matched ?? []).map(m => m.name).filter(Boolean))];
+  const said = new Set(matched.map(name => name.toLowerCase()));
   const tags = [
     ...matched.map(name => ({ text: cap(name), kind: 'match', on: true })),
-    ...(pick.styles ?? []).map(s => ({ text: s.label, color: styleColor(s.id), on: selected.includes(s.id) })),
+    ...(pick.styles ?? []).filter(s => !said.has(s.label.toLowerCase()))
+      .map(s => ({ text: s.label, color: styleColor(s.id), on: selected.includes(s.id) })),
     ...(pick.close ? [{ text: 'Wears close', kind: 'close', on: selected.includes('intimate') }] : []),
   ];
   const own = owned
@@ -166,9 +165,9 @@ export function picksHTML(slot, { name, k = PAGE, ownedOf = () => null, wantedOf
 
 // ---------- By style ----------
 
-// A style's tip: what it is, and which owned bottles are it.
-export function styleTip(id, owned = []) {
-  const blurb = STYLE_BY_ID.get(id)?.blurb ?? '';
+// A style's tip: what it is (`style`, from src/scent-styles.js STYLES), and which owned bottles are it.
+export function styleTip(style, owned = []) {
+  const blurb = style?.blurb ?? '';
   const mine = owned.length === 1 ? ` You own ${owned[0]}.`
     : owned.length ? ` You own ${owned.length}: ${listed(owned.slice(0, 3))}${owned.length > 3 ? ` and ${owned.length - 3} more` : ''}.`
     : ' You don’t own one yet.';
@@ -177,11 +176,14 @@ export function styleTip(id, owned = []) {
 
 /**
  * The style chips, liked ones first (`order`), with how several combine
- * (any or all) and a line on what's asked. `owned`: style id -> names of
- * owned bottles of it, for the tips (long-press or hover; screen readers
- * hear them as the chip's description).
+ * (any or all) and a line on what's asked. `styles`: src/scent-styles.js
+ * STYLES (labels, blurbs). `owned`: style id -> names of owned bottles of
+ * it, for the tips (long-press or hover; screen readers hear them as the
+ * chip's description).
  */
-export function stylePickerHTML({ order, selected, mode, owned = {}, all = false }) {
+export function stylePickerHTML({ styles, order, selected, mode, owned = {}, all = false }) {
+  const byId = new Map(styles.map(s => [s.id, s]));
+  const styleLabel = id => byId.get(id)?.label ?? id;
   const chips = order.map((id, i) => {
     const on = selected.includes(id);
     const extra = !on && i >= CHIPS_SHOWN ? ' extra' : '';
@@ -191,10 +193,11 @@ export function stylePickerHTML({ order, selected, mode, owned = {}, all = false
   const toggle = hidden
     ? `<button type="button" class="btn tertiary compact styles-more" data-action="disc-styles-all" aria-expanded="${all}">${all ? 'Fewer styles' : `${hidden} more styles`}</button>`
     : '';
-  const tips = order.map(id => `<span id="disc-tip-${esc(id)}">${esc(styleTip(id, owned[id]))}</span>`).join('');
+  const tips = order.map(id => `<span id="disc-tip-${esc(id)}">${esc(styleTip(byId.get(id), owned[id]))}</span>`).join('');
   // One style: what it is. None: how to start. Several: the toggle says how they combine.
-  const line = !selected.length ? 'Pick a style to see more of it. Press and hold one to see what it is.'
-    : selected.length === 1 ? esc(STYLE_BY_ID.get(selected[0])?.blurb ?? '') : '';
+  const line = !selected.length
+    ? 'Pick a style to see more of it. <span class="hint-touch">Press and hold one</span><span class="hint-pointer">Point at one</span> to see what it is.'
+    : selected.length === 1 ? esc(byId.get(selected[0])?.blurb ?? '') : '';
   const combine = selected.length >= 2
     ? segHTML([{ value: 'any', label: 'Any of them', on: mode !== 'all' }, { value: 'all', label: 'All at once', on: mode === 'all' }], { action: 'disc-mode', label: 'Combine styles', cls: 'disc-combine' })
     : '';

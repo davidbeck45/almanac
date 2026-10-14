@@ -6,7 +6,6 @@
 // and writes the query object src/app/router.js keeps (its DISCOVER_KEYS
 // must list every key here), and turns the filters into src/discover.js
 // FILTERS for the pool's questions.
-import { STYLES } from '../../scent-styles.js';
 import { normalize } from '../../collections.js';
 
 export const KEYS = ['q', 'by', 'tab', 'styles', 'mode', 'seeds', 'season', 'time', 'lean', 'longevity', 'projection', 'safe', 'discontinued', 'mists'];
@@ -21,7 +20,9 @@ export const PROJECTION = [{ value: null, label: 'Any' }, { value: 7.4, label: '
 export const SAFE_MIN = 50;
 export const SEED_MAX = 5;
 
-const STYLE_IDS = new Set(STYLES.map(s => s.id));
+// A style id as src/scent-styles.js names them ("skin", "whiteFloral"); the
+// view keeps the ones STYLES has (it loads on demand).
+const STYLE_ID = /^[a-z][A-Za-z]{1,23}$/;
 // None chosen, as the URL says it: an absent key means the defaults (the
 // liked styles, the most worn bottles).
 const NONE = 'none';
@@ -46,7 +47,7 @@ export function readQuery(query = {}) {
     q: String(query.q ?? '').trim(),
     by: query.by === 'names' || query.by === 'notes' ? query.by : null,
     tab: query.tab === 'like' ? 'like' : 'styles',
-    styles: query.styles == null ? null : query.styles === NONE ? [] : listOf(query.styles, id => STYLE_IDS.has(id)),
+    styles: query.styles == null ? null : query.styles === NONE ? [] : listOf(query.styles, id => STYLE_ID.test(id) && id !== NONE),
     mode: query.mode === 'all' ? 'all' : 'any',
     seeds: query.seeds == null ? null : query.seeds === NONE ? [] : listOf(query.seeds, () => true).slice(0, SEED_MAX),
     filters: {
