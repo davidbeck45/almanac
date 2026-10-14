@@ -553,6 +553,25 @@ test('compare marks one leader by the value it shows, and calls lasting and loud
   assert.match(row('cmp-now'), /66%[^]*66%/);
   assert.ok(!row('cmp-now').includes('cmp-lead-tag'), '66% and 66% lead nobody');
   assert.match(html, /cmp-lead-tag">(Longest|Loudest)</, 'performance leads are named, not "best"');
+
+  // A bottle Parfumo lacks shows an estimate from Fragrantica's votes, marked, and never leads one Parfumo rates.
+  const rated = byName('Liquid Brun'), guess = { ...byName('Terra'), id: 'x1', name: 'Zenith', parfumo: undefined };
+  const page = (...fs) => compareHTML({
+    ids: fs.map(f => f.id), bottles: fs.map(f => ({ id: f.id, f, status: 'ready', owned: false })),
+    now: null, occ: null, tonight: null, pairs: [], about: () => null,
+  });
+  const mixed = page(rated, guess);
+  const lasts = mixed.slice(mixed.indexOf('aria-labelledby="cmp-lasts"'), mixed.indexOf('aria-labelledby="cmp-projects"'));
+  assert.match(lasts, /≈ 8\.6<small> of 10<\/small><span class="visually-hidden">, estimated from Fragrantica votes/);
+  assert.match(lasts, />8\.4<small> of 10/, 'Parfumo’s own rating stands as it is');
+  assert.ok(!lasts.includes('cmp-cell lead'), 'an estimate doesn’t outlast a real rating');
+  assert.match(mixed, /estimated \(≈\) from Fragrantica votes where Parfumo lacks the bottle/);
+  assert.ok(!page(rated, byName('Sauvage')).includes('≈'), 'all on Parfumo: no estimates, none credited');
+  const guesses = page(guess, { ...byName('Jake'), parfumo: undefined });
+  assert.match(guesses, /cmp-lead-tag">Longest</, 'estimates lead each other');
+  // The bottle page says it with the same words.
+  assert.match(bottlePageHTML(modelOf(rated)), /Lasts 8\.4 · Projects \d\.\d <span>of 10 on/);
+  assert.match(bottlePageHTML(modelOf(guess)), /Lasts 4\.0 of 5 · Projects 2\.9 of 4 <span>on Fragrantica/);
 });
 
 test('tonight’s pick is a bottle you own when one is among them', () => {

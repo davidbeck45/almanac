@@ -305,13 +305,14 @@ function headSection({ f, entry, ctxLabel, solo }) {
     ? '<span>Entered by hand</span>'
     : !f.rating ? 'Unrated'
     : `★ ${f.rating.toFixed(2)} <span>${esc(f.source === 'fragella' ? 'Fragella rating' : `${f.ratingVotes.toLocaleString()} votes`)}</span>`;
-  // Parfumo's 0–10 ratings when we have them, else Fragrantica's votes, else Fragella's words.
+  // Parfumo's 0–10 ratings when we have them, else Fragrantica's votes, else
+  // Fragella's words; Lasts and Projects, as compare and On my skin say it.
   const pf = f.parfumo, fv = f.performance;
   const performance = pf
-    ? `Longevity ${pf.longevity.toFixed(1)} · Sillage ${pf.sillage.toFixed(1)} <span>of 10 on <a href="${esc(pf.url)}" target="_blank" rel="noopener" data-focus="bp-parfumo">Parfumo</a></span>`
+    ? `Lasts ${pf.longevity.toFixed(1)} · Projects ${pf.sillage.toFixed(1)} <span>of 10 on <a href="${esc(pf.url)}" target="_blank" rel="noopener" data-focus="bp-parfumo">Parfumo</a></span>`
     : fv
-    ? `Longevity ${fv.longevity.toFixed(1)} of 5 · Sillage ${fv.sillage.toFixed(1)} of 4 <span>on Fragrantica</span>`
-    : [f.longevity, f.sillage && `${f.sillage} sillage`].filter(Boolean).map(esc).join(' · ');
+    ? `Lasts ${fv.longevity.toFixed(1)} of 5 · Projects ${fv.sillage.toFixed(1)} of 4 <span>on Fragrantica</span>`
+    : [f.longevity, f.sillage && `${f.sillage} projection`].filter(Boolean).map(esc).join(' · ');
   const o = f.original;
   const inspired = o ? `<p class="inspired">Inspired by ${o.url ? `<a href="${esc(o.url)}" target="_blank" rel="noopener" data-focus="bp-inspired">${esc(o.name)}</a>` : esc(o.name)} · ${esc(o.brand)}</p>` : '';
   const kicker = entry && !solo ? `<p class="kicker">${magDot(entry.tier)}${esc(ctxLabel)}</p>` : '';
