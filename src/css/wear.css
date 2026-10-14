@@ -433,32 +433,33 @@
   .occ-when { grid-template-columns: auto 1fr; align-items: center; column-gap: var(--s-4); }
 }
 
-/* Date and place pills: the date in words with a native date input laid
-   over it (the system's picker opens on a tap), and a place button. */
-.date-pill, .place-pill {
+/* Date and place pills: the date in words (a button, for keyboards) with a
+   native date input laid over it for pointers, and a place button. */
+.date-pill { position: relative; display: inline-flex; min-width: 0; border-radius: var(--r-pill); }
+.date-pill-btn, .place-pill {
   position: relative;
   display: inline-flex;
+  flex: 1;
   align-items: center;
   gap: var(--s-2);
   min-width: 0;
   min-height: var(--hit);
   padding: 0 var(--s-4) 0 var(--s-3);
-  border-radius: var(--r-pill);
+  border-radius: inherit;
   border: 1px solid var(--border-strong);
   background: var(--fill-faint);
   color: var(--text-primary);
   font-weight: 600;
   white-space: nowrap;
-  cursor: pointer;
   transition: background-color var(--dur-2), border-color var(--dur-2);
 }
+.place-pill { flex: none; border-radius: var(--r-pill); }
 .date-pill svg, .place-pill svg { width: 16px; height: 16px; flex: none; color: var(--ambient); }
-.place-pill span { overflow: hidden; text-overflow: ellipsis; }
-@media (hover: hover) { :is(.date-pill, .place-pill):hover { background: var(--fill); border-color: color-mix(in srgb, var(--text-primary) 22%, transparent); } }
-.date-pill input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; font-size: var(--fs-headline); }
+:is(.date-pill-btn, .place-pill) span { overflow: hidden; text-overflow: ellipsis; }
+@media (hover: hover) { :is(.date-pill:hover .date-pill-btn, .place-pill:hover) { background: var(--fill); border-color: color-mix(in srgb, var(--text-primary) 22%, transparent); } }
+.date-pill input { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; font-size: var(--fs-headline); }
 /* Chromium opens its calendar from this indicator: stretch it over the pill. */
 .date-pill input::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: auto; height: auto; opacity: 0; cursor: pointer; }
-.date-pill:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ---------- Journal teaser ---------- */
 
@@ -507,7 +508,8 @@
 .trip-place-text small { overflow: hidden; color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); text-overflow: ellipsis; white-space: nowrap; }
 .trip-place.empty b { color: var(--text-secondary); font-weight: 500; }
 /* In the form a date reads like a field, not a pill. */
-.trip-field .date-pill { width: 100%; min-height: 52px; border-radius: var(--r-control); font-weight: 500; }
+.trip-field .date-pill { display: flex; width: 100%; border-radius: var(--r-control); }
+.trip-field .date-pill-btn { min-height: 52px; font-weight: 500; }
 .trip-field .seg { align-self: start; justify-self: start; }
 .trip-field .seg button { min-width: 52px; }
 
@@ -543,7 +545,7 @@
 .trip-submit { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
 
 /* The trip at a glance. */
-.trip-head-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: var(--s-3); }
+.trip-head-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: var(--s-2) var(--s-3); }
 .trip-badge { display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--r-control); background: color-mix(in srgb, var(--ambient) 14%, var(--surface-2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ambient) 25%, transparent); color: var(--ambient); }
 .trip-badge svg { width: 22px; height: 22px; }
 .trip-head-text { min-width: 0; }
@@ -551,8 +553,8 @@
 .trip-head-text h2 { overflow: hidden; font-family: var(--display); font-size: var(--fs-title-2); line-height: var(--lh-title-2); font-weight: 600; letter-spacing: -0.01em; text-overflow: ellipsis; white-space: nowrap; }
 .trip-head-text p { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 /* Its events, as tags under the dates. */
-.trip-tags { display: flex; flex-wrap: wrap; gap: var(--s-1); margin-top: var(--s-2); }
-.trip-tag { display: inline-flex; align-items: center; gap: var(--s-1); padding: var(--s-0) var(--s-2); border-radius: var(--r-pill); background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; }
+.trip-tags { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: var(--s-1); }
+.trip-tag { display: inline-flex; align-items: center; gap: var(--s-1); padding: var(--s-0) var(--s-2); border-radius: var(--r-pill); background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; white-space: nowrap; }
 .trip-tag svg { width: 12px; height: 12px; }
 .trip-wx { display: flex; align-items: center; gap: var(--s-2); margin-top: var(--s-3); padding-top: var(--s-3); border-top: 1px solid var(--border-subtle); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .trip-wx .wx svg { width: 18px; height: 18px; }

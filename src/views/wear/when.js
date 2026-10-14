@@ -118,7 +118,7 @@ export const actions = {
     when.place = null;
     state.occasionSlot = null;
     app.renderPage();
-    document.querySelector('.occ-when [data-field="occ-date"]')?.focus({ preventScroll: true });
+    document.querySelector('.occ-when [data-for="occ-date"]')?.focus({ preventScroll: true });
   },
   // Asks again for a date and place whose weather didn't come.
   'occ-when-retry'(el, app) {
@@ -132,6 +132,6 @@ export const changes = {
     const today = state.wx?.todayISO;
     if (!el.value || !today) return;
     when.dateISO = el.value <= today ? null : el.value;
-    app.keepingFocus(el, '#app', app.renderPage);
+    repaint(app);
   },
 };

@@ -98,24 +98,33 @@ export function repaint(app) {
 // ---------- Dates ----------
 
 /**
- * A pill that shows a date in words and holds a native date input over it,
- * so a tap opens the system's picker and a screen reader hears a date field.
- * { field: its data-field (fires on change), value, min, max, text, label,
- *   name? }
+ * A pill that shows a date in words, with a native date input laid over it:
+ * a tap or click opens the system's picker, and a keyboard reaches one
+ * button (a date input would take three Tab stops, one per part) that opens
+ * the same picker. { field: the input's data-field (fires on change),
+ * value, min, max, text, label: what the button says it sets, name? }
  */
 export function datePillHTML({ field, value, min = '', max = '', text, label, name = '' }) {
-  return `<label class="date-pill">${icon.calendar}<span class="date-pill-text" aria-hidden="true">${esc(text)}</span>
-    <input type="date"${name ? ` name="${esc(name)}"` : ''} data-field="${esc(field)}" data-action="date-open" value="${esc(value)}"${min ? ` min="${esc(min)}"` : ''}${max ? ` max="${esc(max)}"` : ''} aria-label="${esc(label)}" required></label>`;
+  return `<span class="date-pill">
+    <button type="button" class="date-pill-btn" data-action="date-open" data-for="${esc(field)}" aria-label="${esc(`${label}: ${text}. Change`)}">${icon.calendar}<span>${esc(text)}</span></button>
+    <input type="date"${name ? ` name="${esc(name)}"` : ''} data-field="${esc(field)}" data-action="date-open" value="${esc(value)}"${min ? ` min="${esc(min)}"` : ''}${max ? ` max="${esc(max)}"` : ''} tabindex="-1" aria-hidden="true" required>
+  </span>`;
 }
 
 export const actions = {
   'place-home': (el, app) => take(state.loc, app),
   'place-recent': (el, app) => take(recentPlaces()[+el.dataset.value], app),
   'place-city': (el, app) => take(state.sheet?.results?.[+el.dataset.value], app),
-  // A click anywhere on a date pill opens the picker (desktop Chromium only
-  // opens it from its own small icon otherwise).
+  // A date pill's picker, from its button (keyboards) or its input (a click
+  // anywhere on it: desktop Chromium otherwise opens it from its small icon
+  // only). Without showPicker, the field itself takes focus.
   'date-open'(el) {
-    try { el.showPicker?.(); } catch {} // already open, or no user gesture
+    const input = el.matches('input') ? el : el.parentElement.querySelector('input[type="date"]');
+    try {
+      input.showPicker();
+    } catch {
+      if (el !== input) input.focus(); // no showPicker, or it's open already
+    }
   },
 };
 

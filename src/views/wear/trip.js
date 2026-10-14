@@ -223,9 +223,9 @@ export function tripSummaryHTML(trip, { today, note = '', updating = false } = {
       <div class="trip-head-text">
         <h2 id="trip-title" tabindex="-1">${esc(trip.place.name)}</h2>
         <p>${esc(`${plural(tripDays(trip), 'day')}, ${datesText(trip.fromISO, trip.toISO)}`)}</p>
-        ${tags.length ? `<ul class="trip-tags" aria-label="Events">${tags.join('')}</ul>` : ''}
       </div>
       <button class="btn secondary compact" data-action="trip-edit">${icon.pen}Change</button>
+      ${tags.length ? `<ul class="trip-tags" aria-label="Events">${tags.join('')}</ul>` : ''}
     </div>
     <p class="trip-wx${updating ? ' updating' : ''}">${wxIcon(wx.all ? 'cloudy' : 'partly')}<span>${esc(status)}</span></p>
     ${note ? `<p class="trip-note">${esc(note)}</p>` : ''}
@@ -241,8 +241,9 @@ function noticesHTML(result, max) {
   const out = [];
   if (result.uncovered.length) {
     const byBest = new Map();
-    for (const u of result.uncovered) byBest.set(u.best, [...(byBest.get(u.best) ?? []), u.window]);
-    const lines = [...byBest].map(([best, wins]) => `${listOf(wins.map(w => windowName(w.dateISO, w.slot)))}: <b>${esc(best.name)}</b> would suit ${wins.length > 1 ? 'them' : 'it'} better.`);
+    for (const u of result.uncovered) byBest.set(u.best, [...(byBest.get(u.best) ?? []), u]);
+    const when = u => `${windowName(u.window.dateISO, u.window.slot)}${u.occasion ? ` (${u.occasion.label.toLowerCase()})` : ''}`;
+    const lines = [...byBest].map(([best, us]) => `${esc(listOf(us.map(when)))}: <b>${esc(best.name)}</b> would suit ${us.length > 1 ? 'them' : 'it'} better.`);
     out.push(`<div class="trip-notice"><p><b>Not quite covered.</b> ${lines.join(' ')}</p>${more}</div>`);
   }
   if (result.variety) {
@@ -556,13 +557,13 @@ export const changes = {
     if (!el.value) return;
     const length = d.fromISO && d.toISO && d.toISO >= d.fromISO ? daysBetween(d.fromISO, d.toISO) : 3;
     setDates(el.value, shiftISO(el.value, length));
-    app.keepingFocus(el, '#app', app.renderPage);
+    repaint(app);
   },
   'trip-to'(el, app) {
     const d = draft();
     if (!el.value) return;
     setDates(d.fromISO && d.fromISO <= el.value ? d.fromISO : el.value, el.value);
-    app.keepingFocus(el, '#app', app.renderPage);
+    repaint(app);
   },
   'trip-ev-date'(el) {
     if (ui.adding) ui.adding.dateISO = el.value;
