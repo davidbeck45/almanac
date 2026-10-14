@@ -206,6 +206,16 @@ test('doubles: dupes of one original, a dupe and its original, or none and the c
   assert.match(insights.doublesHTML({ ...none, partial: true }), /compares notes and accords only/);
 });
 
+test('an owned dupe’s original ties it to what voters link the original to: Supremacy and Aventus', async () => {
+  const pool = await loadPool(load);
+  const byId = new Map(Array.from({ length: pool.count }, (_, i) => fromPool(pool, i)).map(r => [r.id, r]));
+  const supremacy = named('Supremacy Collector\'s Edition Pour Homme'), aventus = byId.get('9828');
+  for (const list of [[supremacy, aventus], [aventus, supremacy]]) {
+    const [pair] = doubles(list).pairs;
+    assert.equal(pair?.why, 'voters', list.map(f => f.name).join(' + '));
+  }
+});
+
 test('doubles on anyone’s wardrobe read voters’ links from the pool: Aventus and Club de Nuit Intense Man', async () => {
   // As Mine or a shared link has them: r/ records, no signals of their own.
   const ids = ['9828', '34696', '31861', '13016', '33519'];
