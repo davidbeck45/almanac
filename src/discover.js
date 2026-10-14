@@ -428,7 +428,8 @@ export function moreOfStyles(styleIds, ctx, { mode = 'any', k = 10, filters = {}
 }
 
 // Several ranked lists as one: the best head next, each list's picks
-// counting SPREAD less for every pick it has had.
+// counting SPREAD less for every pick it has had, and no bottle twice (a
+// pick's twins included).
 function takeTurns(lists, k) {
   const out = [], taken = new Set(), turns = lists.map(() => 0), at = lists.map(() => 0);
   while (out.length < k) {
@@ -440,8 +441,9 @@ function takeTurns(lists, k) {
     });
     if (best < 0) break;
     const pick = lists[best][at[best]];
+    if (pick.alike) pick.alike = pick.alike.filter(r => !taken.has(r.id));
     out.push(pick);
-    taken.add(pick.id);
+    for (const r of [pick.record, ...(pick.alike ?? [])]) taken.add(r.id);
     turns[best]++;
   }
   return out;
