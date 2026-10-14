@@ -951,7 +951,8 @@ export const actions = {
     let shown = false;
     const find = () => {
       if (state.route?.dest !== 'bottle' || state.route.arg !== id) return;
-      const mark = document.querySelector('#bottle #bp-dupes, #bottle [data-section="dupes"], #bottle #dupes-title');
+      // The section itself first: its slot comes first in the page and never says it's busy.
+      const mark = document.querySelector('#bottle #bp-dupes') ?? document.querySelector('#bottle [data-section="dupes"], #bottle #dupes-title');
       const section = mark?.closest('section') ?? mark;
       if (section) {
         const ready = section.getAttribute('aria-busy') !== 'true';

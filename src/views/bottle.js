@@ -50,7 +50,22 @@ export function sectionsFor(model) {
 
 /** The sections' `after` hooks, for the shell to call once the page is drawn. */
 export function afterBottle(model, app) {
+  settleSoon(globalThis.document?.querySelector('#bottle .bp-panel'));
   for (const s of SECTIONS) s.after?.(model, app);
+}
+
+/**
+ * A page just drawn lays out and paints only the sections in view (the
+ * rest skip it: content-visibility in src/css/bottle.css), so it comes up
+ * sooner; the frame after, every section takes its real height
+ * (.bp-settled), so nothing above the reader changes size as they scroll,
+ * jump to a section or drag the scrollbar (the panel holds the reader's
+ * place itself, without the browser's scroll anchoring). At once when the
+ * reader's place has to be measured (keepReading).
+ */
+const settle = panel => panel?.classList.add('bp-settled');
+function settleSoon(panel) {
+  if (panel && !panel.classList.contains('bp-settled')) requestAnimationFrame(() => setTimeout(() => settle(panel)));
 }
 
 // Whether the page on screen is still this bottle's (after an await). `id`:
@@ -61,8 +76,9 @@ export const showing = id => state.route?.dest === 'bottle' && state.route.arg =
 // on and off), the place's climate, "How you wear" and "Prefer great value".
 const inputsKey = i => JSON.stringify([i.owned.map(f => f.id), i.exclude.map(f => f.id), i.summary, i.shares, i.preferValue]);
 // A payload's part of the key: a record counts by its id (its notes may
-// arrive later; the answer doesn't change with them).
-const payloadKey = own => JSON.stringify(own, (k, v) => (k === 'record' && v && typeof v === 'object' ? String(v.id) : v));
+// arrive later; the answer doesn't change with them), and the about data sent
+// with it not at all (it saves the pool loading it; the answer is the same).
+const payloadKey = own => JSON.stringify(own, (k, v) => (k === 'record' && v && typeof v === 'object' ? String(v.id) : k === 'about' ? undefined : v));
 
 /**
  * A section's answers from the pool (src/app/pool.js), one per bottle, asked
@@ -114,8 +130,10 @@ export function pooled(type, channel, payload, { section = null, prepare = null,
     answers.set(id, next);
     if (!showing(model.arg ?? id)) return;
     // The answer brought the bottle's signals (value, safety: the crowd block
-    // reads them), so the record changed: the whole page, reader kept in place.
-    if (section && findRecord(id) === model.f) redrawSection(section, app);
+    // reads them): the whole page, reader kept in place. A record swapped
+    // meanwhile for its own r/ record (every note, the same signals) has had
+    // its page drawn already: the section alone.
+    if (section && findRecord(id)?.extras === model.f.extras) redrawSection(section, app);
     else app.renderBottle();
   }
   return { ask, get: id => answers.get(id), forget: id => answers.delete(id) };
@@ -160,7 +178,10 @@ export function readingAt(panel) {
 /** Scrolls a panel drawn again so the section the reader was at sits where it did (readingAt). */
 export function keepReading(panel, at) {
   const slot = at && panel.querySelector(`:scope > [data-section="${at.id}"]`);
-  if (slot) panel.scrollTop += slot.getBoundingClientRect().top - panel.getBoundingClientRect().top - at.offset;
+  if (!slot) return;
+  // The sections above at their real heights, not a skipped one's stand-in.
+  settle(panel);
+  panel.scrollTop += slot.getBoundingClientRect().top - panel.getBoundingClientRect().top - at.offset;
 }
 
 // ---------- The styles someone likes ----------

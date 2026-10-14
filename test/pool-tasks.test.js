@@ -4,7 +4,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { handlePool, newPoolCache, poolServer, POOL_TASKS, QUICK } from '../src/pool-tasks.js';
 import { poolClient, inlineWorker } from '../src/app/pool.js';
-import { loadPool, fromPool } from '../src/fragrantica.js';
+import { loadPool, fromPool, loadAbout } from '../src/fragrantica.js';
 import { gapContext, gapReport } from '../src/gaps.js';
 import { signalsOf, PREFER_VALUE } from '../src/candidates.js';
 import { DEMO_LIKED } from '../src/discover.js';
@@ -167,6 +167,14 @@ test('dupes finds the smells-like family, and records loads bottles pool first',
   assert.ok(isRecord(brun.original.record) && brun.original.built);
   const aventus = await ask('dupes', { owned, id: '9828' });
   assert.ok(aventus.cheaper.length >= 3 && aventus.cheaper.every(e => isRecord(e.record) && !('about' in e.record)));
+
+  // A bottle page sends the about data it has: the same answer, without loading its shard again.
+  const shards = [];
+  const tracked = newPoolCache({ load: async path => { shards.push(path); return load(path); } });
+  const about = await loadAbout('9828', load);
+  const sent = (await handlePool({ id: 1, type: 'dupes', payload: { owned, id: '9828', about } }, tracked)).result;
+  assert.deepEqual(sent, aventus);
+  assert.ok(!shards.includes(`x/${9828 % 512}.json`), shards.join(' '));
 
   const { records, missing } = await ask('records', { ids: ['76063', 12807, 'my:x', '76063'] });
   assert.deepEqual(records.map(r => r.name), ['Shalimar Millésime Tonka', 'Olympic Amber']);

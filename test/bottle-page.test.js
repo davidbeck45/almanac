@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { SECTIONS, bottlePageHTML, pooled, sectionsFor, linkId, likedStyleIds, likedTaste } from '../src/views/bottle.js';
-import { state, computeToday } from '../src/app/state.js';
+import { state, computeToday, keepBottles } from '../src/app/state.js';
 import '../src/views/sections.js';
 import { buyCheckHTML, checkable, fillGroups } from '../src/views/bottle-check.js';
 import { sprayHTML, figureSVG, sprayCount } from '../src/views/bottle-spray.js';
@@ -211,6 +211,46 @@ test('a pooled answer: replaced on its channel it’s asked again, a changed que
   state.route = null;
 });
 
+test('an answer landing after the record swapped for its own r/ record draws its section alone; one that brings signals draws the page', async () => {
+  // A pool record (8 notes, its signals) open on its page; loadFullRecord swaps in its r/ record, keeping them.
+  const pooledRecord = { ...byName('Liquid Brun'), id: '9828', name: 'Aventus', source: 'fragrantica', about: undefined, original: null, extras: { value: 2.1 } };
+  state.bottles.set('9828', pooledRecord);
+  state.route = { dest: 'bottle', arg: '9828', query: {} };
+  const drawn = [];
+  const panel = { getBoundingClientRect: () => ({ top: 0 }) };
+  const slot = { getBoundingClientRect: () => ({ top: 400 }), closest: () => panel, contains: () => false, nextElementSibling: null, set innerHTML(html) { drawn.push(html); } };
+  globalThis.document = { querySelector: sel => (sel === '#bottle [data-section="notes"]' ? slot : null), activeElement: null };
+  let whole = 0, release;
+  const app = { renderBottle: () => whole++, refocus: () => true };
+  const answers = pooled('check', 'test-swap', m => ({ id: m.f.id }), { section: 'notes', ask: () => new Promise(r => { release = () => r({ n: 1 }); }) });
+  try {
+    const asking = answers.ask({ f: pooledRecord, arg: '9828' }, app);
+    await new Promise(r => setTimeout(r, 0));
+    keepBottles([{ ...pooledRecord, extras: undefined, notes: { top: ['Bergamot'], mid: ['Birch'], base: ['Musk'] } }]);
+    assert.notEqual(state.bottles.get('9828'), pooledRecord, 'swapped');
+    release();
+    await asking;
+    assert.equal(whole, 0, 'the page isn’t drawn again: it was when the record landed');
+    assert.equal(drawn.length, 1, 'only the section');
+    assert.match(drawn[0], /Birch/, 'from the record as it is now');
+
+    // An r/ record (no signals) whose answer brought them: the crowd block reads them, so the page.
+    const bare = { ...pooledRecord, id: '9829', extras: undefined };
+    state.bottles.set('9829', bare);
+    state.route = { dest: 'bottle', arg: '9829', query: {} };
+    const signals = answers.ask({ f: bare, arg: '9829' }, app);
+    await new Promise(r => setTimeout(r, 0));
+    keepBottles([{ ...bare, extras: { value: 2.1 } }]);
+    release();
+    await signals;
+    assert.equal(whole, 1, 'the whole page');
+  } finally {
+    delete globalThis.document;
+    state.bottles.clear();
+    state.route = null;
+  }
+});
+
 // ---------- Buy check ----------
 
 const check = {
@@ -379,6 +419,10 @@ const entry = (id, extra = {}) => ({
 test('smells like: the original, cheaper twins and siblings, each opening its page or a comparison', () => {
   const m = modelOf(stranger, { owned: false });
   assert.match(clean(dupesHTML(m, undefined), 'loading'), /aria-busy="true"/);
+  // Not asked yet, its skeleton holds still (the reader may never scroll to
+  // it); it shimmers only while the question is out.
+  assert.match(dupesHTML(m, undefined), /class="bp-section bp-waiting"/);
+  assert.ok(!dupesHTML(m, { status: 'loading', result: null }).includes('bp-waiting'));
   assert.match(clean(dupesHTML(m, { status: 'error', error: EVIL }), 'error'), /data-action="bp-dupes-retry"/);
   assert.equal(dupesHTML(m, { status: 'ready', result: { original: null, cheaper: [], siblings: [] } }), '', 'nobody smells like it');
   assert.equal(dupesHTML(modelOf({ ...evil, id: 'my:x', accords: {} }), undefined), '', 'nothing to compare by');
