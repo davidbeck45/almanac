@@ -12,6 +12,7 @@ import { state, findRecord, nowSlot, poolInputs, ownedIn } from '../../app/state
 import { loadWants, saveWants, setWant, hasWant } from '../../wishlist.js';
 import {
   libNow, loadLib, libFailed, likedFor, inputsKey, ownable, repaint, listLoading, verdictBadge, verdictOf, verdictRank, fillsHTML, OWNED_WORD,
+  liveHTML, speak,
 } from './parts.js';
 
 const wish = {
@@ -117,14 +118,18 @@ export function wishlistHTML({ items, busy = false, error = '', reload = false, 
     });
   }
   const summary = wishSummary(items);
-  const status = reload ? '<span class="error">Checking needs a connection the first time. Reconnect, then reload.</span> <button class="link-btn" data-action="wish-reload">Reload</button>'
+  const RELOAD = 'Checking needs a connection the first time. Reconnect, then reload.';
+  const line = reload ? RELOAD : error || (busy ? `Checking ${plural(items.filter(i => !i.owned).length, 'bottle')} against your wardrobe…`
+    : summary ? `${plural(items.length, 'bottle')}: ${summary}.` : '');
+  const status = reload ? `<span class="error">${RELOAD}</span> <button class="link-btn" data-action="wish-reload">Reload</button>`
     : error ? `<span class="error">${esc(error)}</span> <button class="link-btn" data-action="wish-retry">Try again</button>`
-      : busy ? `Checking ${plural(items.filter(i => !i.owned).length, 'bottle')} against your wardrobe…`
-        : summary ? `${plural(items.length, 'bottle')}: ${summary}.` : '';
+      : esc(line);
   const down = Boolean(reload || error || failed);
+  // The line redraws with the list, so screen readers hear it from a status
+  // line of its own (liveHTML), once per change.
   return `<section class="card wishlist" aria-labelledby="wish-title">
     ${sectionHead('Bottles you want', '<p>Best fit for your shelf first.</p>', { id: 'wish-title' })}
-    <p class="muted small wish-status" role="status">${status}</p>
+    <p class="muted small wish-status">${status}</p>${liveHTML('wish-live', line)}
     <ul class="wishes${busy ? ' busy' : ''}">${items.map(i => wantCardHTML(i, { failed: down })).join('')}</ul>
   </section>`;
 }
@@ -214,6 +219,7 @@ export const wishlistPaneDef = {
   render: wishlistPane,
   after(app) {
     warmPool();
+    speak(document.getElementById('main'));
     refresh(app);
   },
 };
@@ -227,10 +233,24 @@ function redraw(el, app) {
   app.keepingFocus(el, scope, app.render);
 }
 
+// A want leaving the list (Remove, I bought it) hands focus to the next
+// one's name, else the one before's, else the list's heading (the page's
+// once the list is empty).
+function nextWant(el) {
+  const card = el.closest('.wish');
+  return (card?.nextElementSibling ?? card?.previousElementSibling)?.querySelector('[data-action="wish-remove"]')?.dataset.id ?? null;
+}
+function focusWant(id) {
+  const name = id && document.querySelector(`.wish .pick-name-btn[data-id="${CSS.escape(id)}"]`);
+  const head = document.getElementById('wish-title');
+  if (head) head.tabIndex = -1;
+  (name || head || document.getElementById('page-title'))?.focus();
+}
+
 function removed(app, id, before) {
   wish.undo = { list: before, id };
   const name = findRecord(id)?.name ?? before.find(w => w.id === id)?.record?.name ?? 'Bottle';
-  app.showToast(`<span class="note">${esc(name)} removed from your wishlist.</span><button class="btn primary compact" data-action="wish-undo">Undo</button>`);
+  app.showToast(`<span class="note">${esc(name)} removed from your wishlist</span><button class="btn primary compact" data-action="wish-undo">Undo</button>`);
 }
 
 export const actions = {
@@ -243,18 +263,15 @@ export const actions = {
     if (!hasWant(next, id)) return removed(app, id, before);
     const name = findRecord(id)?.name ?? 'Bottle';
     app.showToast(onPane() ? `<span>${esc(name)} is on your wishlist</span>`
-      : `<span class="note">${esc(name)} is on your wishlist.</span><a class="btn secondary compact" href="#/wardrobe/wishlist">See it</a>`);
+      : `<span class="note">${esc(name)} is on your wishlist</span><a class="btn secondary compact" href="#/wardrobe/wishlist">See it</a>`);
   },
   'wish-remove'(el, app) {
     const id = el.dataset.id;
     const before = loadWants();
     setWant(id, false);
-    // Focus moves on to the next bottle's name, or the page's heading.
-    const card = el.closest('.wish');
-    const next = (card?.nextElementSibling ?? card?.previousElementSibling)?.querySelector('[data-action="wish-remove"]')?.dataset.id;
+    const next = nextWant(el);
     app.render();
-    const target = next && document.querySelector(`.wish .pick-name-btn[data-id="${CSS.escape(next)}"]`);
-    (target ?? document.getElementById('page-title'))?.focus();
+    focusWant(next);
     removed(app, id, before);
   },
   // The Undo button goes with its toast: focus moves to the bottle that came
@@ -281,9 +298,10 @@ export const actions = {
       return app.showToast(`<span>${esc(err.message)}</span>`);
     }
     if (!record) return app.showToast('<span>That bottle didn’t load. Try again.</span>');
+    const next = nextWant(el);
     setWant(id, false);
     app.own(record);
-    document.getElementById('page-title')?.focus();
+    focusWant(next);
   },
   'wish-retry'(el, app) {
     Object.assign(wish, { key: null, error: '', recordsError: '' });

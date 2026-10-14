@@ -56,8 +56,41 @@ export function repaint(app) {
   const el = document.activeElement;
   if (!el?.closest?.('#main')) return app.renderPage();
   const id = el.id;
+  const section = el.closest('section[aria-labelledby]')?.getAttribute('aria-labelledby');
   app.keepingFocus(el, '#app', app.renderPage);
-  if (id && !el.isConnected && !document.activeElement?.closest?.('#main')) document.getElementById(id)?.focus({ preventScroll: true });
+  if (el.isConnected || document.activeElement?.closest?.('#main')) return;
+  // Nothing took its place (an owned suggestion's card left the list): its
+  // section's heading, else the page's, never the body.
+  const heading = (id && document.getElementById(id)) || (section && document.getElementById(section));
+  if (heading && !heading.matches('a, button, input, [tabindex]')) heading.tabIndex = -1;
+  (heading ?? document.getElementById('page-title'))?.focus({ preventScroll: true });
+}
+
+// ---------- Saying what changed ----------
+// Panes and sheets redraw whole, and a live region that arrives with its
+// text already in it often goes unread. So a status line is drawn empty with
+// what it should say in data-say (liveHTML), and speak() fills it a moment
+// later, once per new message: a redraw saying the same again stays quiet.
+
+const said = new Map(); // a live region's id -> what it said last
+
+/** A status line only screen readers hear, saying `text` once speak() runs. */
+export const liveHTML = (id, text = '') => `<p class="visually-hidden" role="status" id="${esc(id)}" data-say="${esc(text)}"></p>`;
+
+/** Says `text` in the live region with this id, unless that's what it said last. */
+export function say(id, text) {
+  if (said.get(id) === text) return;
+  said.set(id, text);
+  setTimeout(() => {
+    const el = document.getElementById(id);
+    // A newer draw with a newer message has its own turn.
+    if (el && (el.dataset.say ?? text) === text && el.textContent !== text) el.textContent = text;
+  }, 150);
+}
+
+/** Fills the status lines (liveHTML) in `root` whose message changed. */
+export function speak(root = document) {
+  for (const el of root?.querySelectorAll('[data-say]') ?? []) say(el.id, el.dataset.say);
 }
 
 // ---------- Inputs ----------

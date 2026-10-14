@@ -277,7 +277,7 @@ export function bottleCardSkeletonHTML(count = 1) {
 export function sharedBannerHTML(shared, mineCount, { slim = false, confirm = false } = {}) {
   const who = shared.name ? `${esc(shared.name)}’s` : 'A shared';
   const status = shared.loading ? 'Loading…' : `${plural(shared.records.length, 'bottle')}${shared.missing.length ? ` · ${shared.missing.length} couldn’t load` : ''}`;
-  const save = confirm ? `Replace my ${mineCount}?` : 'Save as mine';
+  const save = confirm ? `Replace your ${mineCount}?` : 'Save as mine';
   return `<div class="banner${slim ? ' slim' : ''}" role="status">
     <span class="banner-icon">${icon.share}</span>
     <span class="banner-text"><b>${who} collection</b><small>${status}</small></span>

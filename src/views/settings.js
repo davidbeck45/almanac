@@ -39,7 +39,7 @@ export function settingsHTML({ loc, units, themeName, active, mineCount, shared,
     `)}
     ${group('Collection', `
       ${shared ? `<p class="notice">Viewing ${esc(shared.name ? `${shared.name}’s` : 'a shared')} collection from a link. Picking a list closes it.</p>` : ''}
-      ${row('Ranking from', segHTML([{ value: 'demo', label: 'David’s', on: !shared && active === 'demo' }, { value: 'mine', label: `Mine · ${mineCount}`, on: !shared && active === 'mine' }], { action: 'collection', label: 'Collection' }))}
+      ${row('Ranking from', segHTML([{ value: 'demo', label: 'David’s wardrobe', on: !shared && active === 'demo' }, { value: 'mine', label: `Mine · ${mineCount}`, on: !shared && active === 'mine' }], { action: 'collection', label: 'Collection' }))}
       ${row(`<a class="set-link" href="#/wardrobe/owned">${on} of ${plural(total, 'bottle')} in rotation</a>`, `<button class="btn tertiary compact" data-action="share" ${on ? '' : 'disabled'}>${icon.share}Share</button>`)}
     `)}
     ${group('Wear journal', `
