@@ -129,6 +129,14 @@ test('why it ranks here: the rating bar says whose rating it is, and a bottle no
   assert.match(why({ ...byHand, personal: { rating: 5, longevity: 0, sillage: 0 } }), /bar-label">Your rating</);
 });
 
+test('also good: only today, tonight and tomorrow go lower case in its heading', () => {
+  const alts = ranked.filter(r => r.fragrance.id !== evil.id).slice(0, 4);
+  const head = label => bottlePageHTML(modelOf(evil, { alts, ctxLabel: label })).match(/Also good for ([^<]*)</)?.[1];
+  assert.equal(head('Tonight'), 'tonight');
+  assert.equal(head('Saturday night'), 'Saturday night');
+  assert.equal(head('Formal · Saturday night'), 'Formal · Saturday night');
+});
+
 // ---------- Pool answers ----------
 
 test('a section asks the pool once per bottle and wardrobe, and draws the page when the answer lands', async () => {

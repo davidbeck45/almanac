@@ -233,7 +233,7 @@ export function bottleModel(route) {
     win,
     ctx: key,
     // "Formal · tonight", but "Formal · Friday night": only the relative words go lower case.
-    ctxLabel: win ? (ctx.occasion ? `${ctx.occasion.label} · ${win.label.replace(/^(Today|Tonight|Tomorrow)\b/, w => w.toLowerCase())}` : win.label) : '',
+    ctxLabel: win ? (ctx.occasion ? `${ctx.occasion.label} · ${inSentence(win.label)}` : win.label) : '',
     occasion: ctx?.occasion ?? null,
     owned,
     inMine: state.mine.records.some(r => r.id === f.id),
@@ -397,10 +397,13 @@ function whySection({ entry, solo, win }) {
   return `<section class="bp-section"><h3>${title} <span class="h3-aside">${matchPct(entry)}% match</span></h3><div class="bars why">${bars}</div>${rotation}</section>`;
 }
 
+// Only the relative words go lower case: "Also good for tonight", "Also good for Saturday night".
+const inSentence = label => label.replace(/^(Today|Tonight|Tomorrow)\b/, w => w.toLowerCase());
+
 // The next few from the same list, on the same shelf the list draws.
 function altsSection({ alts, ctx, ctxLabel, worn }) {
   if (!alts.length) return '';
-  return `<section class="bp-section"><h3>Also good for ${esc(ctxLabel.toLowerCase())}</h3>${shelfHTML(alts, ctx, { wornId: worn })}</section>`;
+  return `<section class="bp-section"><h3>Also good for ${esc(inSentence(ctxLabel))}</h3>${shelfHTML(alts, ctx, { wornId: worn })}</section>`;
 }
 
 // Partners from the same collection (src/layering.js), heavier one sprayed first.
