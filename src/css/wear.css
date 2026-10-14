@@ -155,6 +155,8 @@
     justify-items: start;
     gap: var(--s-3);
     width: auto;
+    /* The name keeps the toggle's inset from the hero's right edge. */
+    max-width: calc(100% - var(--x) + var(--bw) / 2 - var(--s-4));
     margin-left: calc(var(--bw) / -2);
     text-align: left;
   }
@@ -198,6 +200,9 @@
 .pick-top .btn svg { width: 14px; height: 14px; }
 .pick-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); margin-top: var(--s-4); }
 .pick-actions .match { margin-left: auto; }
+/* The match sits in the glow's corner: a light accord (white floral,
+   vanilla) lifts it enough to take secondary text under 4.5:1. */
+.pick .match { color: var(--text-primary); }
 /* A bottle the rotation nudge brought back: its own quiet line, the sky's
    color, so it doesn't read as one more reason it fits. */
 .nudge { display: inline-flex; align-items: center; gap: var(--s-1); margin: 0 0 var(--s-3); padding: var(--s-0) var(--s-2) var(--s-0) var(--s-1); border-radius: var(--r-pill); background: color-mix(in srgb, var(--ambient) 12%, transparent); color: var(--ambient); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
@@ -227,8 +232,17 @@
    count wrapped under the button on all but the widest cards). */
 .pick-actions .spray-hint { order: -1; width: calc(100% + var(--s-2)); margin: calc(-1 * var(--s-3)) 0 0 calc(-1 * var(--s-2)); }
 .spray-hint svg:last-child { margin-left: auto; }
-/* Elsewhere the card shows the bottle too. */
-.pick.full { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: var(--s-1) var(--s-4); }
+/* Elsewhere the card shows the bottle too. Its wash is a fixed size, so on
+   a wide card it lights the bottle and fades before the kicker beside it
+   (secondary text there keeps 4.5:1 over the lightest accords). */
+.pick.full {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: var(--s-1) var(--s-4);
+  background:
+    radial-gradient(300px 260px at 0% 0%, color-mix(in srgb, var(--accord) 20%, transparent), transparent 62%),
+    var(--surface-2);
+}
 .pick.full .pick-actions { grid-column: 1 / -1; }
 .pick-bottle { display: grid; place-items: center; align-self: start; padding-top: var(--s-2); border-radius: var(--r-control); }
 .pick-bottle img { width: 88px; height: auto; filter: var(--drop-bottle); transition: transform var(--dur-3) var(--ease-out); }
@@ -258,12 +272,13 @@
     border-radius: var(--r-inset);
     border: 1px solid var(--border-subtle);
     background:
-      radial-gradient(120% 110% at 100% 0%, color-mix(in srgb, var(--accord) 12%, transparent), transparent 62%),
+      radial-gradient(120% 110% at 100% 0%, color-mix(in srgb, var(--accord) 10%, transparent), transparent 62%),
       var(--fill-faint);
   }
 }
 .next-window .kicker svg { width: 14px; height: 14px; color: var(--ambient); }
-.next-time { margin-left: auto; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+/* In the glow's corner too: secondary, which keeps 4.5:1 over the lightest accord. */
+.next-time { margin-left: auto; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .next-pick { display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: center; gap: var(--s-3); }
 .next-pick .pick-bottle { padding-top: 0; }
 .next-pick .pick-bottle img { width: 52px; }
@@ -297,7 +312,8 @@
 .wk-temps { display: flex; gap: var(--s-1); align-items: baseline; font-variant-numeric: tabular-nums; }
 .wk-temps b { font-size: var(--fs-footnote); font-weight: 600; }
 .wk-temps small { color: var(--text-tertiary); font-size: var(--fs-caption); }
-.wk-pop { color: var(--info); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* "87% rain": two lines in a phone's narrow column. */
+.wk-pop { color: var(--info); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; }
 .wk-picks { display: grid; gap: var(--s-1); min-width: 0; }
 /* A pick: the photo with its time of day as a badge (a check once worn),
    then the name, which gets the rest of the row. */
