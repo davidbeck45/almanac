@@ -559,7 +559,8 @@ export const fields = {
     typing = setTimeout(() => {
       typed = true;
       ks.notes = T.PAGE;
-      update(app, { q: query, by: null });
+      // Under three letters there's no search: the URL leaves it out.
+      update(app, { q: query.length >= MIN_QUERY ? query : '', by: null });
     }, query.length < MIN_QUERY ? 0 : TYPING_MS);
   },
   'disc-seed-q'(el, app) {
@@ -574,7 +575,8 @@ export const forms = {
   'disc-search'(data, app, form) {
     clearTimeout(typing);
     typed = true;
-    update(app, { q: String(data.get('q') ?? '').trim(), by: null });
+    const q = String(data.get('q') ?? '').trim();
+    update(app, { q: q.length >= MIN_QUERY ? q : '', by: null });
     // On a phone, Search puts the keyboard away so the results show.
     if (matchMedia('(hover: none)').matches) form.querySelector('input')?.blur();
   },
