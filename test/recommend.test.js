@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, execFile } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,6 +13,10 @@ const { fragrances } = JSON.parse(readFileSync(new URL('../data/collection.json'
 // The CLI against the synthetic forecast, no network.
 const cli = (...args) => spawnSync(process.execPath, ['--import', mock, script, ...args], { encoding: 'utf8' });
 const offline = (...args) => spawnSync(process.execPath, ['--import', mock, script, ...args], { encoding: 'utf8', env: { ...process.env, MOCK_OFFLINE: '1' } });
+// The same, as a promise, for runs side by side.
+const run = (...args) => new Promise(resolve => {
+  execFile(process.execPath, ['--import', mock, script, ...args], { encoding: 'utf8' }, (err, stdout, stderr) => resolve({ status: err ? err.code ?? 1 : 0, stdout, stderr }));
+});
 
 test('occasions resolve by id or label, any case or spacing', () => {
   assert.equal(findOccasion('date').id, 'date');
@@ -67,16 +71,18 @@ test('--exclude refuses a term that takes out most of the wardrobe, and an empty
   }
 });
 
-test('switched-off bottles are left out of picks but still owned for suggestions and checks, as in the app', () => {
-  const own = JSON.parse(cli('--check', 'Liquid Brun', '--exclude', 'Liquid Brun', '--json').stdout);
+test('switched-off bottles are left out of picks but still owned for suggestions and checks, as in the app', async () => {
+  const runs = await Promise.all([
+    run('--check', 'Liquid Brun', '--exclude', 'Liquid Brun', '--json'), run('--check', 'Althair', '--exclude', 'Liquid Brun', '--json'),
+    run('--style', 'vanilla', '--exclude', 'Liquid Brun,Amber Empire,Cream Velvet', '--top', '12', '--json'),
+    run('--gaps', '--exclude', 'Liquid Brun', '--json'), run('--gaps', '--top', '0'),
+  ]);
+  const [own, original, style, gaps] = runs.slice(0, 4).map(r => JSON.parse(r.stdout));
   assert.deepEqual([own.verdict, own.reasons[0]], ['Redundant', 'You own it.']);
-  const original = JSON.parse(cli('--check', 'Althair', '--exclude', 'Liquid Brun', '--json').stdout);
   assert.equal(original.verdict, 'Redundant', 'the original of a bottle he owns');
-  const style = JSON.parse(cli('--style', 'vanilla', '--exclude', 'Liquid Brun,Amber Empire,Cream Velvet', '--top', '12', '--json').stdout);
   assert.ok(!style.results.some(r => ['Liquid Brun', 'Amber Empire', 'Cream Velvet'].includes(r.name)), style.results.map(r => r.name).join(', '));
-  const gaps = JSON.parse(cli('--gaps', '--exclude', 'Liquid Brun', '--json').stdout);
   assert.equal(gaps.bottles, 24, 'covers nothing');
-  assert.match(cli('--gaps', '--top', '0').stderr, /--top takes 1 or more for --gaps/);
+  assert.match(runs[4].stderr, /--top takes 1 or more for --gaps/);
 });
 
 test('--journal leaves out the bottles the app switched off and tunes the use shares by its wears', () => {
@@ -166,23 +172,25 @@ test('an ambiguous name says which bottle it took', () => {
   assert.ok(out.range && out.topPick.day && out.topPick.night);
 });
 
-test('--ideal gives a lone degree once and joins spans a degree or two apart', () => {
-  for (const name of ['Supremacy Collector’s Edition', 'Jake', 'Amber Empire']) {
-    const out = cli('--ideal', name).stdout;
-    assert.match(out, /Top 3 in this collection by night: /);
-    assert.doesNotMatch(out, /\b(\d+)–\1°F/, out);
+test('--ideal gives a lone degree once and joins spans a degree or two apart', async () => {
+  const names = ['Supremacy Collector’s Edition', 'Jake', 'Amber Empire'];
+  const [json, ...texts] = await Promise.all([run('--ideal', 'Amber Empire', '--json'), ...names.map(name => run('--ideal', name))]);
+  for (const { stdout } of texts) {
+    assert.match(stdout, /Top 3 in this collection by night: /);
+    assert.doesNotMatch(stdout, /\b(\d+)–\1°F/, stdout);
   }
-  const amber = JSON.parse(cli('--ideal', 'Amber Empire', '--json').stdout).topPick.night;
+  const amber = JSON.parse(json.stdout).topPick.night;
   for (let i = 1; i < amber.length; i++) assert.ok(amber[i].lowF - amber[i - 1].highF > 3, JSON.stringify(amber));
 });
 
-test('a switched-off bottle still answers for --layer, --ideal and --spray, saying so', () => {
-  for (const flag of ['--layer', '--ideal', '--spray']) {
-    const run = cli('--exclude', 'Sauvage', flag, 'Sauvage');
-    assert.equal(run.status, 0, `${flag}: ${run.stderr}`);
-    assert.match(run.stderr, /^Sauvage is switched off; answering for it anyway\.\n$/);
-  }
-  assert.doesNotMatch(cli('--exclude', 'Sauvage', '--layer', 'Sauvage').stdout, /\+ Sauvage /, 'nor is it anyone’s partner');
+test('a switched-off bottle still answers for --layer, --ideal and --spray, saying so', async () => {
+  const flags = ['--layer', '--ideal', '--spray'];
+  const runs = await Promise.all(flags.map(flag => run('--exclude', 'Sauvage', flag, 'Sauvage')));
+  runs.forEach((r, i) => {
+    assert.equal(r.status, 0, `${flags[i]}: ${r.stderr}`);
+    assert.match(r.stderr, /^Sauvage is switched off; answering for it anyway\.\n$/);
+  });
+  assert.doesNotMatch(runs[0].stdout, /\+ Sauvage /, 'nor is it anyone’s partner');
 });
 
 const dayISO = days => new Date(Date.now() - new Date().getTimezoneOffset() * 60_000 + days * 86_400_000).toISOString().slice(0, 10);

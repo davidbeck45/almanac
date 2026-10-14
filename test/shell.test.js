@@ -111,7 +111,9 @@ function serviceWorker(scope = 'https://example.org/scentcast/') {
     return new Response(`${pathname} from the network (${version})`, { status: net.status, headers: { etag: `"${version}"` } });
   };
   const context = { self, caches, fetch, Response, URL, setTimeout, clearTimeout };
-  vm.runInNewContext(sw, context);
+  // The wait for a slow network, cut short so the suite doesn't sit through it.
+  assert.match(sw, /const NETWORK_WAIT_MS = \d+;/);
+  vm.runInNewContext(sw.replace(/const NETWORK_WAIT_MS = \d+;/, `const NETWORK_WAIT_MS = ${TEST_WAIT_MS};`), context);
   async function get(path, mode = 'cors', { clientId = '', resultingClientId = '' } = {}) {
     let responded = null;
     const waits = [];
@@ -121,8 +123,9 @@ function serviceWorker(scope = 'https://example.org/scentcast/') {
     return res ? res.text() : null;
   }
   const cached = (name, path) => stores.get(name)?.get(new URL(path, scope).href)?.clone();
-  return { get, cached, net, puts, wait: Number(sw.match(/const NETWORK_WAIT_MS = (\d+)/)[1]) };
+  return { get, cached, net, puts, wait: TEST_WAIT_MS };
 }
+const TEST_WAIT_MS = 120;
 
 test('the service worker keeps one copy of the app page, and other pages opened in a tab never replace it', async () => {
   const CACHE = sw.match(/const CACHE = '([\w-]+)'/)[1];
@@ -163,15 +166,15 @@ test('a launch on a slow line opens the saved app, one version throughout', asyn
   // A new version is out, but the line is slow: the saved page opens without
   // waiting it out, and its files and its worker's come from the cache.
   w.net.version = 'v2';
-  w.net.delay = w.wait + 400;
+  w.net.delay = w.wait + 200;
   const start = Date.now();
   assert.equal(await w.get('', 'navigate', { resultingClientId: 'b' }), '/scentcast/ from the network (v1)');
-  assert.ok(Date.now() - start < w.wait + 300, 'it didn’t wait for the network');
+  assert.ok(Date.now() - start < w.wait + 150, 'it didn’t wait for the network');
   w.net.delay = 0;
   assert.equal(await w.get('src/main.js', 'cors', { clientId: 'b' }), '/scentcast/src/main.js from the network (v1)');
   assert.equal(await w.get('src/pool-worker.js', 'cors', { clientId: 'b', resultingClientId: 'worker' }), '/scentcast/src/pool-worker.js from the network (v2)', 'a file it never saved comes from the network');
   assert.equal(await w.get('src/main.js', 'cors', { clientId: 'worker' }), '/scentcast/src/main.js from the network (v1)', 'the worker keeps to the page’s version');
-  await new Promise(r => setTimeout(r, 500)); // the late page lands
+  await new Promise(r => setTimeout(r, w.wait + 200)); // the late page lands
   assert.equal(await w.cached(CACHE, './').text(), '/scentcast/ from the network (v1)', 'the late page isn’t saved over the version its files are');
   // A launch where the network answers in time takes the new version.
   assert.equal(await w.get('', 'navigate', { resultingClientId: 'c' }), '/scentcast/ from the network (v2)');

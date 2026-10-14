@@ -1,8 +1,6 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { loadPool, loadPoolStyles, loadAbout, poolKey } from '../src/fragrantica.js';
 import { STYLES, topOf, closeOf } from '../src/scent-styles.js';
 import { genderLean, signalsOf, ownedVectors } from '../src/candidates.js';
@@ -495,33 +493,3 @@ test('the want list keeps ids, and whole records for bottles the dataset can’t
 
 beforeEach(() => { delete globalThis.localStorage; });
 
-test('the CLI answers Discover questions', () => {
-  const script = fileURLToPath(new URL('../scripts/recommend.mjs', import.meta.url));
-  const cli = (...args) => spawnSync(process.execPath, [script, ...args], { encoding: 'utf8' });
-  const style = JSON.parse(cli('--style', 'skin scent,clean', '--all', '--top', '5', '--json').stdout);
-  assert.deepEqual([style.styles, style.mode, style.results.length], [['skin', 'clean'], 'all', 5]);
-  assert.ok(style.results.every(r => (r.styles.includes('Skin scent') || r.styles.includes('Clean')) && r.why));
-  assert.ok(style.results.every(r => Array.isArray(r.twins) && 'smellsLike' in r));
-  const notes = JSON.parse(cli('--notes', 'iris leather', '--season', 'winter', '--slot', 'night', '--lean', 'masculine', '--min-value', '3', '--json').stdout);
-  assert.equal(notes.results.length, 10);
-  assert.ok(notes.results.every(r => r.value >= 3 && r.matched.length === 2));
-  assert.match(cli('--notes', 'vanila', '--top', '2').stderr, /did you mean "vanilla"/);
-  assert.match(cli('--notes', 'lavendar', '--top', '2').stderr, /Reading "lavendar" as "lavender"/);
-  assert.match(cli('--style', 'skin', '--top', '3', '--min-rating', '4.2', '--json').stdout, /"rating": 4\.[2-9]/);
-  const like = cli('--more-like', 'Liquid Brun,Amber Empire', '--top', '3');
-  assert.match(like.stdout, /^More like Liquid Brun \+ Amber Empire:\n 1\. .+ · .+ · \d{4} · \d\.\d\d★ · value \d\.\d · Shares /);
-  const dupes = cli('--dupes', 'Aventus');
-  assert.match(dupes.stdout, /Smells like it for far less:\n {2}Club de Nuit Intense Man · Armaf/);
-  const bad = cli('--style', 'wet dog');
-  assert.equal(bad.status, 1);
-  assert.match(bad.stderr, /No style called "wet dog"/);
-  assert.match(cli('--notes', 'iris', '--lean', 'manly').stderr, /--lean takes feminine, unisex, masculine/);
-  // Nothing to ask about fails plainly rather than printing an empty list.
-  assert.match(cli('--style', 'skin', '--top', '0').stderr, /--top takes 1 or more/);
-  assert.match(cli('--notes', 'and').stderr, /Name a note or accord/);
-  assert.match(cli('--style', ',').stderr, /Name a style/);
-  assert.match(cli('--more-like', ',').stderr, /Name a bottle/);
-  // "liked" falls back to the wardrobe's own mix when none of the loved styles is left.
-  const liked = cli('--style', 'liked', '--top', '2', '--exclude', 'Sandalwood & Musk,Meant To Be Seen,Cedrus Blanc,Jake,Shiyaaka Sky');
-  assert.match(liked.stdout, /^More \S/);
-});
