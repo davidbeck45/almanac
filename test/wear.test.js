@@ -100,6 +100,14 @@ test('the trip, event and pick templates render clean: no undefined or NaN, name
   assert.ok(!trip.tripPackHTML(packed, saved).includes('data-action="trip-share"'), 'Share only where the browser can');
 });
 
+test('a bottle worn on every window of the trip is named by the slot packTrip says, as its text does', () => {
+  const [a, b] = fragrances;
+  const notice = slot => trip.tripPackHTML({ ...packed, variety: { add: b, everyDay: [a], slot } }, saved);
+  assert.match(notice('night'), /is worn every night\. Pack <b>[^<]+<\/b> too and each gets a night off/);
+  assert.match(notice('day'), /is worn every day\. Pack .* a day off/);
+  assert.match(notice(null), /every day, by day or night\. .* a break/);
+});
+
 test('the empty trip explains itself in one sentence, and never promises a count packTrip doesn’t keep', () => {
   const html = trip.tripFormHTML({ place: null, fromISO: today, toISO: shiftISO(today, 3), events: [], max: 3 }, { today });
   assert.match(html, /<p>Pick a place and dates, and get the fewest bottles that cover every day and night there\.<\/p>/);
@@ -269,7 +277,7 @@ test('an event’s heading says what, when and where', () => {
   assert.equal(when.whenPhrase({ slot: 'night', dateISO: '2026-12-12' }, '2026-10-14'), 'Sat night, Dec 12');
 });
 
-test('rankings take your ratings and the rotation nudge; the cache follows the saved ratings', () => {
+test('rankings take your ratings and the rotation nudge; the cache follows the saved ratings', async () => {
   const { state } = app;
   // The Week reads the clock, so this forecast starts today (UTC-4, as the fixture).
   const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
@@ -314,7 +322,15 @@ test('rankings take your ratings and the rotation nudge; the cache follows the s
   assert.notEqual(state.today[next.slot].pick.fragrance.id, top, 'a 1★ bottle sits out');
   assert.ok(state.today[next.slot].ranked.find(r => r.fragrance.id === top).reasons.some(r => r.text === 'You rate it 1★'));
   assert.ok(!fragrances.find(f => f.id === top).personal, 'the records themselves stay as they were');
-  assert.ok(!app.activeFragrances().find(f => f.id === top).personal, 'and the pool’s questions keep the crowd’s footing');
+  assert.ok(!app.activeFragrances().find(f => f.id === top).personal, 'activeFragrances() stays as the crowd has it');
+  // The pool's questions send the rated records, so the gap finder lets a 1★ bottle cover nothing.
+  const loc = state.loc;
+  state.loc = null; // no place: the default climate, no archive call
+  try {
+    assert.deepEqual((await app.poolInputs()).owned.find(f => f.id === top).personal, { rating: 1, longevity: 1, sillage: 0 });
+  } finally {
+    state.loc = loc;
+  }
 });
 
 test('Occasion nudges only today here: an event on a later date gets the best for it', () => {

@@ -97,8 +97,9 @@ export function activeFragrances() {
 // attached as `personal`, so a 1★ bottle sits out and one that lasts longer
 // on you counts so. Cached until the list, its switches or the saved
 // ratings change: the bottle page's "On my skin" saves them and renders, and
-// the next call sees it. The pool's questions keep the crowd's footing
-// (poolInputs sends activeFragrances()).
+// the next call sees it. The pool's questions get them too (poolInputs), so
+// the gap finder scores owned bottles with your stars and a bottle you rate
+// 2★ or lower covers nothing there.
 let skinned = { key: null, stamp: null, all: [], hidden: null, out: [] };
 export function rankedFragrances() {
   const records = sourceRecords(), stamp = skinStamp();
@@ -343,7 +344,8 @@ export function localClimate() {
 /**
  * What every question to the pool (src/app/pool.js) says about whoever is
  * asking; spread it into the payload, so Insights, buy checks and Discover
- * agree: `owned` (the ranked list, switched on), `exclude` (its bottles
+ * agree: `owned` (the ranked list, switched on, with your stars:
+ * rankedFragrances), `exclude` (its bottles
  * switched off: they cover nothing, but are never suggested back),
  * `summary` (localClimate), `shares` ("How you wear" with the journal's
  * occasions, src/uses.js) and `preferValue`. The first time at a place it
@@ -353,7 +355,7 @@ export async function poolInputs() {
   const [{ loadUses, sharesFrom }, summary] = await Promise.all([import('../uses.js'), localClimate()]);
   const hidden = hiddenIn(viewingDemo());
   return {
-    owned: activeFragrances(),
+    owned: rankedFragrances(),
     exclude: sourceRecords().filter(f => hidden.has(f.id)),
     summary,
     shares: sharesFrom(loadUses(), occasionCounts(state.history)),

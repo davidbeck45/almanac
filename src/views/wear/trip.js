@@ -279,8 +279,11 @@ function noticesHTML(result, max) {
     out.push(`<div class="trip-notice"><p><b>Not quite covered.</b> ${lines.join(' ')}</p>${more}</div>`);
   }
   if (result.variety) {
-    const worn = result.variety.everyDay.map(f => `<b>${esc(f.name)}</b>`);
-    out.push(`<div class="trip-notice"><p>${listOf(worn)} ${worn.length > 1 ? 'are' : 'is'} worn every day. Pack <b>${esc(result.variety.add.name)}</b> too and each gets a day off.</p>${more}</div>`);
+    // Worded by the slot it's worn in, as packTrip's text is: nights only, days only, or both.
+    const { everyDay, add, slot } = result.variety;
+    const worn = everyDay.map(f => `<b>${esc(f.name)}</b>`);
+    const [when, rest] = slot === 'night' ? ['every night', 'a night off'] : slot === 'day' ? ['every day', 'a day off'] : ['every day, by day or night', 'a break'];
+    out.push(`<div class="trip-notice"><p>${listOf(worn)} ${worn.length > 1 ? 'are' : 'is'} worn ${when}. Pack <b>${esc(add.name)}</b> too and each gets ${rest}.</p>${more}</div>`);
   }
   return out.join('');
 }
