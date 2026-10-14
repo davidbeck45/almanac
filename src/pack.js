@@ -9,11 +9,17 @@ const SHORT_DATE = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'nume
 const shortDate = iso => SHORT_DATE.format(new Date(`${iso}T12:00:00Z`));
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const listOf = items => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
+const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
 // Whether key a beats key b, comparing in order.
 const ahead = (a, b) => {
   const j = a.findIndex((x, i) => x !== b[i]);
   return j >= 0 && a[j] > b[j];
 };
+function mostCommon(xs) {
+  const counts = new Map();
+  for (const x of xs) counts.set(x, (counts.get(x) ?? 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+}
 
 /** Windows with the trip's events on them: events [{ dateISO, slot, occasion }]. */
 export function withEvents(windows, events = []) {
@@ -121,14 +127,6 @@ export function packTrip(frags, windows, { max = 3, occasionOf = win => win.occa
 
   const uncovered = plan.filter(p => !p.covered).map(p => ({ window: p.window, occasion: p.occasion, best: p.top.record, score: p.top.score }));
   return { bottles, plan, uncovered, text: packText(bottles, plan, uncovered, wins, packed.length >= max) };
-}
-
-const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
-
-function mostCommon(xs) {
-  const counts = new Map();
-  for (const x of xs) counts.set(x, (counts.get(x) ?? 0) + 1);
-  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 }
 
 // "Pack Essence de Blanc (every day) and Supremacy (every night). …"

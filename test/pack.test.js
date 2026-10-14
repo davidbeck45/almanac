@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { packTrip, withEvents, picksFor } from '../src/pack.js';
+import { packTrip, withEvents, picksFor, tripPlan } from '../src/pack.js';
 import { rank, PLAN_MARGIN } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { syntheticForecast } from './fixtures.js';
@@ -100,6 +100,11 @@ test('picksFor ranks one date and slot, from the forecast or typical weather', a
     const far = await picksFor(fragrances, { place, dateISO: shift(today, 40), slot: 'day' });
     assert.ok(far.window.typical);
     assert.equal(far.window.dateISO, shift(today, 40));
+    const planned = await tripPlan(fragrances, { place, fromISO: shift(today, 1), toISO: shift(today, 5), events: [{ dateISO: shift(today, 2), slot: 'night', occasion: occasionById('nightout') }] });
+    assert.equal(planned.windows.length, 10);
+    assert.ok(planned.windows.slice(0, 6).every(w => !w.typical) && planned.windows.slice(6).every(w => w.typical), 'forecast, then typical');
+    assert.equal(planned.plan[3].occasion.id, 'nightout');
+    assert.match(planned.text, /Dates past the forecast use typical weather\./);
   } finally {
     globalThis.fetch = real;
   }
