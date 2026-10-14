@@ -388,15 +388,20 @@ function browseHTML(d) {
     </div>`;
 }
 
+// The search whose names list is on screen: it stays up, not back to a
+// skeleton, while the notes reading catches up (the pool came in meanwhile).
+let namesShownFor = null;
+
 function searchHTML(d) {
   const names = state.discover, notesSlot = slots.notes;
   const notes = notesSlot.result;
   const notesOk = Boolean(notes?.terms?.length) && !notes.unknown?.length;
   // Before guessing which list the words meant: the notes answer (once the
   // pool is in), the names, and how well known a bottle named exactly that is.
-  const waiting = (!notes && notesSlot.status === 'loading' && poolStatus() !== 'loading')
-    || (notesOk && !d.by && (names.busy || namedPending(d).length > 0));
-  const mode = searchMode(d, names.results, notes, votesOf);
+  const settling = notesOk && !d.by && (names.busy || namedPending(d).length > 0);
+  const shown = namesShownFor === d.q;
+  const waiting = !shown && ((!notes && notesSlot.status === 'loading' && poolStatus() !== 'loading') || settling);
+  const mode = settling && shown ? 'names' : searchMode(d, names.results, notes, votesOf);
   const notesShown = mode === 'notes';
   const toggle = T.modeToggleHTML(mode, {
     names: names.results?.length ? d.q : null,
@@ -410,6 +415,7 @@ function searchHTML(d) {
     results = `${T.notesNoteHTML(notes, d.q)}${listHTML(d, 'notes', emptyHTML(d, 'notes'))}`;
     title = `<div class="disc-list-head">${T.searchTitleHTML(mode, { query: d.q, terms: notes?.terms })}${valueOn() ? T.valueFloorHTML() : ''}</div>`;
   } else if (names.results?.length) {
+    namesShownFor = d.q;
     // The title says what's listed; the line stays for an offline search.
     results = `${names.offline ? `<p class="disc-count muted">${T.statusHTML(names)}</p>` : ''}${T.namesHTML(names, nameOwners(), { wantedOf: wantedOf() })}`;
     title = T.searchTitleHTML(mode, { query: d.q });
