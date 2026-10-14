@@ -368,7 +368,7 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   // Risky shows through even when it fills nothing.
   const kouros = buyCheck(records.find(r => r.name === 'Kouros'), ctx);
   assert.equal(kouros.verdict, 'Risky');
-  assert.ok(kouros.reasons.includes('It divides people: many voters hate it.'));
+  assert.ok(kouros.reasons.includes('It divides people: more voters hate it than most.'));
 
   const zenith = verdict('124649'); // Riiffs Zenith
   assert.equal(zenith.verdict, 'Strong fit');

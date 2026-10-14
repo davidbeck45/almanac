@@ -411,6 +411,9 @@ test('an original read from the votes needs a year and, through a plain link, a 
 test('every pick says why', async () => {
   const [skin] = moreOfStyles(['skin'], ctx, { k: 1 });
   assert.match(whyLine(skin), /Skin scent.*closest you own: /);
+  // Its risk in brackets, one colon at most.
+  const risky = { ...skin, risk: { level: 'medium', reasons: ['It divides people: more voters hate it than most.'] } };
+  assert.match(whyLine(risky), /; medium risk \(it divides people: more voters hate it than most\)/);
   // A clone says what it copies, with the votes once its about data is in.
   const clone = moreOfStyles(['skin'], ctx, { k: 40 }).find(p => p.clonesOf);
   assert.ok(clone);

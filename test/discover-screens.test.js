@@ -209,7 +209,7 @@ test('marks say value and risk in words', () => {
   assert.equal(T.valueMark(2.1).text, 'Pricey');
   assert.equal(T.riskMark({ level: 'low', reasons: ['It doesn’t last long.'] }), null);
   assert.deepEqual(T.riskMark({ level: 'medium', reasons: ['Owners often let it go.'] }), { text: 'Some risk', tone: 'warn', spoken: 'Some risk. Owners often let it go.' });
-  assert.equal(T.riskMark({ level: 'high', reasons: ['It divides people: many voters hate it.'] }).spoken, 'Risky. It divides people: many voters hate it.', 'one colon at most');
+  assert.equal(T.riskMark({ level: 'high', reasons: ['It divides people: more voters hate it than most.'] }).spoken, 'Risky. It divides people: more voters hate it than most.', 'one colon at most');
   assert.equal(T.riskMark({ level: 'high', reasons: [] }).spoken, 'Risky');
 });
 

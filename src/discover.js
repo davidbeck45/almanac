@@ -414,7 +414,7 @@ export function whyLine(pick) {
   }
   if (pick.family) parts.push(pick.family);
   if (pick.alsoLiked) parts.push('fans of your picks like it too');
-  if (pick.risk.level !== 'low') parts.push(`${pick.risk.level} risk: ${pick.risk.reasons[0]?.replace(/\.$/, '').toLowerCase() ?? ''}`);
+  if (pick.risk.level !== 'low') parts.push(`${pick.risk.level} risk${pick.risk.reasons[0] ? ` (${lower(pick.risk.reasons[0].replace(/\.$/, ''))})` : ''}`);
   if (pick.twin) parts.push(`cheaper twin: ${pick.twin.record.name}`);
   const alike = (pick.alike ?? []).filter(r => r.id !== copy?.id);
   if (alike.length) parts.push(`twins: ${alike.map(r => r.name).join(', ')}`);
