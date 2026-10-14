@@ -3,7 +3,7 @@
 // and the small templates both draw (buy-check verdicts, a bottle's rating,
 // value and risk, a fill with its before and after, the Want button).
 // Styles: src/css/wardrobe.css.
-import { esc, plural } from '../../ui.js';
+import { esc, plural, ratingMark, valueWord as valueWords, riskWord } from '../../ui.js';
 import { icon } from '../../ui/components.js';
 import { occasionCounts } from '../../history.js';
 import { state, activeFragrances, hiddenIn, viewingDemo, findRecord, library } from '../../app/state.js';
@@ -157,24 +157,18 @@ export function verdictBadge(verdict) {
   return `<span class="verdict" data-kind="${kind}">${VERDICT_GLYPH[kind]}${esc(verdict)}</span>`;
 }
 
-/** "4.5★ · 1,055 votes", or null without a rating. */
-export function ratingText(rating, votes) {
-  if (!(rating > 0)) return null;
-  return `${rating.toFixed(1)}★${votes ? ` · ${Number(votes).toLocaleString('en-US')} ${votes === 1 ? 'vote' : 'votes'}` : ''}`;
-}
+/** "★ 4.49 · 1,055 votes", or null without a rating (src/ui.js, as every screen says it). */
+export const ratingText = (rating, votes) => ratingMark(rating, votes);
 
 /**
  * Voters' value for money (1–5) in words, or null. Great from 3.8, where
- * "Prefer great value" draws its line (PREFER_VALUE in src/candidates.js).
+ * "Prefer great value" draws its line (src/ui.js, as every screen says it).
  */
-export function valueWord(value) {
-  if (value == null) return null;
-  return value >= 3.8 ? 'Great value' : value >= 3.3 ? 'Good value' : value >= 2.8 ? 'Fair value' : 'Pricey, voters say';
-}
+export const valueWord = value => valueWords(value);
 
-/** A blind buy's risk in words: { word, reason }. */
-export function riskText(risk) {
-  const word = { low: 'Safe blind buy', medium: 'Try before buying', high: 'Risky blind buy' }[risk?.level] ?? 'Not much crowd data';
+/** A blind buy's risk in words: { word, reason }; `record` tells a safe bet from a fair one. */
+export function riskText(risk, record = null) {
+  const word = riskWord(risk?.level, record?.extras?.safe) ?? 'Not much crowd data';
   return { word, reason: risk?.level !== 'low' ? risk?.reasons?.[0] ?? '' : '' };
 }
 

@@ -276,7 +276,7 @@ export function strongHTML(report) {
 export function pickCardHTML(p, { wanted = false, owned = null } = {}) {
   const f = p.record ?? p;
   const fills = p.fills.filter(x => x.matters);
-  const risk = riskText(p.risk);
+  const risk = riskText(p.risk, p.record);
   const facts = [ratingText(p.rating, p.ratingVotes), valueWord(p.quality?.value), risk.word].filter(Boolean);
   const twin = p.twin && !p.twin.owned
     ? `<p class="ins-twin">Cheaper twin: <button class="link-btn" data-action="open" data-ctx="" data-id="${esc(p.twin.id)}">${esc(p.twin.name)}</button>${p.twin.brand ? ` by ${esc(p.twin.brand)}` : ''}${valueWord(p.twin.value) ? `, ${esc(valueWord(p.twin.value).toLowerCase())}` : ''}.</p>`

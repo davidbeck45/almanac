@@ -5,7 +5,7 @@
 // fill, the closest bottle you own and a cheaper twin to want instead. Each
 // thing is said once: a reason the chips or rows below show drops out.
 import { styleById } from '../scent-styles.js';
-import { esc } from '../ui.js';
+import { esc, valueWord as valueWords } from '../ui.js';
 import { icon, rowHTML } from '../ui/components.js';
 import { addSection, pooled, likedStyleIds } from './bottle.js';
 import { state, collectionLabel, findRecord } from '../app/state.js';
@@ -35,8 +35,8 @@ const checks = pooled('check', 'bp-check', payload, {
 const pct = x => `${Math.round(x * 100)}%`;
 // collectionLabel() as the end of "Would it suit …?".
 const whose = label => (label === 'My collection' ? 'your collection' : label === 'Shared collection' ? 'this shared collection' : label);
-// Value for money in words, as the crowd block says it.
-const valueWord = v => (v == null ? '' : v >= 4 ? 'great value' : v >= 3.4 ? 'good value' : v >= 2.4 ? 'fair price' : 'pricey');
+// Value for money in words, as every screen says it.
+const valueWord = v => valueWords(v)?.toLowerCase() ?? '';
 
 /** A heart toggle for a bottle in a row: Want it, or stop wanting it. */
 export const wantToggle = (f, on) =>

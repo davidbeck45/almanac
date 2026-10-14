@@ -152,11 +152,11 @@ test('a pick’s card: escaped, marked, and every action named', () => {
   assert.match(html, /<span>Smells like<\/span>/);
   assert.match(html, /★ 4\.18/);
   assert.match(html, /Great value/);
-  assert.match(html, /Risky buy/);
+  assert.match(html, />Risky</);
   assert.match(html, /class="tag on"[^>]*>Skin scent</, 'the styles asked for light up');
   assert.match(html, /class="tag"[^>]*>Powdery &amp; iris</);
   assert.match(html, /class="tag on close"[^>]*>Wears close</, 'wears close, lit when Intimate was asked for');
-  assert.match(html, /aria-labelledby="bc-styles-p1-n"/, 'the button’s name is the bottle’s');
+  assert.match(html, /aria-labelledby="bc-styles-p1-n bc-styles-p1-b"/, 'the button’s name is the bottle’s, with its brand and year');
   assert.match(html, /aria-pressed="false" aria-label="Want /);
   const lines = T.whyLines(pick('p1'), { max: 9 });
   assert.equal(lines.length, 5, 'nearest, what it copies, twin, twins and family');
@@ -198,7 +198,7 @@ test('a pick with nothing voters link it to leaves out Smells like; a mist or an
   assert.equal(T.formatOf({ name: 'Bare Vanilla Fine Fragrance Mist' }), 'Body mist');
   assert.equal(T.formatOf({ name: 'If You Musk', extras: { flags: ['mist'] } }), 'Body mist', 'the pool’s mist flag');
   for (const name of ['Cashmere Mist', 'Iris Silver Mist', 'Oud Wood', 'Soil']) assert.equal(T.formatOf({ name }), null, name);
-  assert.match(T.pickCardHTML(pick('p6', { record: record('p6', 'Amber Fragrance Oil') })), /class="bcard-meta">[^<]*· 2020 · Perfume oil</);
+  assert.match(T.pickCardHTML(pick('p6', { record: record('p6', 'Amber Fragrance Oil') })), /class="bcard-meta"[^>]*>[^<]*· 2020 · Perfume oil</);
 });
 
 test('marks say value and risk in words', () => {

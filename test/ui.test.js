@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as ui from '../src/ui.js';
+import * as componentsKit from '../src/ui/components.js';
 import { icon, shelfHTML, sharedBannerHTML, messageHTML, skeletonHTML, rowHTML } from '../src/ui/components.js';
 import * as wear from '../src/views/wear.js';
 import * as wardrobe from '../src/views/wardrobe.js';
@@ -159,7 +160,8 @@ test('the shelf stands every bottle on the line with its magnitude, B and C incl
   for (const t of ['S', 'A', 'B', 'C']) {
     if (ranked.some(r => r.tier === t)) assert.ok(html.includes(`data-tier="${t}"`), `tier ${t} shows`);
   }
-  assert.match(html, /aria-label="[^"]+, \d+% match, tier [SABC]"/, 'the name comes first in each label, then the match');
+  assert.match(html, /aria-label="[^"]+, \d+% match(, (top pick|strong|good))?"/, 'the name comes first in each label, then the match');
+  assert.ok(!/tier [SABC]/.test(html), 'no tier letters, which nobody sees');
 });
 
 test('the owner’s wardrobe is never called a demo', () => {
@@ -216,4 +218,26 @@ test('each Wardrobe pane has its own heading, and Wear this names its bottle', (
   const headings = wardrobe.wardrobe.panes.map(p => p.heading({}));
   assert.equal(new Set(headings).size, headings.length, headings.join(', '));
   assert.match(wear.pickHTML(entry, 'day', null), /Wear this<span class="visually-hidden">: [^<]+<\/span>/);
+});
+
+test('value, risk and rating read in the same words on every screen', async () => {
+  const { PREFER_VALUE } = await import('../src/candidates.js');
+  assert.equal(ui.valueWord(PREFER_VALUE), 'Great value', 'great exactly where Prefer great value draws its line');
+  assert.equal(ui.valueWord(PREFER_VALUE - 0.01), 'Good value');
+  assert.equal(discoverT.valueMark(PREFER_VALUE).text, 'Great value', 'Discover’s marks agree');
+  assert.deepEqual([4.5, 3.5, 2.5, 2].map(ui.valueWord), ['Great value', 'Good value', 'Fair price', 'Pricey']);
+  assert.equal(ui.valueWord(null), null);
+  assert.deepEqual([['high'], ['medium'], ['low', 72], ['low', 31], ['low', null], ['unknown']].map(a => ui.riskWord(...a)),
+    ['Risky', 'Some risk', 'Safe bet', 'Fair bet', 'Fair bet', null]);
+  assert.equal(ui.ratingMark(4.4934, 10377), '★ 4.49 · 10,377 votes');
+  assert.equal(ui.ratingMark(4.4), '★ 4.40');
+  assert.equal(ui.ratingMark(4, 1), '★ 4.00 · 1 vote');
+  assert.equal(ui.ratingMark(0, 12), null);
+});
+
+test('accord chips read in sentence case, whatever case the data keeps', () => {
+  assert.equal(ui.accordLabel('fresh spicy'), 'Fresh spicy');
+  assert.equal(ui.accordLabel('Champagne'), 'Champagne');
+  const { chips } = componentsKit;
+  assert.match(chips({ 'warm spicy': 100, Champagne: 80, amber: 60 }), />Warm spicy<.*>Champagne<.*>Amber</s);
 });

@@ -16,7 +16,7 @@ import { loadSkin, applySkin } from '../skin.js';
 import { loadAbout } from '../fragrantica.js';
 import { isCustomId, fromShareToken } from '../custom.js';
 import { normalize } from '../collections.js';
-import { esc, matchPct, plural, displayReasons } from '../ui.js';
+import { esc, matchPct, plural, displayReasons, valueWord } from '../ui.js';
 import { icon, img, accordColor, messageHTML, sheetFrame } from '../ui/components.js';
 import { compareIds, routeHash } from '../app/router.js';
 import { askPool } from '../app/pool.js';
@@ -171,8 +171,7 @@ const valueOf = (f, about) => signalsOf(f).value ?? about?.value?.avg ?? null;
 function valueCell(f, about) {
   const v = valueOf(f, about);
   if (v == null) return '<span class="muted">No votes</span>';
-  const word = v >= 4 ? 'Great value' : v >= 3.4 ? 'Good value' : v >= 2.4 ? 'Fair price' : 'Pricey';
-  return `<span class="cmp-num">${v.toFixed(1)}<small> of 5</small></span>${meter((v - 1) / 4)}<span class="cmp-why">${word}</span>`;
+  return `<span class="cmp-num">${v.toFixed(1)}<small> of 5</small></span>${meter((v - 1) / 4)}<span class="cmp-why">${valueWord(v)}</span>`;
 }
 
 function stylesCell(f) {

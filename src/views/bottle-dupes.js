@@ -2,7 +2,7 @@
 // family from the suggestion pool (src/discover.js dupesOf): the original a
 // dupe copies, bottles that smell like it for far less, and the ones voters
 // link it with. Each opens its own page, or a side-by-side with this one.
-import { esc } from '../ui.js';
+import { esc, valueWord as valueWords, ratingMark } from '../ui.js';
 import { icon, rowHTML } from '../ui/components.js';
 import { routeHash } from '../app/router.js';
 import { addSection, pooled, aboutOf, linkId } from './bottle.js';
@@ -10,8 +10,8 @@ import { state, findRecord } from '../app/state.js';
 
 const MAX = 4;
 const num = n => Number(n).toLocaleString('en-US');
-// Value for money in words, as the crowd block says it (the number is on compare).
-const valueWord = v => (v >= 4 ? 'great value' : v >= 3.4 ? 'good value' : v >= 2.4 ? 'fair price' : 'pricey');
+// Value for money in words, as every screen says it (the number is on compare).
+const valueWord = v => valueWords(v)?.toLowerCase() ?? '';
 // The pool's answer for a bottle it has nothing on: nothing to show, not an error.
 const NOT_IN_LIBRARY = /isn’t in the fragrance library/;
 
@@ -35,7 +35,7 @@ function entryMeta(e, m) {
   else if (e.why === 'notes') bits.push('Alike by its notes');
   else if (e.why === 'votes') bits.push('Voters link them');
   if (e.value != null) bits.push(valueWord(e.value));
-  if (bits.length < 2 && e.rating) bits.push(`★ ${e.rating.toFixed(1)}`);
+  if (bits.length < 2 && e.rating) bits.push(ratingMark(e.rating));
   if (e.risk?.level === 'high') bits.push('risky blind buy');
   return esc(bits.join(' · ').replace(/^./, c => c.toUpperCase()));
 }

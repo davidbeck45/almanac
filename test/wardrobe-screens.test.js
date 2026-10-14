@@ -146,11 +146,11 @@ test('a suggestion card shows its fills against your best, its facts and its act
   const p = report.picks[0];
   const html = clean(insights.pickCardHTML(p, { wanted: false }), 'pick card');
   for (const f of p.fills.filter(x => x.matters)) assert.ok(html.includes(placeOf(f.title)), f.title);
-  assert.match(html, /\d\.\d★ · [\d,]+ votes/);
+  assert.match(html, /★ \d\.\d\d · [\d,]+ votes/);
   assert.match(html, /Great value/, 'a value-filtered pick is great value');
   assert.match(html, /data-action="wish-toggle"[^>]*aria-pressed="false"/);
   assert.match(html, /data-action="ins-own"/);
-  assert.match(html, /Safe blind buy|Try before buying|Risky blind buy|Not much crowd data/);
+  assert.match(html, /Safe bet|Fair bet|Some risk|Risky|Not much crowd data/);
   const own = insights.pickCardHTML(p, { owned: 'In Mine' });
   assert.match(own, /owned-tag/, 'one you own says where');
   assert.ok(!own.includes('wish-toggle') && !own.includes('ins-own'), 'and offers nothing to want or own');
@@ -321,8 +321,10 @@ test('a Redundant check that ties to nothing you own reads Covered', () => {
   assert.equal(verdictOf({ ...base, overlap: { id: '1', name: 'Liam', via: null, sim: 0.6, link: 'Voters call it a twin of your Liam' } }), 'Redundant', 'voters tie them');
   assert.equal(verdictOf({ ...base, overlap: null }), 'Redundant', 'you own it');
   assert.equal(verdictOf({ verdict: 'Good' }), 'Good');
-  assert.equal(riskText({ level: 'low' }).word, 'Safe blind buy');
-  assert.equal(riskText({ level: 'medium', reasons: ['Voters split on it.'] }).word, 'Try before buying');
+  assert.equal(riskText({ level: 'low' }, { extras: { safe: 72 } }).word, 'Safe bet', 'the bottle page’s words');
+  assert.equal(riskText({ level: 'low' }, { extras: { safe: 31 } }).word, 'Fair bet');
+  assert.equal(riskText({ level: 'medium', reasons: ['Voters split on it.'] }).word, 'Some risk');
+  assert.equal(riskText({ level: 'high', reasons: [] }).word, 'Risky');
 });
 
 test('verdicts, values and fills read in words', () => {
@@ -333,7 +335,7 @@ test('verdicts, values and fills read in words', () => {
   assert.equal(valueWord(3.5), 'Good value');
   assert.equal(valueWord(null), null);
   assert.equal(placeOf('Daily picks on cold to mild nights'), 'Daily picks · cold to mild nights');
-  assert.equal(ratingText(4.512, 1055), '4.5★ · 1,055 votes');
+  assert.equal(ratingText(4.512, 1055), '★ 4.51 · 1,055 votes', 'as the bottle page says it');
   assert.equal(ratingText(null, 10), null);
   const fill = { title: 'Formal on cool nights', from: 0.87, to: 0.91, first: true, beats: { name: EVIL }, beatsPick: true };
   const html = clean(fillHTML(fill), 'fill');

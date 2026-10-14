@@ -9,7 +9,7 @@ import { setHidden } from '../hidden.js';
 import { saveMine, shareURL, localMatches, nameMatches, importLines, MAX_IMPORT_LINES } from '../collections.js';
 import { customRecord, MAX_CUSTOM_ACCORDS } from '../custom.js';
 import { clearHistory, journalExport } from '../history.js';
-import { esc, plural, shortDate, relativeDay } from '../ui.js';
+import { esc, plural, shortDate, relativeDay, accordLabel } from '../ui.js';
 import {
   icon, img, messageHTML, rowHTML, switchHTML, segHTML, sheetFrame, sharedBannerHTML, accordColor, sectionHead,
 } from '../ui/components.js';
@@ -240,7 +240,7 @@ export function customSheetHTML({ name = '', brand = '', accords = [], seasons =
   const accordChip = a => {
     const rank = accords.indexOf(a);
     const full = rank < 0 && accords.length >= maxAccords;
-    return `<button type="button" class="pick-chip${rank >= 0 ? ' on' : ''}" style="--c:${accordColor(a)}" data-action="accord" data-value="${esc(a)}" aria-pressed="${rank >= 0}"${full ? ' disabled' : ''}>${rank >= 0 ? `<b>${rank + 1}</b>` : ''}${esc(a)}</button>`;
+    return `<button type="button" class="pick-chip${rank >= 0 ? ' on' : ''}" style="--c:${accordColor(a)}" data-action="accord" data-value="${esc(a)}" aria-pressed="${rank >= 0}"${full ? ' disabled' : ''}>${rank >= 0 ? `<b>${rank + 1}</b>` : ''}${esc(accordLabel(a))}</button>`;
   };
   const cap = s => s[0].toUpperCase() + s.slice(1);
   return sheetFrame('custom-title', `
