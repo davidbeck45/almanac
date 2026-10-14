@@ -15,7 +15,7 @@ import {
 } from '../../app/state.js';
 import { loadWants, setWant } from '../../wishlist.js';
 import {
-  libNow, loadLib, likedFor, taggedWears, inputsKey, ownable, ratingText, valueWord, riskText, fillsHTML, wantButton, nearestText,
+  libNow, loadLib, likedFor, taggedWears, inputsKey, ownable, repaint, ratingText, valueWord, riskText, fillsHTML, wantButton, nearestText,
 } from './parts.js';
 
 // ---------- The pane's own state ----------
@@ -119,8 +119,10 @@ export const bandColumns = bands => bands.map(b => ({
  */
 export function coverageHTML(report, { uses, bands, cell, slot, fresh = false }) {
   const byCell = new Map(report.coverage.map(c => [c.cell, c]));
-  const picked = byCell.get(cell) ?? byCell.get(defaultCell(report));
+  let picked = byCell.get(cell) ?? byCell.get(defaultCell(report));
   const show = slot ?? picked?.slot ?? 'night';
+  // The picked cell is the map's one tab stop, so it's always one on show.
+  if (picked && picked.slot !== show) picked = worstOf(report, report.coverage.filter(c => c.slot === show && c.status !== 'off').map(c => c.cell)) ?? picked;
   const slots = ['day', 'night'];
   let i = 0;
   // The first column of nights stands a little apart from the days.
@@ -130,7 +132,7 @@ export function coverageHTML(report, { uses, bands, cell, slot, fresh = false })
     if (!c) return `<td data-slot="${s}"${edge(s, b)}><span class="cov-na" aria-hidden="true"></span><span class="visually-hidden">Doesn’t come up</span></td>`;
     const best = c.top[0];
     const label = `${u.label}, ${b.id} ${SLOT_WORD[s]}: ${STATUS_WORD[c.status]}. ${best ? `Your best: ${best.name}, ${pct(best.score)}% match.` : 'Nothing you own fits.'}`;
-    return `<td data-slot="${s}"${edge(s, b)}><button class="cov-cell" data-action="ins-cell" data-value="${esc(c.cell)}" aria-pressed="${c === picked}" aria-label="${esc(label)}">${vial(c.status, { rare: c.weight < RARE, i: i++ })}</button></td>`;
+    return `<td data-slot="${s}"${edge(s, b)}><button class="cov-cell" data-action="ins-cell" data-value="${esc(c.cell)}" aria-pressed="${c === picked}" tabindex="${c === picked ? 0 : -1}" aria-label="${esc(label)}">${vial(c.status, { rare: c.weight < RARE, i: i++ })}</button></td>`;
   };
   const rows = uses.map(u => {
     const has = slots.filter(s => bands.some(b => byCell.has(`${u.id}:${s}:${b.id}`)));
@@ -144,7 +146,7 @@ export function coverageHTML(report, { uses, bands, cell, slot, fresh = false })
     ${segHTML(slots.map(s => ({ value: s, label: s === 'day' ? 'Day' : 'Night', icon: s === 'day' ? icon.sun : icon.moon, on: s === show })), { action: 'ins-slot', label: 'Show the map for', cls: 'cov-toggle' })}
     <div class="cov-scroll">
       <table class="cov-table">
-        <caption class="visually-hidden">How well your bottles cover each occasion in each kind of weather, by day and by night. Feels-like temperatures.</caption>
+        <caption class="visually-hidden">How well your bottles cover each occasion in each kind of weather, by day and by night. Feels-like temperatures. Arrow keys move between cells.</caption>
         <colgroup><col class="cov-use"></colgroup>
         <thead><tr class="cov-slots"><td></td>${groups}</tr><tr class="cov-bands"><td></td>${heads}</tr></thead>
         <tbody>${rows}</tbody>
@@ -183,7 +185,7 @@ export function cellDetailHTML(c, report, resolve = findRecord) {
   return `<div class="cov-detail" id="ins-detail">
     <div class="cov-detail-head">
       ${vial(c.status, { rare: c.weight < RARE })}
-      <h3 tabindex="-1">${esc(c.title)}</h3>
+      <h3 id="ins-detail-title" tabindex="-1">${esc(c.title)}</h3>
       <span class="status-word" data-status="${esc(c.status)}">${STATUS_WORD[c.status]}</span>
     </div>
     <p class="muted small">${esc(oftenText(c.weight))}</p>
@@ -247,12 +249,13 @@ export function pickCardHTML(p, { wanted = false, owned = null } = {}) {
   const own = owned
     ? `<span class="owned-tag">${icon.check}${esc(owned)}</span>`
     : `<button class="btn tertiary compact" data-action="ins-own" data-id="${esc(p.id)}">${icon.check}<span>I own it<span class="visually-hidden">: ${esc(p.name)}</span></span></button>`;
+  // The photo opens it too, for a pointer (as on the Wishlist).
   return `<li class="ins-pick">
-    <button class="ins-pick-photo" data-action="open" data-ctx="" data-id="${esc(p.id)}" tabindex="-1" aria-hidden="true">${img(f)}</button>
+    <button class="ins-pick-photo" data-action="open" data-id="${esc(p.id)}" tabindex="-1" aria-hidden="true">${img(f)}</button>
     <div class="ins-pick-body">
       <h3 class="ins-pick-name"><button class="pick-name-btn" data-action="open" data-ctx="" data-id="${esc(p.id)}">${esc(p.name)}</button></h3>
       <p class="ins-pick-brand">${esc([p.brand, p.year].filter(Boolean).join(', '))}</p>
-      <p class="ins-facts">${facts.map((t, i) => (i ? esc(t) : `<b>${esc(t)}</b>`)).join(' · ')}</p>
+      <p class="ins-facts">${facts.map((t, i) => (i ? `<span>${esc(t)}</span>` : `<b>${esc(t)}</b>`)).join(' · ')}</p>
       ${risk.reason ? `<p class="muted small">${esc(risk.reason)}</p>` : ''}
       ${fillsHTML(fills.length ? fills : p.fills)}
       ${p.nearest ? `<p class="muted small ins-near">${esc(nearestText(p.nearest))}.</p>` : ''}
@@ -334,15 +337,6 @@ export function startersHTML(items, { wants = new Set(), more = 0 } = {}) {
 
 const listWords = w => (w.length <= 2 ? w.join(' and ') : `${w.slice(0, -1).join(', ')} and ${w.at(-1)}`);
 
-const WHY_LINE = {
-  dupe: p => {
-    const [copy, original] = String(p.a.original?.id) === String(p.b.id) ? [p.a, p.b] : [p.b, p.a];
-    return `${copy.name} is a dupe of ${original.name}`;
-  },
-  original: p => `Both copy ${p.original.name}`,
-  voters: () => 'Voters say they smell alike',
-  alike: () => 'Nearly the same notes and accords',
-};
 
 /** Doubles: pairs that smell alike, or the closest pair when there are none. */
 export function doublesHTML({ pairs, closest }) {
@@ -352,7 +346,7 @@ export function doublesHTML({ pairs, closest }) {
   return `<p class="muted small">Pairs that wear much the same. Worth knowing before the next one like them.</p>
     <ul class="doubles">${pairs.map(p => `<li class="double">
       <span class="double-photos">${[p.a, p.b].map(f => `<button data-action="open" data-ctx="" data-id="${esc(f.id)}" aria-label="Open ${esc(f.name)}">${img(f)}</button>`).join('')}</span>
-      <span class="double-text"><b>${esc(p.a.name)} and ${esc(p.b.name)}</b><small>${esc(WHY_LINE[p.why](p))} · ${pct(p.sim)}% alike</small></span>
+      <span class="double-text"><b>${esc(p.a.name)} and ${esc(p.b.name)}</b><small>${esc(p.reason)} · ${pct(p.sim)}% alike</small></span>
     </li>`).join('')}</ul>`;
 }
 
@@ -541,11 +535,9 @@ function insightsPane() {
 
 const onPane = () => state.base?.dest === 'wardrobe' && state.base.pane === 'insights';
 
-// Re-renders the pane if it's on screen, focus kept on the control that had it.
+// Re-renders the pane if it's on screen, focus kept where it was.
 function paint(app) {
-  if (!onPane()) return;
-  const el = document.activeElement;
-  app.keepingFocus(el?.closest?.('#main') ? el : null, '#app', app.renderPage);
+  if (onPane()) repaint(app);
 }
 
 // Only the styles half, so the map above doesn't redraw as its answers land.
@@ -622,6 +614,30 @@ async function refreshStyles(app) {
   if (n === stylesAsked) paintStyles(app);
 }
 
+// The map is one tab stop: arrow keys move between its cells (Home and End
+// to a row's ends), skipping the ones that don't come up; Enter opens one.
+const STEPS = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowUp: [-1, 0], ArrowDown: [1, 0] };
+function mapKeys(e) {
+  const from = e.target.closest?.('.cov-cell');
+  if (!from || !(e.key in STEPS || e.key === 'Home' || e.key === 'End')) return;
+  const shown = b => (b?.offsetParent ? b : null);
+  const grid = [...e.currentTarget.tBodies[0].rows].filter(r => r.offsetParent)
+    .map(r => [...r.cells].map(td => shown(td.querySelector('.cov-cell'))));
+  const r0 = grid.findIndex(row => row.includes(from)), c0 = grid[r0].indexOf(from);
+  let next = null;
+  if (e.key === 'Home') next = grid[r0].find(Boolean);
+  else if (e.key === 'End') next = grid[r0].findLast(Boolean);
+  else {
+    const [dr, dc] = STEPS[e.key];
+    for (let r = r0 + dr, c = c0 + dc; grid[r]?.[c] !== undefined; r += dr, c += dc) if ((next = grid[r][c])) break;
+  }
+  e.preventDefault();
+  if (!next) return;
+  from.tabIndex = -1;
+  next.tabIndex = 0;
+  next.focus();
+}
+
 // ---------- The pane ----------
 
 export const insightsPaneDef = {
@@ -633,6 +649,7 @@ export const insightsPaneDef = {
   after(app) {
     warmPool();
     refresh(app);
+    document.querySelector('.cov-table')?.addEventListener('keydown', mapKeys);
   },
 };
 
@@ -646,9 +663,10 @@ export const actions = {
     ins.cell = id;
     ins.slot = id.split(':')[1];
     app.keepingFocus(el, '#app', app.renderPage);
+    // From a thin spot: up to the map with it picked, focus on its detail.
     if (fromList) {
       const head = document.querySelector('#ins-detail h3');
-      head?.closest('.cov')?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      document.querySelector('.ins-cov')?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
       head?.focus({ preventScroll: true });
     }
   },
@@ -691,8 +709,10 @@ export const actions = {
       return app.showToast(`<span>${esc(err.message)}</span>`);
     }
     if (!record) return;
-    app.own(record);
     setWant(id, false);
+    app.own(record);
+    // Its card made way for the new list's report.
+    document.getElementById('page-title')?.focus();
   },
   'ins-mix-all'(el, app) {
     ins.allStyles = !ins.allStyles;

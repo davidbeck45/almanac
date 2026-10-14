@@ -10,7 +10,7 @@ import { icon, img, messageHTML, sectionHead, matchBadge } from '../../ui/compon
 import { askPool, warmPool } from '../../app/pool.js';
 import { state, findRecord, nowSlot, poolInputs } from '../../app/state.js';
 import { loadWants, saveWants, setWant, hasWant } from '../../wishlist.js';
-import { libNow, loadLib, likedFor, inputsKey, ownable, verdictBadge, verdictRank, fillsHTML } from './parts.js';
+import { libNow, loadLib, likedFor, inputsKey, ownable, repaint, verdictBadge, verdictRank, fillsHTML } from './parts.js';
 
 const wish = {
   key: null, // the inputs and wants the checks answer
@@ -47,8 +47,10 @@ export function wantCardHTML({ want, record, check, today }) {
       : `<ul class="wish-reasons">${check.reasons.slice(0, 2).map(r => `<li>${esc(r)}</li>`).join('')}</ul>
         ${fills.length ? `<p class="wish-label">Would fill</p>${fillsHTML(fills, 2)}` : ''}`;
   const id = esc(want.id);
+  // The photo is a second way in for a pointer: out of the tab order, and
+  // without data-ctx, so a redraw never hands it the name's focus.
   return `<li class="wish" data-kind="${check && !check.missing ? esc(check.verdict) : ''}">
-    <button class="wish-photo" data-action="open" data-ctx="" data-id="${id}" tabindex="-1" aria-hidden="true">${img(f)}</button>
+    <button class="wish-photo" data-action="open" data-id="${id}" tabindex="-1" aria-hidden="true">${img(f)}</button>
     <div class="wish-body">
       <div class="wish-head">
         <h3 class="wish-name">${named ? `<button class="pick-name-btn" data-action="open" data-ctx="" data-id="${id}">${esc(f.name)}</button>` : '<span class="sk sk-line w70"></span>'}</h3>
@@ -120,9 +122,7 @@ const wishlistPane = () => wishlistHTML({ items: items(), busy: wish.busy, error
 
 const onPane = () => state.base?.dest === 'wardrobe' && state.base.pane === 'wishlist';
 function paint(app) {
-  if (!onPane()) return;
-  const el = document.activeElement;
-  app.keepingFocus(el?.closest?.('#main') ? el : null, '#app', app.renderPage);
+  if (onPane()) repaint(app);
 }
 
 // Names and photos first (records answer at once), then the checks.
@@ -187,7 +187,7 @@ function redraw(el, app) {
 function removed(app, id, before) {
   wish.undo = before;
   const name = findRecord(id)?.name ?? before.find(w => w.id === id)?.record?.name ?? 'Bottle';
-  app.showToast(`<span>${esc(name)} removed from your wishlist</span><button class="btn primary compact" data-action="wish-undo">Undo</button>`);
+  app.showToast(`<span class="note">${esc(name)} removed from your wishlist.</span><button class="btn primary compact" data-action="wish-undo">Undo</button>`);
 }
 
 export const actions = {
@@ -200,7 +200,7 @@ export const actions = {
     if (!hasWant(next, id)) return removed(app, id, before);
     const name = findRecord(id)?.name ?? 'Bottle';
     app.showToast(onPane() ? `<span>${esc(name)} is on your wishlist</span>`
-      : `<span>${esc(name)} is on your wishlist</span><a class="btn secondary compact" href="#/wardrobe/wishlist">See it</a>`);
+      : `<span class="note">${esc(name)} is on your wishlist.</span><a class="btn secondary compact" href="#/wardrobe/wishlist">See it</a>`);
   },
   'wish-remove'(el, app) {
     const id = el.dataset.id;

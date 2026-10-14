@@ -29,6 +29,21 @@ export function loadLib() {
   return loading;
 }
 
+// ---------- Painting ----------
+
+/**
+ * Re-renders the page when an answer lands, focus kept: on the successor of
+ * the control that had it (data attributes, as the shell does), else on the
+ * element with its id (a heading).
+ */
+export function repaint(app) {
+  const el = document.activeElement;
+  if (!el?.closest?.('#main')) return app.renderPage();
+  const id = el.id;
+  app.keepingFocus(el, '#app', app.renderPage);
+  if (id && !el.isConnected && !document.activeElement?.closest?.('#main')) document.getElementById(id)?.focus({ preventScroll: true });
+}
+
 // ---------- Inputs ----------
 
 /**

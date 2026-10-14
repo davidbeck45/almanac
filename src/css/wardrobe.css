@@ -331,6 +331,7 @@
 
 /* The bottles that would fill the gaps: each stands on a shelf line. */
 .ins-fill > .section-head { padding: 0 var(--s-1); }
+.ins-cov { scroll-margin-top: calc(var(--head-bar) + var(--s-4) + env(safe-area-inset-top)); }
 .ins-picks { display: grid; gap: var(--s-3); }
 @container page (min-width: 680px) { .ins-picks { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .ins-pick {
@@ -352,6 +353,7 @@
 .ins-pick-brand { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .ins-facts { margin-top: var(--s-2); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .ins-facts b { color: var(--text-primary); font-weight: 500; }
+.ins-facts :is(b, span) { white-space: nowrap; }
 .ins-near, .ins-twin { margin-top: var(--s-3); }
 .ins-twin { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .ins-pick .action-row { margin-top: var(--s-4); }
@@ -359,7 +361,7 @@
 
 /* The style mix: one bar per style, the hearted ones in full sky. */
 .mix-key { margin: 0 0 var(--s-2); }
-.mix { display: grid; margin: 0 calc(-1 * var(--s-2)); }
+.mix { display: grid; max-width: 680px; margin: 0 calc(-1 * var(--s-2)); }
 .mix-row { display: grid; grid-template-columns: minmax(0, 1fr) var(--hit); align-items: center; }
 .mix-main { display: grid; grid-template-columns: 104px minmax(0, 1fr) 24px; align-items: center; gap: var(--s-3); min-height: var(--hit); padding: 0 var(--s-2); border-radius: var(--r-control); text-align: left; }
 @media (hover: hover) { .mix-main:hover { background: var(--fill-faint); } }
