@@ -133,7 +133,7 @@
 }
 @media (hover: hover) { .hero-pick:hover .hero-bottle img { transform: translateY(-3px) rotate(-2deg); } }
 .hero-pick:active .hero-bottle img { transform: scale(0.96); }
-.hero-label { position: relative; display: grid; justify-items: center; max-width: 100%; margin-top: var(--s-2); text-shadow: 0 1px 2px rgb(var(--shade) / 0.6), 0 0 16px rgb(var(--ink-deep) / 0.7); }
+.hero-label { position: relative; display: grid; justify-items: center; max-width: 100%; margin-top: var(--s-2); text-shadow: 0 1px 2px rgb(var(--shade) / 0.6); }
 /* A soft pool of shade under the name, so it reads over the trees and a
    bright hillside alike; no edge, so it stays part of the scene. */
 .hero-label::before {
@@ -160,6 +160,14 @@
 .hero-label small svg { width: 12px; height: 12px; }
 .hero-label b { max-width: 100%; overflow: hidden; font-family: var(--display); font-size: var(--fs-headline); line-height: var(--lh-headline); font-style: italic; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .hero-label > span { max-width: 100%; overflow: hidden; color: color-mix(in srgb, var(--on-scene) 78%, transparent); font-size: var(--fs-caption); line-height: var(--lh-caption); text-overflow: ellipsis; white-space: nowrap; }
+/* The name and brand clip to their boxes for the ellipsis, which cuts a
+   text-shadow's glow off at the box's edge into a hard dark rectangle. A
+   drop-shadow glows past the box (an element's overflow clips its content,
+   not its filter); its blur is a standard deviation, so 8px is the 16px a
+   text-shadow would take. */
+.hero-label b, .hero-label > span { filter: drop-shadow(0 0 8px rgb(var(--ink-deep) / 0.7)); }
+/* Forced colors drop text shadows but not filters: the glow goes with them. */
+@media (forced-colors: active) { .hero-label b, .hero-label > span { filter: none; } }
 /* On phones a long name (`.long`, over about 18 characters, which is what
    one line holds) takes two lines, and the brand joins the kicker's line
    above it ("Tonight · Afnan"), so the label still ends inside the hero.
