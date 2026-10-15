@@ -1016,36 +1016,42 @@ export const actions = {
     document.querySelector(`.results [data-action="open"][data-id="${CSS.escape(record.id)}"]`)?.focus();
   },
   // The bottle page, at its smells-like section (what it copies, cheaper
-  // twins, siblings): scrolled to once it draws (a dataset bottle loads its
-  // record first), its heading focused once its answer is in, as Now's spray
-  // line opens the spray section. Watches until then, or until the page goes.
-  // The scroll is instant: the page draws again whole as its about data and
-  // full record land, and a smooth scroll stops with the panel it ran in
-  // (the new one keeps where it had got to, often the top).
+  // twins, siblings), as Now's spray line opens the spray section: scrolled
+  // to once it draws (a dataset bottle loads its record first) and its
+  // heading focused, so focus is never left on Close out of sight. Until its
+  // answer is in (the section asks only once it nears the view), it's put
+  // back whenever the page drawing again whole as its about data and full
+  // record land leaves it out of view, and once more as the answer lands;
+  // the reader scrolling, tapping or pressing a key meanwhile takes over.
+  // The scroll is instant: a smooth scroll stops with the panel it ran in.
   'disc-dupes'(el, app) {
     const id = el.dataset.id;
     app.openBottle(id, null, el.closest('.bcard, .row')?.querySelector('.bcard-open, .row-main') ?? el);
     const until = Date.now() + DUPES_WAIT_MS;
+    const watch = new AbortController();
+    let theirs = false;
+    for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown']) {
+      addEventListener(type, () => { theirs = true; }, { capture: true, passive: true, signal: watch.signal });
+    }
     let shown = false;
     const find = () => {
-      if (state.route?.dest !== 'bottle' || state.route.arg !== id) return;
+      if (theirs || state.route?.dest !== 'bottle' || state.route.arg !== id) return watch.abort();
       // The section (aria-busy until its answer is in), else its heading, else its slot.
       const mark = DUPES_MARKS.map(sel => document.querySelector(`#bottle ${sel}`)).find(Boolean);
       const section = mark?.closest('section') ?? mark;
       if (section) {
         const ready = section.getAttribute('aria-busy') !== 'true';
         const head = mark.matches('h2, h3') ? mark : section.querySelector('h3');
-        // As it first draws (which asks for its answer), and again once the
-        // answer is in if the heading isn't in view.
-        if (!shown || (ready && !inPanel(head ?? section))) toTop(section);
+        if (!shown || !inPanel(head ?? section)) toTop(section);
         shown = true;
-        if (ready) {
-          if (head && !head.hasAttribute('tabindex')) head.setAttribute('tabindex', '-1');
-          head?.focus({ preventScroll: true });
-          return;
+        if (head && document.activeElement !== head) {
+          if (!head.hasAttribute('tabindex')) head.setAttribute('tabindex', '-1');
+          head.focus({ preventScroll: true });
         }
+        if (ready) return watch.abort();
       }
       if (Date.now() < until) setTimeout(find, 120);
+      else watch.abort();
     };
     setTimeout(find, 120);
   },

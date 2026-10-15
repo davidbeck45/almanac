@@ -24,7 +24,7 @@ import {
   addToMine as addRecord, markBottlesLoaded, keepBottles, loadFullRecord, retryClimate,
 } from './state.js';
 import {
-  registerSheets, renderSheet, openSheet, updateSheet, closeSheet, sheetPopped, sheetEntry, replacePageURL, refocus,
+  registerSheets, renderSheet, openSheet, updateSheet, closeSheet, sheetPopped, sheetEntry, replacePageURL, refocus, refocusNear, inSight,
   keepingFocus, showToast, hideToast, settleToast, watchToast, morph, canMorph, visible, reducedMotion, SHEET_OUT_MS,
 } from './sheets.js';
 import * as wearView from '../views/wear.js';
@@ -76,7 +76,7 @@ const app = {
   render, renderPage, renderBottle, retryBottle,
   navigate, openBottle, closeBottle,
   openSheet, updateSheet, closeSheet, renderSheet,
-  showToast, hideToast, keepingFocus, refocus,
+  showToast, hideToast, keepingFocus, refocus, inSight,
   refreshWeather, setLocation, setActive, addToMine, own, closeShared,
 };
 
@@ -148,11 +148,13 @@ function listBack() {
 // ---------- Rendering ----------
 
 // Everything on screen, again (data, weather, units or theme changed). The
-// focused control, replaced, hands focus to its successor; with none (a
-// button that became a tag, a banner that went), focus goes to the top of
-// the region it was in, never to the page's body.
+// focused control, replaced, hands focus to its successor, else to the
+// nearest one like it left in its list (a bottle hidden from a shelf); with
+// none (a button that became a tag, a banner that went), focus goes to the
+// top of the region it was in, never to the page's body.
 function render() {
   const focused = document.activeElement;
+  const seen = inSight(focused);
   const region = focused?.closest?.('#sheet, #bottle, #app');
   const scope = region ? `#${region.id}` : '#app';
   computeToday();
@@ -161,7 +163,7 @@ function render() {
   renderPage();
   renderBottle();
   if (state.sheet) renderSheet({ keepScroll: true });
-  if (focused && focused !== document.body && !focused.isConnected && !refocus(focused, scope)) {
+  if (focused && focused !== document.body && !focused.isConnected && !refocusNear(focused, scope, { reveal: seen })) {
     const fallback = { '#sheet': '#sheet .sheet-close', '#bottle': '#bottle .bp-close' }[scope] ?? '#page-title';
     $(fallback)?.focus({ preventScroll: true });
   }
@@ -434,13 +436,14 @@ function renderBottle({ fresh = false, instant = false } = {}) {
   // above it grow (an answer landing turns a skeleton into a card).
   const reading = sameBottle && panel ? bottleView.readingAt(panel) : null;
   const focused = sameBottle && el.contains(document.activeElement) ? document.activeElement : null;
+  const seen = inSight(focused);
   const kept = sameBottle ? keptScrolls(el) : new Map();
   const model = bottleModelFor(r);
   const opening = el.hidden;
   el.innerHTML = bottleView.bottlePageHTML(model, { modal });
   keepScrolls(el, kept);
   // Focus on its successor, else on the element with its id, else the close button: never the body.
-  if (focused && !refocus(focused, '#bottle')) {
+  if (focused && !refocus(focused, '#bottle', { reveal: seen })) {
     ((focused.id && document.getElementById(focused.id)) || $('#bottle .bp-close'))?.focus({ preventScroll: true });
   }
   if (model) bottleView.afterBottle(model, app);
@@ -564,11 +567,12 @@ function applyRoute(next, { quiet = false, instant = false, restore = false } = 
   }
   pushedBottle = false;
   // Closing a bottle page leaves the page under it as it was, focus back on
-  // what opened it; a new page (a link out of the bottle page, the rail with
-  // the inspector open) is a navigation like any other. The bottle page goes
-  // first: as a dialog it keeps the page under it inert, and focus can't
-  // land on the new page's heading until it's gone. Docked, it gives focus
-  // back only when focus was in it: a control on the page keeps it.
+  // what opened it (hidden from picks, the next bottle in its list); a new
+  // page (a link out of the bottle page, the rail with the inspector open)
+  // is a navigation like any other. The bottle page goes first: as a dialog
+  // it keeps the page under it inert, and focus can't land on the new
+  // page's heading until it's gone. Docked, it gives focus back only when
+  // focus was in it: a control on the page keeps it.
   const changed = !sameRoute(state.base, next);
   const focused = document.activeElement;
   const pageHadFocus = docked() && focused && focused !== document.body && !$('#bottle').contains(focused);
@@ -581,7 +585,7 @@ function applyRoute(next, { quiet = false, instant = false, restore = false } = 
     const closing = prev?.dest === 'bottle' && restore && samePane(state.base, next);
     setBase(next, { quiet, restore, keepScroll: closing });
   }
-  if (prev?.dest === 'bottle' && !changed && !pageHadFocus && !refocus(bottleOpener)) $('#page-title')?.focus({ preventScroll: true });
+  if (prev?.dest === 'bottle' && !changed && !pageHadFocus && !refocusNear(bottleOpener)) $('#page-title')?.focus({ preventScroll: true });
   if (prev?.dest === 'bottle') bottleOpener = null;
   syncTitle();
 }

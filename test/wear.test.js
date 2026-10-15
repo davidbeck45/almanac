@@ -240,7 +240,7 @@ test('a trip under way updates from the form: the open event is added, the days 
     return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
   };
   globalThis.document = { querySelector: () => null, getElementById: () => null, activeElement: null };
-  const ui = { renderPage() {}, refocus() { return false; }, keepingFocus(el, scope, f) { f(); } };
+  const ui = { renderPage() {}, refocus() { return false; }, inSight() { return true; }, keepingFocus(el, scope, f) { f(); } };
   try {
     // Started two days ago; those days' weather is marked to tell it apart.
     const past = [-2, -1].flatMap(d => ['day', 'night'].map(slot => ({ ...wx[slot], slot, dateISO: shiftISO(today, d), label: 'x', feelsF: 40 })));

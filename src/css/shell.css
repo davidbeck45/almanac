@@ -341,7 +341,9 @@ body:has(#sheet:not([hidden]) .sheet-bar) .toast, body:has(#bottle.modal:not([hi
 }
 @media (min-width: 1100px) { .toast { bottom: calc(var(--s-5) + env(safe-area-inset-bottom)); } }
 /* From 1100px it centres on the page's column, not the window: the rail
-   takes the left (88px, then --rail), a docked bottle page the right. */
+   takes the left (88px, then --rail), a docked bottle page the right. Under
+   an overlay sheet, a dialog centred on the window, it centres on that,
+   docked bottle page or not. */
 @media (min-width: 1100px) {
   .toast { left: calc(50% + 88px / 2); }
   body:has(#app.has-bottle) .toast { left: calc(50% + (88px - var(--inspector)) / 2); }
@@ -349,6 +351,9 @@ body:has(#sheet:not([hidden]) .sheet-bar) .toast, body:has(#bottle.modal:not([hi
 @media (min-width: 1280px) {
   .toast { left: calc(50% + var(--rail) / 2); }
   body:has(#app.has-bottle) .toast { left: calc(50% + (var(--rail) - var(--inspector)) / 2); }
+}
+@media (min-width: 1100px) {
+  body.sheet-open .toast, body.sheet-open:has(#app.has-bottle) .toast { left: 50%; }
 }
 
 /* View transitions: the bottle flies between its list and its page, and the

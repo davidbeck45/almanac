@@ -277,6 +277,35 @@ test('a launch that met a new version waits for the network, so versions never m
   assert.equal(await w.get('src/app/shell.js', 'cors', { clientId: 'b' }), '/scentcast/src/app/shell.js from the network (v3)', 'not the saved v2 beside a v3 main.js');
 });
 
+test('files in flight together keep to the launch’s one decision, whichever file makes it', async () => {
+  const CACHE = sw.match(/const CACHE = '([\w-]+)'/)[1];
+  const launch = async () => {
+    const w = serviceWorker();
+    await w.get('', 'navigate');
+    for (const f of ['src/main.js', 'src/app/shell.js']) await w.get(f);
+    await w.get('', 'navigate', { resultingClientId: 'a' }); // the page as saved
+    w.net.version = 'v2'; // a deploy that changed only modules
+    return w;
+  };
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  // main.js comes back new while shell.js's check is still out: past SLOW_MS
+  // shell.js waits for the network instead of taking its saved copy.
+  let w = await launch();
+  w.net.slow = { 'src/main.js': w.slow / 4, 'src/app/shell.js': w.slow * 3 };
+  assert.deepEqual(await Promise.all([w.get('src/main.js', 'cors', { clientId: 'a' }), w.get('src/app/shell.js', 'cors', { clientId: 'a' })]),
+    ['/scentcast/src/main.js from the network (v2)', '/scentcast/src/app/shell.js from the network (v2)'], 'one version: the new one');
+  // shell.js's check passes SLOW_MS first (the line is slow), then main.js,
+  // asked a little later, comes back new: it's the saved copy too, and the
+  // late answer isn't saved over it.
+  w = await launch();
+  w.net.slow = { 'src/app/shell.js': w.slow * 3, 'src/main.js': w.slow * 0.75 };
+  const shell = w.get('src/app/shell.js', 'cors', { clientId: 'a' });
+  await sleep(w.slow / 2);
+  assert.deepEqual(await Promise.all([w.get('src/main.js', 'cors', { clientId: 'a' }), shell]),
+    ['/scentcast/src/main.js from the network (v1)', '/scentcast/src/app/shell.js from the network (v1)'], 'one version: the saved one');
+  assert.equal(await w.cached(CACHE, 'src/main.js').text(), '/scentcast/src/main.js from the network (v1)');
+});
+
 test('dataset files answer from the cache at once and are checked behind it', async () => {
   const w = serviceWorker();
   w.net.version = 'v2';

@@ -14,8 +14,9 @@
 // far came back unchanged, the rest of that launch comes from the cache too:
 // what it already has is the cache's version. Once anything came back
 // changed (a new version is out), the launch waits for the network, so
-// versions don't mix. The cache catches up on a launch where the network
-// answers in time, or when a new sw.js installs.
+// versions don't mix. Whichever happens first decides, for the files
+// already in flight as well. The cache catches up on a launch where the
+// network answers in time, or when a new sw.js installs.
 const CACHE = 'scentcast-v21';
 const NETWORK_WAIT_MS = 2500;
 const SLOW_MS = 1000;
@@ -243,28 +244,38 @@ self.addEventListener('fetch', e => {
       return;
     }
 
-    // An app file. A worker the page starts shares its launch.
+    // An app file. A worker the page starts shares its launch, and the
+    // launch decides once: from the cache (a slow check) or from the network
+    // (a new version), whichever comes first, and every file after keeps to
+    // it, those already in flight too.
     const launch = launches.get(e.clientId);
     if (launch) launchOf(e.resultingClientId, launch);
     e.respondWith((async () => {
       const hit = await saved();
       if (hit && launch?.cached) return hit;
       const net = fresh(req.url, hit);
+      const network = () => net.then(res => {
+        if (launch && !launch.cached && res.ok && changed(res, hit)) launch.changed = true;
+        return keep(res);
+      }).catch(async () => hit ?? (await caches.match(key, { ignoreSearch: true })) ?? Response.error());
       // Nothing saved, or no launch to decide for (the page didn't open
       // through this worker), or a new version coming in: wait for the network.
-      if (!hit || !launch || launch.changed) {
-        return net.then(res => {
-          if (launch && res.ok && changed(res, hit)) launch.changed = true;
-          return keep(res);
-        }).catch(async () => hit ?? (await caches.match(key, { ignoreSearch: true })) ?? Response.error());
-      }
+      if (!hit || !launch || launch.changed) return network();
       const first = await Promise.race([net.catch(() => 'failed'), late(SLOW_MS)]);
+      // Another file's check passed SLOW_MS meanwhile: the launch is the
+      // saved version (a late answer isn't saved).
+      if (launch.cached) {
+        net.catch(() => {});
+        return hit;
+      }
       if (first instanceof Response) {
         if (first.ok && changed(first, hit)) launch.changed = true;
         return keep(first);
       }
+      // Slow, but another file came back new meanwhile: this one waits too.
+      if (first === 'late' && launch.changed) return network();
       // Offline, or the line is slow: the saved copy, and the rest of the
-      // launch from the cache (a late answer isn't saved).
+      // launch from the cache.
       if (first === 'late') launch.cached = true;
       net.catch(() => {});
       return hit;

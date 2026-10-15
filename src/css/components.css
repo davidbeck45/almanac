@@ -605,15 +605,16 @@
   font-size: var(--fs-body);
   opacity: 0;
   transform: translate(-50%, 16px) scale(0.98);
-  transition: opacity var(--dur-2), transform var(--dur-3) var(--ease-sheet), bottom var(--dur-3) var(--ease-sheet);
+  transition: opacity var(--dur-2), transform var(--dur-3) var(--ease-sheet), bottom var(--dur-3) var(--ease-sheet), left var(--dur-3) var(--ease-sheet);
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast > svg { width: 16px; height: 16px; flex: none; color: var(--positive); }
 .toast[data-tone='error'] > svg { width: 18px; height: 18px; color: var(--negative); }
 .toast:not(:has(button, a)) { padding-right: var(--s-5); }
-/* The message wraps to two lines at most, so a long bottle name never cuts
-   off what happened to it ("… hidden from picks") before its Undo. A longer
-   note (what changed, and the way back) takes a wider toast. */
+/* The message wraps to two lines at most (three beside a control, Undo,
+   which takes the room on the narrowest phones), so a long bottle name never
+   cuts off what happened to it ("… hidden from picks") before its Undo. A
+   longer note (what changed, and the way back) takes a wider toast. */
 .toast span {
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -626,6 +627,7 @@
   overflow-wrap: anywhere;
   text-wrap: pretty;
 }
+.toast:has(button, a) span { -webkit-line-clamp: 3; }
 .toast.wrapped, .toast:has(.note) { border-radius: var(--r-surface); } /* .wrapped: the shell saw it wrap */
 .toast:has(.note) { width: min(100vw - 2 * var(--s-4), 460px); padding-block: var(--s-2); }
 .toast .note { -webkit-line-clamp: 4; }

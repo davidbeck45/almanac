@@ -105,9 +105,10 @@ function take(place, app) {
  */
 export function repaint(app) {
   const focused = document.activeElement;
+  const seen = app.inSight(focused);
   app.renderPage();
   if (!focused || focused === document.body || focused.isConnected) return;
-  if (!app.refocus(focused, '#app') && focused.id) document.getElementById(focused.id)?.focus({ preventScroll: true });
+  if (!app.refocus(focused, '#app', { reveal: seen }) && focused.id) document.getElementById(focused.id)?.focus({ preventScroll: true });
 }
 
 // ---------- Dates ----------
