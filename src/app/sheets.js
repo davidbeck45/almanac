@@ -30,12 +30,13 @@ export function renderSheet({ keepScroll = false, fresh = false } = {}) {
   const html = render(s);
   if (html === null) return closeSheet();
   const focused = el.contains(document.activeElement) ? document.activeElement : null;
+  const seen = inSight(focused);
   const form = focused?.closest('form[data-form]')?.dataset.form;
   el.innerHTML = html;
   const panel = el.querySelector('.sheet-panel');
   if (fresh) panel.classList.add('fresh');
   if (keepScroll) panel.scrollTop = scroll;
-  if (focused && !refocus(focused, '#sheet')) {
+  if (focused && !refocus(focused, '#sheet', { reveal: seen })) {
     const field = form && el.querySelector(`form[data-form="${CSS.escape(form)}"] :is(input:not([type="hidden"]), textarea)`);
     (field || el.querySelector('.sheet-close'))?.focus({ preventScroll: true });
   }
@@ -69,8 +70,12 @@ function successor(el, scope) {
 // else its successor (above). A text field's successor gets the caret where
 // it was. True only when focus landed: false when there's no successor (a
 // hidden bottle's card, say) or it can't take focus (hidden, disabled), so
-// callers fall back to the top of the region.
-export function refocus(el, scope = '#app') {
+// callers fall back to the top of the region. `reveal` scrolls it back into
+// view if the redraw left it out of sight: a redraw nobody asked for (data
+// landing, coming back to the tab) passes whether the control was in sight
+// before it (`inSight`), so a control the reader scrolled away from stays
+// where they left it.
+export function refocus(el, scope = '#app', { reveal: show = true } = {}) {
   if (!el || el === document.body) return false;
   const target = el.isConnected ? el : successor(el, scope);
   if (!target) return false;
@@ -79,20 +84,24 @@ export function refocus(el, scope = '#app') {
   if (target !== el && 'selectionStart' in el) {
     try { target.setSelectionRange(el.selectionStart, el.selectionEnd); } catch {} // not every input type has a caret
   }
-  reveal(target);
+  if (show) reveal(target);
   return true;
 }
 
 // Focus moves without scrolling, so a redraw doesn't jump the page; but it
-// mustn't sit out of sight (WCAG 2.4.11). Once the redraw has settled (the
-// shelves' and the bottle page's scroll put back), an element that a
-// sideways strip, a scrolling panel or the window cuts off scrolls just into
-// view.
+// mustn't leave focus out of sight (WCAG 2.4.11). Once the redraw has
+// settled (the shelves' and the bottle page's scroll put back), an element
+// that a sideways strip, a scrolling panel or the window cuts off scrolls
+// just into view.
 function reveal(el) {
   requestAnimationFrame(() => {
     if (document.activeElement === el && outOfSight(el)) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   });
 }
+
+// Whether a focused element shows whole now: measured before a redraw, it
+// says whether refocus may scroll back to its successor.
+export const inSight = el => Boolean(el) && el !== document.body && el.isConnected && !outOfSight(el);
 
 function outOfSight(el) {
   const r = el.getBoundingClientRect();
@@ -121,11 +130,12 @@ function outOfSight(el) {
 
 // Views and sheets re-render whole, which replaces the control that asked for
 // it; focus its successor in `scope` so keyboard and screen reader users keep
-// their place.
+// their place (scrolled back into view only if it was in sight before).
 export function keepingFocus(trigger, scope, rerender) {
   const focused = trigger && document.activeElement === trigger;
+  const seen = focused && inSight(trigger);
   rerender();
-  if (focused) refocus(trigger, scope);
+  if (focused) refocus(trigger, scope, { reveal: seen });
 }
 
 let sheetOpener = null;

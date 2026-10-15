@@ -398,8 +398,9 @@ function redraw(app) {
   if (!onCompare()) return;
   const focused = document.activeElement;
   const inMain = Boolean(focused?.closest?.('#main'));
+  const seen = app.inSight(focused);
   app.renderPage();
-  if (!inMain || focused.isConnected || app.refocus(focused, '#main')) return;
+  if (!inMain || focused.isConnected || app.refocus(focused, '#main', { reveal: seen })) return;
   ((focused.id && document.getElementById(focused.id)) || document.querySelector('#page-title'))?.focus({ preventScroll: true });
 }
 

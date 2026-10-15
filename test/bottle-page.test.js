@@ -246,7 +246,7 @@ test('an answer landing after the record swapped for its own r/ record draws its
   const slot = { getBoundingClientRect: () => ({ top: 400 }), closest: () => panel, contains: () => false, nextElementSibling: null, set innerHTML(html) { drawn.push(html); } };
   globalThis.document = { querySelector: sel => (sel === '#bottle [data-section="notes"]' ? slot : null), activeElement: null };
   let whole = 0, release;
-  const app = { renderBottle: () => whole++, refocus: () => true };
+  const app = { renderBottle: () => whole++, refocus: () => true, inSight: () => true };
   const answers = pooled('check', 'test-swap', m => ({ id: m.f.id }), { section: 'notes', ask: () => new Promise(r => { release = () => r({ n: 1 }); }) });
   try {
     const asking = answers.ask({ f: pooledRecord, arg: '9828' }, app);

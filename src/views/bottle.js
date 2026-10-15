@@ -153,12 +153,13 @@ export function redrawSection(id, app) {
   if (!model) return app.renderBottle();
   const panel = slot.closest('.bp-panel');
   const focused = slot.contains(document.activeElement) ? document.activeElement : null;
+  const seen = app.inSight(focused);
   const next = slot.getBoundingClientRect().top < panel.getBoundingClientRect().top ? slot.nextElementSibling : null;
   const before = next?.getBoundingClientRect().top;
   slot.innerHTML = section.render(model);
   if (next) panel.scrollTop += next.getBoundingClientRect().top - before;
   // A control that went: its successor, else the section's heading.
-  if (focused && !focused.isConnected && !app.refocus(focused, '#bottle')) {
+  if (focused && !focused.isConnected && !app.refocus(focused, '#bottle', { reveal: seen })) {
     (slot.querySelector('h3[tabindex]') ?? panel.querySelector('.bp-close'))?.focus({ preventScroll: true });
   }
 }

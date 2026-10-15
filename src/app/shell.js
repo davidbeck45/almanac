@@ -24,7 +24,7 @@ import {
   addToMine as addRecord, markBottlesLoaded, keepBottles, loadFullRecord, retryClimate,
 } from './state.js';
 import {
-  registerSheets, renderSheet, openSheet, updateSheet, closeSheet, sheetPopped, sheetEntry, replacePageURL, refocus,
+  registerSheets, renderSheet, openSheet, updateSheet, closeSheet, sheetPopped, sheetEntry, replacePageURL, refocus, inSight,
   keepingFocus, showToast, hideToast, settleToast, watchToast, morph, canMorph, visible, reducedMotion, SHEET_OUT_MS,
 } from './sheets.js';
 import * as wearView from '../views/wear.js';
@@ -76,7 +76,7 @@ const app = {
   render, renderPage, renderBottle, retryBottle,
   navigate, openBottle, closeBottle,
   openSheet, updateSheet, closeSheet, renderSheet,
-  showToast, hideToast, keepingFocus, refocus,
+  showToast, hideToast, keepingFocus, refocus, inSight,
   refreshWeather, setLocation, setActive, addToMine, own, closeShared,
 };
 
@@ -153,6 +153,7 @@ function listBack() {
 // the region it was in, never to the page's body.
 function render() {
   const focused = document.activeElement;
+  const seen = inSight(focused);
   const region = focused?.closest?.('#sheet, #bottle, #app');
   const scope = region ? `#${region.id}` : '#app';
   computeToday();
@@ -161,7 +162,7 @@ function render() {
   renderPage();
   renderBottle();
   if (state.sheet) renderSheet({ keepScroll: true });
-  if (focused && focused !== document.body && !focused.isConnected && !refocus(focused, scope)) {
+  if (focused && focused !== document.body && !focused.isConnected && !refocus(focused, scope, { reveal: seen })) {
     const fallback = { '#sheet': '#sheet .sheet-close', '#bottle': '#bottle .bp-close' }[scope] ?? '#page-title';
     $(fallback)?.focus({ preventScroll: true });
   }
@@ -434,13 +435,14 @@ function renderBottle({ fresh = false, instant = false } = {}) {
   // above it grow (an answer landing turns a skeleton into a card).
   const reading = sameBottle && panel ? bottleView.readingAt(panel) : null;
   const focused = sameBottle && el.contains(document.activeElement) ? document.activeElement : null;
+  const seen = inSight(focused);
   const kept = sameBottle ? keptScrolls(el) : new Map();
   const model = bottleModelFor(r);
   const opening = el.hidden;
   el.innerHTML = bottleView.bottlePageHTML(model, { modal });
   keepScrolls(el, kept);
   // Focus on its successor, else on the element with its id, else the close button: never the body.
-  if (focused && !refocus(focused, '#bottle')) {
+  if (focused && !refocus(focused, '#bottle', { reveal: seen })) {
     ((focused.id && document.getElementById(focused.id)) || $('#bottle .bp-close'))?.focus({ preventScroll: true });
   }
   if (model) bottleView.afterBottle(model, app);
