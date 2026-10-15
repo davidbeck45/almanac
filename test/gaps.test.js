@@ -546,6 +546,12 @@ test('the pool’s table can be worked out ahead, in slices, and the next report
   assert.deepEqual([...table.slice(-2000)], [...fresh.slice(-2000)]);
   // Already there: nothing to work out.
   assert.equal(await warmPoolTable(records, hot, { pause: async () => { pauses++; } }), table);
+  // Warming another climate leaves the one asked about last: a place's own and the default's both stay.
+  const cold = { ...hot, 'day:cold': { ...hot['day:cold'], share: hot['day:cold'].share + 0.1 } };
+  const coldTable = await warmPoolTable(records, cold, { pause: async () => {} });
+  assert.notEqual(coldTable, table);
+  assert.equal(gapContext({ owned: wardrobe, records, byId, summary: hot }).table, table, 'not pushed out by the warm-up');
+  assert.equal(gapContext({ owned: wardrobe, records, byId, summary: cold }).table, coldTable);
 });
 
 test('a place’s climate comes from one archive call, is kept, and falls back offline', async () => {

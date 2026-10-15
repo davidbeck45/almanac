@@ -44,6 +44,20 @@ test('the pool loads once, says so, and every question is listed', async () => {
   assert.deepEqual(POOL_TASKS.sort(), ['check', 'dupes', 'liked', 'moreLike', 'notes', 'records', 'report', 'styles', 'warm']);
 });
 
+test('the worker notes the climate the latest question named, for a bare warm to work out', async () => {
+  const c = newPoolCache({ load });
+  assert.equal(c.climate, undefined, 'none named yet: the default');
+  const place = { 'day:mild': { share: 1 } };
+  await handlePool({ id: 1, type: 'liked', payload: { owned, summary: place } }, c);
+  assert.equal(c.climate, place);
+  await handlePool({ id: 2, type: 'liked', payload: { owned } }, c);
+  assert.equal(c.climate, place, 'a question without one changes nothing');
+  await handlePool({ id: 3, type: 'warm', payload: { summary: null } }, c);
+  assert.equal(c.climate, place, 'a warm for a climate of its own isn’t one the questions named');
+  await handlePool({ id: 4, type: 'liked', payload: { owned, summary: null } }, c);
+  assert.equal(c.climate, null, 'null: the default');
+});
+
 test('report is the gap finder’s, with a record for every bottle it suggests', async () => {
   const report = await ask('report', { owned: raw, k: 3 });
   const pool = await loadPool(load);

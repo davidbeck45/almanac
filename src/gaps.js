@@ -223,13 +223,21 @@ export function fitTable(bottles, { cells, slotBands }) {
   return out;
 }
 
-// The pool's table for a climate, kept for the last records and climate asked
-// about (a wardrobe change, other shares or the value toggle reuse it).
-let lastTable = null;
+// The pool's tables for the last TABLES_KEPT climates asked about, newest
+// first (a wardrobe change, other shares or the value toggle reuse one), so
+// the default climate's, warmed ahead, and a place's own don't push each
+// other out. Each is about 2 MB.
+const TABLES_KEPT = 2;
+let tables = []; // { records, key, table }
+const tableFor = (records, key) => tables.find(t => t.records === records && t.key === key) ?? null;
+function keepTable(entry) {
+  tables = [entry, ...tables.filter(t => t !== entry)].slice(0, TABLES_KEPT);
+  return entry.table;
+}
+
 export function poolTable(records, summary, cc = cellsFor(summary)) {
   const key = JSON.stringify(summary);
-  if (lastTable?.records !== records || lastTable.key !== key) lastTable = { records, key, table: fitTable(records, cc) };
-  return lastTable.table;
+  return keepTable(tableFor(records, key) ?? { records, key, table: fitTable(records, cc) });
 }
 
 const nextTurn = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -239,20 +247,22 @@ const nextTurn = () => new Promise(resolve => setTimeout(resolve, 0));
  * out ahead of time in slices of `chunk` bottles, pausing between them so a
  * Worker answers other questions meanwhile: the first report or buy check
  * then finds it done (about 230 ms of a 340 ms context in Node). Stops when
- * one already is. -> the table.
+ * one already is, and never pushes out the table of the climate asked about
+ * last. -> the table.
  */
 export async function warmPoolTable(records, summary = DEFAULT_CLIMATE, { pause = nextTurn, chunk = 500 } = {}) {
   summary ??= DEFAULT_CLIMATE;
   const key = JSON.stringify(summary), footed = allFooted(records);
-  const done = () => lastTable?.records === footed && lastTable.key === key;
   const cc = cellsFor(summary), m = cc.cells.length, table = new Float32Array(footed.length * m);
   for (let i = 0; i < footed.length; i += chunk) {
     await pause();
-    if (done()) return lastTable.table;
+    if (tableFor(footed, key)) return tableFor(footed, key).table;
     table.set(fitTable(footed.slice(i, i + chunk), cc), i * m);
   }
-  if (!done()) lastTable = { records: footed, key, table };
-  return lastTable.table;
+  if (tableFor(footed, key)) return tableFor(footed, key).table;
+  // Kept behind the newest: what a question asked for meanwhile stays.
+  tables = [...tables.slice(0, TABLES_KEPT - 1), { records: footed, key, table }];
+  return table;
 }
 
 const quantile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(p * (sorted.length - 1))))];
