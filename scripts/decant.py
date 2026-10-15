@@ -366,7 +366,7 @@ def build() -> None:
     signals = Signals(by_id)
     pool(signals)
     about(signals)
-    print("then: python3 scripts/decant.py extras, node scripts/fit-profiles.mjs --write, npm run build:data, npm test")
+    print("then: python3 scripts/decant.py extras, node scripts/fit-profiles.mjs --write, node scripts/fit-occasions.mjs --write, node scripts/fit-pool-styles.mjs --write, npm run build:data, npm test")
 
 
 # ---------- Derived signals: the pool, about files and extras ----------
