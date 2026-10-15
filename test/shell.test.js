@@ -311,6 +311,13 @@ test('the forecast goes out before the app loads, from a module that imports alm
   }
 });
 
+test('the offline copy installs without waiting on the forecast', () => {
+  const shell = read('src/app/shell.js');
+  const boot = shell.slice(shell.indexOf('export async function boot('));
+  const register = boot.indexOf("navigator.serviceWorker.register('sw.js')");
+  assert.ok(register > 0 && register < boot.indexOf('await refreshWeather()'), 'registered before boot waits on the forecast');
+});
+
 test('the suggestion pool’s files stay cached offline, however many dataset shards come and go', async () => {
   const max = Number(sw.match(/const DATA_MAX = (\d+)/)[1]);
   const w = serviceWorker();

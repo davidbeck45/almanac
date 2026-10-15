@@ -899,8 +899,9 @@ export async function boot({ early: asked = null } = {}) {
   markBottlesLoaded();
   const link = parseShare(params);
   if (link) openSharedLink(link);
+  // The offline copy installs now, not once the forecast is in: a slow or
+  // hung forecast mustn't keep the app from working offline.
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   if (state.loc) await refreshWeather();
   else { render(); openSheet({ kind: 'location' }); }
-
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
