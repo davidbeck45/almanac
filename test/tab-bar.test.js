@@ -4,15 +4,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { tabBarAfter, TUCK_AFTER, SHOW_AFTER, TUCK_BELOW } from '../src/app/sheets.js';
+import { tabBarAfter, TUCK_AFTER, SHOW_AFTER, TUCK_BELOW, TUCK_ROOM } from '../src/app/sheets.js';
 
 const MAX = 3000;
+const ROOM = 844; // a 390x844 phone's window
 // Scrolls through `ys` from `start`, a frame per position, and returns the
 // bar's state after each.
-function scroll(ys, start = { y: 0, travel: 0, tucked: false }, max = MAX) {
+function scroll(ys, start = { y: 0, travel: 0, tucked: false }, max = MAX, room = ROOM) {
   const states = [];
   let bar = start;
-  for (const y of ys) states.push(bar = tabBarAfter(bar, y, max));
+  for (const y of ys) states.push(bar = tabBarAfter(bar, y, max, room));
   return states;
 }
 const tucked = states => states.map(s => s.tucked);
@@ -53,8 +54,32 @@ test('jitter never adds up, so it never flickers', () => {
 test('at the end of the page it comes back, as Safari’s toolbar does', () => {
   assert.ok(!scroll([MAX], away).at(-1).tucked, 'the end');
   assert.ok(!scroll([MAX - 1], away).at(-1).tucked, 'a fractional pixel short of it');
-  assert.ok(scroll(steps(MAX - 400, 20, 15), shown).at(-1).tucked, 'still tucked just before it');
-  assert.ok(!scroll([...steps(MAX - 400, 20, 20)], { y: MAX - 400, travel: 0, tucked: false }).at(-1).tucked, 'scrolling down into the end');
+  const tuckedLow = { y: MAX - 1000, travel: 0, tucked: true };
+  assert.ok(scroll(steps(MAX - 1000, 20, 45), tuckedLow).every(s => s.tucked), 'still tucked just before it');
+  assert.ok(!scroll(steps(MAX - 1000, 20, 50), tuckedLow).at(-1).tucked, 'scrolling down into the end');
+});
+
+test('within half a window of the end it doesn’t tuck, so a flick never takes it out and straight back', () => {
+  const near = ROOM * TUCK_ROOM;
+  const shownLow = { y: MAX - 1000, travel: 0, tucked: false };
+  const run = scroll(steps(MAX - 1000, 30, 33), shownLow);
+  const at = run.findIndex(s => s.tucked);
+  assert.ok(at >= 0 && MAX - run[at].y >= near, 'it tucks while half a window is left');
+  assert.ok(!scroll(steps(MAX - near, 4, 10), { y: MAX - near, travel: 0, tucked: false }).at(-1).tucked, 'shown nearer the end stays shown');
+  assert.ok(scroll(steps(MAX - near, 20, 10), { y: MAX - near, travel: 0, tucked: true }).every(s => s.tucked), 'tucked stays tucked until the end');
+  // Short pages (390x844 on the saved weather): Trip scrolls 128px, Now
+  // without a journal 224, Settings 249, Now with one about 500, and at
+  // 430x932 Now 342. Down them in swipes of 25 or 30px, or one flick.
+  for (const [max, room] of [[128, 844], [224, 844], [249, 844], [414, 844], [496, 844], [342, 932], [113, 667], [321, 667]]) {
+    for (const by of [5, 25, 30]) {
+      const ys = steps(0, by, Math.ceil(max / by));
+      assert.ok(scroll(ys, undefined, max, room).every(s => !s.tucked), `max ${max} in a ${room}px window, ${by}px a frame`);
+    }
+    assert.ok(scroll([90, 200, 300, max], undefined, max, room).every(s => !s.tucked), `max ${max} in a ${room}px window, a flick`);
+  }
+  // A page with room to stay away does tuck: Now with a journal on an
+  // iPhone, Safari's toolbar taking about 180px of the window.
+  assert.ok(scroll(steps(0, 15, 10), undefined, 680, 664).at(-1).tucked);
 });
 
 test('iOS’s rubber band at either end reads as no scroll at all', () => {
@@ -63,8 +88,8 @@ test('iOS’s rubber band at either end reads as no scroll at all', () => {
   // Past the end and back: the bounce up to the end isn't a scroll down later.
   const bounce = scroll([MAX + 50, MAX + 20, MAX], away);
   assert.ok(bounce.every(s => !s.tucked && s.y === MAX));
-  // Then up a little from the end and down again: shown, as ever, then tucked.
-  const after = scroll([MAX - 30, MAX - 50, MAX - 30], bounce.at(-1));
+  // Then up from the end and down again: shown, as ever, then tucked.
+  const after = scroll([MAX - 600, MAX - 700, MAX - 680], bounce.at(-1));
   assert.deepEqual(tucked(after), [false, false, true]);
 });
 
@@ -74,17 +99,22 @@ test('a page shorter than the window, or barely longer, never tucks it', () => {
   assert.ok(scroll(steps(0, 5, 14), undefined, 70).every(s => !s.tucked), 'all of it within the top');
 });
 
-test('the tucked bar is only out of sight: in the tab order, and back with focus', () => {
+test('the tucked bar is only out of sight: in the tab order, and back with keyboard focus', () => {
   const css = readFileSync(new URL('../src/css/shell.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const rules = [...css.matchAll(/([^{}]*\.tucked[^{}]*)\{([^}]*)\}/g)];
   assert.ok(rules.length, 'shell.css styles .nav.tucked');
   for (const [, selector, body] of rules) {
-    assert.match(selector, /:not\(:focus-within\)/, `${selector.trim()}: focus in the bar shows it`);
+    // Keyboard focus only: a tapped tab Chromium leaves focused must neither
+    // hold the bar out nor drop it on the next tap.
+    assert.match(selector, /:not\(:has\((\.nav )?:focus-visible\)\)/, `${selector.trim()}: keyboard focus in the bar shows it`);
+    assert.doesNotMatch(selector, /focus-within/, `${selector.trim()}: a tap's focus doesn't count`);
     assert.doesNotMatch(body, /display|visibility|pointer-events|content-visibility/, `${selector.trim()}: moves it, never takes it out of the page`);
   }
+  assert.match(css, /\.nav:has\(:focus-visible\) \{ transition: none; \}/, 'Tab into it never lands on a control still sliding in');
   assert.doesNotMatch(css, /@media \(min-width: 1100px\)[^@]*\.tucked/, 'the rail never tucks');
   const sheets = readFileSync(new URL('../src/app/sheets.js', import.meta.url), 'utf8');
   const tab = sheets.slice(sheets.indexOf('// ---------- The tab bar'));
   assert.doesNotMatch(tab, /\binert\b\s*=|aria-hidden|\.hidden\s*=/, 'the script never hides it from assistive tech');
   assert.match(tab, /addEventListener\('scroll', [\s\S]*?\{ passive: true \}\)/, 'one passive scroll listener');
+  assert.match(tab, /addEventListener\('focusin', [^\n]*:focus-visible/, 'only keyboard focus brings it back from the script');
 });

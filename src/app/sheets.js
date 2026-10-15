@@ -396,8 +396,8 @@ export function morph(from, update, to) {
 // Under 1100px the tab bar floats over the foot of the page. While the reader
 // scrolls down it tucks below the screen's edge, and a scroll up brings it
 // back, as Safari's own toolbar does; so do the top of the page, its end, a
-// new page (the shell's showTabBar) and focus in the bar. It only moves out
-// of sight (.tucked, shell.css): it stays in the tab order and the
+// new page (the shell's showTabBar) and keyboard focus in the bar. It only
+// moves out of sight (.tucked, shell.css): it stays in the tab order and the
 // accessibility tree. The page's scroll padding still keeps focus clear of
 // where it shows, since any scroll up brings it back over that strip.
 
@@ -407,22 +407,27 @@ export function morph(from, update, to) {
 export const TUCK_AFTER = 12;
 export const SHOW_AFTER = 8;
 export const TUCK_BELOW = 64;
+// It tucks only with this share of the window still to scroll: nearer the
+// end, where it comes back anyway, one flick would take it out and straight
+// back in (a short page, like Trip or Settings, never tucks it at all).
+export const TUCK_ROOM = 0.5;
 // Within this of the end counts as the end (fractional scroll positions).
 const AT_END = 2;
 
 /**
- * The tab bar after a scroll to `y` with `max` the furthest the page scrolls,
- * from where it was: { y, travel, tucked }, `travel` the distance scrolled
- * in the current direction (down positive). iOS's rubber band, past either
- * end, reads as the end it stretches from, so its bounce back is no scroll.
+ * The tab bar after a scroll to `y`, with `max` the furthest the page
+ * scrolls and `room` the window's height, from where it was:
+ * { y, travel, tucked }, `travel` the distance scrolled in the current
+ * direction (down positive). iOS's rubber band, past either end, reads as the
+ * end it stretches from, so its bounce back is no scroll.
  */
-export function tabBarAfter({ y: from = 0, travel = 0, tucked = false } = {}, y, max) {
+export function tabBarAfter({ y: from = 0, travel = 0, tucked = false } = {}, y, max, room = 0) {
   const end = Math.max(0, max);
   const at = Math.min(Math.max(y, 0), end);
   if (at <= TUCK_BELOW || at >= end - AT_END) return { y: at, travel: 0, tucked: false };
   const dy = at - from;
   const run = !dy ? travel : Math.sign(dy) === Math.sign(travel) ? travel + dy : dy;
-  if (!tucked && run >= TUCK_AFTER) return { y: at, travel: 0, tucked: true };
+  if (!tucked && run >= TUCK_AFTER && end - at >= room * TUCK_ROOM) return { y: at, travel: 0, tucked: true };
   if (tucked && run <= -SHOW_AFTER) return { y: at, travel: 0, tucked: false };
   return { y: at, travel: run, tucked };
 }
@@ -441,17 +446,21 @@ export function watchTabBar(wide) {
     barFrame = requestAnimationFrame(() => {
       barFrame = 0;
       if (wide.matches) return;
-      const next = tabBarAfter(bar, scrollY, document.documentElement.scrollHeight - innerHeight);
+      const next = tabBarAfter(bar, scrollY, document.documentElement.scrollHeight - innerHeight, innerHeight);
       if (next.tucked !== bar.tucked) nav.classList.toggle('tucked', next.tucked);
       bar = next;
     });
   }, { passive: true });
   wide.addEventListener('change', showTabBar);
-  nav.addEventListener('focusin', showTabBar);
+  // Keyboard focus only: Chromium leaves a tapped or clicked link focused
+  // (tapping the current tab, which goes back to the top), and that mustn't
+  // hold the bar out, nor drop it on the next tap elsewhere. shell.css
+  // matches, with :focus-visible.
+  nav.addEventListener('focusin', e => { if (e.target.matches(':focus-visible')) showTabBar(); });
 }
 
 // Out again, counting from here: a new page (after its scroll is put back,
-// so that jump isn't read as a scroll), the rail, focus in the bar.
+// so that jump isn't read as a scroll), the rail, keyboard focus in the bar.
 export function showTabBar() {
   bar = { y: scrollY, travel: 0, tucked: false };
   $('#nav')?.classList.remove('tucked');

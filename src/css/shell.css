@@ -180,17 +180,18 @@ html:has(#main .disc-search) { scroll-padding-top: calc(env(safe-area-inset-top)
 /* While the reader scrolls down, the bar tucks below the screen's edge
    (.tucked, src/app/sheets.js), and a scroll up brings it back, as Safari's
    own toolbar does. It only moves out of sight: it stays in the tab order
-   and the accessibility tree, and focus in it brings it straight back. With
-   the sky held still (Settings) it fades in place instead of sliding, then
-   steps out of the way of taps; reduced motion makes either instant, as it
-   does every transition (base.css). The toast stays where it sits over the
-   bar, so it never moves under the reader or meets the bar coming back. */
+   and the accessibility tree, and keyboard focus in it brings it straight
+   back (:focus-visible, not :focus-within: Chromium leaves a tapped tab
+   focused, which mustn't hold it out). With the sky held still (Settings)
+   it fades in place instead of sliding, then steps out of the way of taps;
+   reduced motion makes either instant, as it does every transition
+   (base.css). The toast drops with it (below). */
 @media (max-width: 1099px) {
   .nav { transition: transform var(--dur-3) var(--ease-sheet); }
-  .nav.tucked:not(:focus-within) { transform: translate(-50%, calc(100% + var(--s-3) + env(safe-area-inset-bottom))); }
+  .nav.tucked:not(:has(:focus-visible)) { transform: translate(-50%, calc(100% + var(--s-3) + env(safe-area-inset-bottom))); }
   .still-sky .nav { transition: opacity var(--dur-2), transform 0s; }
-  .still-sky .nav.tucked:not(:focus-within) { opacity: 0; transition: opacity var(--dur-2), transform 0s var(--dur-2); }
-  .nav:focus-within { transition: none; }
+  .still-sky .nav.tucked:not(:has(:focus-visible)) { opacity: 0; transition: opacity var(--dur-2), transform 0s var(--dur-2); }
+  .nav:has(:focus-visible) { transition: none; }
 }
 
 /* ---------- Nav: rail ---------- */
@@ -351,6 +352,13 @@ html:has(#main .disc-search) { scroll-padding-top: calc(env(safe-area-inset-top)
 /* ---------- The toast over the tab bar ---------- */
 
 .toast { bottom: calc(var(--tabbar) + var(--s-5) + env(safe-area-inset-bottom)); }
+/* While the tab bar is tucked away the toast drops to the foot of the
+   screen, and rises with the bar as it comes back: the two move together
+   (same duration and easing), so they never meet. With the sky held still
+   the bar fades in place instead, so the toast keeps its place over it. */
+@media (max-width: 1099px) {
+  :root:not(.still-sky) body:has(.nav.tucked):not(:has(.nav :focus-visible)) .toast { bottom: calc(var(--s-4) + env(safe-area-inset-bottom)); }
+}
 body:has(#sheet:not([hidden]) .sheet-bar) .toast, body:has(#bottle.modal:not([hidden])) .toast { bottom: calc(var(--s-4) + env(safe-area-inset-bottom)); }
 @media (max-width: 719px) {
   /* On phones a sheet's sticky footer sits where the toast would; lift it. */
