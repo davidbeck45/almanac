@@ -176,19 +176,25 @@ export function sprayGuide(record, conditions, occasion = null, skin = null) {
 
   // Why: what moved the count the way it went leads ("and" between two of
   // them); a big push the other way follows with "though". A count the
-  // occasion caps is the occasion's doing.
+  // occasion caps is the occasion's doing. Nothing that went the count's way
+  // says nothing: a reason pushing against the count never stands alone. At
+  // BASE nothing moved the count, so a reason is worth giving only as two
+  // big pushes that cancel out ("…, though …"), the cap's first.
   const ranked = terms.filter(t => t.why && Math.abs(t.sprays) >= 0.25).sort((a, b) => Math.abs(b.sprays) - Math.abs(a.sprays));
   const capped = occ.max != null && amount > occ.max;
-  const way = Math.sign((lo + hi) / 2 - BASE) || Math.sign(amount - BASE) || Math.sign(ranked[0]?.sprays ?? 0);
+  if (capped) ranked.sort((a, b) => (b.why === occ.why) - (a.why === occ.why));
+  const way = Math.sign((lo + hi) / 2 - BASE) || Math.sign(ranked[0]?.sprays ?? 0);
   const along = ranked.filter(t => Math.sign(t.sprays) === way), against = ranked.filter(t => Math.sign(t.sprays) === -way);
-  if (capped) along.sort((a, b) => (b.why === occ.why) - (a.why === occ.why));
   const count = lo === hi ? `${lo} spray${lo === 1 ? '' : 's'}` : `${lo}–${hi} sprays`;
   const text = [`${count}, on ${listOf(where.map(spotText))}${under}.`];
   const [lead, next] = along, other = against[0];
-  if (lead) {
-    const though = other && Math.abs(other.sprays) >= AGAINST_REASON && !(next && Math.abs(next.sprays) >= Math.abs(other.sprays));
+  const big = t => t && Math.abs(t.sprays) >= AGAINST_REASON;
+  if (lo === hi && lo === BASE) {
+    if (big(lead) && big(other)) text.push(`${cap(lead.clause)}, though ${other.clause}.`);
+  } else if (lead) {
+    const though = big(other) && !(next && Math.abs(next.sprays) >= Math.abs(other.sprays));
     text.push(`${cap(lead.clause)}${though ? `, though ${other.clause}` : next ? ` and ${next.clause}` : ''}.`);
-  } else if (other) text.push(`${cap(other.clause)}.`);
+  }
 
   // One note, most useful first: don't chase a loud bottle, top up one that
   // fades (by the crowd's votes or your skin) or burns off in heat, and a
