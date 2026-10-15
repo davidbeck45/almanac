@@ -143,7 +143,9 @@ async function runCitySearch(query) {
       sheet.results = results;
     } catch (err) {
       if (seq !== citySeq || state.sheet !== sheet) return;
+      // The error takes the list's place, so the status doesn't count the last query's places.
       sheet.error = err.message;
+      sheet.results = null;
     }
     sheet.busy = false;
   }
