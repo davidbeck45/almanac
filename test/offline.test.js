@@ -9,7 +9,7 @@ import { fetchForecast, summarize, week } from '../src/weather.js';
 import { fetchClimate } from '../src/climate.js';
 import { journalExport, parseJournal } from '../src/history.js';
 
-const NOW = new Date(2027, 2, 5, 15, 20);
+const NOW = new Date('2027-03-05T15:20:00-05:00'); // mid-afternoon in New York, whatever the machine's zone
 const offline = () => offlineFetch(() => assert.fail('reached the network'), offlineData(NOW));
 
 test('the saved forecast and wears move to the day asked', () => {

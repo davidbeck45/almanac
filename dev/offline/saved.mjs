@@ -28,9 +28,11 @@ function moveDates(value, days) {
   return isoDay(d) + value.slice(10);
 }
 
-// Days from the saved forecast's first day to today; the journal moves with it.
+// Days from the saved forecast's first day to New York's today (not this
+// machine's, which east of New York can be a day ahead); the journal moves with it.
 const FORECAST = read('ny-forecast.json');
-const shift = now => Math.round((noon(isoDay(now)) - noon(FORECAST.daily.time[0])) / 864e5);
+const placeDay = now => new Date(now.getTime() + FORECAST.utc_offset_seconds * 1000).toISOString().slice(0, 10);
+const shift = now => Math.round((noon(placeDay(now)) - noon(FORECAST.daily.time[0])) / 864e5);
 
 /**
  * The saved forecast starting today, read at this hour: `current` is the
