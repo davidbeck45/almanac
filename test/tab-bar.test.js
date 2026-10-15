@@ -59,18 +59,18 @@ test('at the end of the page it comes back, as Safari’s toolbar does', () => {
   assert.ok(!scroll(steps(MAX - 1000, 20, 50), tuckedLow).at(-1).tucked, 'scrolling down into the end');
 });
 
-test('within half a window of the end it doesn’t tuck, so a flick never takes it out and straight back', () => {
+test('within a third of a window of the end it doesn’t tuck, so a flick never takes it out and straight back', () => {
   const near = ROOM * TUCK_ROOM;
   const shownLow = { y: MAX - 1000, travel: 0, tucked: false };
   const run = scroll(steps(MAX - 1000, 30, 33), shownLow);
   const at = run.findIndex(s => s.tucked);
-  assert.ok(at >= 0 && MAX - run[at].y >= near, 'it tucks while half a window is left');
+  assert.ok(at >= 0 && MAX - run[at].y >= near, 'it tucks while a third of a window is left');
   assert.ok(!scroll(steps(MAX - near, 4, 10), { y: MAX - near, travel: 0, tucked: false }).at(-1).tucked, 'shown nearer the end stays shown');
   assert.ok(scroll(steps(MAX - near, 20, 10), { y: MAX - near, travel: 0, tucked: true }).every(s => s.tucked), 'tucked stays tucked until the end');
   // Short pages (390x844 on the saved weather): Trip scrolls 128px, Now
   // without a journal 224, Settings 249, Now with one about 500, and at
   // 430x932 Now 342. Down them in swipes of 25 or 30px, or one flick.
-  for (const [max, room] of [[128, 844], [224, 844], [249, 844], [414, 844], [496, 844], [342, 932], [113, 667], [321, 667]]) {
+  for (const [max, room] of [[128, 844], [224, 844], [249, 844], [342, 932], [113, 667]]) {
     for (const by of [5, 25, 30]) {
       const ys = steps(0, by, Math.ceil(max / by));
       assert.ok(scroll(ys, undefined, max, room).every(s => !s.tucked), `max ${max} in a ${room}px window, ${by}px a frame`);
@@ -78,8 +78,10 @@ test('within half a window of the end it doesn’t tuck, so a flick never takes 
     assert.ok(scroll([90, 200, 300, max], undefined, max, room).every(s => !s.tucked), `max ${max} in a ${room}px window, a flick`);
   }
   // A page with room to stay away does tuck: Now with a journal on an
-  // iPhone, Safari's toolbar taking about 180px of the window.
+  // iPhone, Safari's toolbar taking about 180px of the window, and the same
+  // page in the Home Screen app's full 844px window.
   assert.ok(scroll(steps(0, 15, 10), undefined, 680, 664).at(-1).tucked);
+  assert.ok(scroll(steps(0, 15, 10), undefined, 496, 844).at(-1).tucked);
 });
 
 test('iOS’s rubber band at either end reads as no scroll at all', () => {

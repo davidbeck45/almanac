@@ -409,8 +409,10 @@ export const SHOW_AFTER = 8;
 export const TUCK_BELOW = 64;
 // It tucks only with this share of the window still to scroll: nearer the
 // end, where it comes back anyway, one flick would take it out and straight
-// back in (a short page, like Trip or Settings, never tucks it at all).
-export const TUCK_ROOM = 0.5;
+// back in (a short page, like Trip or Settings, never tucks it at all). Half
+// a window kept it out on Now in a full-screen 844px window (the Home Screen
+// app), where it covered as much as anywhere.
+export const TUCK_ROOM = 0.33;
 // Within this of the end counts as the end (fractional scroll positions).
 const AT_END = 2;
 
