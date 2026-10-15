@@ -88,6 +88,23 @@ export function refocus(el, scope = '#app', { reveal: show = true } = {}) {
   return true;
 }
 
+// refocus(), else, when it went with no successor (a bottle hidden from the
+// shelf it was opened from), its nearest old neighbour still there: the next
+// control like it in its list, else the one before. A replaced element keeps
+// its old subtree, so its list is still there to read.
+export function refocusNear(el, scope = '#app', options) {
+  if (refocus(el, scope, options)) return true;
+  const action = el?.dataset?.action;
+  if (!action || el.isConnected) return false;
+  const like = `[data-action="${CSS.escape(action)}"]`;
+  let list = el.parentElement;
+  while (list && list.querySelectorAll(like).length < 2) list = list.parentElement;
+  if (!list) return false;
+  const peers = [...list.querySelectorAll(like)];
+  const at = peers.indexOf(el);
+  return [...peers.slice(at + 1), ...peers.slice(0, at).reverse()].some(p => refocus(p, scope, options));
+}
+
 // Focus moves without scrolling, so a redraw doesn't jump the page; but it
 // mustn't leave focus out of sight (WCAG 2.4.11). Once the redraw has
 // settled (the shelves' and the bottle page's scroll put back), an element
