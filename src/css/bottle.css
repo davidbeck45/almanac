@@ -23,9 +23,11 @@
    any tint under it takes it below 4.5. */
 .bp-panel, .cmp { --ambient-ink: color-mix(in srgb, var(--ambient) 65%, var(--paper)); }
 
-/* Clear of the close button (44px at --s-2 from the edge, src/css/shell.css)
-   with air to spare: an italic name's last letter overhangs its box. */
-.bp-head { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: var(--s-4); align-items: center; padding-right: calc(var(--hit) + var(--s-1)); }
+/* Clear of the close button (44px at --s-2 from the panel's edge, src/css/
+   shell.css): the head as a whole by --s-7, and the line level with it, the
+   kicker or else the name's first, by --s-4 more, as an italic name's last
+   letter overhangs its box. The lines below take the full width. */
+.bp-head { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: var(--s-4); align-items: center; padding-right: var(--s-7); }
 .bp-bottle {
   display: grid;
   place-items: center;
@@ -35,10 +37,11 @@
 }
 .bp-bottle img { width: 92px; height: auto; filter: var(--drop-bottle); }
 .bp-title { min-width: 0; }
-.bp-title .kicker { display: flex; align-items: center; gap: var(--s-2); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 500; }
+.bp-title .kicker { display: flex; align-items: center; gap: var(--s-2); margin-right: var(--s-4); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 500; }
 /* Bottle names are set like book titles: Fraunces italic. */
 .bp-title h2 { margin: var(--s-1) 0 var(--s-0); font-family: var(--display); font-size: var(--fs-title-1); line-height: var(--lh-title-1); font-style: italic; font-weight: 600; letter-spacing: -0.01em; overflow-wrap: anywhere; }
 .bp-title h2.long { font-size: var(--fs-title-3); line-height: var(--lh-title-3); }
+.bp-title h2:first-child::before { content: ''; float: right; width: var(--s-4); height: 1lh; }
 .bp-title .brand { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .rating { margin-top: var(--s-2); color: var(--accent); font-size: var(--fs-body); font-weight: 600; font-variant-numeric: tabular-nums; }
 .rating span { margin-left: var(--s-1); color: var(--text-secondary); font-size: var(--fs-footnote); font-weight: 400; }
