@@ -333,7 +333,7 @@ test('a first visit waiting on the forecast says so, and says it’s slow once i
   assert.equal(words({ loc: null }), 'Where are you? Set a location to get picks.');
 });
 
-test('on phones the hero’s name stands under the bottle: trees keep off it, and a long name takes two lines', () => {
+test('on phones the hero’s name stands under the bottle: trees keep off it, and a long name takes two lines; beside the bottle a longer one steps down a size', () => {
   const props = svg => {
     const W = +svg.match(/viewBox="0 0 (\d+)/)[1];
     return [...svg.matchAll(/translate\(([\d.]+) ([\d.]+)\)/g)].filter(m => +m[2] > 180).map(m => +m[1] / W);
@@ -341,7 +341,8 @@ test('on phones the hero’s name stands under the bottle: trees keep off it, an
   const ranked = rank(fragrances, wx.day, 'day', { history: [], todayISO: today });
   const sky = { loc: { name: 'New York', lat: 40 }, wx, loading: false, error: null };
   const hero = (aspect, f) => wear.heroHTML(sky, { aspect, pick: { entry: { ...ranked[0], fragrance: f }, win: wx.day, worn: false } });
-  const short = fragrances.find(f => f.name.length <= 16), long = fragrances.find(f => f.name.length > 30);
+  const short = fragrances.find(f => f.name.length <= 16), long = fragrances.find(f => f.name.length > 18 && f.name.length <= 26);
+  const longer = fragrances.find(f => f.name.length > 30);
   // The near hill's trees: none behind the name on a phone (from 320 to 430
   // wide), where they stand on a wide hero.
   for (const aspect of [320 / 288, 375 / 288, 430 / 320]) {
@@ -351,6 +352,8 @@ test('on phones the hero’s name stands under the bottle: trees keep off it, an
   assert.ok(props(hero(2.4, short)).some(x => x > 0.87), 'a wide hero keeps them');
   assert.match(hero(1.3, long), /class="hero-pick long"/);
   assert.match(hero(1.3, short), /class="hero-pick"/);
+  // Beside the bottle, past two lines of the title size, it steps down a size.
+  assert.match(hero(2.4, longer), /class="hero-pick long longer"/);
 });
 
 test('on wide heroes the sun keeps clear of the name beside the bottle, waiting on the bottle’s left', async () => {

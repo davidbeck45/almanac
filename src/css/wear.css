@@ -196,7 +196,14 @@
   .hero-label { justify-items: start; margin: 0 0 var(--s-1); }
   /* Beside the bottle the kicker stands over open sky: the shade reaches up behind it. */
   .hero-label::before { inset: calc(-1 * var(--s-6)) calc(-1 * var(--s-5)) calc(-1 * var(--s-3)); }
-  .hero-label b { font-size: var(--fs-title-3); line-height: var(--lh-title-3); white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  /* The name has 165 to 180px beside the bottle (the hero's max-width above
+     binds, not the 240px column). Two lines of the title size hold about 26
+     characters there; a longer name (`.longer`, wear.js) steps down to the
+     headline size, whose two lines hold about 40 (Supremacy Collector's
+     Edition Pour Homme). A third line takes the rest before the ellipsis,
+     and stays shorter than the bottle. */
+  .hero-label b { font-size: var(--fs-title-3); line-height: var(--lh-title-3); white-space: normal; text-wrap: balance; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+  .hero-pick.longer .hero-label b { font-size: var(--fs-headline); line-height: var(--lh-headline); }
   .hero-label small svg { width: 14px; height: 14px; }
 }
 

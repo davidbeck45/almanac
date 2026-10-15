@@ -57,6 +57,9 @@ const FOOT_CLEAR = 0.45;
 // About what one line of the hero's label holds on a phone (16px Fraunces
 // italic in 168px): a longer name takes two lines there (wear.css `.long`).
 const LONG_NAME = 18;
+// About what two lines of it hold beside the bottle from 720px wide (20px in
+// 165px): a longer name steps down a size there (wear.css `.longer`).
+const LONGER_NAME = 26;
 
 /**
  * The hero: the weather scene with the place, the temperature and, on Now,
@@ -103,7 +106,7 @@ export function heroHTML({ loc, wx, loading, error, updating, slow = false }, { 
     const light = skyLight({ ...sky, aspect, theme: theme(), stage: stage.scene });
     // The rim catches the light on the side it comes from.
     const side = light.x >= stage.x ? 1 : -1;
-    bottle = `<button class="hero-pick${f.name.length > LONG_NAME ? ' long' : ''}" data-action="open" data-ctx="${esc(pick.win.slot)}" data-id="${esc(f.id)}"
+    bottle = `<button class="hero-pick${f.name.length > LONG_NAME ? ' long' : ''}${f.name.length > LONGER_NAME ? ' longer' : ''}" data-action="open" data-ctx="${esc(pick.win.slot)}" data-id="${esc(f.id)}"
       style="--x:${(stage.x * 100).toFixed(2)}%;--y:${(stage.y * 100).toFixed(2)}%;--rim:${light.color};--rim-side:${side};--rim-k:${light.strength}">
       <span class="hero-bottle">${img(f, { lazy: false })}</span>
       <span class="hero-label"><small>${pick.worn ? `${icon.check}Wearing` : `${slotIcon(pick.win.slot)}${esc(pick.win.label)}`}</small><b>${esc(f.name)}</b><span>${esc(f.brand)}</span></span>
