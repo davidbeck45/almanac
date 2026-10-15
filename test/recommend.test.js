@@ -286,11 +286,16 @@ test('--date and --from are checked against the place’s own date, not this mac
   assert.equal(JSON.parse(today.stdout).weather, 'forecast');
 });
 
-test('a forecast that doesn’t answer in time says so, not "check the connection"', () => {
+test('a forecast that doesn’t answer in time, or is refused, says so, not "check the connection"', () => {
   const line = weatherFailure(Object.assign(new Error('Weather request got no answer in 25 s'), { timeout: true, service: 'forecast', timeoutMs: 25_000 }));
   assert.equal(line, 'Couldn\'t get the forecast from Open-Meteo: its forecast didn\'t answer within 25 seconds. It\'s slow or down; try again in a minute.');
   assert.match(weatherFailure({ timeout: true, service: 'archive', timeoutMs: 45_000 }, 'the weather'), /^Couldn't get the weather from Open-Meteo: its weather archive didn't answer within 45 seconds/);
   assert.match(weatherFailure(new TypeError('fetch failed')), /^Couldn't get the forecast from Open-Meteo \(fetch failed\)\. Check the connection/);
+  // A refusal says why, as the app does; the day's requests spent isn't the connection.
+  const spent = spawnSync(process.execPath, ['--import', mock, script, '--loc', '40.7,-74'], { encoding: 'utf8',
+    env: { ...process.env, MOCK_FORECAST_STATUS: '429', MOCK_REASON: 'Daily API request limit exceeded. Please try again tomorrow.' } });
+  assert.equal(spent.stderr.trim(), 'Couldn\'t get the forecast from Open-Meteo: the forecast service’s daily limit is used up. Try again tomorrow.');
+  assert.equal(weatherFailure({ status: 503, service: 'archive' }, 'the weather'), 'Couldn\'t get the weather from Open-Meteo: the weather archive is down for the moment. Try again soon.');
 });
 
 test('--date answers for any day: the forecast when it reaches, typical weather past it', () => {

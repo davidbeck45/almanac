@@ -42,7 +42,7 @@ import { DEFAULT_HIDDEN } from '../src/hidden.js';
 import { parseJournal, occasionCounts } from '../src/history.js';
 import { normalize } from '../src/collections.js';
 import { excluding } from '../src/pool-tasks.js';
-import { fetchForecast, summarize, week, tripWindows } from '../src/weather.js';
+import { fetchForecast, summarize, week, tripWindows, forecastError } from '../src/weather.js';
 import { searchCities } from '../src/location.js';
 import { STYLES, STYLE_STRONG, WEARS_CLOSE, styleById, styleScores, topOf, leanOf, closeOf, styleMix } from '../src/scent-styles.js';
 import { fragranticaLibrary, loadPool, fromPool, loadPoolStyles, loadAbout } from '../src/fragrantica.js';
@@ -109,12 +109,15 @@ function fail(message) {
 }
 
 // Why the weather didn't come, as the line fail() prints: Open-Meteo gives
-// up on a request after REQUEST_TIMEOUT (TRIP_TIMEOUT for --date and --pack).
+// up on a request after REQUEST_TIMEOUT (TRIP_TIMEOUT for --date and --pack),
+// and a refusal says why in the app's words (forecastError: the day's
+// requests used up, busy, down); only no answer at all is the connection's.
 export function weatherFailure(err, what = 'the forecast') {
   if (err?.timeout) {
     const which = err.service === 'archive' ? 'its weather archive' : 'its forecast';
     return `Couldn't get ${what} from Open-Meteo: ${which} didn't answer within ${Math.round(err.timeoutMs / 1000)} seconds. It's slow or down; try again in a minute.`;
   }
+  if (err?.status) return `Couldn't get ${what} from Open-Meteo: ${forecastError(err).replace(/^The/, 'the')}`;
   return `Couldn't get ${what} from Open-Meteo (${err.message}). Check the connection and try again.`;
 }
 
