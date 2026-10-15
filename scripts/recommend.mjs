@@ -108,6 +108,16 @@ function fail(message) {
   process.exit(1);
 }
 
+// Why the weather didn't come, as the line fail() prints: Open-Meteo gives
+// up on a request after REQUEST_TIMEOUT (TRIP_TIMEOUT for --date and --pack).
+export function weatherFailure(err, what = 'the forecast') {
+  if (err?.timeout) {
+    const which = err.service === 'archive' ? 'its weather archive' : 'its forecast';
+    return `Couldn't get ${what} from Open-Meteo: ${which} didn't answer within ${Math.round(err.timeoutMs / 1000)} seconds. It's slow or down; try again in a minute.`;
+  }
+  return `Couldn't get ${what} from Open-Meteo (${err.message}). Check the connection and try again.`;
+}
+
 const byLine = r => `${r.name} by ${r.brand}${r.year ? ` (${r.year})` : ''}`;
 // Answers built on the dataset's ratings and votes say where they're from.
 const CREDIT = 'From Le Decanteur\'s Fragrantica dataset (CC BY-NC-SA 4.0)';
@@ -144,6 +154,7 @@ const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s ?? '') && !Number.isNaN(Date.pa
   && new Date(`${s}T12:00:00Z`).toISOString().slice(0, 10) === s;
 const localToday = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 const daysFrom = (a, b) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86_400_000);
+const dayBefore = iso => new Date(Date.parse(`${iso}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
 const SHORT = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 const shortDate = iso => SHORT.format(new Date(`${iso}T12:00:00Z`));
 // The longest trip --pack plans, and how far ahead (typical weather needs past years' dates).
@@ -248,7 +259,12 @@ async function main() {
   for (const key of ['date', 'from', 'to']) {
     if (args[key] !== undefined && !isDate(args[key])) fail(`--${key} takes a date like ${today}, not "${args[key]}"`);
   }
-  if (args.date && args.date < today) fail(`--date ${args.date} has passed; pick today or later`);
+  // A place's date can be a day either side of this machine's. A date before
+  // yesterday here has passed everywhere; the weather checks the rest against
+  // the place's own date (windowsAt), before asking the archive for a day
+  // that's over there.
+  const earliest = dayBefore(today);
+  if (args.date && args.date < earliest) fail(`--date ${args.date} has passed; pick today or later`);
   if (args.date && daysFrom(today, args.date) > MAX_AHEAD_DAYS) fail(`--date ${args.date} is more than a year out`);
   if (args.date && args.week) fail('--date picks for one day; leave out --week');
 
@@ -321,7 +337,22 @@ async function main() {
     try {
       return await fetchForecast(place);
     } catch (err) {
-      fail(`Couldn't get the forecast from Open-Meteo (${err.message}). Check the connection and try again.`);
+      fail(weatherFailure(err));
+    }
+  }
+
+  // Stops when the weather for `flag`'s dates (--date, --from) didn't come:
+  // the first date has gone by at the place (tripWindows' refusePast), or
+  // Open-Meteo failed.
+  function weatherFailed(err, place, flag, fromISO) {
+    if (err.past) fail(`--${flag} ${fromISO} has passed in ${place.name}; pick ${err.today} or later`);
+    fail(weatherFailure(err, 'the weather'));
+  }
+  async function windowsAt(place, fromISO, toISO, flag, opts = {}) {
+    try {
+      return await tripWindows(place, fromISO, toISO, { ...opts, refusePast: true });
+    } catch (err) {
+      weatherFailed(err, place, flag, fromISO);
     }
   }
 
@@ -495,7 +526,7 @@ async function main() {
     if (!args.city && !args.loc) fail('--pack needs a place: --city NAME or --loc LAT,LON');
     if (!args.from || !args.to) fail(`--pack needs --from and --to, like --from ${today} --to ${today}`);
     if (args.to < args.from) fail(`--to ${args.to} comes before --from ${args.from}`);
-    if (args.from < today) fail(`--from ${args.from} has passed; pick today or later`);
+    if (args.from < earliest) fail(`--from ${args.from} has passed; pick today or later`);
     if (daysFrom(args.from, args.to) >= MAX_TRIP_DAYS) fail(`--pack plans up to ${MAX_TRIP_DAYS} days at a time`);
     if (daysFrom(today, args.to) > MAX_AHEAD_DAYS) fail(`--to ${args.to} is more than a year out`);
     const max = Number(args.max);
@@ -510,13 +541,7 @@ async function main() {
     // --slot packs for only days or nights; --occasion goes on every window of
     // its slot (a work trip's days) that has no event of its own.
     const place = await resolvePlace();
-    let windows;
-    try {
-      windows = await tripWindows(place, args.from, args.to, slot ? { slots: [slot] } : undefined);
-    } catch (err) {
-      fail(`Couldn't get the weather from Open-Meteo (${err.message}). Check the connection and try again.`);
-    }
-    windows = withEvents(windows, events);
+    const windows = withEvents(await windowsAt(place, args.from, args.to, 'from', slot ? { slots: [slot] } : {}), events);
     const trip = packTrip(fragrances, windows, { max, occasionOf: tripOccasion(occasion, slot) });
     const weather = w => ({ source: w.typical ? 'typical' : 'forecast', feelsF: Math.round(w.feelsF), humidity: Math.round(w.humidity), dewF: Math.round(w.dewF), condition: w.condition, rainChance: w.pop });
     if (args.json) {
@@ -569,11 +594,7 @@ async function main() {
       const place = await resolvePlace();
       const wanted = slot ?? occasion?.slot;
       if (args.date) {
-        try {
-          situations = await tripWindows(place, args.date, args.date, { slots: wanted ? [wanted] : SLOTS });
-        } catch (err) {
-          fail(`Couldn't get the weather from Open-Meteo (${err.message}). Check the connection and try again.`);
-        }
+        situations = await windowsAt(place, args.date, args.date, 'date', { slots: wanted ? [wanted] : SLOTS });
       } else {
         const wx = summarize(await forecastFor(place));
         situations = (wanted ? [wx[wanted]] : [wx.day, wx.night].sort(byTime)).filter(Boolean);
@@ -761,11 +782,11 @@ async function main() {
     let result;
     try {
       result = wanted
-        ? [await picksFor(fragrances, { place, dateISO: args.date, slot: wanted, occasion, history, nudge })].filter(Boolean)
+        ? [await picksFor(fragrances, { place, dateISO: args.date, slot: wanted, occasion, history, nudge, refusePast: true })].filter(Boolean)
           .map(({ window: win, ranked }) => ({ win, ranked, pick: ranked[0] }))
-        : planWindows(fragrances, await tripWindows(place, args.date, args.date), { history, nudge });
+        : planWindows(fragrances, await tripWindows(place, args.date, args.date, { refusePast: true }), { history, nudge });
     } catch (err) {
-      fail(`Couldn't get the weather from Open-Meteo (${err.message}). Check the connection and try again.`);
+      weatherFailed(err, place, 'date', args.date);
     }
     if (!result.length) fail(`No weather came back for ${args.date}`);
     const typical = result.some(r => r.win.typical);

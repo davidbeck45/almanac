@@ -637,10 +637,15 @@ window.addEventListener('hashchange', () => sync());
 // The forecast boot asked for while the wardrobe loads: it doesn't need it.
 let early = null; // { loc, forecast: promise }
 const samePlace = (a, b) => a?.lat === b?.lat && a?.lon === b?.lon;
+// Past this with nothing on screen, the hero says the forecast is slow
+// (state.slow); the request gives up at REQUEST_TIMEOUT (weather.js).
+const SLOW_AFTER = 7000;
 
 // Opens on the saved forecast when there is one: fresh, it's all we need;
 // older, it shows under "Updating…", photos faded, until the new one arrives,
-// so the morning check doesn't wait on the network.
+// so the morning check doesn't wait on the network. Without one, a slow
+// answer says so after SLOW_AFTER, and one that never comes ends in the
+// forecast error with Try again.
 async function refreshWeather({ force = false } = {}) {
   if (!state.loc) return;
   const asked = !force && early?.loc === state.loc ? early.forecast : null;
@@ -656,7 +661,13 @@ async function refreshWeather({ force = false } = {}) {
   }
   state.loading = true;
   state.updating = Boolean(state.wx);
+  state.slow = false;
   render();
+  const slow = setTimeout(() => {
+    if (!state.loading || state.wx) return;
+    state.slow = true;
+    render();
+  }, SLOW_AFTER);
   try {
     state.forecast = await (asked ?? getForecast(state.loc, { force }));
     state.wx = summarize(state.forecast);
@@ -664,8 +675,10 @@ async function refreshWeather({ force = false } = {}) {
     if (state.wx) state.wx = { ...state.wx, stale: true };
     else state.error = forecastError(err);
   } finally {
+    clearTimeout(slow);
     state.loading = false;
     state.updating = false;
+    state.slow = false;
   }
   render();
 }
@@ -886,8 +899,9 @@ export async function boot({ early: asked = null } = {}) {
   markBottlesLoaded();
   const link = parseShare(params);
   if (link) openSharedLink(link);
+  // The offline copy installs now, not once the forecast is in: a slow or
+  // hung forecast mustn't keep the app from working offline.
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   if (state.loc) await refreshWeather();
   else { render(); openSheet({ kind: 'location' }); }
-
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 }

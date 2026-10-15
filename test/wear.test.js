@@ -323,6 +323,16 @@ test('the compact band keeps trees and the cabin off the ground under its line o
   }
 });
 
+test('a first visit waiting on the forecast says so, and says it’s slow once it is', () => {
+  const loc = { name: 'Chicago', lat: 41.88 };
+  const words = state => wear.heroHTML({ loc, wx: null, error: null, loading: false, ...state }, { aspect: 1.3 })
+    .match(/<div class="hero-meta">([\s\S]*?)<\/div>\s*<\/div>/)[1].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+  assert.equal(words({ loading: true }), 'Checking the sky…');
+  assert.equal(words({ loading: true, slow: true }), 'Still checking the sky… The forecast is slow to answer.');
+  assert.equal(words({ error: 'The forecast service isn’t answering. Try again in a minute.' }), 'Weather unavailable Chicago');
+  assert.equal(words({ loc: null }), 'Where are you? Set a location to get picks.');
+});
+
 test('on phones the hero’s name stands under the bottle: trees keep off it, and a long name takes two lines', () => {
   const props = svg => {
     const W = +svg.match(/viewBox="0 0 (\d+)/)[1];

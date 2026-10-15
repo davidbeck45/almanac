@@ -140,3 +140,23 @@ test('a forecast day left to one model gives way to typical weather', async () =
   });
   assert.equal(FORECAST_DAYS, 10, 'the blend beats typical weather about ten days out, not sixteen');
 });
+
+test('refusePast stops on a date already over at the place, by its own clock, before asking the archive', async () => {
+  // 19:05 in Chicago on Oct 14 is 01:05 on Oct 15 in London: the forecast starts on London's date.
+  const nowMs = Date.parse('2026-10-15T00:05:00Z');
+  const london = { ...syntheticForecast(FORECAST_DAYS, { start: '2026-10-15' }), utc_offset_seconds: 3600 };
+  await withFetch(u => (u.hostname === 'api.open-meteo.com' ? london : archive(u.searchParams.get('start_date'), u.searchParams.get('end_date'), 50)), async asked => {
+    await assert.rejects(tripWindows({ lat: 51.5, lon: -0.1 }, '2026-10-14', '2026-10-16', { nowMs, refusePast: true }),
+      err => err.past === true && err.today === '2026-10-15');
+    assert.ok(!asked.some(u => u.hostname === 'archive-api.open-meteo.com'), 'no typical weather for a day that’s over');
+
+    asked.length = 0;
+    const wins = await tripWindows({ lat: 51.5, lon: -0.1 }, '2026-10-15', '2026-10-16', { nowMs, refusePast: true });
+    assert.ok(wins.length === 4 && wins.every(w => !w.typical), 'London’s today is the forecast’s');
+    assert.ok(!asked.some(u => u.hostname === 'archive-api.open-meteo.com'));
+
+    // Without it (the app's trip under way keeps its start), the day gone by still gets typical weather.
+    const kept = await tripWindows({ lat: 51.5, lon: -0.1 }, '2026-10-14', '2026-10-15', { nowMs });
+    assert.deepEqual(kept.map(w => !!w.typical), [true, true, false, false]);
+  });
+});

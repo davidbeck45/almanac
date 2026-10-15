@@ -26,9 +26,45 @@ const CACHE_MAX_AGE = 20 * 60 * 1000;
 // loads) up to this age: it still covers today and tomorrow.
 const SHOW_STALE_FOR = 12 * 60 * 60 * 1000;
 
+// How long a request to Open-Meteo may take before it's dropped and fails
+// as `timeout` (forecastError: "isn't answering"). On a slow day in October
+// 2026 the app's blended week took 17–24 s, and one that never answered
+// would have kept a first visit on "Checking the sky…" for good. Trips and
+// dates (tripWindows) ask for ten days, which took 32 s that day, and wait
+// longer.
+export const REQUEST_TIMEOUT = 25_000;
+export const TRIP_TIMEOUT = 45_000;
+
 const wallMs = iso => Date.parse(`${iso}Z`);
 const avg = xs => xs.reduce((a, b) => a + b, 0) / xs.length;
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+
+/**
+ * An Open-Meteo request's JSON, or an error forecastError reads: refused
+ * (requestError's), unreachable, or past `timeoutMs` with no answer
+ * (`timeout: true`; the request is aborted). The clock covers the body too.
+ */
+async function fetchJSON(url, { service = 'forecast', timeoutMs = REQUEST_TIMEOUT } = {}) {
+  const ctl = new AbortController();
+  let timer;
+  const expired = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const what = service === 'archive' ? 'Weather archive request' : 'Weather request';
+      reject(Object.assign(new Error(`${what} got no answer in ${Math.round(timeoutMs / 1000)} s`), { timeout: true, service, timeoutMs }));
+      ctl.abort();
+    }, timeoutMs);
+  });
+  const answer = (async () => {
+    const res = await fetch(url, { signal: ctl.signal });
+    if (!res.ok) throw await requestError(res, service);
+    return res.json();
+  })();
+  try {
+    return await Promise.race([answer, expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // Temperature, feels-like and humidity are the mean of four global models.
 // Open-Meteo's default ("best match", NOAA's GFS in the US) ran about a degree
@@ -74,8 +110,9 @@ export function blendModels(raw) {
   return { ...raw, hourly, daily };
 }
 
-// `days` of forecast, today first: 7 for the app, up to FORECAST_DAYS for a trip.
-export async function fetchForecast({ lat, lon }, { days = 7 } = {}) {
+// `days` of forecast, today first: 7 for the app, up to FORECAST_DAYS for a
+// trip. Fails as `timeout` past `timeoutMs` (fetchJSON).
+export async function fetchForecast({ lat, lon }, { days = 7, timeoutMs = REQUEST_TIMEOUT } = {}) {
   const params = new URLSearchParams({
     latitude: lat,
     longitude: lon,
@@ -87,9 +124,7 @@ export async function fetchForecast({ lat, lon }, { days = 7 } = {}) {
     forecast_days: days,
     models: [DEFAULT_MODEL, ...BLEND_MODELS].join(','),
   });
-  const res = await fetch(`${FORECAST_URL}?${params}`);
-  if (!res.ok) throw await requestError(res);
-  return { ...blendModels(await res.json()), fetchedAt: Date.now() };
+  return { ...blendModels(await fetchJSON(`${FORECAST_URL}?${params}`, { timeoutMs })), fetchedAt: Date.now() };
 }
 
 const cacheKey = loc => `${CACHE_VERSION}:${loc.lat},${loc.lon}`;
@@ -135,6 +170,7 @@ export async function getForecast(loc, { force = false } = {}) {
 export function forecastError(err) {
   const status = err?.status;
   const service = err?.service === 'archive' ? 'The weather archive' : 'The forecast service';
+  if (err?.timeout) return `${service} isn’t answering. Try again in a minute.`;
   // Open-Meteo says why it refused: a minute's burst, or the day's requests used up.
   if (status === 429 && /daily/i.test(err.reason ?? '')) return `${service}’s daily limit is used up. Try again tomorrow.`;
   if (status === 429) return `${service} is busy. Try again in a minute.`;
@@ -266,9 +302,10 @@ function yearsBefore(iso, years) {
  * Archived hourly weather around fromISO..toISO in each of the last `years`
  * years the archive has whole: { latitude, years: [{ ago, data }] }, `data`
  * shaped like a forecast's hourly block (windowOn reads it). Plain fetch, so
- * it runs in Node and the browser alike.
+ * it runs in Node and the browser alike; each request fails as `timeout`
+ * past `timeoutMs`.
  */
-export async function fetchTypical({ lat, lon }, fromISO, toISO, { years = TYPICAL_YEARS, nowMs = Date.now() } = {}) {
+export async function fetchTypical({ lat, lon }, fromISO, toISO, { years = TYPICAL_YEARS, nowMs = Date.now(), timeoutMs = REQUEST_TIMEOUT } = {}) {
   const archived = shiftDays(new Date(nowMs).toISOString().slice(0, 10), -ARCHIVE_LAG_DAYS);
   let first = 1;
   while (shiftDays(yearsBefore(toISO, first), TYPICAL_SPREAD) > archived) first++;
@@ -282,9 +319,7 @@ export async function fetchTypical({ lat, lon }, fromISO, toISO, { years = TYPIC
       temperature_unit: 'fahrenheit',
       timezone: 'auto',
     });
-    const res = await fetch(`${ARCHIVE_URL}?${params}`);
-    if (!res.ok) throw await requestError(res, 'archive');
-    return { ago, data: await res.json() };
+    return { ago, data: await fetchJSON(`${ARCHIVE_URL}?${params}`, { service: 'archive', timeoutMs }) };
   };
   const out = await Promise.all(Array.from({ length: years }, (_, i) => get(first + i)));
   return { latitude: out[0]?.data.latitude ?? lat, years: out };
@@ -348,16 +383,23 @@ export function typicalWindow(climate, dateISO, slot) {
 /**
  * The `slots` windows of every date from fromISO to toISO, in time order:
  * the forecast's as far as it reaches, typical weather past it (`typical`).
- * Fetches only what the dates need.
+ * Fetches only what the dates need, each request waiting up to TRIP_TIMEOUT.
+ * `refusePast` throws `{ past: true, today }` when fromISO has already gone
+ * by at the place (the forecast's own date, which can be a day off the
+ * device's), before asking the archive for a day that's over.
  */
-export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'], nowMs = Date.now() } = {}) {
+export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'], nowMs = Date.now(), refusePast = false, timeoutMs = TRIP_TIMEOUT } = {}) {
   const dates = [];
   for (let d = fromISO; d <= toISO; d = shiftDays(d, 1)) dates.push(d);
   const found = new Map();
   const key = (d, s) => `${d} ${s}`;
   // The location's date can be a day off UTC's; windowOn finds what's there.
   if (fromISO <= shiftDays(new Date(nowMs).toISOString().slice(0, 10), FORECAST_DAYS)) {
-    const forecast = await fetchForecast(loc, { days: FORECAST_DAYS });
+    const forecast = await fetchForecast(loc, { days: FORECAST_DAYS, timeoutMs });
+    const { todayISO } = clock(forecast, nowMs);
+    if (refusePast && fromISO < todayISO) {
+      throw Object.assign(new Error(`${fromISO} has passed there; it's ${todayISO}`), { past: true, today: todayISO });
+    }
     for (const d of dates) {
       for (const s of slots) {
         const win = windowOn(forecast, d, s);
@@ -367,7 +409,7 @@ export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'
   }
   const missing = dates.filter(d => slots.some(s => !found.get(key(d, s))));
   if (missing.length) {
-    const climate = await fetchTypical(loc, missing[0], missing.at(-1), { nowMs });
+    const climate = await fetchTypical(loc, missing[0], missing.at(-1), { nowMs, timeoutMs });
     for (const d of missing) for (const s of slots) if (!found.get(key(d, s))) found.set(key(d, s), typicalWindow(climate, d, s));
   }
   return dates.flatMap(d => slots.map(s => found.get(key(d, s))).filter(Boolean));
@@ -385,17 +427,34 @@ function clock(forecast, nowMs) {
   };
 }
 
-// `current` is the reading at fetch time. A saved forecast an hour or more
-// old reads "now" from its row for this hour instead, so a 2 pm forecast
-// opened at 1 am doesn't show the afternoon under a night sky.
+// Now's temperature, feels-like and humidity are the blend's, read between
+// this hour's row and the next, like the windows and the day's high and low.
+// `current` is the default model's alone (HRRR or GFS in the US): on a
+// Chicago evening it read 57° under a low of 59°, feeling 53° beside a
+// window under way at 56°. `current` keeps the sky (weather code, cloud
+// cover) while it's the reading at fetch time; a saved forecast an hour or
+// more old takes this hour's row for that too, so a 2 pm forecast opened at
+// 1 am doesn't show the afternoon under a night sky.
 const CURRENT_FOR = 60 * 60 * 1000;
 
 function nowReading(forecast, hours, ctx, nowMs) {
   const c = forecast.current;
-  const row = nowMs - forecast.fetchedAt >= CURRENT_FOR && hours.find(x => x.date === ctx.todayISO && x.hour === ctx.hour);
-  return row
-    ? { tempF: row.temp, feelsF: row.feels, humidity: row.humidity, cloudCover: null, code: row.code }
-    : { tempF: c.temperature_2m, feelsF: c.apparent_temperature, humidity: c.relative_humidity_2m, cloudCover: c.cloud_cover, code: c.weather_code };
+  const i = hours.findIndex(x => x.date === ctx.todayISO && x.hour === ctx.hour);
+  const row = hours[i], next = hours[i + 1];
+  // Within today only, so the reading stays between the day's high and low.
+  const part = new Date(ctx.wallNow).getUTCMinutes() / 60;
+  const at = key => (!Number.isFinite(row?.[key]) ? null
+    : next?.date === row.date && Number.isFinite(next[key]) ? row[key] + (next[key] - row[key]) * part : row[key]);
+  const blend = { tempF: at('temp'), feelsF: at('feels'), humidity: at('humidity') };
+  const sky = row && nowMs - forecast.fetchedAt >= CURRENT_FOR
+    ? { cloudCover: null, code: row.code }
+    : { cloudCover: c.cloud_cover, code: c.weather_code };
+  return {
+    tempF: blend.tempF ?? c.temperature_2m,
+    feelsF: blend.feelsF ?? c.apparent_temperature,
+    humidity: blend.humidity ?? c.relative_humidity_2m,
+    ...sky,
+  };
 }
 
 export function summarize(forecast, nowMs = Date.now()) {
