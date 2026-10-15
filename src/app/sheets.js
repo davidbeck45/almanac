@@ -1,7 +1,8 @@
 // Overlay sheets (location, add bottles, paste a list, add it yourself), the
-// toast, focus repair after re-renders, and the bottle's flight between a list
-// and its page. Browser-only: the shell imports it; views reach it through
-// the `app` object their actions get.
+// toast, focus repair after re-renders, the bottle's flight between a list
+// and its page, and the tab bar tucking away on scroll. Browser-only: the
+// shell imports it; views reach it through the `app` object their actions
+// get. tabBarAfter is pure (test/tab-bar.test.js).
 import { state } from './state.js';
 import { icon } from '../ui/components.js';
 
@@ -389,4 +390,69 @@ export function morph(from, update, to) {
   vt.finished.catch(() => {}).finally(() => {
     for (const img of document.querySelectorAll('img')) if (img.style.viewTransitionName) img.style.viewTransitionName = '';
   });
+}
+
+// ---------- The tab bar ----------
+// Under 1100px the tab bar floats over the foot of the page. While the reader
+// scrolls down it tucks below the screen's edge, and a scroll up brings it
+// back, as Safari's own toolbar does; so do the top of the page, its end, a
+// new page (the shell's showTabBar) and focus in the bar. It only moves out
+// of sight (.tucked, shell.css): it stays in the tab order and the
+// accessibility tree. The page's scroll padding still keeps focus clear of
+// where it shows, since any scroll up brings it back over that strip.
+
+// Only a deliberate scroll moves it: TUCK_AFTER px down in one go, once
+// past the top's TUCK_BELOW (about the bar's height), or SHOW_AFTER px up. A
+// turn starts the count over, so jitter never adds up to either.
+export const TUCK_AFTER = 12;
+export const SHOW_AFTER = 8;
+export const TUCK_BELOW = 64;
+// Within this of the end counts as the end (fractional scroll positions).
+const AT_END = 2;
+
+/**
+ * The tab bar after a scroll to `y` with `max` the furthest the page scrolls,
+ * from where it was: { y, travel, tucked }, `travel` the distance scrolled
+ * in the current direction (down positive). iOS's rubber band, past either
+ * end, reads as the end it stretches from, so its bounce back is no scroll.
+ */
+export function tabBarAfter({ y: from = 0, travel = 0, tucked = false } = {}, y, max) {
+  const end = Math.max(0, max);
+  const at = Math.min(Math.max(y, 0), end);
+  if (at <= TUCK_BELOW || at >= end - AT_END) return { y: at, travel: 0, tucked: false };
+  const dy = at - from;
+  const run = !dy ? travel : Math.sign(dy) === Math.sign(travel) ? travel + dy : dy;
+  if (!tucked && run >= TUCK_AFTER) return { y: at, travel: 0, tucked: true };
+  if (tucked && run <= -SHOW_AFTER) return { y: at, travel: 0, tucked: false };
+  return { y: at, travel: run, tucked };
+}
+
+let bar = { y: 0, travel: 0, tucked: false };
+let barFrame = 0;
+
+// One passive scroll listener; the work waits for the next frame, reading
+// the scroll and the page's height before writing the one class. `wide`:
+// the shell's matchMedia for the rail, which never tucks.
+export function watchTabBar(wide) {
+  const nav = $('#nav');
+  bar = { y: scrollY, travel: 0, tucked: false };
+  addEventListener('scroll', () => {
+    if (barFrame || wide.matches) return;
+    barFrame = requestAnimationFrame(() => {
+      barFrame = 0;
+      if (wide.matches) return;
+      const next = tabBarAfter(bar, scrollY, document.documentElement.scrollHeight - innerHeight);
+      if (next.tucked !== bar.tucked) nav.classList.toggle('tucked', next.tucked);
+      bar = next;
+    });
+  }, { passive: true });
+  wide.addEventListener('change', showTabBar);
+  nav.addEventListener('focusin', showTabBar);
+}
+
+// Out again, counting from here: a new page (after its scroll is put back,
+// so that jump isn't read as a scroll), the rail, focus in the bar.
+export function showTabBar() {
+  bar = { y: scrollY, travel: 0, tucked: false };
+  $('#nav')?.classList.remove('tucked');
 }

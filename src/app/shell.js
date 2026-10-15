@@ -26,6 +26,7 @@ import {
 import {
   registerSheets, renderSheet, openSheet, updateSheet, closeSheet, sheetPopped, sheetEntry, replacePageURL, refocus, refocusNear, inSight,
   keepingFocus, showToast, hideToast, settleToast, watchToast, morph, canMorph, visible, reducedMotion, SHEET_OUT_MS,
+  watchTabBar, showTabBar,
 } from './sheets.js';
 import * as wearView from '../views/wear.js';
 import * as wardrobeView from '../views/wardrobe.js';
@@ -563,6 +564,7 @@ function applyRoute(next, { quiet = false, instant = false, restore = false } = 
     else if (prev?.dest !== 'bottle' || (docked() && focused !== document.body && !$('#bottle').contains(focused))) bottleOpener = focused;
     renderBottle({ fresh: true, instant });
     if (!quiet) $('#bottle .bp-close')?.focus({ preventScroll: true });
+    showTabBar();
     return;
   }
   pushedBottle = false;
@@ -588,6 +590,9 @@ function applyRoute(next, { quiet = false, instant = false, restore = false } = 
   if (prev?.dest === 'bottle' && !changed && !pageHadFocus && !refocusNear(bottleOpener)) $('#page-title')?.focus({ preventScroll: true });
   if (prev?.dest === 'bottle') bottleOpener = null;
   syncTitle();
+  // Every route change brings the tab bar back, once the page's scroll is
+  // where it lands.
+  showTabBar();
 }
 
 // `restore`: open where it was left (Back, Forward, a tab, the
@@ -820,6 +825,8 @@ function listen() {
   });
   // Crossing 1100px turns the bottle page from a dialog into the inspector.
   WIDE.addEventListener('change', () => renderBottle());
+  // Under 1100px the tab bar tucks away while the reader scrolls down.
+  watchTabBar(WIDE);
 
   // The scene's loops (stars, rain, chimney smoke) pause while the hero is
   // scrolled out of sight.

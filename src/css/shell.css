@@ -45,7 +45,8 @@
 }
 
 /* Keyboard focus scrolls clear of what sticks (WCAG 2.4.11): the head bar
-   at the top, and under 1100px the tab bar at the bottom. Pages with a
+   at the top, and under 1100px the tab bar at the bottom (tucked away or
+   not: a scroll up brings it back over that strip). Pages with a
    sticky field under the head bar (Owned's filter) or instead of it
    (Discover's search) keep clear of that too. */
 html { scroll-padding-top: calc(env(safe-area-inset-top) + var(--s-2) + var(--head-bar) + var(--s-4)); }
@@ -175,6 +176,22 @@ html:has(#main .disc-search) { scroll-padding-top: calc(env(safe-area-inset-top)
   color: var(--text-primary);
 }
 .nav-item[aria-current='page'] svg { color: var(--ambient); }
+
+/* While the reader scrolls down, the bar tucks below the screen's edge
+   (.tucked, src/app/sheets.js), and a scroll up brings it back, as Safari's
+   own toolbar does. It only moves out of sight: it stays in the tab order
+   and the accessibility tree, and focus in it brings it straight back. With
+   the sky held still (Settings) it fades in place instead of sliding, then
+   steps out of the way of taps; reduced motion makes either instant, as it
+   does every transition (base.css). The toast stays where it sits over the
+   bar, so it never moves under the reader or meets the bar coming back. */
+@media (max-width: 1099px) {
+  .nav { transition: transform var(--dur-3) var(--ease-sheet); }
+  .nav.tucked:not(:focus-within) { transform: translate(-50%, calc(100% + var(--s-3) + env(safe-area-inset-bottom))); }
+  .still-sky .nav { transition: opacity var(--dur-2), transform 0s; }
+  .still-sky .nav.tucked:not(:focus-within) { opacity: 0; transition: opacity var(--dur-2), transform 0s var(--dur-2); }
+  .nav:focus-within { transition: none; }
+}
 
 /* ---------- Nav: rail ---------- */
 
