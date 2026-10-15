@@ -85,8 +85,13 @@ export function matchBottles(fragrances, text) {
   const nameOf = f => normalize(String(f.name).replace(/\s*\(\d{4}\)\s*$/, ''));
   const exact = fragrances.filter(f => nameOf(f) === q);
   if (exact.length) return exact;
-  // A number matches whole: "212" isn't "2121", nor "21" "212".
-  const has = q.replace(/ /g, '').length >= PART_MIN && !/^\d+$/.test(q) ? hay => hay.includes(q) : hay => ` ${hay} `.includes(` ${q} `);
+  // A number matches whole, read off the name as written: "212" isn't
+  // "2121", nor "21" "212", nor "0" the 0 in "9.0".
+  if (/^\d+$/.test(q)) {
+    const whole = new RegExp(`(?<!\\d)(?<!\\d\\.)${q}(?!\\d)(?!\\.\\d)`);
+    return fragrances.filter(f => whole.test(`${String(f.name).replace(/\s*\(\d{4}\)\s*$/, '')} ${f.brand ?? ''}`));
+  }
+  const has = q.replace(/ /g, '').length >= PART_MIN ? hay => hay.includes(q) : hay => ` ${hay} `.includes(` ${q} `);
   return fragrances.filter(f => has(nameOf(f)) || has(`${nameOf(f)} ${normalize(f.brand)}`));
 }
 
@@ -665,8 +670,9 @@ async function main() {
         : number ? (matchBottles(records, q).length ? await datasetBottle(q, records, byId) : null)
           : await datasetBottle(q, records, byId) ?? matchBottles(wardrobe, q)[0] ?? null;
       if (number) {
-        if (record) console.error(`Reading "${q}" as a name (${byLine(record)}); give id:${q} for the bottle with that id.`);
-        else record = await byNumber(q);
+        const withId = await byNumber(q);
+        if (record) console.error(`Reading "${q}" as a name (${byLine(record)})${withId ? `; give id:${q} for ${byLine(withId)}, the bottle with that id` : ''}.`);
+        else record = withId;
       }
       if (!record) fail(`No bottle matches "${q}"`);
       // Outside the pool, a bottle's signals come from its about data.
@@ -1032,7 +1038,7 @@ const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,N
        node scripts/recommend.mjs --pack (--city NAME | --loc LAT,LON[,NAME]) --from YYYY-MM-DD --to YYYY-MM-DD [--max N] [--events "DATE [day|night] OCCASION; …"] [--json]
        node scripts/recommend.mjs --spray NAME [--city NAME | --loc LAT,LON[,NAME]] [--date YYYY-MM-DD] [--occasion ID] [--slot day|night] [--json]
        node scripts/recommend.mjs --gaps [--city NAME | --loc LAT,LON[,NAME]] [--uses USE=never|sometimes|often,…] [--value | --no-value] [--mists] [--top N] [--exclude NAME,NAME] [--journal FILE] [--demo] [--json]
-       node scripts/recommend.mjs --check NAME|ID [--city NAME | --loc LAT,LON[,NAME]] [--uses …] [--value | --no-value] [--style STYLE,STYLE] [--exclude NAME,NAME] [--journal FILE] [--json]
+       node scripts/recommend.mjs --check NAME|ID|id:ID [--city NAME | --loc LAT,LON[,NAME]] [--uses …] [--value | --no-value] [--style STYLE,STYLE] [--exclude NAME,NAME] [--journal FILE] [--json]
        node scripts/recommend.mjs (--style STYLE,STYLE|liked [--all] | --more-like NAME,NAME|favorites | --notes "NOTE NOTE") [--season S,S] [--slot day|night] [--lean feminine|unisex|masculine] [--min-value V] [--min-rating R] [--mists] [--top N] [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --dupes NAME [--top N] [--json]`;
 

@@ -37,6 +37,11 @@ test('bottle names match exactly first, else by part', () => {
   assert.deepEqual(matchBottles(named, 'opium').map(f => f.name), ['Opium (1977)'], 'a year after the name isn’t part of it');
   assert.deepEqual(matchBottles(named, '212').map(f => f.name), ['212 VIP'], 'a number matches whole');
   assert.deepEqual(matchBottles(named, '1977'), []);
+  // Read off the name as written: a digit in a decimal isn't a number of its own.
+  const numbered = [{ name: '9.0 Zara', brand: 'Zara' }, { name: 'Thank U Next 2.0', brand: 'Ariana Grande' }, { name: 'Chanel N°5', brand: 'Chanel' }, { name: 'Vol.1', brand: 'X' }];
+  for (const q of ['0', '9', '2']) assert.deepEqual(matchBottles(numbered, q), [], q);
+  assert.deepEqual(matchBottles(numbered, '5').map(f => f.name), ['Chanel N°5']);
+  assert.deepEqual(matchBottles(numbered, '1').map(f => f.name), ['Vol.1']);
 });
 
 test('names match as the app searches them: any apostrophe, whole words for a short part', () => {
