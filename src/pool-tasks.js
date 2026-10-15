@@ -38,7 +38,8 @@
 //            waits for the pool and sends only its rows, the rest missing (no r/ loads: rating votes
 //            for a bottle the pool lacks are under 500, so a miss is never well known)
 //   warm     { summary? } -> { count }: loads the pool, then the gap finder's
-//            table for that climate (the default) while nothing else is asked
+//            table for that climate while nothing else is asked; without one,
+//            for the climate the latest question named (heard), else the default
 // Picks are src/discover.js's (record, styles, nearest, clonesOf, twin,
 // alike, risk, …) with `why`, the line whyLine writes. cloneVotes: true adds
 // the smells-like votes behind each `clonesOf` (addCloneVotes; one about
@@ -100,7 +101,15 @@ async function fetchLoad(path) {
  * the pool loads.
  */
 export function newPoolCache({ load = fetchLoad, onStatus = null } = {}) {
-  return { load, onStatus, pool: null, ready: null, owned: [], gaps: [], discover: [], library: fragranticaLibrary(load) };
+  return { load, onStatus, pool: null, ready: null, owned: [], gaps: [], discover: [], library: fragranticaLibrary(load), climate: undefined };
+}
+
+// The climate the latest question named (`summary`; null for the default),
+// noted as it arrives: a bare `warm` (the app's, sent before it knows the
+// place's climate) works out the table the report or check behind it will want.
+function heard(cache, msg) {
+  const payload = msg?.payload;
+  if (msg?.type !== 'warm' && payload && Object.hasOwn(payload, 'summary')) cache.climate = payload.summary ?? null;
 }
 
 // Errors from the modules and the loader are written to be read; anything
@@ -393,9 +402,10 @@ const TASKS = {
 
   async warm(p, cache, ms) {
     const pool = await timed(ms, 'pool', () => poolOf(cache));
-    // The gap finder's table for the climate (the default, or `summary`), in
-    // slices while nothing else is asked, so the first report doesn't wait for it.
-    warmPoolTable(pool.records, p.summary ?? DEFAULT_CLIMATE).catch(() => {});
+    // The gap finder's table for the climate (`summary`, else the one the
+    // questions name, else the default), in slices while nothing else is
+    // asked, so the first report doesn't wait for it.
+    warmPoolTable(pool.records, (Object.hasOwn(p, 'summary') ? p.summary : cache.climate) ?? DEFAULT_CLIMATE).catch(() => {});
     return { count: pool.records.length };
   },
 };
@@ -404,6 +414,11 @@ export const POOL_TASKS = Object.keys(TASKS);
 
 /** One message in, its answer out (never throws). */
 export async function handlePool(msg, cache) {
+  heard(cache, msg);
+  return respond(msg, cache);
+}
+
+async function respond(msg, cache) {
   const { id = null, type, payload = {} } = msg ?? {};
   const ms = {}, t0 = performance.now();
   try {
@@ -449,7 +464,7 @@ export function poolServer(post, { load } = {}) {
 
   async function run(msg) {
     send({ type: 'start', id: msg?.id ?? null });
-    send(await handlePool(msg, cache));
+    send(await respond(msg, cache));
   }
 
   async function pump() {
@@ -467,10 +482,13 @@ export function poolServer(post, { load } = {}) {
 
   return data => {
     if (data?.type === 'cancel') queue = queue.filter(m => m.id !== data.id);
-    else if (QUICK.has(data?.type)) run(data);
     else {
-      queue.push(data);
-      pump();
+      heard(cache, data);
+      if (QUICK.has(data?.type)) run(data);
+      else {
+        queue.push(data);
+        pump();
+      }
     }
   };
 }

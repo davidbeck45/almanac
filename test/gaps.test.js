@@ -113,6 +113,9 @@ test('your stars move your own coverage, not the pool reference, and a bottle yo
   assert.ok(ids.includes(String(cozy(ctx).top[0].bottle.id)), cozy(ctx).top[0].bottle.name);
   assert.ok(!ids.includes(String(cozy(again).top[0].bottle.id)));
   assert.equal(again.worn.length, wardrobe.length - 2);
+  // A skin nudge without stars is no dislike: it still covers.
+  const nudged = gapContext({ owned: applySkin(wardrobe, { [ids[0]]: { longevity: 1 }, [ids[1]]: { sillage: -1 } }), records, byId });
+  assert.equal(nudged.worn.length, wardrobe.length);
   // Still his: it checks as owned.
   assert.equal(buyCheck(byId.get(ids[1]), again).verdict, 'Redundant');
   // A bottle he loves covers a little more, by what rank() adds for it.
@@ -421,7 +424,7 @@ test('the buy check knows what he likes: more of a style he’s thin on is good,
   // Bo wears close, which he likes, but it's woody: the line says so rather than "none of the styles you like".
   const bo = check('69541');
   assert.equal(bo.verdict, 'Covered');
-  assert.match(bo.reasons[1], /^It’s woody\b.* and wears close, but none of the scent styles you like\.$/);
+  assert.match(bo.reasons[1], /^It wears close, but it’s woody( and \w+)?, none of the scent styles you like\.$/);
   // A bottle that only leans toward a style he likes says so, as its page does ("Leans skin scent").
   assert.equal(check('209').reasons[1], 'It only leans toward skin scent, one of the scent styles you like.', 'Narciso Rodriguez For Her');
   // Where it comes closest to his best, not where it does best.
@@ -543,6 +546,12 @@ test('the pool’s table can be worked out ahead, in slices, and the next report
   assert.deepEqual([...table.slice(-2000)], [...fresh.slice(-2000)]);
   // Already there: nothing to work out.
   assert.equal(await warmPoolTable(records, hot, { pause: async () => { pauses++; } }), table);
+  // Warming another climate leaves the one asked about last: a place's own and the default's both stay.
+  const cold = { ...hot, 'day:cold': { ...hot['day:cold'], share: hot['day:cold'].share + 0.1 } };
+  const coldTable = await warmPoolTable(records, cold, { pause: async () => {} });
+  assert.notEqual(coldTable, table);
+  assert.equal(gapContext({ owned: wardrobe, records, byId, summary: hot }).table, table, 'not pushed out by the warm-up');
+  assert.equal(gapContext({ owned: wardrobe, records, byId, summary: cold }).table, coldTable);
 });
 
 test('a place’s climate comes from one archive call, is kept, and falls back offline', async () => {

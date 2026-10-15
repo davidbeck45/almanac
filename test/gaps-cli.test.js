@@ -53,12 +53,15 @@ test('--gaps and --check answer in the terminal', async () => {
 });
 
 test('--check reads a number a bottle is named as its name, and id: as an id', async () => {
-  const [named, id, four, jadore] = await Promise.all([cli('--check', '1881'), cli('--check', 'id:1881'), cli('--check', '212', '--json'), cli('--check', '210')]);
+  const [named, id, four, jadore, zero] = await Promise.all([cli('--check', '1881'), cli('--check', 'id:1881'), cli('--check', '212'), cli('--check', '210'), cli('--check', '0')]);
   assert.match(jadore.stdout, /^J'adore by Dior/, 'a number only an obscure bottle is named is an id');
   assert.equal(jadore.stderr, '');
   assert.match(named.stdout, /^1881 by Cerruti/);
-  assert.match(named.stderr, /Reading "1881" as a name .*give id:1881/);
+  assert.match(named.stderr, /Reading "1881" as a name \(1881 by Cerruti \(1995\)\); give id:1881 for DKNY To Go Women by Donna Karan \(2007\), the bottle with that id\./);
   assert.match(id.stdout, /^DKNY To Go Women by Donna Karan/);
   assert.equal(id.stderr, '');
-  assert.deepEqual([JSON.parse(four.stdout).name, JSON.parse(four.stdout).brand], ['212', 'Carolina Herrera']);
+  // No bottle has the id 212, so no id: to give; a lone digit isn't one in a decimal ("9.0 Zara").
+  assert.match(four.stdout, /^212 by Carolina Herrera/);
+  assert.equal(four.stderr.trim(), 'Reading "212" as a name (212 by Carolina Herrera (1997)).');
+  assert.doesNotMatch(zero.stdout + zero.stderr, /9\.0 Zara/);
 });

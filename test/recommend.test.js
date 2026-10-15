@@ -37,6 +37,11 @@ test('bottle names match exactly first, else by part', () => {
   assert.deepEqual(matchBottles(named, 'opium').map(f => f.name), ['Opium (1977)'], 'a year after the name isn’t part of it');
   assert.deepEqual(matchBottles(named, '212').map(f => f.name), ['212 VIP'], 'a number matches whole');
   assert.deepEqual(matchBottles(named, '1977'), []);
+  // Read off the name as written: a digit in a decimal isn't a number of its own.
+  const numbered = [{ name: '9.0 Zara', brand: 'Zara' }, { name: 'Thank U Next 2.0', brand: 'Ariana Grande' }, { name: 'Chanel N°5', brand: 'Chanel' }, { name: 'Vol.1', brand: 'X' }];
+  for (const q of ['0', '9', '2']) assert.deepEqual(matchBottles(numbered, q), [], q);
+  assert.deepEqual(matchBottles(numbered, '5').map(f => f.name), ['Chanel N°5']);
+  assert.deepEqual(matchBottles(numbered, '1').map(f => f.name), ['Vol.1']);
 });
 
 test('names match as the app searches them: any apostrophe, whole words for a short part', () => {
@@ -286,11 +291,16 @@ test('--date and --from are checked against the place’s own date, not this mac
   assert.equal(JSON.parse(today.stdout).weather, 'forecast');
 });
 
-test('a forecast that doesn’t answer in time says so, not "check the connection"', () => {
+test('a forecast that doesn’t answer in time, or is refused, says so, not "check the connection"', () => {
   const line = weatherFailure(Object.assign(new Error('Weather request got no answer in 25 s'), { timeout: true, service: 'forecast', timeoutMs: 25_000 }));
   assert.equal(line, 'Couldn\'t get the forecast from Open-Meteo: its forecast didn\'t answer within 25 seconds. It\'s slow or down; try again in a minute.');
   assert.match(weatherFailure({ timeout: true, service: 'archive', timeoutMs: 45_000 }, 'the weather'), /^Couldn't get the weather from Open-Meteo: its weather archive didn't answer within 45 seconds/);
   assert.match(weatherFailure(new TypeError('fetch failed')), /^Couldn't get the forecast from Open-Meteo \(fetch failed\)\. Check the connection/);
+  // A refusal says why, as the app does; the day's requests spent isn't the connection.
+  const spent = spawnSync(process.execPath, ['--import', mock, script, '--loc', '40.7,-74'], { encoding: 'utf8',
+    env: { ...process.env, MOCK_FORECAST_STATUS: '429', MOCK_REASON: 'Daily API request limit exceeded. Please try again tomorrow.' } });
+  assert.equal(spent.stderr.trim(), 'Couldn\'t get the forecast from Open-Meteo: the forecast service’s daily limit is used up. Try again tomorrow.');
+  assert.equal(weatherFailure({ status: 503, service: 'archive' }, 'the weather'), 'Couldn\'t get the weather from Open-Meteo: the weather archive is down for the moment. Try again soon.');
 });
 
 test('--date answers for any day: the forecast when it reaches, typical weather past it', () => {

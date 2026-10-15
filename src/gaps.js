@@ -12,7 +12,7 @@
 // point come from real days). Owned bottles are measured against the
 // suggestion pool's scores in the same cell, every bottle read on the
 // pool's evidence (sameFooting).
-import { seasonFit, timeFit, weatherFit, quality, personalPart, occasionRaw, occasionPart, scoreOf, targetSeasonWeights, DISLIKED } from './engine.js';
+import { seasonFit, timeFit, weatherFit, quality, personalPart, occasionRaw, occasionPart, scoreOf, targetSeasonWeights, isDisliked } from './engine.js';
 import { occasionById } from './occasions.js';
 import { similarity, sharedTraits } from './similar.js';
 import { styleScores, styleMix, styleById, topOf, shownOf, closeOf } from './scent-styles.js';
@@ -223,13 +223,21 @@ export function fitTable(bottles, { cells, slotBands }) {
   return out;
 }
 
-// The pool's table for a climate, kept for the last records and climate asked
-// about (a wardrobe change, other shares or the value toggle reuse it).
-let lastTable = null;
+// The pool's tables for the last TABLES_KEPT climates asked about, newest
+// first (a wardrobe change, other shares or the value toggle reuse one), so
+// the default climate's, warmed ahead, and a place's own don't push each
+// other out. Each is about 2 MB.
+const TABLES_KEPT = 2;
+let tables = []; // { records, key, table }
+const tableFor = (records, key) => tables.find(t => t.records === records && t.key === key) ?? null;
+function keepTable(entry) {
+  tables = [entry, ...tables.filter(t => t !== entry)].slice(0, TABLES_KEPT);
+  return entry.table;
+}
+
 export function poolTable(records, summary, cc = cellsFor(summary)) {
   const key = JSON.stringify(summary);
-  if (lastTable?.records !== records || lastTable.key !== key) lastTable = { records, key, table: fitTable(records, cc) };
-  return lastTable.table;
+  return keepTable(tableFor(records, key) ?? { records, key, table: fitTable(records, cc) });
 }
 
 const nextTurn = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -239,20 +247,22 @@ const nextTurn = () => new Promise(resolve => setTimeout(resolve, 0));
  * out ahead of time in slices of `chunk` bottles, pausing between them so a
  * Worker answers other questions meanwhile: the first report or buy check
  * then finds it done (about 230 ms of a 340 ms context in Node). Stops when
- * one already is. -> the table.
+ * one already is, and never pushes out the table of the climate asked about
+ * last. -> the table.
  */
 export async function warmPoolTable(records, summary = DEFAULT_CLIMATE, { pause = nextTurn, chunk = 500 } = {}) {
   summary ??= DEFAULT_CLIMATE;
   const key = JSON.stringify(summary), footed = allFooted(records);
-  const done = () => lastTable?.records === footed && lastTable.key === key;
   const cc = cellsFor(summary), m = cc.cells.length, table = new Float32Array(footed.length * m);
   for (let i = 0; i < footed.length; i += chunk) {
     await pause();
-    if (done()) return lastTable.table;
+    if (tableFor(footed, key)) return tableFor(footed, key).table;
     table.set(fitTable(footed.slice(i, i + chunk), cc), i * m);
   }
-  if (!done()) lastTable = { records: footed, key, table };
-  return lastTable.table;
+  if (tableFor(footed, key)) return tableFor(footed, key).table;
+  // Kept behind the newest: what a question asked for meanwhile stays.
+  tables = [...tables.slice(0, TABLES_KEPT - 1), { records: footed, key, table }];
+  return table;
 }
 
 const quantile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(p * (sorted.length - 1))))];
@@ -487,7 +497,7 @@ export function gapContext({ owned, records, byId, summary = DEFAULT_CLIMATE, sh
     if (lean >= ctx.lean[0] && lean <= ctx.lean[1] && !flags.includes('brigaded') && (mists || !flags.includes('mist'))) rows.push(i);
   });
   const ref = poolReference(table, records.length, m, rows);
-  const worn = owned.filter(f => !(f.personal?.rating <= DISLIKED));
+  const worn = owned.filter(f => !isDisliked(f));
   const ownTable = fitTable(worn.map(sameFooting), cc);
   const cov = coverage(worn, ownTable, cc.cells, ref);
   const norms = poolNorms(records);
@@ -864,14 +874,14 @@ export function buyCheck(record, ctx, { liked = null, stated = true } = {}) {
   // (tasteOf), so the line says scent styles, and that it wears close.
   const kinds = new Set((liked ?? []).map(id => styleById(id)?.kind).filter(Boolean));
   const which = kinds.size > 1 ? `scent styles ${like}` : `styles ${like}`;
-  const wears = kinds.size > 1 && closeOf(styleScores(scored)) ? ' and wears close, but' : ',';
+  const wears = kinds.size > 1 && closeOf(styleScores(scored)) ? 'It wears close, but it’s' : 'It’s';
   // No clear style, but one its page shows as a lean ("Leans skin scent"): say so.
   const [leaning] = taste && !styleLabels.length ? shownOf(styleScores(scored)) : [];
   const leansTo = leaning && `It only leans toward ${styleById(leaning.id).label.toLowerCase()}, ${liked.includes(leaning.id) ? 'one' : 'none'} of the ${which}.`;
   const tasteLine = !taste ? null
     : taste.thin ? `More of the ${styleNoun(taste.style)} ${like}: you own ${countWord(taste.owned)}.`
       : taste.style ? `You own ${taste.owned} ${styleNoun(taste.style)} already.`
-        : styleLabels.length ? `It’s ${list(styleLabels)}${wears} none of the ${which}.` : leansTo || `It isn’t one of the ${which}.`;
+        : styleLabels.length ? `${wears} ${list(styleLabels)}, none of the ${which}.` : leansTo || `It isn’t one of the ${which}.`;
   const mistLine = mist ? 'It’s a body mist: lighter and shorter-lived than a perfume.' : null;
   // Why it adds nothing: it fades where it would help, or where it comes
   // closest to the wardrobe's best (in a cell that comes up) it's matched.

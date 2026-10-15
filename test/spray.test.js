@@ -166,6 +166,11 @@ test('why reads the way the count went: a reason pushing against it says "though
           though++;
           assert.notEqual(RAISES.test(against), ups[0], `${f.name}: ${g.text}`);
         }
+        // The lead goes the way the count went; at the base count nothing moved it, so a reason
+        // comes only with its counterweight.
+        const mid = (g.sprays[0] + g.sprays[1]) / 2;
+        if (mid === 3) assert.ok(against, `${f.name} ${occasion?.id}: ${g.text}`);
+        else assert.equal(ups[0], mid > 3, `${f.name} ${occasion?.id}: ${g.text}`);
       }
     }
   }

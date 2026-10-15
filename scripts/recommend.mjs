@@ -42,9 +42,9 @@ import { DEFAULT_HIDDEN } from '../src/hidden.js';
 import { parseJournal, occasionCounts } from '../src/history.js';
 import { normalize } from '../src/collections.js';
 import { excluding } from '../src/pool-tasks.js';
-import { fetchForecast, summarize, week, tripWindows } from '../src/weather.js';
+import { fetchForecast, summarize, week, tripWindows, forecastError } from '../src/weather.js';
 import { searchCities } from '../src/location.js';
-import { STYLES, STYLE_STRONG, WEARS_CLOSE, styleById, styleScores, topOf, leanOf, closeOf, styleMix } from '../src/scent-styles.js';
+import { STYLES, STYLE_STRONG, WEARS_CLOSE, styleById, styleScores, topOf, shownOf, leanOf, closeOf, styleMix } from '../src/scent-styles.js';
 import { fragranticaLibrary, loadPool, fromPool, loadPoolStyles, loadAbout } from '../src/fragrantica.js';
 import { applySkin } from '../src/skin.js';
 import { packTrip, withEvents, picksFor, tripOccasion } from '../src/pack.js';
@@ -85,8 +85,13 @@ export function matchBottles(fragrances, text) {
   const nameOf = f => normalize(String(f.name).replace(/\s*\(\d{4}\)\s*$/, ''));
   const exact = fragrances.filter(f => nameOf(f) === q);
   if (exact.length) return exact;
-  // A number matches whole: "212" isn't "2121", nor "21" "212".
-  const has = q.replace(/ /g, '').length >= PART_MIN && !/^\d+$/.test(q) ? hay => hay.includes(q) : hay => ` ${hay} `.includes(` ${q} `);
+  // A number matches whole, read off the name as written: "212" isn't
+  // "2121", nor "21" "212", nor "0" the 0 in "9.0".
+  if (/^\d+$/.test(q)) {
+    const whole = new RegExp(`(?<!\\d)(?<!\\d\\.)${q}(?!\\d)(?!\\.\\d)`);
+    return fragrances.filter(f => whole.test(`${String(f.name).replace(/\s*\(\d{4}\)\s*$/, '')} ${f.brand ?? ''}`));
+  }
+  const has = q.replace(/ /g, '').length >= PART_MIN ? hay => hay.includes(q) : hay => ` ${hay} `.includes(` ${q} `);
   return fragrances.filter(f => has(nameOf(f)) || has(`${nameOf(f)} ${normalize(f.brand)}`));
 }
 
@@ -109,12 +114,15 @@ function fail(message) {
 }
 
 // Why the weather didn't come, as the line fail() prints: Open-Meteo gives
-// up on a request after REQUEST_TIMEOUT (TRIP_TIMEOUT for --date and --pack).
+// up on a request after REQUEST_TIMEOUT (TRIP_TIMEOUT for --date and --pack),
+// and a refusal says why in the app's words (forecastError: the day's
+// requests used up, busy, down); only no answer at all is the connection's.
 export function weatherFailure(err, what = 'the forecast') {
   if (err?.timeout) {
     const which = err.service === 'archive' ? 'its weather archive' : 'its forecast';
     return `Couldn't get ${what} from Open-Meteo: ${which} didn't answer within ${Math.round(err.timeoutMs / 1000)} seconds. It's slow or down; try again in a minute.`;
   }
+  if (err?.status) return `Couldn't get ${what} from Open-Meteo: ${forecastError(err).replace(/^The/, 'the')}`;
   return `Couldn't get ${what} from Open-Meteo (${err.message}). Check the connection and try again.`;
 }
 
@@ -502,16 +510,17 @@ async function main() {
         name: f.name,
         brand: f.brand,
         source: f.source === 'fragrantica' ? 'dataset' : 'collection',
-        styles: topOf(scores),
+        // What its card and page show: a lean ("Leans skin scent", leans: true) when no style clears the bar.
+        styles: shownOf(scores),
         wearsClose: closeOf(scores),
         scores,
       }, null, 2));
     } else {
       console.log(`${f.name} (${f.brand})${f.source === 'fragrantica' ? ', from the Fragrantica dataset' : ''}`);
       const width = Math.max(...STYLES.map(s => s.label.length));
-      const shown = new Set(topOf(scores).map(s => s.id));
+      const shown = new Map(shownOf(scores).map(s => [s.id, s.leans ? 'leans (shown)' : 'shown']));
       for (const r of topOf(scores, Infinity, 0.15)) {
-        const tags = [shown.has(r.id) && 'shown', r.score >= STYLE_STRONG && 'strong'].filter(Boolean).join(', ');
+        const tags = [shown.get(r.id), r.score >= STYLE_STRONG && 'strong'].filter(Boolean).join(', ');
         console.log(`  ${r.label.padEnd(width)}  ${r.score.toFixed(2)}${tags ? `  ${tags}` : ''}`);
       }
       console.log(`  ${styleById('intimate').label.padEnd(width)}  ${scores.intimate.toFixed(2)}  ${closeOf(scores) ? 'wears close' : `wears close from ${WEARS_CLOSE.toFixed(2)}`}`);
@@ -662,8 +671,9 @@ async function main() {
         : number ? (matchBottles(records, q).length ? await datasetBottle(q, records, byId) : null)
           : await datasetBottle(q, records, byId) ?? matchBottles(wardrobe, q)[0] ?? null;
       if (number) {
-        if (record) console.error(`Reading "${q}" as a name (${byLine(record)}); give id:${q} for the bottle with that id.`);
-        else record = await byNumber(q);
+        const withId = await byNumber(q);
+        if (record) console.error(`Reading "${q}" as a name (${byLine(record)})${withId ? `; give id:${q} for ${byLine(withId)}, the bottle with that id` : ''}.`);
+        else record = withId;
       }
       if (!record) fail(`No bottle matches "${q}"`);
       // Outside the pool, a bottle's signals come from its about data.
@@ -1029,7 +1039,7 @@ const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,N
        node scripts/recommend.mjs --pack (--city NAME | --loc LAT,LON[,NAME]) --from YYYY-MM-DD --to YYYY-MM-DD [--max N] [--events "DATE [day|night] OCCASION; …"] [--json]
        node scripts/recommend.mjs --spray NAME [--city NAME | --loc LAT,LON[,NAME]] [--date YYYY-MM-DD] [--occasion ID] [--slot day|night] [--json]
        node scripts/recommend.mjs --gaps [--city NAME | --loc LAT,LON[,NAME]] [--uses USE=never|sometimes|often,…] [--value | --no-value] [--mists] [--top N] [--exclude NAME,NAME] [--journal FILE] [--demo] [--json]
-       node scripts/recommend.mjs --check NAME|ID [--city NAME | --loc LAT,LON[,NAME]] [--uses …] [--value | --no-value] [--style STYLE,STYLE] [--exclude NAME,NAME] [--journal FILE] [--json]
+       node scripts/recommend.mjs --check NAME|ID|id:ID [--city NAME | --loc LAT,LON[,NAME]] [--uses …] [--value | --no-value] [--style STYLE,STYLE] [--exclude NAME,NAME] [--journal FILE] [--json]
        node scripts/recommend.mjs (--style STYLE,STYLE|liked [--all] | --more-like NAME,NAME|favorites | --notes "NOTE NOTE") [--season S,S] [--slot day|night] [--lean feminine|unisex|masculine] [--min-value V] [--min-rating R] [--mists] [--top N] [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --dupes NAME [--top N] [--json]`;
 

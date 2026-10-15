@@ -1,7 +1,8 @@
-// Run the Worker locally on Node: http://127.0.0.1:8787
-//   node worker/dev.mjs          real Fragella (spends quota), key from worker/.dev.vars
-//   MOCK=1 node worker/dev.mjs   answers from saved responses in .cache/fragella (no quota)
-// KV is in memory and resets on restart.
+// Run the Worker locally on Node: http://127.0.0.1:8787 (PORT=… for another)
+//   node worker/dev.mjs          real Fragella (spends quota), key from worker/.dev.vars;
+//                                a lookup budget of 50 a day for the IP, the deployed 4 for everyone
+//   MOCK=1 node worker/dev.mjs   answers from saved responses in .cache/fragella (no quota, 50 a day)
+// DAILY_LOOKUPS_PER_IP and DAILY_LOOKUPS set the budgets. KV is in memory and resets on restart.
 import { createServer } from 'node:http';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import worker from './index.js';
@@ -47,12 +48,16 @@ const env = {
   CACHE: kv,
   ALLOWED_ORIGINS: 'http://127.0.0.1:5173,http://localhost:5173',
   DAILY_LOOKUPS_PER_IP: process.env.DAILY_LOOKUPS_PER_IP ?? '50',
+  // Everyone's budget guards the real quota (unset, the deployed default);
+  // mocked, there's none to guard.
+  ...(process.env.DAILY_LOOKUPS || process.env.MOCK ? { DAILY_LOOKUPS: process.env.DAILY_LOOKUPS || '50' } : {}),
   ...(process.env.MOCK ? { FRAGELLA_BASE: 'http://mock.fragella/api/v1' } : {}),
 };
+const port = Number(process.env.PORT) || 8787;
 
 createServer(async (req, res) => {
-  const request = new Request(`http://127.0.0.1:8787${req.url}`, { method: req.method, headers: req.headers });
+  const request = new Request(`http://127.0.0.1:${port}${req.url}`, { method: req.method, headers: req.headers });
   const response = await worker.fetch(request, env);
   res.writeHead(response.status, Object.fromEntries(response.headers));
   res.end(await response.text());
-}).listen(8787, '127.0.0.1', () => console.log('scentcast-api on http://127.0.0.1:8787'));
+}).listen(port, '127.0.0.1', () => console.log(`scentcast-api on http://127.0.0.1:${port}`));

@@ -82,7 +82,7 @@ Fields worth reading:
 - `--dupes`: `original` (`built: true` is the original of a dupe he owns; otherwise "going by the votes"), `cheaper[]` (`why: "notes"`: alike by notes, no votes; `notesDiffer`: voted alike but the notes differ), `siblings[]`, `smellsLikeVotes` [yes, no], `owned`, `mist`.
 - `risk.level`: low, medium (a reason to mention), high (sample first) or unknown (no crowd data yet).
 
-Stderr matters: "matches N bottles (…); using the most voted" (confirm the brand or pass `id:<number>`), `Reading "212" as a name (…)` (pass `id:212` if he meant the id), "Reading X as Y" (a typo it fixed), "Few bottles list X; did you mean Y?" (run again with Y), "--exclude ... matches no bottle".
+Stderr matters: "matches N bottles (…); using the most voted" (confirm the brand or pass `id:<number>`), `Reading "1881" as a name (…); give id:1881 for …` (pass `id:1881` if he meant that bottle; with no such clause, no bottle has the id), "Reading X as Y" (a typo it fixed), "Few bottles list X; did you mean Y?" (run again with Y), "--exclude ... matches no bottle".
 
 ## 5. Reply
 

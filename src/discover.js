@@ -7,7 +7,7 @@
 // src/candidates.js what a bottle is worth, how new it would be and how risky.
 // Pure (no DOM, no fetch), so a module Worker can run it.
 import { ACCORDS, barStrength } from './accords.js';
-import { performanceRating, steadyShares, DISLIKED } from './engine.js';
+import { performanceRating, steadyShares, isDisliked } from './engine.js';
 import { fromPool } from './fragrantica.js';
 import { journalStats } from './history.js';
 import { STYLES, STYLE_MIN, STYLE_LEAN, WEARS_CLOSE, styleScores, topOf, shownOf, leanOf, closeOf, styleMix } from './scent-styles.js';
@@ -642,7 +642,7 @@ function mergeTurns(ctx, lists, k, shares) {
  * however often worn. -> { seeds: records, from: 'worn' | 'rated' }
  */
 export function defaultSeeds(owned, { history = [], todayISO = null, n = SEED_COUNT } = {}) {
-  const liked = owned.filter(f => !(f.personal?.rating <= DISLIKED));
+  const liked = owned.filter(f => !isDisliked(f));
   if (history.length && todayISO) {
     const byId = new Map(liked.map(f => [String(f.id), f]));
     const worn = journalStats(history, todayISO, SEED_DAYS).top.map(([id]) => byId.get(String(id))).filter(Boolean);

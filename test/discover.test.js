@@ -259,6 +259,10 @@ test('default seeds: the most worn of the last 60 days, else the best rated', ()
   assert.ok(yours.seeds.every(f => !(f.personal?.rating <= 2)), yours.seeds.map(f => f.name).join());
   const disliked = defaultSeeds(applySkin(wardrobe, { 94713: { rating: 1 } }), { history, todayISO: '2026-10-13' });
   assert.deepEqual(disliked.seeds.map(f => f.name), ['Cedrus Blanc']);
+  // A skin nudge without stars (`personal.rating: null`) is no dislike.
+  const nudged = applySkin(wardrobe, { [rated.seeds[0].id]: { rating: null, longevity: 1 }, 94713: { sillage: -1 } });
+  assert.deepEqual(defaultSeeds(nudged).seeds.map(f => f.name), rated.seeds.map(f => f.name));
+  assert.deepEqual(defaultSeeds(nudged, { history, todayISO: '2026-10-13' }).seeds.map(f => f.name), ['Liquid Brun', 'Cedrus Blanc']);
 });
 
 test('notes and accords search: every term, forgiving how it’s typed', () => {
