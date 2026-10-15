@@ -3,11 +3,11 @@
 // covers each), the modules Insights and the Wishlist load on demand stay out
 // of the boot graph, a bottle page's shopping order reads as the page does,
 // its order slots are the registry's, the --journal example names the file
-// Export saves, the names CLAUDE.md gives are still in use, and nothing
-// tracked points at the git-excluded sweep notes.
+// Export saves, the code names, paths and files CLAUDE.md gives are still in
+// the repo, and nothing tracked points at the git-excluded sweep notes.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, normalize } from 'node:path';
 import { SECTIONS, sectionsFor } from '../src/views/bottle.js';
 import '../src/views/sections.js';
@@ -106,6 +106,29 @@ test("Insights' risk words in CLAUDE.md are riskWord's", () => {
   assert.ok(words, 'CLAUDE.md says which words Insights uses for risk');
   const said = new Set(['high', 'medium', 'low'].flatMap(level => [riskWord(level), riskWord(level, 80)]));
   assert.deepEqual(new Set(words), said);
+});
+
+test('the code names, paths and files CLAUDE.md gives are in the repo', () => {
+  const code = filesUnder(['src', 'scripts', 'dev', 'worker', 'omarchy'], /\.(js|mjs|py|html|css|json|qml|toml|sh)$/)
+    .map(f => f.text).concat(read('sw.js'), read('index.html')).join('\n');
+  const quoted = new Set([...claude.matchAll(/`([^`\n]+)`/g)].map(m => m[1]));
+  // Names from outside the code: a Claude in Chrome tool, Parfumo's brand slugs.
+  const outside = new Set(['get_page_text', 'Afnan_Perfumes', 'Goldfield__Banks']);
+  // camelCase, snake_case and CONSTANT names, called or not ("`rank`" is a word too, so skip plain ones).
+  const names = [...quoted].map(q => q.match(/^([A-Za-z_$][\w$]*)(?:\(.*\))?$/)?.[1])
+    .filter(n => n && /[a-z][A-Z]|_|^[A-Z][A-Z0-9]+$/.test(n) && !outside.has(n));
+  assert.ok(names.length > 200, `${names.length} names`);
+  const gone = names.filter(n => !new RegExp(`(?<![\\w$])${n.replace(/\$/g, '\\$')}(?![\\w$])`).test(code));
+  assert.deepEqual(gone, [], 'CLAUDE.md names these, but no code does');
+  // Paths from the repo root, and bare file names ("`bottle-check.js`").
+  const ignored = new Set(['worker/.dev.vars']); // git leaves it out
+  const paths = [...quoted].filter(q => /^(src|scripts|dev|test|data|worker|omarchy|fonts|icons)\/[\w./-]+$/.test(q) && !ignored.has(q));
+  assert.deepEqual(paths.filter(p => !existsSync(new URL(p, root))), [], 'CLAUDE.md names these paths');
+  const files = new Set([readdirSync(root), ...['src', 'scripts', 'dev', 'test', 'worker', 'omarchy', 'data'].map(dir =>
+    readdirSync(new URL(`${dir}/`, root), { recursive: true }).filter(f => !/^fragrantica\/[rix]\//.test(f)))]
+    .flat().map(f => f.split('/').at(-1)));
+  const bare = [...quoted].filter(q => /^[\w.-]+\.(js|mjs|css|py|json|jsonl|html|toml)$/.test(q));
+  assert.deepEqual(bare.filter(f => !files.has(f)), [], 'CLAUDE.md names these files');
 });
 
 test('nothing points at the sweep notes, which git leaves out', () => {

@@ -3,3 +3,6 @@ worker/.dev.vars
 worker/.wrangler/
 node_modules/
 .cache/
+shots/
+.claude/*
+!.claude/skills/
