@@ -2,7 +2,7 @@
 // windows (a trip's forecast, or typical weather past it), and the ranked
 // picks for one date and slot anywhere. packTrip is pure; picksFor and
 // tripPlan fetch the weather (src/weather.js).
-import { rank, daysBetween, PLAN_MARGIN, DISLIKED, ROTATION_PENALTY } from './engine.js';
+import { rank, daysBetween, PLAN_MARGIN, isDisliked, ROTATION_PENALTY } from './engine.js';
 import { tripWindows } from './weather.js';
 
 const SHORT_DATE = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
@@ -128,7 +128,7 @@ export function packTrip(frags, windows, { max = 3, occasionOf = win => win.occa
 
   // Bottles that suit a window, the ones you dislike only where nothing else does.
   const suits = frags.filter(f => coverOf.get(f.id).length);
-  const liked = suits.filter(f => !(f.personal?.rating <= DISLIKED));
+  const liked = suits.filter(f => !isDisliked(f));
   const reached = new Set(liked.flatMap(f => coverOf.get(f.id)));
   const pool = [...liked, ...suits.filter(f => !liked.includes(f) && coverOf.get(f.id).some(i => !reached.has(i)))];
 

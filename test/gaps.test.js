@@ -113,6 +113,9 @@ test('your stars move your own coverage, not the pool reference, and a bottle yo
   assert.ok(ids.includes(String(cozy(ctx).top[0].bottle.id)), cozy(ctx).top[0].bottle.name);
   assert.ok(!ids.includes(String(cozy(again).top[0].bottle.id)));
   assert.equal(again.worn.length, wardrobe.length - 2);
+  // A skin nudge without stars is no dislike: it still covers.
+  const nudged = gapContext({ owned: applySkin(wardrobe, { [ids[0]]: { longevity: 1 }, [ids[1]]: { sillage: -1 } }), records, byId });
+  assert.equal(nudged.worn.length, wardrobe.length);
   // Still his: it checks as owned.
   assert.equal(buyCheck(byId.get(ids[1]), again).verdict, 'Redundant');
   // A bottle he loves covers a little more, by what rank() adds for it.

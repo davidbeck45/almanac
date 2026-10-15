@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { loadSkin, setSkin, withSkin, applySkin } from '../src/skin.js';
-import { rank, planWindows, quality, performanceLevel, PLAN_MARGIN } from '../src/engine.js';
+import { rank, planWindows, quality, performanceLevel, isDisliked, PLAN_MARGIN } from '../src/engine.js';
 import { occasionById, OCCASIONS } from '../src/occasions.js';
 
 const fragrances = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url))).fragrances
@@ -98,6 +98,14 @@ test('a bottle you rate 1★ or 2★ drops out of the top 3 unless it’s clearl
   }
   assert.equal(windows, 2 * 64 * (OCCASIONS.length + 1));
   assert.ok(kept[1] > 0 && kept[2] > kept[1], `kept ${JSON.stringify(kept)}`);
+});
+
+test('only stars make a dislike: a skin nudge alone carries no rating', () => {
+  const nudged = applySkin(fragrances, withSkin({}, '31861', { longevity: 1 }, '2026-10-01')).find(f => f.id === '31861');
+  assert.deepEqual(nudged.personal, { rating: null, longevity: 1, sillage: 0 });
+  assert.equal(isDisliked(nudged), false, 'null <= 2 is true in JS, so the rating is never compared bare');
+  assert.equal(isDisliked(byName('Sauvage')), false);
+  for (const [stars, want] of [[1, true], [2, true], [3, false], [5, false]]) assert.equal(isDisliked({ personal: { rating: stars } }), want, `${stars}★`);
 });
 
 test('a week’s plan never brings in a bottle you rate 1★ or 2★ for variety', () => {

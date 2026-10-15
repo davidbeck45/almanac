@@ -12,7 +12,7 @@
 // point come from real days). Owned bottles are measured against the
 // suggestion pool's scores in the same cell, every bottle read on the
 // pool's evidence (sameFooting).
-import { seasonFit, timeFit, weatherFit, quality, personalPart, occasionRaw, occasionPart, scoreOf, targetSeasonWeights, DISLIKED } from './engine.js';
+import { seasonFit, timeFit, weatherFit, quality, personalPart, occasionRaw, occasionPart, scoreOf, targetSeasonWeights, isDisliked } from './engine.js';
 import { occasionById } from './occasions.js';
 import { similarity, sharedTraits } from './similar.js';
 import { styleScores, styleMix, styleById, topOf, shownOf, closeOf } from './scent-styles.js';
@@ -487,7 +487,7 @@ export function gapContext({ owned, records, byId, summary = DEFAULT_CLIMATE, sh
     if (lean >= ctx.lean[0] && lean <= ctx.lean[1] && !flags.includes('brigaded') && (mists || !flags.includes('mist'))) rows.push(i);
   });
   const ref = poolReference(table, records.length, m, rows);
-  const worn = owned.filter(f => !(f.personal?.rating <= DISLIKED));
+  const worn = owned.filter(f => !isDisliked(f));
   const ownTable = fitTable(worn.map(sameFooting), cc);
   const cov = coverage(worn, ownTable, cc.cells, ref);
   const norms = poolNorms(records);

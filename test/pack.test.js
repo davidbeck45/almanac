@@ -219,6 +219,9 @@ test('a bottle you rate 2★ or lower stays home unless nothing else suits a win
   const rated = packTrip(applySkin(fragrances, { [night.id]: { rating: 2 } }), MIXED, { max: 4 });
   assert.ok(!rated.bottles.some(b => b.record.id === night.id), rated.text);
   assert.deepEqual(rated.uncovered, []);
+  // A skin nudge without stars is no dislike: it packs as before.
+  const nudged = packTrip(applySkin(fragrances, { [night.id]: { longevity: 1 } }), MIXED, { max: 4 });
+  assert.ok(nudged.bottles.some(b => b.record.id === night.id), nudged.text);
   // Two bottles, the winter one disliked: still the only one for cold nights.
   const summer = plain.plan.find(p => p.window.slot === 'day').pick;
   const pair = applySkin([summer, night], { [night.id]: { rating: 1 } });

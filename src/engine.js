@@ -300,6 +300,13 @@ const PERSONAL_PICK = [-0.1, -0.06, -0.01, 0, 0.02];
 // Ratings at or below this mean you'd rather not wear it: no nudges, no packing.
 export const DISLIKED = 2;
 
+/**
+ * Whether you rate the bottle DISLIKED or lower. Only stars count: a bottle
+ * with just a skin nudge carries `personal.rating: null`, and `null <= 2` is
+ * true in JS, so never compare the rating directly.
+ */
+export const isDisliked = frag => Number.isFinite(frag?.personal?.rating) && frag.personal.rating <= DISLIKED;
+
 /** Your stars' term in a score (rank's `parts.personal`, see scoreOf); 0 unrated. */
 export function personalPart(frag) {
   const stars = frag.personal?.rating;
@@ -517,7 +524,7 @@ function nudgeIdle(scored, history, todayISO, slot) {
   // Tiers fall in rank order, so the first bottle out of the top's tier ends the search.
   for (let i = 1; i < scored.length && top.score - scored[i].score <= PLAN_MARGIN && scored[i].tier === top.tier; i++) {
     const days = idle(scored[i]);
-    if (days < NUDGE_AFTER || scored[i].fragrance.personal?.rating <= DISLIKED) continue;
+    if (days < NUDGE_AFTER || isDisliked(scored[i].fragrance)) continue;
     const [pick] = scored.splice(i, 1);
     pick.nudged = true;
     pick.parts.idle = days;
@@ -708,7 +715,7 @@ export function planWindows(fragrances, windows, opts = {}) {
     // A nudged bottle leads the list, and is new to the plan. A bottle you
     // rate DISLIKED or lower never counts as the fresh one, so it's planned
     // only where it ranks first and nothing new to the plan comes close.
-    const fresh = ranked.find(r => !used.has(r.fragrance.id) && !(r.fragrance.personal?.rating <= DISLIKED));
+    const fresh = ranked.find(r => !used.has(r.fragrance.id) && !isDisliked(r.fragrance));
     let pick = logged && ranked.find(r => r.fragrance.id === logged.id);
     if (!pick) pick = fresh && ranked[0].score - fresh.score <= PLAN_MARGIN ? fresh : ranked[0];
     // A repeat of the plan that tops the list anyway (the only bottle, or
