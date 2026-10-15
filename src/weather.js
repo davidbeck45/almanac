@@ -26,9 +26,45 @@ const CACHE_MAX_AGE = 20 * 60 * 1000;
 // loads) up to this age: it still covers today and tomorrow.
 const SHOW_STALE_FOR = 12 * 60 * 60 * 1000;
 
+// How long a request to Open-Meteo may take before it's dropped and fails
+// as `timeout` (forecastError: "isn't answering"). On a slow day in October
+// 2026 the app's blended week took 17–24 s, and one that never answered
+// would have kept a first visit on "Checking the sky…" for good. Trips and
+// dates (tripWindows) ask for ten days, which took 32 s that day, and wait
+// longer.
+export const REQUEST_TIMEOUT = 25_000;
+export const TRIP_TIMEOUT = 45_000;
+
 const wallMs = iso => Date.parse(`${iso}Z`);
 const avg = xs => xs.reduce((a, b) => a + b, 0) / xs.length;
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+
+/**
+ * An Open-Meteo request's JSON, or an error forecastError reads: refused
+ * (requestError's), unreachable, or past `timeoutMs` with no answer
+ * (`timeout: true`; the request is aborted). The clock covers the body too.
+ */
+async function fetchJSON(url, { service = 'forecast', timeoutMs = REQUEST_TIMEOUT } = {}) {
+  const ctl = new AbortController();
+  let timer;
+  const expired = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const what = service === 'archive' ? 'Weather archive request' : 'Weather request';
+      reject(Object.assign(new Error(`${what} got no answer in ${Math.round(timeoutMs / 1000)} s`), { timeout: true, service, timeoutMs }));
+      ctl.abort();
+    }, timeoutMs);
+  });
+  const answer = (async () => {
+    const res = await fetch(url, { signal: ctl.signal });
+    if (!res.ok) throw await requestError(res, service);
+    return res.json();
+  })();
+  try {
+    return await Promise.race([answer, expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // Temperature, feels-like and humidity are the mean of four global models.
 // Open-Meteo's default ("best match", NOAA's GFS in the US) ran about a degree
@@ -74,8 +110,9 @@ export function blendModels(raw) {
   return { ...raw, hourly, daily };
 }
 
-// `days` of forecast, today first: 7 for the app, up to FORECAST_DAYS for a trip.
-export async function fetchForecast({ lat, lon }, { days = 7 } = {}) {
+// `days` of forecast, today first: 7 for the app, up to FORECAST_DAYS for a
+// trip. Fails as `timeout` past `timeoutMs` (fetchJSON).
+export async function fetchForecast({ lat, lon }, { days = 7, timeoutMs = REQUEST_TIMEOUT } = {}) {
   const params = new URLSearchParams({
     latitude: lat,
     longitude: lon,
@@ -87,9 +124,7 @@ export async function fetchForecast({ lat, lon }, { days = 7 } = {}) {
     forecast_days: days,
     models: [DEFAULT_MODEL, ...BLEND_MODELS].join(','),
   });
-  const res = await fetch(`${FORECAST_URL}?${params}`);
-  if (!res.ok) throw await requestError(res);
-  return { ...blendModels(await res.json()), fetchedAt: Date.now() };
+  return { ...blendModels(await fetchJSON(`${FORECAST_URL}?${params}`, { timeoutMs })), fetchedAt: Date.now() };
 }
 
 const cacheKey = loc => `${CACHE_VERSION}:${loc.lat},${loc.lon}`;
@@ -135,6 +170,7 @@ export async function getForecast(loc, { force = false } = {}) {
 export function forecastError(err) {
   const status = err?.status;
   const service = err?.service === 'archive' ? 'The weather archive' : 'The forecast service';
+  if (err?.timeout) return `${service} isn’t answering. Try again in a minute.`;
   // Open-Meteo says why it refused: a minute's burst, or the day's requests used up.
   if (status === 429 && /daily/i.test(err.reason ?? '')) return `${service}’s daily limit is used up. Try again tomorrow.`;
   if (status === 429) return `${service} is busy. Try again in a minute.`;
@@ -266,9 +302,10 @@ function yearsBefore(iso, years) {
  * Archived hourly weather around fromISO..toISO in each of the last `years`
  * years the archive has whole: { latitude, years: [{ ago, data }] }, `data`
  * shaped like a forecast's hourly block (windowOn reads it). Plain fetch, so
- * it runs in Node and the browser alike.
+ * it runs in Node and the browser alike; each request fails as `timeout`
+ * past `timeoutMs`.
  */
-export async function fetchTypical({ lat, lon }, fromISO, toISO, { years = TYPICAL_YEARS, nowMs = Date.now() } = {}) {
+export async function fetchTypical({ lat, lon }, fromISO, toISO, { years = TYPICAL_YEARS, nowMs = Date.now(), timeoutMs = REQUEST_TIMEOUT } = {}) {
   const archived = shiftDays(new Date(nowMs).toISOString().slice(0, 10), -ARCHIVE_LAG_DAYS);
   let first = 1;
   while (shiftDays(yearsBefore(toISO, first), TYPICAL_SPREAD) > archived) first++;
@@ -282,9 +319,7 @@ export async function fetchTypical({ lat, lon }, fromISO, toISO, { years = TYPIC
       temperature_unit: 'fahrenheit',
       timezone: 'auto',
     });
-    const res = await fetch(`${ARCHIVE_URL}?${params}`);
-    if (!res.ok) throw await requestError(res, 'archive');
-    return { ago, data: await res.json() };
+    return { ago, data: await fetchJSON(`${ARCHIVE_URL}?${params}`, { service: 'archive', timeoutMs }) };
   };
   const out = await Promise.all(Array.from({ length: years }, (_, i) => get(first + i)));
   return { latitude: out[0]?.data.latitude ?? lat, years: out };
@@ -348,16 +383,16 @@ export function typicalWindow(climate, dateISO, slot) {
 /**
  * The `slots` windows of every date from fromISO to toISO, in time order:
  * the forecast's as far as it reaches, typical weather past it (`typical`).
- * Fetches only what the dates need.
+ * Fetches only what the dates need, each request waiting up to TRIP_TIMEOUT.
  */
-export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'], nowMs = Date.now() } = {}) {
+export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'], nowMs = Date.now(), timeoutMs = TRIP_TIMEOUT } = {}) {
   const dates = [];
   for (let d = fromISO; d <= toISO; d = shiftDays(d, 1)) dates.push(d);
   const found = new Map();
   const key = (d, s) => `${d} ${s}`;
   // The location's date can be a day off UTC's; windowOn finds what's there.
   if (fromISO <= shiftDays(new Date(nowMs).toISOString().slice(0, 10), FORECAST_DAYS)) {
-    const forecast = await fetchForecast(loc, { days: FORECAST_DAYS });
+    const forecast = await fetchForecast(loc, { days: FORECAST_DAYS, timeoutMs });
     for (const d of dates) {
       for (const s of slots) {
         const win = windowOn(forecast, d, s);
@@ -367,7 +402,7 @@ export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'
   }
   const missing = dates.filter(d => slots.some(s => !found.get(key(d, s))));
   if (missing.length) {
-    const climate = await fetchTypical(loc, missing[0], missing.at(-1), { nowMs });
+    const climate = await fetchTypical(loc, missing[0], missing.at(-1), { nowMs, timeoutMs });
     for (const d of missing) for (const s of slots) if (!found.get(key(d, s))) found.set(key(d, s), typicalWindow(climate, d, s));
   }
   return dates.flatMap(d => slots.map(s => found.get(key(d, s))).filter(Boolean));

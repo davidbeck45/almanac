@@ -64,7 +64,7 @@ const LONG_NAME = 18;
  * page). `compact` is the shorter band the other Wear panes get.
  * pick: { entry, win, worn } | null; slots: Now's windows for the Day/Night toggle.
  */
-export function heroHTML({ loc, wx, loading, error, updating }, { aspect, compact = false, pick = null, slots = [], slotOn = null }) {
+export function heroHTML({ loc, wx, loading, error, updating, slow = false }, { aspect, compact = false, pick = null, slots = [], slotOn = null }) {
   const now = wx?.now;
   const sky = sceneNow(wx, { error: Boolean(error) });
   const stage = pick && !compact ? stagePoint(aspect, stageX(aspect)) : null;
@@ -73,7 +73,8 @@ export function heroHTML({ loc, wx, loading, error, updating }, { aspect, compac
   const [big, cond, sub, status] = now
     ? [`${temp(now.tempF)}°`, now.label, `Feels\u00a0${deg(now.feelsF)} · H\u00a0${deg(now.hiF)} L\u00a0${deg(now.loF)}`, updating ? 'Updating…' : wx.stale ? 'Offline' : '']
     : error ? ['', 'Weather unavailable', loc?.name ?? '', '']
-      : ['', loading ? 'Checking the sky…' : 'Where are you?', loading ? '' : 'Set a location to get picks.', ''];
+      : loading ? ['', slow ? 'Still checking the sky…' : 'Checking the sky…', slow ? 'The forecast is slow to answer.' : '', '']
+        : ['', 'Where are you?', 'Set a location to get picks.', ''];
   const scene = renderScene({
     ...sky,
     season: calendarSeason(new Date(), loc?.lat ?? 1),

@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { findOccasion, matchBottles, parseEvents } from '../scripts/recommend.mjs';
+import { findOccasion, matchBottles, parseEvents, weatherFailure } from '../scripts/recommend.mjs';
 
 const script = fileURLToPath(new URL('../scripts/recommend.mjs', import.meta.url));
 const mock = fileURLToPath(new URL('./mock-fetch.mjs', import.meta.url));
@@ -264,6 +264,13 @@ test('--pack and --date stop on bad dates before any request', () => {
     assert.equal(run.status, 1, args.join(' '));
     assert.match(run.stderr, message);
   }
+});
+
+test('a forecast that doesn’t answer in time says so, not "check the connection"', () => {
+  const line = weatherFailure(Object.assign(new Error('Weather request got no answer in 25 s'), { timeout: true, service: 'forecast', timeoutMs: 25_000 }));
+  assert.equal(line, 'Couldn\'t get the forecast from Open-Meteo: its forecast didn\'t answer within 25 seconds. It\'s slow or down; try again in a minute.');
+  assert.match(weatherFailure({ timeout: true, service: 'archive', timeoutMs: 45_000 }, 'the weather'), /^Couldn't get the weather from Open-Meteo: its weather archive didn't answer within 45 seconds/);
+  assert.match(weatherFailure(new TypeError('fetch failed')), /^Couldn't get the forecast from Open-Meteo \(fetch failed\)\. Check the connection/);
 });
 
 test('--date answers for any day: the forecast when it reaches, typical weather past it', () => {

@@ -108,6 +108,16 @@ function fail(message) {
   process.exit(1);
 }
 
+// Why the weather didn't come, as the line fail() prints: Open-Meteo gives
+// up on a request after REQUEST_TIMEOUT (TRIP_TIMEOUT for --date and --pack).
+export function weatherFailure(err, what = 'the forecast') {
+  if (err?.timeout) {
+    const which = err.service === 'archive' ? 'its weather archive' : 'its forecast';
+    return `Couldn't get ${what} from Open-Meteo: ${which} didn't answer within ${Math.round(err.timeoutMs / 1000)} seconds. It's slow or down; try again in a minute.`;
+  }
+  return `Couldn't get ${what} from Open-Meteo (${err.message}). Check the connection and try again.`;
+}
+
 const byLine = r => `${r.name} by ${r.brand}${r.year ? ` (${r.year})` : ''}`;
 // Answers built on the dataset's ratings and votes say where they're from.
 const CREDIT = 'From Le Decanteur\'s Fragrantica dataset (CC BY-NC-SA 4.0)';
@@ -321,7 +331,7 @@ async function main() {
     try {
       return await fetchForecast(place);
     } catch (err) {
-      fail(`Couldn't get the forecast from Open-Meteo (${err.message}). Check the connection and try again.`);
+      fail(weatherFailure(err));
     }
   }
 
@@ -514,7 +524,7 @@ async function main() {
     try {
       windows = await tripWindows(place, args.from, args.to, slot ? { slots: [slot] } : undefined);
     } catch (err) {
-      fail(`Couldn't get the weather from Open-Meteo (${err.message}). Check the connection and try again.`);
+      fail(weatherFailure(err, 'the weather'));
     }
     windows = withEvents(windows, events);
     const trip = packTrip(fragrances, windows, { max, occasionOf: tripOccasion(occasion, slot) });
@@ -572,7 +582,7 @@ async function main() {
         try {
           situations = await tripWindows(place, args.date, args.date, { slots: wanted ? [wanted] : SLOTS });
         } catch (err) {
-          fail(`Couldn't get the weather from Open-Meteo (${err.message}). Check the connection and try again.`);
+          fail(weatherFailure(err, 'the weather'));
         }
       } else {
         const wx = summarize(await forecastFor(place));
@@ -765,7 +775,7 @@ async function main() {
           .map(({ window: win, ranked }) => ({ win, ranked, pick: ranked[0] }))
         : planWindows(fragrances, await tripWindows(place, args.date, args.date), { history, nudge });
     } catch (err) {
-      fail(`Couldn't get the weather from Open-Meteo (${err.message}). Check the connection and try again.`);
+      fail(weatherFailure(err, 'the weather'));
     }
     if (!result.length) fail(`No weather came back for ${args.date}`);
     const typical = result.some(r => r.win.typical);

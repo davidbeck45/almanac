@@ -60,6 +60,7 @@ export const state = {
   wx: null,
   loading: false,
   updating: false, // a cached forecast is on screen while a fresh one loads
+  slow: false, // nothing on screen yet, and the forecast is slow to answer
   error: null,
   route: null, // the parsed route on screen (src/app/router.js)
   base: null, // the page under a bottle page: the last route that wasn't one

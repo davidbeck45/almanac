@@ -1,6 +1,9 @@
-import { test } from 'node:test';
+import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { blendModels, week, windowOn, summarize, cachedForecast, forecastError, requestError } from '../src/weather.js';
+import {
+  blendModels, week, windowOn, summarize, cachedForecast, getForecast, forecastError, requestError, fetchForecast, fetchTypical,
+  REQUEST_TIMEOUT, TRIP_TIMEOUT,
+} from '../src/weather.js';
 import { syntheticForecast } from './fixtures.js';
 
 // Two days of a multi-model response, variables suffixed by model as Open-Meteo returns them.
@@ -115,4 +118,61 @@ test('a saved forecast hours old reads now from its hourly row, not the reading 
   assert.equal(late.now.feelsF, 72);
   assert.equal(late.now.humidity, 50);
   assert.equal(late.now.label, 'Mostly clear');
+});
+
+// Stubs fetch with one that never answers, for one test; `signals` collects what each request was given.
+async function withHungFetch(run) {
+  const real = globalThis.fetch, signals = [];
+  globalThis.fetch = (url, opts) => { signals.push(opts?.signal); return new Promise(() => {}); };
+  try {
+    return await run(signals);
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+
+test('a request that never answers gives up, drops the request and reads as not answering', async () => {
+  assert.ok(REQUEST_TIMEOUT >= 20_000 && REQUEST_TIMEOUT <= 25_000, 'past a slow day’s 24 s, not much past it');
+  assert.ok(TRIP_TIMEOUT > 32_000, 'a slow day’s ten days took 32 s');
+  await withHungFetch(async signals => {
+    await assert.rejects(fetchForecast({ lat: 41.88, lon: -87.63 }, { timeoutMs: 20 }), err => err.timeout && err.service === 'forecast' && err.timeoutMs === 20);
+    assert.equal(signals[0]?.aborted, true);
+    await assert.rejects(fetchTypical({ lat: 41.88, lon: -87.63 }, '2026-12-10', '2026-12-10', { timeoutMs: 20, years: 1, nowMs: Date.parse('2026-10-14T12:00:00Z') }),
+      err => err.timeout && err.service === 'archive');
+  });
+  assert.equal(forecastError({ timeout: true, service: 'forecast' }), 'The forecast service isn’t answering. Try again in a minute.');
+  assert.equal(forecastError({ timeout: true, service: 'archive' }), 'The weather archive isn’t answering. Try again in a minute.');
+
+  // An answer inside the limit comes through, and its clock stops.
+  const real = globalThis.fetch;
+  globalThis.fetch = () => new Promise(resolve => setTimeout(resolve, 10, new Response(JSON.stringify(multiModel()))));
+  try {
+    const f = await fetchForecast({ lat: 41.88, lon: -87.63 }, { timeoutMs: 1000 });
+    assert.equal(f.hourly.temperature_2m[0], 70);
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test('a hung forecast falls back on the saved one, else fails as not answering', async () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    await withHungFetch(async () => {
+      const loc = { lat: 41.88, lon: -87.63 };
+      store.set('scentcast.weather', JSON.stringify({ key: '3:41.88,-87.63', forecast: { ...multiModel(), fetchedAt: Date.now() - 13 * 3600e3 } }));
+      const saved = getForecast(loc);
+      mock.timers.tick(REQUEST_TIMEOUT);
+      assert.equal((await saved).stale, true);
+
+      store.clear();
+      const none = getForecast(loc);
+      mock.timers.tick(REQUEST_TIMEOUT);
+      await assert.rejects(none, err => forecastError(err) === 'The forecast service isn’t answering. Try again in a minute.');
+    });
+  } finally {
+    mock.timers.reset();
+    delete globalThis.localStorage;
+  }
 });
