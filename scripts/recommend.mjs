@@ -44,7 +44,7 @@ import { normalize } from '../src/collections.js';
 import { excluding } from '../src/pool-tasks.js';
 import { fetchForecast, summarize, week, tripWindows, forecastError } from '../src/weather.js';
 import { searchCities } from '../src/location.js';
-import { STYLES, STYLE_STRONG, WEARS_CLOSE, styleById, styleScores, topOf, leanOf, closeOf, styleMix } from '../src/scent-styles.js';
+import { STYLES, STYLE_STRONG, WEARS_CLOSE, styleById, styleScores, topOf, shownOf, leanOf, closeOf, styleMix } from '../src/scent-styles.js';
 import { fragranticaLibrary, loadPool, fromPool, loadPoolStyles, loadAbout } from '../src/fragrantica.js';
 import { applySkin } from '../src/skin.js';
 import { packTrip, withEvents, picksFor, tripOccasion } from '../src/pack.js';
@@ -510,16 +510,17 @@ async function main() {
         name: f.name,
         brand: f.brand,
         source: f.source === 'fragrantica' ? 'dataset' : 'collection',
-        styles: topOf(scores),
+        // What its card and page show: a lean ("Leans skin scent", leans: true) when no style clears the bar.
+        styles: shownOf(scores),
         wearsClose: closeOf(scores),
         scores,
       }, null, 2));
     } else {
       console.log(`${f.name} (${f.brand})${f.source === 'fragrantica' ? ', from the Fragrantica dataset' : ''}`);
       const width = Math.max(...STYLES.map(s => s.label.length));
-      const shown = new Set(topOf(scores).map(s => s.id));
+      const shown = new Map(shownOf(scores).map(s => [s.id, s.leans ? 'leans (shown)' : 'shown']));
       for (const r of topOf(scores, Infinity, 0.15)) {
-        const tags = [shown.has(r.id) && 'shown', r.score >= STYLE_STRONG && 'strong'].filter(Boolean).join(', ');
+        const tags = [shown.get(r.id), r.score >= STYLE_STRONG && 'strong'].filter(Boolean).join(', ');
         console.log(`  ${r.label.padEnd(width)}  ${r.score.toFixed(2)}${tags ? `  ${tags}` : ''}`);
       }
       console.log(`  ${styleById('intimate').label.padEnd(width)}  ${scores.intimate.toFixed(2)}  ${closeOf(scores) ? 'wears close' : `wears close from ${WEARS_CLOSE.toFixed(2)}`}`);

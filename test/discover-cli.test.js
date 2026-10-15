@@ -53,8 +53,12 @@ test('the CLI answers Discover questions', async () => {
 });
 
 test('--styles, --more-like and --dupes find a bottle as --check does: the famous one, not a 0-vote namesake', async () => {
-  const [styles, dupes] = await Promise.all([cli('--styles', 'Baccarat Rouge', '--json'), cli('--dupes', 'ombre leather', '--json')]);
+  const [styles, dupes, leans, leansText] = await Promise.all([cli('--styles', 'Baccarat Rouge', '--json'), cli('--dupes', 'ombre leather', '--json'),
+    cli('--styles', 'Narciso Rodriguez For Her', '--json'), cli('--styles', 'Narciso Rodriguez For Her')]);
   assert.deepEqual([JSON.parse(styles.stdout).name, JSON.parse(styles.stdout).brand], ['Baccarat Rouge 540', 'Maison Francis Kurkdjian']);
+  // No style clears the bar, so it shows its lean, as its page does.
+  assert.deepEqual(JSON.parse(leans.stdout).styles.map(s => [s.label, s.leans]), [['Leans skin scent', true]]);
+  assert.match(leansText.stdout, /\n {2}Skin scent +0\.\d+ {2}leans \(shown\)\n/);
   const family = JSON.parse(dupes.stdout);
   assert.equal(family.brand, 'Tom Ford');
   assert.ok(family.cheaper.length + family.siblings.length > 0, 'it has smells-like votes');
