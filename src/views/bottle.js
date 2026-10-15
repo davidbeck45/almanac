@@ -448,11 +448,13 @@ function layeringAfter(model, app) {
   if (model.partners !== undefined || warming) return;
   warming = warmPairing(activeFragrances().filter(o => o.id !== model.f.id), model.f).finally(() => { warming = null; });
   warming.then(() => {
-    if (!showing(model.arg)) return;
-    redrawSection('layering', app);
-    // The list changed meanwhile (another one switched on): work that one out too.
-    const now = bottleModel(state.route);
-    if (now?.partners === undefined) layeringAfter(now, app);
+    // The bottle on screen now, which may be another one opened meanwhile
+    // (it found this pass running and left it to finish), or the list
+    // changed (another one switched on): work out what it still lacks.
+    const now = state.route?.dest === 'bottle' ? bottleModel(state.route) : null;
+    if (!now) return;
+    if (now.partners === undefined) layeringAfter(now, app);
+    else redrawSection('layering', app);
   }, () => {});
 }
 
