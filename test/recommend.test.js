@@ -266,6 +266,26 @@ test('--pack and --date stop on bad dates before any request', () => {
   }
 });
 
+test('--date and --from are checked against the place’s own date, not this machine’s', () => {
+  // This machine in Chicago; the place 14 hours ahead of UTC (19 ahead of Chicago), or 12 behind (21 behind Tokyo).
+  const at = (tz, hours, ...args) => spawnSync(process.execPath, ['--import', mock, script, ...args], {
+    encoding: 'utf8', env: { ...process.env, TZ: tz, MOCK_UTC_OFFSET: String(hours), MOCK_ARCHIVE_STATUS: '500' },
+  });
+  const placeDay = (hours, days = 0) => new Date(Date.now() + hours * 3600e3 + days * 86_400_000).toISOString().slice(0, 10);
+  // A day that's over there, though not here (or only just): stopped before any typical weather is asked for.
+  const gone = placeDay(14, -1);
+  for (const args of [['--date', gone], ['--date', gone, '--slot', 'night'], ['--pack', '--from', gone, '--to', placeDay(14, 1)], ['--spray', 'Terra', '--date', gone]]) {
+    const run = at('America/Chicago', 14, '--city', 'Testville', ...args);
+    assert.equal(run.status, 1, args.join(' '));
+    const flag = args.includes('--pack') ? 'from' : 'date';
+    assert.equal(run.stderr.trim(), `--${flag} ${gone} has passed in Testville, Test State; pick ${placeDay(14)} or later`);
+  }
+  // Today there, though it's already tomorrow here: answered from the forecast.
+  const today = at('Asia/Tokyo', -12, '--loc', '40.7,-74', '--date', placeDay(-12), '--json');
+  assert.equal(today.status, 0, today.stderr);
+  assert.equal(JSON.parse(today.stdout).weather, 'forecast');
+});
+
 test('a forecast that doesn’t answer in time says so, not "check the connection"', () => {
   const line = weatherFailure(Object.assign(new Error('Weather request got no answer in 25 s'), { timeout: true, service: 'forecast', timeoutMs: 25_000 }));
   assert.equal(line, 'Couldn\'t get the forecast from Open-Meteo: its forecast didn\'t answer within 25 seconds. It\'s slow or down; try again in a minute.');

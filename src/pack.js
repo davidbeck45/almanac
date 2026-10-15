@@ -333,10 +333,11 @@ function packText(bottles, plan, uncovered, wins, full, variety) {
  * Ranked picks for one date and slot at any place: the forecast's window, or
  * typical weather past the forecast. The slot defaults to the occasion's,
  * else day. -> { window, ranked }, or null when no weather came back.
+ * `refusePast` throws for a date gone by at the place, as tripWindows'.
  */
-export async function picksFor(frags, { place, dateISO, slot = null, occasion = null, history = [], nudge = false }) {
+export async function picksFor(frags, { place, dateISO, slot = null, occasion = null, history = [], nudge = false, refusePast = false }) {
   const at = slot ?? occasion?.slot ?? 'day';
-  const [win] = await tripWindows(place, dateISO, dateISO, { slots: [at] });
+  const [win] = await tripWindows(place, dateISO, dateISO, { slots: [at], refusePast });
   if (!win) return null;
   return { window: win, ranked: rank(frags, win, at, { occasion, history, todayISO: dateISO, nudge }) };
 }

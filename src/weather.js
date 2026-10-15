@@ -384,8 +384,11 @@ export function typicalWindow(climate, dateISO, slot) {
  * The `slots` windows of every date from fromISO to toISO, in time order:
  * the forecast's as far as it reaches, typical weather past it (`typical`).
  * Fetches only what the dates need, each request waiting up to TRIP_TIMEOUT.
+ * `refusePast` throws `{ past: true, today }` when fromISO has already gone
+ * by at the place (the forecast's own date, which can be a day off the
+ * device's), before asking the archive for a day that's over.
  */
-export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'], nowMs = Date.now(), timeoutMs = TRIP_TIMEOUT } = {}) {
+export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'], nowMs = Date.now(), refusePast = false, timeoutMs = TRIP_TIMEOUT } = {}) {
   const dates = [];
   for (let d = fromISO; d <= toISO; d = shiftDays(d, 1)) dates.push(d);
   const found = new Map();
@@ -393,6 +396,10 @@ export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'
   // The location's date can be a day off UTC's; windowOn finds what's there.
   if (fromISO <= shiftDays(new Date(nowMs).toISOString().slice(0, 10), FORECAST_DAYS)) {
     const forecast = await fetchForecast(loc, { days: FORECAST_DAYS, timeoutMs });
+    const { todayISO } = clock(forecast, nowMs);
+    if (refusePast && fromISO < todayISO) {
+      throw Object.assign(new Error(`${fromISO} has passed there; it's ${todayISO}`), { past: true, today: todayISO });
+    }
     for (const d of dates) {
       for (const s of slots) {
         const win = windowOn(forecast, d, s);

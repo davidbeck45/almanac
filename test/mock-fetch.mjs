@@ -5,10 +5,12 @@
 // MOCK_OFFLINE set, fails like no network; MOCK_FORECAST_STATUS=429 turns
 // the forecast API down with that status, as when the day's quota is spent
 // (MOCK_ARCHIVE_STATUS the archive; MOCK_REASON is the reason the answer
-// gives, as Open-Meteo's do).
+// gives, as Open-Meteo's do). MOCK_UTC_OFFSET (hours) puts the place in
+// another time zone: its forecast starts on the place's own date.
 import { syntheticForecast } from './fixtures.js';
 
-const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+const offset = Number(process.env.MOCK_UTC_OFFSET ?? -4) * 3600;
+const yesterday = new Date(Date.now() + offset * 1000 - 86_400_000).toISOString().slice(0, 10);
 globalThis.fetch = async url => {
   const u = String(url);
   if (process.env.MOCK_OFFLINE) throw new TypeError('fetch failed');
@@ -19,7 +21,7 @@ globalThis.fetch = async url => {
   };
   if (u.startsWith('https://api.open-meteo.com/v1/forecast') && process.env.MOCK_FORECAST_STATUS) return refuse(process.env.MOCK_FORECAST_STATUS);
   if (u.startsWith('https://archive-api.open-meteo.com/v1/archive') && process.env.MOCK_ARCHIVE_STATUS) return refuse(process.env.MOCK_ARCHIVE_STATUS);
-  if (u.startsWith('https://api.open-meteo.com/v1/forecast')) return json(syntheticForecast(8, { start: yesterday }));
+  if (u.startsWith('https://api.open-meteo.com/v1/forecast')) return json({ ...syntheticForecast(8, { start: yesterday }), utc_offset_seconds: offset });
   if (u.startsWith('https://archive-api.open-meteo.com/v1/archive')) {
     const q = new URL(u).searchParams;
     const days = Math.round((Date.parse(q.get('end_date')) - Date.parse(q.get('start_date'))) / 86_400_000) + 1;
