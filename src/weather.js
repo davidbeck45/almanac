@@ -420,17 +420,34 @@ function clock(forecast, nowMs) {
   };
 }
 
-// `current` is the reading at fetch time. A saved forecast an hour or more
-// old reads "now" from its row for this hour instead, so a 2 pm forecast
-// opened at 1 am doesn't show the afternoon under a night sky.
+// Now's temperature, feels-like and humidity are the blend's, read between
+// this hour's row and the next, like the windows and the day's high and low.
+// `current` is the default model's alone (HRRR or GFS in the US): on a
+// Chicago evening it read 57° under a low of 59°, feeling 53° beside a
+// window under way at 56°. `current` keeps the sky (weather code, cloud
+// cover) while it's the reading at fetch time; a saved forecast an hour or
+// more old takes this hour's row for that too, so a 2 pm forecast opened at
+// 1 am doesn't show the afternoon under a night sky.
 const CURRENT_FOR = 60 * 60 * 1000;
 
 function nowReading(forecast, hours, ctx, nowMs) {
   const c = forecast.current;
-  const row = nowMs - forecast.fetchedAt >= CURRENT_FOR && hours.find(x => x.date === ctx.todayISO && x.hour === ctx.hour);
-  return row
-    ? { tempF: row.temp, feelsF: row.feels, humidity: row.humidity, cloudCover: null, code: row.code }
-    : { tempF: c.temperature_2m, feelsF: c.apparent_temperature, humidity: c.relative_humidity_2m, cloudCover: c.cloud_cover, code: c.weather_code };
+  const i = hours.findIndex(x => x.date === ctx.todayISO && x.hour === ctx.hour);
+  const row = hours[i], next = hours[i + 1];
+  // Within today only, so the reading stays between the day's high and low.
+  const part = new Date(ctx.wallNow).getUTCMinutes() / 60;
+  const at = key => (!Number.isFinite(row?.[key]) ? null
+    : next?.date === row.date && Number.isFinite(next[key]) ? row[key] + (next[key] - row[key]) * part : row[key]);
+  const blend = { tempF: at('temp'), feelsF: at('feels'), humidity: at('humidity') };
+  const sky = row && nowMs - forecast.fetchedAt >= CURRENT_FOR
+    ? { cloudCover: null, code: row.code }
+    : { cloudCover: c.cloud_cover, code: c.weather_code };
+  return {
+    tempF: blend.tempF ?? c.temperature_2m,
+    feelsF: blend.feelsF ?? c.apparent_temperature,
+    humidity: blend.humidity ?? c.relative_humidity_2m,
+    ...sky,
+  };
 }
 
 export function summarize(forecast, nowMs = Date.now()) {

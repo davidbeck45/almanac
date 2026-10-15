@@ -102,13 +102,14 @@ test('a refused request carries its status, Open-Meteo’s reason and the servic
 
 test('a saved forecast hours old reads now from its hourly row, not the reading at fetch time', () => {
   const f = blendModels(multiModel());
-  // Fetched at 14:00 local on the 8th, when it was 75° and clear.
+  // Fetched at 14:00 local on the 8th, when the default model said 75° and clear.
   const fetchedAt = Date.parse('2026-10-08T19:00:00Z');
   f.current = { temperature_2m: 75, apparent_temperature: 76, relative_humidity_2m: 40, weather_code: 0, cloud_cover: 0 };
   f.fetchedAt = fetchedAt;
 
+  // The temperature is the blend's at 14:10; the sky is still the reading at fetch time.
   const soon = summarize(f, fetchedAt + 10 * 60e3);
-  assert.equal(soon.now.tempF, 75);
+  assert.equal(soon.now.tempF, 80);
   assert.equal(soon.now.label, 'Clear');
 
   // Opened at 01:00 local on the 9th: the 01:00 row (70°, mostly clear by the default model).
@@ -118,6 +119,33 @@ test('a saved forecast hours old reads now from its hourly row, not the reading 
   assert.equal(late.now.feelsF, 72);
   assert.equal(late.now.humidity, 50);
   assert.equal(late.now.label, 'Mostly clear');
+});
+
+test('now reads the blend between this hour and the next, so it sits inside the day’s high and low', () => {
+  const f = blendModels(multiModel());
+  // The default model alone ran cold, as Chicago's did: 57° under a blended low of 70°.
+  f.current = { temperature_2m: 57, apparent_temperature: 53, relative_humidity_2m: 81, weather_code: 3, cloud_cover: 100 };
+  f.fetchedAt = Date.parse('2026-10-08T21:00:00Z');
+  // 16:30 local: halfway from 16:00 (80°, feels 82°) to 17:00 (70°, feels 72°).
+  const wx = summarize(f, Date.parse('2026-10-08T21:30:00Z'));
+  assert.equal(wx.now.tempF, 75);
+  assert.equal(wx.now.feelsF, 77);
+  assert.equal(wx.now.humidity, 50);
+  assert.ok(wx.now.loF <= wx.now.tempF && wx.now.tempF <= wx.now.hiF, `${wx.now.tempF} in ${wx.now.loF}..${wx.now.hiF}`);
+  assert.equal(wx.day.feelsF, wx.now.feelsF, 'the window under way reads the same hours');
+  assert.equal(wx.now.label, 'Overcast', 'the sky is still `current`’s');
+  assert.equal(wx.now.cloudCover, 100);
+  assert.equal(week(f, Date.parse('2026-10-08T21:30:00Z'))[0].loF, wx.now.loF);
+
+  // Late in the evening it doesn't lean into tomorrow's hours, which could fall outside today's range.
+  f.hourly.temperature_2m[24] = 40;
+  const late = summarize(f, Date.parse('2026-10-09T04:30:00Z'));
+  assert.equal(late.now.tempF, 70);
+  assert.ok(late.now.tempF >= late.now.loF);
+
+  // With no row for now (a forecast that doesn't reach it), `current` stands in.
+  const gone = summarize({ ...f, fetchedAt: Date.parse('2026-10-10T12:00:00Z') }, Date.parse('2026-10-10T12:10:00Z'));
+  assert.equal(gone.now.tempF, 57);
 });
 
 // Stubs fetch with one that never answers, for one test; `signals` collects what each request was given.
