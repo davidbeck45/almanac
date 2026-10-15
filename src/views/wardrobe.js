@@ -613,7 +613,9 @@ async function share(app) {
 }
 
 // Copy, from the share sheet: the clipboard, else the browser's copy of the
-// selected field, else a line saying to copy it by hand.
+// selected field, else a line saying to copy it by hand. Focus stays on Copy
+// (selecting the field takes it there) unless it's down to copying by hand,
+// when the field, selected, has it.
 async function copyShare(el, app) {
   const s = state.sheet;
   const field = document.getElementById('share-url');
@@ -622,8 +624,10 @@ async function copyShare(el, app) {
     await navigator.clipboard.writeText(s.url);
     copied = true;
   } catch {
+    const had = document.activeElement === el;
     field?.select();
     try { copied = document.execCommand('copy'); } catch { copied = false; }
+    if (had && el.isConnected) el.focus({ preventScroll: true });
   }
   if (state.sheet !== s) return;
   app.keepingFocus(el, '#sheet', () => app.updateSheet({ copied: copied || 'Couldn’t copy from here. The link is selected: copy it yourself.' }));
