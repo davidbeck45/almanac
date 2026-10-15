@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, seasonFit, SEASONS, votedShares, performanceLevel } from '../src/engine.js';
+import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, restReason, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, seasonFit, SEASONS, votedShares, performanceLevel } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { heaviness } from '../src/accords.js';
 import { predictedShares } from '../src/custom.js';
@@ -467,7 +467,7 @@ test('a week plan rotates instead of repeating one bottle', () => {
   for (let i = 0; i < ids.length; i += 2) assert.notEqual(ids[i], ids[i + 1], 'same bottle day and night');
   for (const p of plan) assert.ok(p.pick.tier === 'S' || p.pick.tier === 'A', `${p.pick.fragrance.name} is only ${p.pick.tier}`);
   const night = plan[1].ranked.find(r => r.fragrance.id === ids[0]);
-  assert.ok(night.reasons.some(r => r.text === 'Already picked for that day'), 'planned picks are not reported as worn');
+  assert.ok(night.reasons.some(r => r.text === 'Already picked for daytime'), 'planned picks are not reported as worn');
 });
 
 test('the only bottle, or one nothing else comes near, keeps its match on a repeat', () => {
@@ -480,7 +480,12 @@ test('the only bottle, or one nothing else comes near, keeps its match on a repe
   // With others close, the plan still turns to them, and a repeat further down says so.
   const plan = planWindows(fragrances, windows);
   assert.notEqual(plan[0].pick.fragrance.id, plan[1].pick.fragrance.id);
-  assert.ok(plan[1].ranked.find(r => r.fragrance.id === plan[0].pick.fragrance.id).reasons.some(r => r.text === 'Already picked for that day'));
+  assert.ok(plan[1].ranked.find(r => r.fragrance.id === plan[0].pick.fragrance.id).reasons.some(r => r.text === 'Already picked for daytime'));
+  // A pick for the same date is the other slot's, named so: "that day" meant nothing on Now or Compare.
+  assert.equal(restReason({ daysAgo: 0, planned: true }, 'day'), 'Already picked for nighttime');
+  assert.equal(restReason({ daysAgo: 2, planned: true }, 'night'), 'Picked 2 days before');
+  assert.equal(restReason({ daysAgo: 1, planned: false }, 'night'), 'Worn yesterday');
+  assert.equal(restReason({ daysAgo: null, planned: false }, 'night'), null);
 });
 
 test('a logged wear stays the pick for its window', () => {

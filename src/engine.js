@@ -636,15 +636,21 @@ function reasonsFor(frag, parts, ctx) {
   if (parts.unworn) good('Not worn yet', 0.3, true);
   else if (parts.idle) good(`Not worn in ${parts.idle} days`, 0.3, true);
 
-  const d = parts.daysAgo;
-  if (parts.planned) {
-    if (d === 0) bad('Already picked for that day', parts.rotation, true);
-    else if (d > 0) bad(`Picked ${d === 1 ? 'the day' : `${d} days`} before`, parts.rotation, true);
-  } else if (d === 0) bad('Already wearing it today', parts.rotation, true);
-  else if (d === 1) bad('Worn yesterday', parts.rotation, true);
-  else if (d > 1) bad(`Worn ${d} days ago`, parts.rotation, true);
+  const rest = restReason(parts, ctx.slot);
+  if (rest) bad(rest, parts.rotation, true);
 
   return out.sort((a, b) => b.specific - a.specific || b.strength - a.strength);
+}
+
+/**
+ * Why a recent wear or a plan's pick sets a bottle back in a window of
+ * `slot`, in its reason's words (rank's parts: daysAgo, planned), or null. A
+ * pick for the window's own date is the other slot's (rotationPenalty skips
+ * its own), named so, since "that day" means nothing on Now or Compare.
+ */
+export function restReason({ daysAgo: d, planned }, slot) {
+  if (planned) return d === 0 ? `Already picked for ${slot === 'night' ? 'daytime' : 'nighttime'}` : d > 0 ? `Picked ${d === 1 ? 'the day' : `${d} days`} before` : null;
+  return d === 0 ? 'Already wearing it today' : d === 1 ? 'Worn yesterday' : d > 1 ? `Worn ${d} days ago` : null;
 }
 
 /**

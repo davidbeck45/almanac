@@ -144,7 +144,7 @@ test('why it ranks here: the rating bar says whose rating it is, and a bottle no
   assert.ok(rest.includes(`Worn 3 days ago: ${Math.round(e.parts.rotation * 100)}% lower so others get a turn.`), rest);
   assert.ok(!/rotation/i.test(rest));
   const planned = rank([f], wx.night, 'night', { history: [{ id: f.id, date: wx.night.dateISO, slot: 'day', planned: true }], todayISO: wx.night.dateISO })[0];
-  assert.match(bottlePageHTML(modelOf(f, { entry: planned })), /Already picked for that day: \d+% lower so others get a turn\./);
+  assert.match(bottlePageHTML(modelOf(f, { entry: planned })), /Already picked for daytime: \d+% lower so others get a turn\./);
 });
 
 test('day and night read as whole percents that add up to 100, as Compare shows them', () => {

@@ -7,7 +7,7 @@
 // The sections in their own modules are src/views/bottle-*.js; the ones that
 // ask the suggestion pool keep their answers with pooled(), and draw again
 // on their own when an answer lands (redrawSection).
-import { rank, comfortRange, SEASONS } from '../engine.js';
+import { rank, comfortRange, restReason, SEASONS } from '../engine.js';
 import { layerPicks, pairingKept, warmPairing } from '../layering.js';
 import { setHidden } from '../hidden.js';
 import { loadWants, saveWants, hasWant, setWant } from '../wishlist.js';
@@ -405,10 +405,7 @@ function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned, inMine,
 }
 
 // Why a bottle is given a rest, in the words of its reason (src/engine.js).
-function restText({ daysAgo: d, planned }) {
-  if (planned) return d === 0 ? 'Already picked for that day' : d > 0 ? `Picked ${d === 1 ? 'the day' : `${d} days`} before` : 'Picked for a day nearby';
-  return d === 0 ? 'Already wearing it today' : d === 1 ? 'Worn yesterday' : d > 1 ? `Worn ${d} days ago` : 'Worn recently';
-}
+const restText = (parts, slot) => restReason(parts, slot) ?? (parts.planned ? 'Picked for a day nearby' : 'Worn recently');
 
 function whySection({ entry, solo, win }) {
   if (!entry) return '';
@@ -423,7 +420,7 @@ function whySection({ entry, solo, win }) {
     .map(([k, label, color]) => bar(k === 'quality' && yours ? 'Your rating' : label, p[k] * 100, color, `${Math.round(p[k] * 100)}%`)).join('');
   // What a recent wear (or a pick for a day nearby) takes off its match.
   const rotation = p.rotation > 0
-    ? `<p class="why-note">${esc(restText(p))}: ${Math.round(p.rotation * 100)}% lower so others get a turn.</p>`
+    ? `<p class="why-note">${esc(restText(p, win?.slot))}: ${Math.round(p.rotation * 100)}% lower so others get a turn.</p>`
     : '';
   const title = solo ? `How it would do ${win.slot === 'day' ? 'by day' : 'tonight'}` : 'Why it ranks here';
   return `<section class="bp-section"><h3>${title} <span class="h3-aside">${matchPct(entry)}% match</span></h3><div class="bars why">${bars}</div>${rotation}</section>`;
