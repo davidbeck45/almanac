@@ -47,7 +47,7 @@ It returns `sprays: [lo, hi]` (1–6, one number when it lands near one), `where
 
 ## Collection data
 
-`data/collection.jsonl` is the raw scrape, one line per bottle. `data/collection.json` is generated from it by `npm run build:data`, so edit the jsonl.
+`data/collection.jsonl` is the raw scrape, one line per bottle. `data/collection.json` is generated from it by `npm run build:data`, so edit the jsonl. The build names a bottle the dataset has as its `r/` row does (a page's h1 runs name and brand together, and an accented brand like Floraïku or Hermès never matched its slug); `test/fragrantica.test.js` checks every built record.
 
 To add or refresh a bottle:
 1. Get its line. A bottle in the Fragrantica dataset (below; `python3 scripts/decant.py similar <id or "name brand">` finds it) needs no browser: `python3 scripts/decant.py add collection <id>` appends or replaces it. A bottle newer than the dataset needs the extractor: open its page with Claude in Chrome (David is logged in as @doeszen), run `scripts/fragrantica-extract.js` on the rendered page with the javascript tool (it returns one JSON line, clicking "Show votes" for the note votes, `noteVotes`, and back off), and append or replace that line in `data/collection.jsonl`.

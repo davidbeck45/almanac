@@ -87,6 +87,21 @@ test('brands written in capitals read in title case, as the build writes them; s
   assert.ok(wardrobe.every(f => f.brand === brandCase(f.brand)));
 });
 
+test('the build names every bottle the dataset has as the dataset does, accented brands too', async () => {
+  // A page's h1 runs the name and brand together, and its slug drops accents
+  // ("Floraiku" for "Floraïku"), so the build takes the dataset's spelling.
+  const built = ['collection', 'catalog', 'originals', 'calibration']
+    .flatMap(stem => JSON.parse(readFileSync(new URL(`../data/${stem}.json`, import.meta.url))).fragrances);
+  const inspired = built.filter(f => f.original).map(f => f.original);
+  const records = await library.records([...built, ...inspired].map(f => String(f.id)));
+  const misnamed = [...built, ...inspired].filter(f => records.has(String(f.id)))
+    .filter(f => f.name !== records.get(String(f.id)).name || f.brand !== records.get(String(f.id)).brand)
+    .map(f => `${f.name} (${f.brand}): the dataset has ${records.get(String(f.id)).name} (${records.get(String(f.id)).brand})`);
+  assert.deepEqual(misnamed, [], 'npm run build:data');
+  assert.ok(records.size >= built.length - 5, 'most of data/ is in the dataset');
+  assert.equal(built.find(f => f.id === 17).brand, 'Hermès');
+});
+
 test('records load by id; ids the dataset lacks are left out', async () => {
   const found = await library.records(['31861', '999999999', 'fg:abc', 'my:x']);
   assert.deepEqual([...found.keys()], ['31861']);
