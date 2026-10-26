@@ -63,6 +63,13 @@ test('notes between families count toward each, the main one most', () => {
   assert.ok(main > other && Math.abs(main + other - 1) < 1e-9);
   assert.deepEqual(noteFamilies('Bergamot'), [['citrus', 1]]);
   assert.deepEqual(noteFamilies('Unobtainium'), []);
+  // Names that only look like another family: icing is sweet, a snowdrop a
+  // flower, fior di latte milk without cocoa, and dragonfruit's spelling.
+  const families = name => noteFamilies(name).map(([f]) => f);
+  for (const [name, want] of [['Frosting', ['sweet']], ['Frosting [Glacé]', ['sweet']], ['Snowdrops', ['floral', 'green']], ['Fior di Latte', ['lactonic']],
+    ['Dragonfruit', ['tropical']], ['Dragon fruit', ['tropical']], ['Snow', ['fresh', 'ozonic']], ['Ice', ['fresh', 'ozonic']], ['Caffè Latte', ['cacao', 'lactonic']]]) {
+    assert.deepEqual(families(name), want, name);
+  }
   // The labdanum in a resin bottle bridges to an amber one.
   const resin = bottle('resin', { balsamic: 100 }, { base: ['Labdanum'] });
   assert.ok(layerProfile(resin).profile.amber > 0);
