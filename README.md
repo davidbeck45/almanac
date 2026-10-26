@@ -65,6 +65,7 @@ node scripts/recommend.mjs --dupes "Aventus"       # its original, cheaper alter
 ```sh
 npm run dev      # http://127.0.0.1:5173 (Python's http.server; there's no build step)
 npm test
+node scripts/backtest.mjs   # three years of real weather through the engine, for tuning (CLAUDE.md has the figures)
 MOCK=1 node worker/dev.mjs   # the old Fragella lookup on :8787, from saved responses
 ```
 
