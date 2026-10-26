@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { journalStats, journalCalendar, journalExport, toggleWear, parseJournal, occasionCounts, loadHistory } from '../src/history.js';
+import {
+  journalStats, journalCalendar, journalExport, toggleWear, parseJournal, occasionCounts, loadHistory,
+  journalToken, journalFromToken, readJournal, isJournalToken, journalFreshness, RECENT_DAYS, shiftISO,
+} from '../src/history.js';
+import { ROTATION_PENALTY } from '../src/engine.js';
 import { windowOn, week } from '../src/weather.js';
 import { syntheticForecast } from './fixtures.js';
 
@@ -103,4 +107,69 @@ test('the stored log keeps only wears it can read: a real date, day or night', (
     if (real) Object.defineProperty(globalThis, 'localStorage', real);
     else delete globalThis.localStorage;
   }
+});
+
+// A year of wears: two bottles a day across eight, every use, planned entries mixed in.
+function yearLog(todayISO) {
+  const uses = ['daily', 'daily', 'office', undefined, 'date', 'daily'];
+  const log = [];
+  for (let d = 0; d < 365; d++) {
+    for (const [k, slot] of [[0, 'night'], [1, 'day']]) {
+      const occasion = uses[(d + k) % uses.length];
+      log.push({ id: String(100 + ((d * 3 + k) % 8)), date: shiftISO(todayISO, -d), slot, ...(occasion && { occasion }), ...(d === 3 && k && { lat: 40.71, lon: -74.01 }) });
+    }
+  }
+  log.push({ id: '999', date: shiftISO(todayISO, -400), slot: 'day' }, { id: '108', date: shiftISO(todayISO, 1), slot: 'day', planned: true });
+  return log;
+}
+
+test('Copy for Claude carries what rotation and the nudge read, and reads back as a journal', () => {
+  assert.equal(RECENT_DAYS, ROTATION_PENALTY.length, 'the token reaches as far back as rotation');
+  const today = '2026-10-26';
+  const log = yearLog(today);
+  const skin = { 101: { rating: 5, longevity: 0, sillage: 0, updated: '2026-10-01' }, 'my:abc': { rating: null, longevity: -1, sillage: 1 } };
+  const token = journalToken(log, new Set(['4310', 'my:abc']), skin, { todayISO: today });
+  assert.match(token, /^scj1\.[\w-]+$/, 'base64url after a version');
+  assert.ok(token.length < 600, `a few hundred bytes, not ${token.length}`);
+  assert.ok(isJournalToken(token) && isJournalToken(` ${token}\n`) && !isJournalToken('scentcast-journal-2026-10-26.json'));
+  for (const pasted of [`"${token}"`, `\`${token}\`.`, `${token}.`]) assert.deepEqual(readJournal(pasted), readJournal(token), pasted);
+
+  const back = readJournal(token);
+  // Every wear of the last ten days, as logged (no places), with its use.
+  const since = shiftISO(today, -(RECENT_DAYS - 1));
+  const recent = log.filter(h => !h.planned && h.date >= since && h.date <= today).map(({ lat, lon, ...h }) => h);
+  const sameWear = (a, b) => a.id === b.id && a.date === b.date && a.slot === b.slot && a.occasion === b.occasion;
+  for (const h of recent) assert.ok(back.history.some(b => sameWear(b, h)), `${h.date} ${h.slot}`);
+  assert.ok(back.history.every(h => !('lat' in h)), 'no coordinates');
+  assert.ok(!back.history.some(h => h.planned || h.date > today), 'plans stay behind');
+  // Each bottle's last wear and the journal's first, so idle days count as in the app.
+  const last = (list, id) => list.filter(h => h.id === id && !h.planned).map(h => h.date).sort().at(-1);
+  for (const id of new Set(log.map(h => h.id))) assert.equal(last(back.history, id), last(log, id), id);
+  assert.equal(back.history.map(h => h.date).sort()[0], shiftISO(today, -400));
+  assert.equal(new Set(back.history.map(h => `${h.date} ${h.slot}`)).size, back.history.length, 'each wear once');
+  // Switched-off bottles, stars and nudges, and the whole log's wears per use.
+  assert.deepEqual(back.hidden, ['4310', 'my:abc']);
+  assert.deepEqual(back.skin, { 101: { rating: 5, longevity: 0, sillage: 0 }, 'my:abc': { rating: null, longevity: -1, sillage: 1 } });
+  assert.deepEqual(back.counts, occasionCounts(log));
+  assert.equal(back.location, null);
+  assert.deepEqual(journalFreshness(back.history, today), { newest: today, daysAgo: 0, recent: recent.length });
+  assert.deepEqual(journalFreshness(back.history, shiftISO(today, 3)).daysAgo, 3);
+});
+
+test('an empty journal makes a token too, and a bad one says so in a sentence', () => {
+  const empty = readJournal(journalToken([], [], {}, { todayISO: '2026-10-26' }));
+  // An export's wear with a use of null (hand-edited, or a future app's) travels as one without.
+  assert.equal(readJournal(journalToken([{ id: 'a', date: '2026-10-25', slot: 'day', occasion: null }], [], {}, { todayISO: '2026-10-26' })).history[0].occasion, undefined);
+  assert.deepEqual([empty.history, empty.hidden, empty.skin, empty.counts], [[], [], {}, {}]);
+  assert.deepEqual(journalFreshness([], '2026-10-26'), { newest: null, daysAgo: null, recent: 0 });
+  const token = journalToken(history, [], {}, { todayISO: '2026-09-28' });
+  const garbled = /^Error: This Copy for Claude is cut short or garbled: copy it again from Wardrobe › Worn and paste it whole\.$/;
+  for (const bad of [token.slice(0, -6), `${token.slice(0, 12)}!${token.slice(13)}`, 'scj1.', 'scj1.e30', 'scj0.e30', `scj1.${btoa('{"t":"2026-09-28","i":[1],"w":[[3,0,0]]}')}`]) {
+    assert.throws(() => journalFromToken(bad), garbled, bad);
+  }
+  assert.throws(() => readJournal('scj2.abc'), /^Error: This Copy for Claude comes from a newer Scentcast \(scj2\) than this checkout reads; update it\.$/);
+  // Not a token: an export's text, or nothing it knows.
+  assert.equal(readJournal(JSON.stringify(journalExport(history, null, []))).history.length, 4);
+  assert.equal(readJournal('not json'), null);
+  assert.equal(readJournal('{"app":"else"}'), null);
 });

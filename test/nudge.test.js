@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { rank, planWindows, daysBetween, PLAN_MARGIN, NUDGE_AFTER } from '../src/engine.js';
-import { shiftISO } from '../src/history.js';
+import { shiftISO, journalToken, readJournal } from '../src/history.js';
 import { occasionById } from '../src/occasions.js';
 
 const fragrances = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url))).fragrances
@@ -140,4 +140,35 @@ test('a bottle saved for an event is never the one nudged before it', () => {
     assert.notEqual(p.pick.fragrance.id, best.id);
     assert.ok(!p.ranked.some(r => r.nudged && r.fragrance.id === best.id), `${p.win.dateISO} ${p.win.slot}`);
   }
+});
+
+test('Copy for Claude plans as the whole journal does, nudges and all', () => {
+  // Four months of following the plan through a swing of weather, then a week ahead from several days.
+  const windowOf = (dateISO, slot) => {
+    const swing = Math.sin(daysBetween('2026-06-01', dateISO) / 9) * 18;
+    return { ...mildDay(dateISO, slot), feelsF: (slot === 'day' ? 70 : 60) + swing };
+  };
+  // Some bottles stay on the shelf throughout, and Meant To Be Seen past the first weeks.
+  const shelved = new Set(['Infini Rose', 'Sticky Fingers', 'Terra', 'Liam'].map(idOf));
+  let log = [];
+  for (let d = '2026-06-01'; d < '2026-10-01'; d = shiftISO(d, 1)) {
+    if (d === '2026-06-20') shelved.add(idOf('Meant To Be Seen'));
+    for (const p of planWindows(fragrances, [windowOf(d, 'day'), windowOf(d, 'night')], { history: log })) {
+      const worn = [p.pick, ...p.ranked].find(r => !shelved.has(r.fragrance.id)).fragrance.id;
+      log = [{ id: worn, date: d, slot: p.win.slot, occasion: 'daily' }, ...log];
+    }
+  }
+  let nudged = 0;
+  for (const today of ['2026-10-01', '2026-10-04', '2026-10-09']) {
+    const known = log.filter(h => h.date < today);
+    const fromToken = readJournal(journalToken(known, [], {}, { todayISO: today })).history;
+    assert.ok(fromToken.length < known.length / 5, 'a small part of the log');
+    const windows = Array.from({ length: 7 }, (_, k) => shiftISO(today, k)).flatMap(d => [windowOf(d, 'day'), windowOf(d, 'night')]);
+    const whole = planWindows(fragrances, windows, { history: known, nudge: true });
+    const token = planWindows(fragrances, windows, { history: fromToken, nudge: true });
+    assert.deepEqual(token.map(p => p.pick.fragrance.id), whole.map(p => p.pick.fragrance.id), today);
+    assert.deepEqual(token.map(p => p.pick.reasons.map(r => r.text)), whole.map(p => p.pick.reasons.map(r => r.text)));
+    nudged += whole.filter(p => p.pick.nudged).length;
+  }
+  assert.ok(nudged > 0, 'the nudge had something to do');
 });

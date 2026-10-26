@@ -1,8 +1,14 @@
 #!/usr/bin/env node
 // Everything the Omarchy bar widget shows, as one JSON object on stdout.
 //   node omarchy/widget.mjs [--location "Grapevine, TX" | --location 32.93,-97.08[,Name]] [--hidden "Name,Name"]
+//                           [--journal TOKEN|FILE]
 // Without --location it follows Omarchy's weather location, then the IP address.
 // Without --hidden, DEFAULT_HIDDEN stays off, as on a device that never opened Manage.
+// --journal takes the app's Copy for Claude (Wardrobe › Worn) or a file holding
+// it or a journal export, read again on every refresh: the plan then rotates
+// out recent wears, nudges in neglected bottles and applies the stars and
+// switched-off bottles it carries, as the app's Now does. Without one it
+// plans without wears, and the payload says so (`journal: null`).
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -11,6 +17,8 @@ import { parseArgs } from 'node:util';
 import { planWindows } from '../src/engine.js';
 import { accordColor } from '../src/accords.js';
 import { DEFAULT_HIDDEN } from '../src/hidden.js';
+import { readJournal, isJournalToken, journalFreshness } from '../src/history.js';
+import { applySkin } from '../src/skin.js';
 import { searchCities } from '../src/location.js';
 import { fetchForecast, week } from '../src/weather.js';
 import { displayReasons, matchPct } from '../src/ui.js';
@@ -69,6 +77,32 @@ export function activeBottles(fragrances, hidden = DEFAULT_HIDDEN) {
   return fragrances.filter(f => !off.has(String(f.id)) && !off.has(f.name.toLowerCase()));
 }
 
+/**
+ * The journal setting: a Copy for Claude token, or a path (~ for home) to a
+ * file holding one or a journal export. -> parseJournal's shape; throws
+ * with a sentence when it can't be read.
+ */
+export function loadJournal(setting) {
+  const text = String(setting).trim();
+  if (isJournalToken(text)) return readJournal(text);
+  const path = text.replace(/^~(?=\/|$)/, homedir());
+  let raw;
+  try { raw = readFileSync(path, 'utf8'); } catch { throw new Error(`Can't read the journal file ${text}`); }
+  const journal = readJournal(raw);
+  if (!journal) throw new Error(`${text} isn't a Scentcast journal export or Copy for Claude`);
+  return journal;
+}
+
+/**
+ * The bottles to plan from: the journal's stars and skin nudges applied,
+ * and its switched-off bottles left out with the `hidden` setting's (which
+ * alone, unset, means DEFAULT_HIDDEN; with a journal its own list stands in).
+ */
+export function widgetBottles(fragrances, hidden, journal = null) {
+  if (!journal) return activeBottles(fragrances, hidden);
+  return activeBottles(applySkin(fragrances, journal.skin), [...(hidden ?? []), ...journal.hidden]);
+}
+
 const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
 
 function brief(p) {
@@ -98,15 +132,32 @@ function detail(p) {
   };
 }
 
+// A line for the panel's status about the wears the plan counted: none
+// without a journal, and how old the newest is when it's days old.
+function journalNote(freshness) {
+  if (!freshness) return 'not counting recent wears';
+  if (freshness.newest === null) return 'no wears in the journal';
+  return freshness.daysAgo >= 2 ? `newest wear ${freshness.daysAgo} days ago` : null;
+}
+
 // The week ahead planned the way the app plans it, so the widget, Today and
-// Week agree. The first window still ahead is the one to wear now.
-export function widgetPayload(fragrances, forecast, place, nowMs = Date.now()) {
+// Week agree. The first window still ahead is the one to wear now. With a
+// journal (parseJournal's shape) its wears rotate and the nudge is on, as
+// in the app; `journal` says how current they are (journalFreshness), null
+// without one, and `journalNote` puts that in a few words for the panel.
+export function widgetPayload(fragrances, forecast, place, nowMs = Date.now(), journal = null) {
   const days = week(forecast, nowMs);
-  const plan = planWindows(fragrances, days.flatMap(d => [d.day, d.night].filter(Boolean)));
+  // The app's and the journal's ids are strings; data/collection.json has numbers.
+  const bottles = fragrances.map(f => (typeof f.id === 'string' ? f : { ...f, id: String(f.id) }));
+  const history = journal ? journal.history.filter(h => !h.planned) : [];
+  const plan = planWindows(bottles, days.flatMap(d => [d.day, d.night].filter(Boolean)), { history, nudge: history.length > 0 });
   const byWindow = new Map(plan.map(p => [p.win, p]));
+  const freshness = journal && journalFreshness(history, days[0]?.dateISO ?? new Date(nowMs).toISOString().slice(0, 10));
   return {
     place,
     updated: new Date(nowMs).toISOString(),
+    journal: freshness || null,
+    journalNote: journalNote(freshness),
     now: detail(plan[0]),
     next: brief(plan[1]),
     days: days.map(d => ({
@@ -128,15 +179,23 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     options: {
       location: { type: 'string', default: '' },
       hidden: { type: 'string' },
+      journal: { type: 'string', default: '' },
     },
   });
   setTimeout(() => { console.error('Timed out fetching the forecast'); process.exit(1); }, 30_000).unref();
   try {
     const { fragrances } = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url)));
     const hidden = args.hidden === undefined ? undefined : args.hidden.split(',').filter(s => s.trim());
+    // A journal that can't be read leaves the plan without wears, and says why on stderr.
+    let journal = null;
+    if (args.journal.trim()) {
+      try { journal = loadJournal(args.journal); } catch (err) { console.error(err.message); }
+    }
     const place = await resolvePlace(args.location);
     const forecast = await fetchForecast(place);
-    console.log(JSON.stringify(widgetPayload(activeBottles(fragrances, hidden), forecast, place)));
+    const payload = widgetPayload(widgetBottles(fragrances, hidden, journal), forecast, place, Date.now(), journal);
+    if (args.journal.trim() && !journal) payload.journalNote = 'can’t read the journal setting';
+    console.log(JSON.stringify(payload));
   } catch (err) {
     console.error(err.message);
     process.exit(1);

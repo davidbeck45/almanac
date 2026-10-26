@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { activeBottles, resolvePlace, widgetPayload } from '../omarchy/widget.mjs';
+import { activeBottles, loadJournal, resolvePlace, widgetBottles, widgetPayload } from '../omarchy/widget.mjs';
+import { journalToken } from '../src/history.js';
 import { syntheticForecast } from './fixtures.js';
 
 const { fragrances } = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url)));
@@ -43,4 +44,37 @@ test('a coordinate setting or Omarchy\'s weather location resolves without a loo
   const stateFile = join(mkdtempSync(join(tmpdir(), 'scentcast-')), 'weather.json');
   writeFileSync(stateFile, JSON.stringify({ name: 'Malibu', latitude: 34.03, longitude: -118.78 }));
   assert.deepEqual(await resolvePlace('', { stateFile }), { name: 'Malibu', lat: 34.03, lon: -118.78 });
+});
+
+test('with the app’s Copy for Claude the widget skips yesterday’s bottle, and says how old its wears are', () => {
+  const at = Date.parse('2026-09-29T00:00:00Z'); // 20:00 on the 28th, tonight first
+  const bare = widgetPayload(fragrances, syntheticForecast(7), place, at);
+  assert.deepEqual([bare.journal, bare.journalNote], [null, 'not counting recent wears']);
+  // Last night's bottle was tonight's pick without the journal.
+  const jake = fragrances.find(f => f.name === 'Jake');
+  const token = journalToken([{ id: bare.now.id, date: '2026-09-27', slot: 'night', occasion: 'daily' }], [String(jake.id)], {}, { todayISO: '2026-09-28' });
+  const journal = loadJournal(` ${token} `);
+  const out = widgetPayload(widgetBottles(fragrances, undefined, journal), syntheticForecast(7), place, at, journal);
+  assert.notEqual(out.now.id, bare.now.id);
+  assert.deepEqual(out.journal, { newest: '2026-09-27', daysAgo: 1, recent: 1 });
+  assert.equal(out.journalNote, null, 'a day old goes without saying');
+  // The journal's switched-off bottles stand in for the site's defaults, and add to the setting's.
+  assert.ok(!widgetBottles(fragrances, undefined, journal).includes(jake));
+  assert.equal(widgetBottles(fragrances, undefined, { ...journal, hidden: [] }).length, fragrances.length);
+  assert.ok(!widgetBottles(fragrances, ['Sauvage'], journal).some(f => f.name === 'Sauvage' || f.name === 'Jake'));
+  // Three days on, the panel says so.
+  const later = widgetPayload(fragrances, syntheticForecast(7, { start: '2026-09-30' }), place, Date.parse('2026-10-01T00:00:00Z'), journal);
+  assert.equal(later.journalNote, 'newest wear 3 days ago');
+});
+
+test('the journal setting reads a file of either kind, and says plainly when it can’t', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'scentcast-'));
+  const token = journalToken([{ id: '4310', date: '2026-09-27', slot: 'day' }], [], {}, { todayISO: '2026-09-28' });
+  writeFileSync(join(dir, 'token.txt'), `${token}\n`);
+  writeFileSync(join(dir, 'export.json'), JSON.stringify({ app: 'scentcast-journal', history: [{ id: 4310, date: '2026-09-27', slot: 'day' }] }));
+  for (const file of ['token.txt', 'export.json']) assert.deepEqual(loadJournal(join(dir, file)).history.map(h => h.id), ['4310'], file);
+  assert.throws(() => loadJournal(join(dir, 'nope.json')), /^Error: Can't read the journal file .*nope\.json$/);
+  writeFileSync(join(dir, 'other.json'), '{}');
+  assert.throws(() => loadJournal(join(dir, 'other.json')), /isn't a Scentcast journal export or Copy for Claude$/);
+  assert.throws(() => loadJournal(token.slice(0, 20)), /cut short or garbled/);
 });
