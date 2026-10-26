@@ -883,9 +883,10 @@ export function rankEvent(fragrances, win, occasion = win.occasion) {
  * Friday night), planned first: it takes its top as rankEvent ranks it (its
  * logged wear, when it has one), and the plan around it treats that bottle
  * as already in the plan for the windows before it ("Saved for a date on
- * Friday night", `parts.saved`), so a new bottle within PLAN_MARGIN takes
- * them (with nothing that close it can still be worn), and as planned from
- * the event's date on. Events never nudge, and without one nothing changes.
+ * Friday night", `parts.saved`, keeping its score: on the day before a
+ * night event too), so a new bottle within PLAN_MARGIN takes them (with
+ * nothing that close it can still be worn), and as planned for the windows
+ * after it. Events never nudge, and without one nothing changes.
  * Two events can share their best bottle.
  * Returns [{ win, ranked, pick }].
  */
@@ -900,8 +901,10 @@ export function planWindows(fragrances, windows, opts = {}) {
     const pick = (logged && ranked.find(r => r.fragrance.id === logged.id)) ?? ranked[0] ?? null;
     return [{ i, win, ranked, pick, logged }];
   });
+  // An event's pick counts as planned for the windows after it, not for the
+  // day before a night event, where it's saved and keeps its score.
+  const eventPlans = events.filter(e => e.pick && !e.logged).map(e => ({ i: e.i, entry: { id: e.pick.fragrance.id, date: e.win.dateISO, slot: e.win.slot, planned: true } }));
   let planned = [...history];
-  for (const e of events) if (e.pick && !e.logged) planned.push({ id: e.pick.fragrance.id, date: e.win.dateISO, slot: e.win.slot, planned: true });
   const used = new Set();
   let nudgedOn = null;
   return windows.map((win, i) => {
@@ -916,7 +919,8 @@ export function planWindows(fragrances, windows, opts = {}) {
     const logged = loggedIn(win);
     const canNudge = nudge && !logged && (nudgedOn === null || daysBetween(nudgedOn, win.dateISO) >= NUDGE_EVERY);
     const asked = { occasion, todayISO: win.dateISO, nudge: canNudge, ...(saved.size && { saved }) };
-    let ranked = rank(fragrances, win, win.slot, { ...asked, history: planned });
+    const known = [...planned, ...eventPlans.filter(e => e.i < i).map(e => e.entry)];
+    let ranked = rank(fragrances, win, win.slot, { ...asked, history: known });
     // A nudged bottle leads the list, and is new to the plan. A bottle you
     // rate DISLIKED or lower never counts as the fresh one, so it's planned
     // only where it ranks first and nothing new to the plan comes close.
@@ -928,7 +932,7 @@ export function planWindows(fragrances, windows, opts = {}) {
     // nothing, so it neither lowers it nor leads its reasons.
     if (pick && !logged && pick === ranked[0] && pick.parts.planned) {
       const id = pick.fragrance.id;
-      ranked = rank(fragrances, win, win.slot, { ...asked, history: planned.filter(h => !(h.planned && h.id === id)) });
+      ranked = rank(fragrances, win, win.slot, { ...asked, history: known.filter(h => !(h.planned && h.id === id)) });
       pick = ranked.find(r => r.fragrance.id === id);
     }
     // Likewise a bottle saved for an event that's worn anyway doesn't say it's saved.

@@ -644,6 +644,12 @@ test('an event takes the occasion’s best, and the plan around it barely moves'
     const entry = p.ranked.find(r => r.fragrance.id === id);
     assert.ok(entry.reasons.some(r => r.text === (p.win.dateISO === '2026-10-03' ? 'Saved for formal wear tonight' : p.win.dateISO === '2026-10-02' ? 'Saved for formal wear tomorrow night' : 'Saved for formal wear on Saturday night')), entry.reasons.map(r => r.text).join('; '));
   }
+  // On the event's own day it's saved, not already picked: it keeps its score and says so once.
+  const sameDay = plan[at - 1].ranked.find(r => r.fragrance.id === id);
+  const alone = rank(fragrances, windows[at - 1], 'day', { todayISO: '2026-10-03' }).find(r => r.fragrance.id === id);
+  assert.equal(sameDay.parts.rotation, 0);
+  assert.equal(sameDay.score, alone.score);
+  assert.deepEqual(sameDay.reasons.filter(r => /^(Saved|Already|Picked)/.test(r.text)).map(r => r.text), ['Saved for formal wear tonight']);
   assert.ok(plan[at + 1].ranked.find(r => r.fragrance.id === id).reasons.some(r => r.text === 'Picked the day before'));
   assert.ok(plan.slice(at + 1).every(p => !p.ranked.some(r => r.parts.saved)), 'nothing saved once it’s past');
   // Without an event nothing is saved.
