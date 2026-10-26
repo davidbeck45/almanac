@@ -9,8 +9,8 @@
 //   much when voters have rated its performance,
 // - the weather: heat and sticky air carry scent (fewer, lower on the body),
 //   and take more off a rich, heavy bottle, which turns cloying, than off a
-//   fresh one, which burns off; cold mutes it (more, and on fabric, which
-//   holds it),
+//   fresh one, which burns off; cold mutes it, for the time spent out in it
+//   (more, and on fabric, which holds it, where the coat stays on),
 // - the occasion: the office quiet, a date close, a night out louder.
 // Text never names a temperature.
 import { performanceLevel, performanceRating, isSticky } from './engine.js';
@@ -74,15 +74,22 @@ function strengthOf(record) {
 const OIL = /\b(?:perfume|fragrance|parfum|attar|concentrated|body) oil\b|\b(?:oil|attar)$/i;
 export const isOil = record => OIL.test(String(record?.name ?? ''));
 
-// By occasion id: sprays added, the most it should take, and why.
+// By occasion id: sprays added, the most it should take, why, and the share
+// of the time spent outside (1 when it doesn't say), which is how much of
+// the cold step it takes: you spray for where you'll be, and a heated room
+// takes the chill off. The heat and sticky steps stay whole: the walk there,
+// the sun and a crowd keep a summer evening warm.
 const OCCASIONS = {
-  office: { shift: -1, max: 2, why: 'The office wants it quiet' },
-  date: { shift: -0.5, max: 4, why: 'A date wants it close' },
-  cozy: { shift: -0.5, max: 3, why: 'At home a little goes far' },
-  formal: { shift: -0.25, why: 'Formal wear calls for restraint' },
-  nightout: { shift: 1, why: 'A night out can take more' },
+  office: { shift: -1, max: 2, why: 'The office wants it quiet', outside: 0.15 },
+  date: { shift: -0.5, max: 4, why: 'A date wants it close', outside: 0.3 },
+  cozy: { shift: -0.5, max: 3, why: 'At home a little goes far', outside: 0 },
+  formal: { shift: -0.25, why: 'Formal wear calls for restraint', outside: 0.3 },
+  nightout: { shift: 1, why: 'A night out can take more', outside: 0.5 },
   outdoors: { shift: 0.5, why: 'Open air thins it out' },
 };
+// Out this little of the time, the coat comes off (or goes to the
+// cloakroom), so nothing goes on a collar or scarf.
+const COAT_OFF = 0.5;
 
 // Where it goes, most important first: as many spots as sprays.
 const SPOTS = {
@@ -153,8 +160,11 @@ export function sprayGuide(record, conditions, occasion = null, skin = null) {
   const rich = h >= RICH;
   if (sticky) add(-(HEAT_STEP * heat + STICKY_STEP) * load, rich ? 'Sticky heat makes rich notes cloying' : 'Sticky air carries it');
   else if (heat > 0) add(-HEAT_STEP * heat * load, rich ? 'Heat makes rich notes cloying' : 'Heat makes it bloom');
+  // Cold counts for the time spent out in it. Under 0.25 of a spray (the
+  // office's commute) it moves the count without a word, as any small term does.
   const cold = clamp((feels - COLD[0]) / (COLD[1] - COLD[0]), 0, 1);
-  if (cold > 0) add(COLD_STEP * cold, 'Cold air mutes it');
+  const outside = occ.outside ?? 1;
+  if (cold * outside > 0) add(COLD_STEP * cold * outside, 'Cold air mutes it');
 
   if (occ.shift) add(occ.shift, occ.why);
 
@@ -169,7 +179,7 @@ export function sprayGuide(record, conditions, occasion = null, skin = null) {
   const spots = key === 'office' ? SPOTS.office
     : (heat >= 0.5 || sticky) && !(h <= FRESH && sillage < MILD_REASON) ? SPOTS.heat
     : key === 'date' ? SPOTS.date
-    : cold >= 0.5 ? SPOTS.cold
+    : cold >= 0.5 && outside > COAT_OFF ? SPOTS.cold
     : SPOTS[key] ?? SPOTS.any;
   const where = spots.slice(0, Math.max(1, Math.min(hi, spots.length)));
   const under = spots === SPOTS.office || spots === SPOTS.heat ? ', under your shirt' : '';
