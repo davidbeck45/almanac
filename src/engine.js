@@ -30,9 +30,16 @@ const CALENDAR_BOOST = 1.35;
 // out between these latitudes, toward the equator.
 const TROPICS = [15, 25];
 
-// How much each part counts toward a score (scoreOf).
+// How much each part counts toward a score (scoreOf). An occasion's own
+// weights are occasionWeights(): these, unless its fit is mild (MILD_SPAN).
 export const DAILY_WEIGHTS = Object.freeze({ season: 0.5, time: 0.25, weather: 0.2, quality: 0.05 });
 export const OCCASION_WEIGHTS = Object.freeze({ occasion: 0.4, season: 0.3, time: 0.1, weather: 0.15, quality: 0.05 });
+// What a rich bottle loses for an occasion in weather that calls for fresh
+// (parts.heat, richInHeat). With the occasion's fit at 0.4 and the weather
+// at 0.15, a date's love of vanilla and amber kept four winter bottles in a
+// 90°F night's top 6, all A; daily picks weigh season and weather at 0.7 and
+// need no such help. An occasion spent indoors (`indoors`) doesn't pay it.
+const HEAT_WEIGHT = 0.3;
 
 // Rank cutoffs: first 3 are S, next 5 A, next 6 B, rest C. A tier also needs
 // its floor score, so in a small collection on a sweltering day the third
@@ -275,6 +282,18 @@ export function weatherFit(frag, conditions) {
   return clamp(fit + rain, 0, 1);
 }
 
+/**
+ * How rich a bottle is for the heat (parts.heat), 0..1: how far the bottle
+ * sits on the rich side of neutral, times the square of how far the weather
+ * calls for fresh (targetHeaviness under 0), so a warm evening costs it a
+ * little and a sweltering one a lot. Fresh and neutral bottles read 0 in any
+ * weather, so it reorders only the rich ones, and only where it's warm.
+ */
+export function richInHeat(frag, conditions) {
+  const fresh = clamp(-targetHeaviness(conditions), 0, 1);
+  return fresh * fresh * clamp(heaviness(frag.accords), 0, 1);
+}
+
 // Feels-like range a bottle suits on its own: its season and weather fit,
 // weighted as in daily picks, scanned in 1°F steps, whatever the time of year
 // (the calendar would otherwise move a cold-weather bottle's range by 26°F
@@ -512,24 +531,58 @@ export function occasionRaw(frag, occasion) {
 // them as perfect date-night fits.
 const FALLBACK_SCALE = [-0.3, 0.5];
 const OCCASION_KNEE = 0.1;
+// Profiles share one unit (-1..1 an accord), so how far an occasion's fit
+// spreads over the dataset says how much it cares: Formal's, Date Night's and
+// the rest span 0.6 to 0.85, Casual's, which only leans (woods and aromatics
+// a little up, gourmands and leather a little down), 0.28. Stretched to 0..1
+// like the others, that lean outweighed the weather: a near-fresh woody
+// topped every Casual day of a Chicago January, and Cream Velvet, the daily
+// pick at -15°F, ranked 21st. So a fit that spans less than MILD_SPAN reads
+// on a scale MILD_SPAN wide around its middle, and its weights lean toward
+// the daily picks' by the same share (occasionWeights): Casual reads as
+// daily picks with a tilt toward easy-going bottles.
+const MILD_SPAN = 0.6;
+const scaleOf = occasion => OCCASION_SCALE[occasion.id] ?? FALLBACK_SCALE;
 export function occasionPart(raw, occasion) {
-  const [lo, hi] = OCCASION_SCALE[occasion.id] ?? FALLBACK_SCALE;
-  const x = (raw - lo) / (hi - lo), k = OCCASION_KNEE;
+  const [lo, hi] = scaleOf(occasion);
+  const span = Math.max(hi - lo, MILD_SPAN);
+  const x = (raw - (lo + hi - span) / 2) / span, k = OCCASION_KNEE;
   if (x > 1 - k) return 1 - k * Math.exp((1 - k - x) / k);
   if (x < k) return k * Math.exp((x - k) / k);
   return x;
 }
 
 /**
- * A bottle's score from its parts (rank's `parts`): the weighted fits, plus
- * your stars' term (`personal`, when there is one), less the rotation
- * penalty. Shared with anything that scores bottles the way rank() does (the
- * gap finder), so the two can't drift apart.
+ * The weights an occasion's score uses: OCCASION_WEIGHTS and HEAT_WEIGHT
+ * (none for an occasion spent indoors), blended toward DAILY_WEIGHTS for a
+ * mild one by how far its fit falls short of MILD_SPAN.
+ */
+const weightsOf = new WeakMap();
+export function occasionWeights(occasion) {
+  let W = weightsOf.get(occasion);
+  if (W) return W;
+  const [lo, hi] = scaleOf(occasion);
+  const t = Math.min(1, (hi - lo) / MILD_SPAN), O = OCCASION_WEIGHTS, D = DAILY_WEIGHTS;
+  const blend = key => t * O[key] + (1 - t) * D[key];
+  W = Object.freeze({
+    occasion: t * O.occasion, season: blend('season'), time: blend('time'), weather: blend('weather'), quality: blend('quality'),
+    heat: occasion.indoors ? 0 : t * HEAT_WEIGHT,
+  });
+  weightsOf.set(occasion, W);
+  return W;
+}
+
+/**
+ * A bottle's score from its parts (rank's `parts`): the weighted fits (for
+ * an occasion, less what richness in heat costs it), plus your stars' term
+ * (`personal`, when there is one), less the rotation penalty. Shared with
+ * anything that scores bottles the way rank() does (the gap finder), so the
+ * two can't drift apart.
  */
 export function scoreOf(parts, occasion = null) {
-  const W = occasion ? OCCASION_WEIGHTS : DAILY_WEIGHTS;
+  const W = occasion ? occasionWeights(occasion) : DAILY_WEIGHTS;
   let score = W.season * parts.season + W.time * parts.time + W.weather * parts.weather + W.quality * parts.quality;
-  if (occasion) score += W.occasion * parts.occasion;
+  if (occasion) score += W.occasion * parts.occasion - W.heat * (parts.heat ?? 0);
   return score + (parts.personal ?? 0) - (parts.rotation ?? 0);
 }
 
@@ -617,7 +670,7 @@ function strongest(accords, keep) {
 // time-of-day votes, which read the same on every well-placed bottle.
 function reasonsFor(frag, parts, ctx) {
   const { conditions, slot, weights, occasion } = ctx;
-  const W = occasion ? OCCASION_WEIGHTS : DAILY_WEIGHTS;
+  const W = occasion ? occasionWeights(occasion) : DAILY_WEIGHTS;
   const out = [];
   const good = (text, strength, specific = false) => out.push({ text, tone: 'good', strength, specific });
   const bad = (text, strength, specific = false) => out.push({ text, tone: 'bad', strength, specific });
@@ -651,7 +704,7 @@ function reasonsFor(frag, parts, ctx) {
   if (conditions.feelsF >= 78) {
     const cool = strongest(frag.accords, a => a in COOLING);
     if (h <= -0.1) good(cool ? `${COOLING[cool]} the heat` : 'Light enough for the heat', W.weather * 0.8, true);
-    else if (h >= 0.25) bad(sticky ? 'Too rich for sticky heat' : 'Heavy for this heat', W.weather, true);
+    else if (h >= 0.25) bad(sticky ? 'Too rich for sticky heat' : 'Heavy for this heat', W.weather + (occasion ? W.heat * parts.heat : 0), true);
   } else if (conditions.feelsF <= 52) {
     const warm = strongest(frag.accords, a => ACCORDS[a]?.weight >= 0.7);
     if (h >= 0.25) good(warm ? `${warmPhrase(warm)} for the cold` : 'A warm base for the cold', W.weather * 0.8, true);
@@ -746,6 +799,7 @@ export function rank(fragrances, conditions, slot, opts = {}) {
       weather: weatherFit(frag, conditions),
       quality: quality(frag),
       occasion: occasion ? occasionPart(occasionRaw(frag, occasion), occasion) : null,
+      heat: occasion ? richInHeat(frag, conditions) : null,
       personal: personalPart(frag),
       rotation: penalty,
       daysAgo,

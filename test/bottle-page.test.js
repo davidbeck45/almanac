@@ -145,6 +145,16 @@ test('why it ranks here: the rating bar says whose rating it is, and a bottle no
   assert.ok(!/rotation/i.test(rest));
   const planned = rank([f], wx.night, 'night', { history: [{ id: f.id, date: wx.night.dateISO, slot: 'day', planned: true }], todayISO: wx.night.dateISO })[0];
   assert.match(bottlePageHTML(modelOf(f, { entry: planned })), /Already picked for daytime: \d+% lower so others get a turn\./);
+  // A rich bottle on a sweltering date night: what the heat takes off, for that occasion only.
+  const date = occasionById('date'), sweltering = { ...wx.night, feelsF: 90, dewF: 70 };
+  const hot = (rec, occasion) => {
+    const html = bottlePageHTML(modelOf(rec, { entry: rank([rec], sweltering, 'night', { occasion })[0], occasion, win: sweltering }));
+    return html.slice(html.indexOf('data-section="why"'), html.indexOf('data-section="alts"'));
+  };
+  assert.match(hot(byName('Liquid Brun'), date), /Rich for this heat: \d+% lower for a date\./);
+  assert.ok(!hot(byName('Liquid Brun'), null).includes('Rich for this heat'), 'daily picks pay nothing');
+  assert.ok(!hot(byName('Liquid Brun'), occasionById('cozy')).includes('Rich for this heat'), 'nor a night in');
+  assert.ok(!hot(byName('Essence de Blanc'), date).includes('Rich for this heat'), 'nor a fresh bottle');
 });
 
 test('day and night read as whole percents that add up to 100, as Compare shows them', () => {

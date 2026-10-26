@@ -10,7 +10,9 @@
 // bottles fade by Fragrantica's votes (their median longevity sits half a
 // level under the wardrobe's middle), so Office's wish to last pulled its
 // 98th percentile under most lasting fresh bottles, and the knee pressed
-// eight of David's together near a perfect fit.
+// eight of David's together near a perfect fit. A scale narrower than the
+// engine's MILD_SPAN (Casual's) is written as fitted: the engine reads it
+// wider and leans the occasion's weights toward daily picks'.
 //   node scripts/fit-occasions.mjs           (report)
 //   node scripts/fit-occasions.mjs --write   (update src/occasions.js)
 // Rerun after changing an occasion's profile or performance wish, or the

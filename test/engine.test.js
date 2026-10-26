@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, restReason, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, seasonFit, timeFit, SEASONS, votedShares, performanceLevel } from '../src/engine.js';
+import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, restReason, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, seasonFit, timeFit, SEASONS, votedShares, performanceLevel, PLAN_MARGIN } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { heaviness } from '../src/accords.js';
 import { predictedShares } from '../src/custom.js';
@@ -380,6 +380,51 @@ test('scoreOf is the score rank() orders by', () => {
 test('formal favors iris and powder', () => {
   const formal = groupTiers(rank(fragrances, mildFallNight, 'night', { occasion: occasionById('formal') }));
   assert.ok(names(formal.S).includes('Meant To Be Seen'));
+});
+
+test('a sweltering night keeps winter bottles out of a date’s and a night out’s top tiers, not out of a night in', () => {
+  // 90°F at a dew point of 70: the date's love of vanilla and amber once put
+  // Liquid Brun third and five of these A, each "Too rich for sticky heat".
+  const RICH = [...HEAVY, 'Cream Velvet', 'Sticky Fingers'];
+  const sweltering = { feelsF: 90, humidity: 75, dewF: 70, category: 'clear', date: AUG, dateISO: '2026-08-05', lat: 40 };
+  for (const id of ['date', 'nightout']) {
+    const ranked = rank(fragrances, sweltering, 'night', { occasion: occasionById(id) });
+    const top = names(ranked.slice(0, 3));
+    for (const n of top) assert.ok(!RICH.includes(n), `${id}: ${top.join(', ')}`);
+    for (const r of ranked.filter(r => RICH.includes(r.fragrance.name))) assert.ok(r.tier === 'B' || r.tier === 'C', `${id}: ${r.fragrance.name} is ${r.tier}`);
+  }
+  // A night in is spent indoors: Cream Velvet still makes its top 3.
+  assert.ok(names(rank(fragrances, sweltering, 'night', { occasion: occasionById('cozy') }).slice(0, 3)).includes('Cream Velvet'));
+  // Daily picks pay nothing extra: the penalty is an occasion's.
+  const daily = rank(fragrances, sweltering, 'night');
+  assert.ok(daily.every(r => r.parts.heat === null) && daily.every(r => r.score === scoreOf(r.parts)));
+});
+
+test('casual reads like daily picks with a tilt: winter bottles on a cold day, nothing fresh', () => {
+  const casual = occasionById('casual');
+  const cold = { feelsF: 20, humidity: 60, dewF: 12, category: 'clear', date: JAN, dateISO: '2027-01-15', lat: 40 };
+  for (const slot of ['day', 'night']) {
+    const daily = names(rank(fragrances, cold, slot).slice(0, 3)), top = names(rank(fragrances, cold, slot, { occasion: casual }).slice(0, 5));
+    assert.ok(daily.includes(top[0]), `${slot}: ${top[0]} leads Casual, the day's best are ${daily.join(', ')}`);
+    for (const n of top) assert.ok(!FRESH.includes(n), `${slot}: ${top.join(', ')}`);
+  }
+  // Its mild profile once read on a 0..1 stretch like Formal's and outweighed
+  // the weather: a near-fresh woody led every cold day and Cream Velvet sat
+  // 21st. Now its pick is nearly always one daily picks would offer too.
+  let within = 0, n = 0;
+  for (const month of ['01', '04', '07', '10']) {
+    for (const feelsF of [5, 20, 35, 50, 65, 80, 95]) {
+      for (const slot of ['day', 'night']) {
+        const dateISO = `2026-${month}-15`;
+        const c = { feelsF, humidity: 60, dewF: Math.min(feelsF - 8, 72), category: 'clear', date: new Date(`${dateISO}T12:00:00`), dateISO, lat: 40 };
+        const daily = rank(fragrances, c, slot), pick = rank(fragrances, c, slot, { occasion: casual })[0];
+        const best = daily[0].score, as = daily.find(r => r.fragrance.id === pick.fragrance.id).score;
+        n++;
+        if (best - as <= PLAN_MARGIN) within++;
+      }
+    }
+  }
+  assert.ok(within >= 0.9 * n, `${within} of ${n} within PLAN_MARGIN of the day's best`);
 });
 
 test('wearing something yesterday pushes it down today', () => {
