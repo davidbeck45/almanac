@@ -595,3 +595,97 @@ test('in forced colors the chosen occasion tile keeps a ring of its own', () => 
   const forced = [...css.matchAll(/@media \(forced-colors: active\) \{([\s\S]*?)\n\}/g)].map(m => m[1]).join('');
   assert.match(forced, /\.occ\[aria-checked='true'\] \{ outline: 2px solid Highlight/);
 });
+
+test('a night planned for a date: Now and the Week plan around it, say what for, and log the wear for it', () => {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  const wx = summarize(live);
+  const today = wx.todayISO;
+  Object.assign(state, { demo: { fetched: today, fragrances }, forecast: live, wx, loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], occasionSlot: null, slot: null, route: { dest: 'wear', pane: 'now' } });
+  const date = occasionById('date'), formal = occasionById('formal');
+  // Tonight a date, and a formal night later in the week.
+  const later = week(live).find(d => d.dateISO === shiftISO(today, 3)).night;
+  app.setEvent(wx.night.dateISO, 'night', 'date');
+  app.setEvent(later.dateISO, 'night', 'formal');
+  assert.deepEqual(JSON.parse(store.get('scentcast.events')).map(e => e.occasion), ['date', 'formal'], 'kept on the device');
+  try {
+    app.computeToday();
+    const night = state.today.night;
+    assert.equal(night.win.occasion.id, 'date');
+    assert.equal(night.pick.fragrance.id, rank(app.rankedFragrances(), wx.night, 'night', { occasion: date })[0].fragrance.id, 'the best for a date');
+    assert.equal(state.contexts.night.occasion, date, 'its context carries the occasion');
+    // The Week agrees about today, and keeps the formal night's best for it.
+    const days = app.computeWeek();
+    const first = days.flatMap(d => [d.day, d.night]).filter(Boolean).slice(0, app.todaySlots().length);
+    assert.deepEqual(app.todaySlots().map(p => p.pick.fragrance.id), first.map(p => p.pick.fragrance.id));
+    const sat = days.find(d => d.dateISO === later.dateISO).night;
+    assert.equal(sat.pick.fragrance.id, rank(app.rankedFragrances(), later, 'night', { occasion: formal, todayISO: later.dateISO })[0].fragrance.id);
+    assert.ok(days.slice(0, 3).every(d => [d.day, d.night].every(p => !p || p.pick.fragrance.id !== sat.pick.fragrance.id)), 'not worn the days before');
+    // Now's card says what tonight is for, with a way to clear it; the Week marks the planned nights.
+    state.slot = 'night';
+    const now = wear.wear.panes.find(p => p.id === 'now').render({}, state.route);
+    assert.match(now, /<span class="event-tag">.*<span>For a date<\/span><\/span><button class="link-btn" data-action="event-clear" data-date="[\d-]+" data-slot="night">Clear<span class="visually-hidden">: Tonight isn’t for a date<\/span><\/button>/s);
+    const board = wear.weekHTML(days);
+    assert.equal((board.match(/class="wk-mark wk-event"/g) ?? []).length, 2);
+    assert.match(board, /aria-label="[^"]+ night: [^"]+, for formal wear"/);
+    assert.match(board, /What you planned gets its best bottle/);
+    // A wear logged from tonight's card counts for a date.
+    const ui = { keepingFocus() {}, render() {} };
+    wear.actions.wear({ dataset: { ctx: 'night', id: night.pick.fragrance.id } }, ui);
+    assert.equal(state.history.find(h => h.date === wx.night.dateISO && h.slot === 'night').occasion, 'date');
+    // Clear: tonight is everyday again.
+    wear.actions['event-clear']({ dataset: { date: wx.night.dateISO, slot: 'night' } }, { render() { app.computeToday(); }, showToast() {} });
+    assert.equal(app.eventAt(wx.night), null);
+    assert.ok(!state.today.night.win.occasion);
+  } finally {
+    app.setEvent(wx.night.dateISO, 'night', null);
+    app.setEvent(later.dateISO, 'night', null);
+    state.history = [];
+    state.slot = null;
+  }
+});
+
+test('the Occasion pane plans the window shown, at home only, and ranks a planned one as the plan does', () => {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  const wx = summarize(live);
+  const today = wx.todayISO;
+  Object.assign(state, { demo: { fetched: today, fragrances }, forecast: live, wx, loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', occasionSlot: null });
+  const formal = occasionById('formal');
+  const pane = wear.wear.panes.find(p => p.id === 'occasion');
+  const route = { dest: 'wear', pane: 'occasion', arg: 'formal' };
+  when.when.dateISO = shiftISO(today, 3);
+  const win = when.eventWindow('night').win;
+  // Wore its best two days before: unplanned, that counts against it there.
+  const best = rank(app.rankedFragrances(), win, 'night', { occasion: formal, todayISO: win.dateISO })[0].fragrance;
+  state.history = [{ id: best.id, date: shiftISO(today, 1), slot: 'night' }];
+  try {
+    const before = pane.render({}, route);
+    assert.match(before, /<button class="btn secondary compact" data-action="occ-plan" data-date="[\d-]+" data-slot="night" data-occasion="formal">.*Plan it for \w+ night<\/span><\/button>/s);
+    assert.ok(state.contexts.occ.ranked.find(r => r.fragrance.id === best.id).parts.rotation > 0);
+    // Planned: the best for it, as Now and the Week will have it.
+    const ui = { keepingFocus(el, scope, render) { render(); }, render() {}, showToast() {} };
+    when.actions['occ-plan']({ dataset: { date: win.dateISO, slot: 'night', occasion: 'formal' } }, ui);
+    assert.equal(app.eventAt(win).occasion, 'formal');
+    const after = pane.render({}, route);
+    assert.match(after, /<p class="occ-plan on">.*Planned for \w+ night<\/span><button class="link-btn" data-action="occ-plan"[^>]*>Clear/s);
+    assert.equal(state.contexts.occ.ranked[0].fragrance.id, best.id);
+    assert.ok(state.contexts.occ.event);
+    assert.equal(app.computeWeek().find(d => d.dateISO === win.dateISO).night.pick.fragrance.id, best.id, 'the Week agrees');
+    // On the same night another occasion says it's taken; planning it takes its place.
+    const date = pane.render({}, { ...route, arg: 'date' });
+    assert.match(date, /is planned for formal wear<\/span>/);
+    assert.match(date, /Plan it for \w+ night/);
+    // Elsewhere there's no plan to make: Now and the Week are for home.
+    when.when.place = { name: 'Chicago', lat: 41.9, lon: -87.6 };
+    assert.ok(!when.whenBarHTML({ ...when.when, home: state.loc, today, slot: 'night', wx, plan: null }).includes('occ-plan'));
+    when.when.place = null;
+    when.actions['occ-plan']({ dataset: { date: win.dateISO, slot: 'night', occasion: 'formal' } }, ui);
+    assert.equal(app.eventAt(win), null, 'the same control clears it');
+  } finally {
+    when.when.dateISO = null;
+    when.when.place = null;
+    state.history = [];
+    for (const e of [...state.events]) app.setEvent(e.dateISO, e.slot, null);
+  }
+});

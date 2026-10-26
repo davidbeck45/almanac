@@ -3,6 +3,7 @@
 //   node scripts/recommend.mjs --city "New York" [--occasion date] [--slot day|night] [--json]
 //   node scripts/recommend.mjs --loc "40.71,-74.01[,New York]" --exclude "Sauvage,Jake"
 //   node scripts/recommend.mjs --city "New York" --week   (day + night plan for the next 7 days)
+//   node scripts/recommend.mjs --city "New York" --week --events "2026-10-31 night formal"   (planned around it)
 //   node scripts/recommend.mjs --layer "Liquid Brun"       (what layers with it; --layer all for the best pairs)
 //   node scripts/recommend.mjs --layer "Liquid Brun" --city "New York" [--slot night]   (for that weather)
 //   node scripts/recommend.mjs --ideal "Amber Empire"     (the temperatures it wears best in)
@@ -35,7 +36,7 @@
 // wears' occasions into the use shares.
 import { readFileSync, existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
-import { rank, planWindows, comfortRange } from '../src/engine.js';
+import { rank, planWindows, comfortRange, eventPhrase } from '../src/engine.js';
 import { layerPicks, byPick } from '../src/layering.js';
 import { OCCASIONS } from '../src/occasions.js';
 import { DEFAULT_HIDDEN } from '../src/hidden.js';
@@ -59,6 +60,8 @@ import {
 } from '../src/discover.js';
 
 const SLOTS = ['day', 'night'];
+// The modes that answer without planning windows, so take no --events.
+const PLANLESS = ['layer', 'ideal', 'mix', 'doubles', 'styles', 'spray', 'gaps', 'check', 'style', 'more-like', 'notes', 'dupes'];
 const squash = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
 
 /** An occasion by id, label or a former label, any case or spacing ("date", "Date Night", "night out", "everyday"), or null. */
@@ -275,6 +278,23 @@ async function main() {
   if (args.date && args.date < earliest) fail(`--date ${args.date} has passed; pick today or later`);
   if (args.date && daysFrom(today, args.date) > MAX_AHEAD_DAYS) fail(`--date ${args.date} is more than a year out`);
   if (args.date && args.week) fail('--date picks for one day; leave out --week');
+
+  // --events: what a plan is for, window by window (today's picks, --week,
+  // --date and --pack plan around them). Here each event is checked against
+  // the plan's slot (--slot's, else --occasion's; --pack checks its own),
+  // and each mode checks the dates against its windows.
+  let events = [];
+  if (args.events !== undefined) {
+    const mode = PLANLESS.find(k => args[k] !== undefined && args[k] !== false);
+    if (mode) fail(`--events goes with a plan (today's picks, --week, --date or --pack), not --${mode}`);
+    try { events = parseEvents(args.events); } catch (err) { fail(err.message); }
+    const only = args.pack ? null : slot ?? occasion?.slot;
+    for (const e of events) {
+      if (e.dateISO < earliest) fail(`--events: ${e.dateISO} has passed`);
+      if (only && e.slot !== only) fail(`--events: the ${e.occasion.label} on ${e.dateISO} is ${e.slot === 'day' ? 'by day' : 'at night'}, and ${slot ? `--slot ${slot}` : `--occasion ${occasion.id}`} plans ${only === 'day' ? 'days' : 'nights'} only`);
+      if (args.date && e.dateISO !== args.date) fail(`--events: ${e.dateISO} isn't the --date, ${args.date}; --date plans that day only`);
+    }
+  }
 
   let wardrobe = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url))).fragrances
     .map(f => ({ ...f, id: String(f.id) }));
@@ -540,8 +560,6 @@ async function main() {
     if (daysFrom(today, args.to) > MAX_AHEAD_DAYS) fail(`--to ${args.to} is more than a year out`);
     const max = Number(args.max);
     if (!Number.isInteger(max) || max < 1 || max > 6) fail(`--max takes 1 to 6 bottles, not "${args.max}"`);
-    let events;
-    try { events = parseEvents(args.events); } catch (err) { fail(err.message); }
     for (const e of events) {
       if (e.dateISO < args.from || e.dateISO > args.to) fail(`--events: ${e.dateISO} is outside the trip`);
       if (slot && e.slot !== slot) fail(`--events: the ${e.occasion.label} on ${e.dateISO} is at ${e.slot === 'day' ? 'day' : 'night'}, and --slot ${slot} packs for ${slot === 'day' ? 'days' : 'nights'} only`);
@@ -755,7 +773,9 @@ async function main() {
   if (!args.city && !args.loc) fail(USAGE);
 
   const place = await resolvePlace();
+  // A window an event is on (--events) carries its occasion, and says so.
   const pickJSON = (pick, ranked, win, occ = null) => ({
+    ...(win.occasion && { occasion: win.occasion.id }),
     tier: pick.tier,
     name: pick.fragrance.name,
     brand: pick.fragrance.brand,
@@ -763,8 +783,21 @@ async function main() {
     score: +pick.score.toFixed(3),
     reasons: pick.reasons.map(sign),
     runnerUp: ranked.find(r => r !== pick)?.fragrance.name ?? null,
-    spray: sprayJSON(sprayGuide(pick.fragrance, win, occ)),
+    spray: sprayJSON(sprayGuide(pick.fragrance, win, win.occasion ?? occ)),
   });
+  const phrase = o => o.phrase ?? o.label.toLowerCase();
+  const forEvent = win => (win.occasion ? `, for ${phrase(win.occasion)}` : '');
+  // Puts --events on a plan's windows, or stops on one that isn't among
+  // them: outside the dates planned (`what`), or a window already over.
+  const onWindows = (windows, what) => {
+    for (const e of events) {
+      if (windows.some(w => w.dateISO === e.dateISO && w.slot === e.slot)) continue;
+      const [first, last] = [windows[0]?.dateISO, windows.at(-1)?.dateISO];
+      if (e.dateISO >= first && e.dateISO <= last) fail(`--events: the ${e.slot === 'day' ? 'daytime' : 'night'} of ${e.dateISO} is over`);
+      fail(`--events: ${e.dateISO} is outside ${what}${first ? ` (${shortDate(first)} to ${shortDate(last)})` : ''}`);
+    }
+    return withEvents(windows, events);
+  };
   const why = pick => pick.reasons.filter(r => r.tone === 'good').map(r => r.text).join('; ') || pick.reasons.map(r => r.text).join('; ');
   // One window's ranking, as JSON and as text under a heading.
   const slotJSON = ({ win, ranked, pick }) => ({
@@ -782,23 +815,28 @@ async function main() {
     const shown = [pick, ...ranked.filter(r => r !== pick)].slice(0, Math.max(1, top));
     for (const [i, r] of shown.entries()) {
       console.log(`  ${i ? ' ' : '→'} ${r.fragrance.name} (${r.fragrance.brand}${r.fragrance.original ? `, inspired by ${inspiredBy(r.fragrance)}` : ''}): ${r.reasons.map(sign).join('; ')}`);
-      if (!i) console.log(`    Spray: ${sprayGuide(r.fragrance, win, occasion).text}`);
+      if (!i) console.log(`    Spray: ${sprayGuide(r.fragrance, win, win.occasion ?? occasion).text}`);
     }
   };
 
   // One date anywhere: the forecast's windows, or typical weather past them.
+  // With --events on it, the date's windows are planned around them.
   if (args.date) {
     const wanted = slot ?? occasion?.slot;
-    let result;
+    let result, windows;
     try {
-      result = wanted
-        ? [await picksFor(fragrances, { place, dateISO: args.date, slot: wanted, occasion, history, nudge, refusePast: true })].filter(Boolean)
-          .map(({ window: win, ranked }) => ({ win, ranked, pick: ranked[0] }))
-        : planWindows(fragrances, await tripWindows(place, args.date, args.date, { refusePast: true }), { history, nudge });
+      if (events.length) windows = await tripWindows(place, args.date, args.date, { refusePast: true, ...(wanted && { slots: [wanted] }) });
+      else {
+        result = wanted
+          ? [await picksFor(fragrances, { place, dateISO: args.date, slot: wanted, occasion, history, nudge, refusePast: true })].filter(Boolean)
+            .map(({ window: win, ranked }) => ({ win, ranked, pick: ranked[0] }))
+          : planWindows(fragrances, await tripWindows(place, args.date, args.date, { refusePast: true }), { history, nudge });
+      }
     } catch (err) {
       weatherFailed(err, place, 'date', args.date);
     }
-    if (!result.length) fail(`No weather came back for ${args.date}`);
+    if (windows?.length) result = planWindows(fragrances, onWindows(windows, `--date ${args.date}`), { occasion, history, nudge });
+    if (!result?.length) fail(`No weather came back for ${args.date}`);
     const typical = result.some(r => r.win.typical);
     if (args.json) {
       console.log(JSON.stringify({
@@ -812,7 +850,7 @@ async function main() {
       console.log(`${place.name} · ${shortDate(args.date)}${typical ? ' · typical weather for the date (past the forecast)' : ''}${occasion ? ` · occasion: ${occasion.label}` : ''}`);
       for (const r of result) {
         const win = r.win;
-        printSlot(r, `${win.slot === 'day' ? 'Day' : 'Night'}: ${win.typical ? 'typically ' : ''}${win.condition.toLowerCase()}, feels ${Math.round(win.feelsF)}°F, ${Math.round(win.humidity)}% humidity${win.pop >= 30 ? (win.typical ? `, wet on ${win.pop}% of these dates in past years` : `, ${win.pop}% rain`) : ''}`);
+        printSlot(r, `${win.slot === 'day' ? 'Day' : 'Night'}${forEvent(win)}: ${win.typical ? 'typically ' : ''}${win.condition.toLowerCase()}, feels ${Math.round(win.feelsF)}°F, ${Math.round(win.humidity)}% humidity${win.pop >= 30 ? (win.typical ? `, wet on ${win.pop}% of these dates in past years` : `, ${win.pop}% rain`) : ''}`);
       }
     }
     return;
@@ -824,10 +862,10 @@ async function main() {
   if (args.week) {
     const days = week(forecast);
     const wanted = slot ?? occasion?.slot ?? null;
-    const windows = days.flatMap(d => [d.day, d.night].filter(w => w && (!wanted || w.slot === wanted)));
+    const windows = onWindows(days.flatMap(d => [d.day, d.night].filter(w => w && (!wanted || w.slot === wanted))), 'the week ahead');
     const plan = planWindows(fragrances, windows, { occasion, history, nudge });
     const pickFor = win => plan.find(p => p.win === win);
-    const rows = days.map(d => ({ day: d, slots: [d.day, d.night].filter(w => w && windows.includes(w)).map(pickFor) }))
+    const rows = days.map(d => ({ day: d, slots: windows.filter(w => w.dateISO === d.dateISO).map(pickFor) }))
       .filter(r => r.slots.length);
     if (args.json) {
       console.log(JSON.stringify({
@@ -848,7 +886,7 @@ async function main() {
       for (const { day, slots } of rows) {
         console.log(`\n${day.name} ${day.dateISO}: ${day.condition}, ${Math.round(day.hiF)}°/${Math.round(day.loF)}°F${day.pop >= 30 ? `, ${day.pop}% rain` : ''}`);
         for (const { win, pick } of slots) {
-          console.log(`  ${win.slot === 'day' ? 'day  ' : 'night'} ${String(Math.round(win.feelsF)).padStart(3)}°F  ${pick.tier}  ${pick.fragrance.name} (${pick.fragrance.brand}): ${why(pick)}`);
+          console.log(`  ${win.slot === 'day' ? 'day  ' : 'night'} ${String(Math.round(win.feelsF)).padStart(3)}°F  ${pick.tier}  ${pick.fragrance.name} (${pick.fragrance.brand})${win.occasion ? ` for ${phrase(win.occasion)}` : ''}: ${why(pick)}`);
         }
       }
     }
@@ -857,26 +895,45 @@ async function main() {
 
   // Today's windows in time order. Without an occasion or --slot they're
   // planned together like the app's Today, so the night doesn't repeat the day.
+  // --events can fall anywhere in the week ahead: those later on are planned
+  // first and hold their bottles back today, as --week and the app's Now do.
   const wx = summarize(forecast);
-  const result = slot || occasion
-    ? [wx[slot ?? occasion.slot]].filter(Boolean).map(win => {
-      const ranked = rank(fragrances, win, win.slot, { occasion, history, nudge });
-      return { win, ranked, pick: ranked[0] };
-    })
-    : planWindows(fragrances, [wx.day, wx.night].filter(Boolean).sort(byTime), { history, nudge });
+  const wanted = slot ?? occasion?.slot ?? null;
+  const shown = (wanted ? [wx[wanted]] : [wx.day, wx.night]).filter(Boolean).sort(byTime);
+  let result, ahead = [];
+  if (events.length) {
+    const weekly = onWindows(week(forecast).flatMap(d => [d.day, d.night].filter(w => w && (!wanted || w.slot === wanted))), 'the week ahead');
+    const later = weekly.filter(w => w.occasion && (!shown.length || byTime(w, shown.at(-1)) > 0));
+    const plan = planWindows(fragrances, [...withEvents(shown, events), ...later], { occasion, history, nudge });
+    [result, ahead] = [plan.slice(0, shown.length), plan.slice(shown.length)];
+  } else {
+    result = wanted
+      ? shown.map(win => {
+        const ranked = rank(fragrances, win, win.slot, { occasion, history, nudge });
+        return { win, ranked, pick: ranked[0] };
+      })
+      : planWindows(fragrances, shown, { history, nudge });
+  }
 
   if (args.json) {
+    const eventJSON = ({ win, pick }) => ({ date: win.dateISO, slot: win.slot, occasion: win.occasion.id, pick: pick.fragrance.name });
     console.log(JSON.stringify({
       place,
       now: wx.now,
       occasion: occasion?.id ?? null,
       slots: result.map(slotJSON),
+      ...(events.length && { events: [...result, ...ahead].filter(p => p.win.occasion).map(eventJSON) }),
     }, null, 2));
   } else {
     console.log(`${place.name} · now ${Math.round(wx.now.tempF)}°F ${wx.now.label}${occasion ? ` · occasion: ${occasion.label}` : ''}`);
     for (const r of result) {
       const win = r.win;
-      printSlot(r, `${win.label}: ${win.condition}, feels ${Math.round(win.feelsF)}°F, ${Math.round(win.humidity)}% humidity${win.pop >= 30 ? `, ${win.pop}% rain` : ''}`);
+      printSlot(r, `${win.label}${forEvent(win)}: ${win.condition}, feels ${Math.round(win.feelsF)}°F, ${Math.round(win.humidity)}% humidity${win.pop >= 30 ? `, ${win.pop}% rain` : ''}`);
+    }
+    if (ahead.length) console.log('');
+    for (const { win, pick } of ahead) {
+      const what = eventPhrase({ dateISO: win.dateISO, slot: win.slot, occasion: win.occasion }, wx.todayISO);
+      console.log(`For ${what}: ${pick.fragrance.name} (${pick.fragrance.brand})`);
     }
   }
 }
@@ -1029,13 +1086,13 @@ async function discover(args, fragrances, { slot, count, history, hidden }) {
   console.log(`\n${CREDIT}.`);
 }
 
-const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,NAME]) [--occasion ${OCCASIONS.map(o => o.id).join('|')}] [--slot day|night] [--week] [--journal FILE] [--exclude NAME,NAME] [--demo] [--top N] [--json]
+const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,NAME]) [--occasion ${OCCASIONS.map(o => o.id).join('|')}] [--slot day|night] [--week] [--events "DATE [day|night] OCCASION; …"] [--journal FILE] [--exclude NAME,NAME] [--demo] [--top N] [--json]
        node scripts/recommend.mjs --layer NAME|all [--city NAME | --loc LAT,LON[,NAME]] [--slot day|night] [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --ideal NAME [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --mix [--exclude NAME,NAME] [--demo] [--json]
        node scripts/recommend.mjs --doubles [--exclude NAME,NAME] [--demo] [--json]
        node scripts/recommend.mjs --styles NAME [--json]
-       node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,NAME]) --date YYYY-MM-DD [--occasion ID] [--slot day|night] [--journal FILE] [--json]
+       node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,NAME]) --date YYYY-MM-DD [--occasion ID] [--slot day|night] [--events "DATE [day|night] OCCASION; …"] [--journal FILE] [--json]
        node scripts/recommend.mjs --pack (--city NAME | --loc LAT,LON[,NAME]) --from YYYY-MM-DD --to YYYY-MM-DD [--max N] [--events "DATE [day|night] OCCASION; …"] [--json]
        node scripts/recommend.mjs --spray NAME [--city NAME | --loc LAT,LON[,NAME]] [--date YYYY-MM-DD] [--occasion ID] [--slot day|night] [--json]
        node scripts/recommend.mjs --gaps [--city NAME | --loc LAT,LON[,NAME]] [--uses USE=never|sometimes|often,…] [--value | --no-value] [--mists] [--top N] [--exclude NAME,NAME] [--journal FILE] [--demo] [--json]

@@ -9,7 +9,7 @@ Live at **https://davidbeck45.github.io/scentcast/**. It opens on my wardrobe; a
 **Wear**
 - **Now**: the local weather drawn as a sky, with the best bottle for daytime or tonight standing on the hill and the rest of your bottles on a shelf by how well they fit. Each pick has a match score, the reasons behind it and how much to spray ("2 sprays · neck, chest"). A bottle you haven't worn in a month comes back when it's nearly as good a fit.
 - **Week**: a day and night pick for each of the next 7 days, rotating so the same bottle rarely comes up twice in a row.
-- **Occasion**: Casual, Office, Date Night, Night Out, Formal, Outdoors or Cozy, for today or any date up to a year out, here or in another city.
+- **Occasion**: Casual, Office, Date Night, Night Out, Formal, Outdoors or Cozy, for today or any date up to a year out, here or in another city. "Plan it" sets a day or night at home aside for the occasion (a date tonight, a wedding on Saturday): Now and the Week give it the occasion's best bottle, leave that bottle be the days before, and a wear logged then counts for the occasion.
 - **Trip**: the fewest bottles to pack (two to four) for a city and dates, which to wear each day and night, a dressier pick for a formal dinner or a date, and a packing list to copy or share. Past the forecast's ten days it plans on typical weather for the dates, and says so.
 
 **Wardrobe**
@@ -28,7 +28,7 @@ Picks come from Fragrantica's community votes (seasons, day or night, and those 
 
 ## Privacy
 
-There's no account and no tracking. What you add stays in your browser's storage on this device: your bottles, wishlist, wear journal, ratings, settings and recent places. The journal leaves only when you export it.
+There's no account and no tracking. What you add stays in your browser's storage on this device: your bottles, wishlist, wear journal, ratings, planned occasions, settings and recent places. The journal leaves only when you export it.
 
 The app is static files on GitHub Pages. Beyond them it talks to:
 - **Open-Meteo**, for the weather: the coordinates of the places you ask about (your device's location rounded to about 100 m, or a city you picked) for their forecast, and with a date for a trip or an occasion past the forecast, for typical weather; your place to half a degree for Insights' climate; and the city names you search.
@@ -44,6 +44,7 @@ The same engine runs in Node.js, with no dependencies. Run `node scripts/recomme
 ```sh
 node scripts/recommend.mjs --city "New York" --occasion date
 node scripts/recommend.mjs --city "New York" --week
+node scripts/recommend.mjs --city "New York" --week --events "2026-10-31 night formal; 2026-10-29 date night"   # planned around them
 node scripts/recommend.mjs --city Miami --date 2026-10-24 --occasion date   # any date: forecast, else typical weather
 node scripts/recommend.mjs --city "New York" --journal scentcast-journal-2026-10-14.json   # rotate out recent wears, nudge in neglected ones
 node scripts/recommend.mjs --pack --city London --from 2026-12-10 --to 2026-12-19 --events "2026-12-15 night formal"
