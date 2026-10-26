@@ -44,6 +44,7 @@ The same engine runs in Node.js, with no dependencies. Run `node scripts/recomme
 ```sh
 node scripts/recommend.mjs --city "New York" --occasion date
 node scripts/recommend.mjs --city "New York" --week
+node scripts/recommend.mjs --city "New York" --week --events "2026-10-31 night formal; 2026-10-29 date night"   # planned around them
 node scripts/recommend.mjs --city Miami --date 2026-10-24 --occasion date   # any date: forecast, else typical weather
 node scripts/recommend.mjs --city "New York" --journal scentcast-journal-2026-10-14.json   # rotate out recent wears, nudge in neglected ones
 node scripts/recommend.mjs --pack --city London --from 2026-12-10 --to 2026-12-19 --events "2026-12-15 night formal"
