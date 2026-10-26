@@ -154,13 +154,15 @@ export function widgetPayload(fragrances, forecast, place, nowMs = Date.now(), j
   // The app's and the journal's ids are strings; data/collection.json has numbers.
   const bottles = fragrances.map(f => (typeof f.id === 'string' ? f : { ...f, id: String(f.id) }));
   const history = journal ? journal.history.filter(h => !h.planned) : [];
+  // The place's date, which week() has moved past once tonight's window is over.
+  const todayISO = new Date(nowMs + (forecast.utc_offset_seconds ?? 0) * 1000).toISOString().slice(0, 10);
   const events = (journal?.events ?? []).filter(e => occasionById(e.occasion));
   const windows = withStoredEvents(days.flatMap(d => [d.day, d.night].filter(Boolean)), events);
-  const plan = planWindows(bottles, windows, { history, nudge: history.length > 0 });
+  const plan = planWindows(bottles, windows, { history, nudge: history.length > 0, nowISO: todayISO });
   // By date and slot: an event's window is a copy with its occasion on.
   const key = win => win && `${win.dateISO}:${win.slot}`;
   const byWindow = new Map(plan.map(p => [key(p.win), p]));
-  const freshness = journal && journalFreshness(history, days[0]?.dateISO ?? new Date(nowMs).toISOString().slice(0, 10));
+  const freshness = journal && journalFreshness(history, todayISO);
   return {
     place,
     updated: new Date(nowMs).toISOString(),

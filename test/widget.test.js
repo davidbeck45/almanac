@@ -68,6 +68,10 @@ test('with the app’s Copy for Claude the widget skips yesterday’s bottle, an
   // Three days on, the panel says so.
   const later = widgetPayload(fragrances, syntheticForecast(7, { start: '2026-09-30' }), place, Date.parse('2026-10-01T00:00:00Z'), journal);
   assert.equal(later.journalNote, 'newest wear 3 days ago');
+  // At 23:30 tonight's window is over and the plan starts tomorrow, but last night is still a day ago.
+  const late = widgetPayload(widgetBottles(fragrances, undefined, journal), syntheticForecast(7), place, Date.parse('2026-09-29T03:30:00Z'), journal);
+  assert.equal(late.days[0].date, '2026-09-29');
+  assert.deepEqual([late.journal.daysAgo, late.journalNote], [1, null]);
 });
 
 test('with the app’s plans in the journal the widget plans around them, as Now and the Week do', () => {
