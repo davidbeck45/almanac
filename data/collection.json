@@ -1,6 +1,6 @@
 {
   "source": "fragrantica.com/@doeszen wardrobe (Have)",
-  "fetched": "2026-10-14",
+  "fetched": "2026-10-26",
   "fragrances": [
     {
       "id": 98689,
@@ -6622,6 +6622,11 @@
         "base": [
           "Cedarwood"
         ]
+      },
+      "noteVotes": {
+        "Aldehydes": 1000,
+        "Orange": 156,
+        "Cedarwood": 650
       },
       "original": {
         "id": 109989,

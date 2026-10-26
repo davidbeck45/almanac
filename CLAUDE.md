@@ -54,7 +54,7 @@ To add or refresh a bottle:
 2. `python3 scripts/decant.py extras`, `npm run build:data`, `npm run fit` and `npm test`.
 3. If it's a dupe, add its original (below). Add its Parfumo line, and its original's (below).
 
-`python3 scripts/decant.py refresh` takes newer vote counts from a new dataset version into every `data/*.jsonl` line, and rewrites `data/extras.jsonl` (below).
+`python3 scripts/decant.py refresh` takes newer vote counts from a new dataset version into every `data/*.jsonl` line, fills `noteVotes` from the dataset's note weights on a line that has none (Cedrus Blanc's page was read without them; never over votes a line has), and rewrites `data/extras.jsonl` (below).
 
 Dupes and their originals: `data/dupes.json` pairs a dupe's slug with its original's, and `data/originals.jsonl` holds the originals' lines (`decant.py add originals <id>`). The build gives each dupe a summary of its original's votes as `original`; the engine leans on it for a dupe's season and day/night split, the bottle page says "Inspired by", and `npm run fit` counts the originals as voted bottles. Find the original in the dataset's "smells like" votes: `python3 scripts/decant.py similar <id>` lists them, and the top bottle from another brand released no later is the curated original for 18 of the 19 dupes. `decant.py dupes` checks every pair against the votes and names unpaired bottles whose votes point to an original. When a dupe's list holds only fellow clones (Essence de Blanc's), run `similar` on one of them, or read the reviews: the raw HTML of a perfume page has its 200 newest `[itemprop="reviewBody"]`, and the most-named perfume after "dupe of", "clone of", "smells like" and the like is nearly always it. Ask David when the votes are split.
 
