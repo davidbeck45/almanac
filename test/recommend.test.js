@@ -334,6 +334,19 @@ test('--events stops on a window the plan doesn\'t cover, and on a mode that doe
   }
 });
 
+test('an event tonight, once tonight is over at the place, says it’s over, not out of reach', () => {
+  // A time zone where it's 23:00 or later: the plan starts tomorrow there.
+  const hour = new Date().getUTCHours();
+  const offset = ((23 - hour + 36) % 24) - 12;
+  const placeToday = new Date(Date.now() + offset * 3_600_000).toISOString().slice(0, 10);
+  const late = (...args) => spawnSync(process.execPath, ['--import', mock, script, ...args], { encoding: 'utf8', env: { ...process.env, MOCK_UTC_OFFSET: String(offset) } });
+  for (const args of [['--loc', '40.7,-74'], ['--loc', '40.7,-74', '--week']]) {
+    const r = late(...args, '--events', `${placeToday} night date`);
+    assert.equal(r.status, 1, args.join(' '));
+    assert.match(r.stderr, new RegExp(`^--events: the night of ${placeToday} is over\\n$`));
+  }
+});
+
 test('--pack plans a trip: few bottles, every window, events on their night', () => {
   const [from, to] = [dayISO(1), dayISO(4)];
   const run = cli('--pack', '--loc', '40.7,-74,Testville', '--from', from, '--to', to, '--events', `${dayISO(2)} night formal`, '--json');

@@ -835,12 +835,15 @@ async function main() {
   const forEvent = win => (win.occasion ? `, for ${phrase(win.occasion)}` : '');
   // Puts --events on a plan's windows, or stops on one that isn't among
   // them: outside the dates planned (`what`), or a window already over. The
-  // journal's events go only where they fit.
+  // journal's events go only where they fit. Every event here is from this
+  // machine's yesterday on, so one missing before the last window planned
+  // is over at the place, even dated before the first (past 23:00 the plan
+  // starts tomorrow).
   const onWindows = (windows, what) => {
     for (const e of events) {
       if (e.stored || windows.some(w => w.dateISO === e.dateISO && w.slot === e.slot)) continue;
       const [first, last] = [windows[0]?.dateISO, windows.at(-1)?.dateISO];
-      if (e.dateISO >= first && e.dateISO <= last) fail(`--events: the ${e.slot === 'day' ? 'daytime' : 'night'} of ${e.dateISO} is over`);
+      if (first && e.dateISO <= last) fail(`--events: the ${e.slot === 'day' ? 'daytime' : 'night'} of ${e.dateISO} is over`);
       fail(`--events: ${e.dateISO} is outside ${what}${first ? ` (${shortDate(first)} to ${shortDate(last)})` : ''}`);
     }
     return withEvents(windows, events);
