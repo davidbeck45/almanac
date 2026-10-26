@@ -280,9 +280,11 @@ export function weatherFit(frag, conditions) {
 // between April and October). The range runs out from the peak to where the
 // fit falls COMFORT_DROP below it; lowF / highF are null when it runs off the
 // scan (nothing is too cold for a winter scent). bestF, the middle of the
-// peak, is only given for a range closed on both ends.
+// peak, is only given for a range closed on both ends. At a 0.1 drop rich
+// bottles topped out in the low 40s, though collectors wear them into the
+// 50s; 0.15 opened most two-sided ranges (Supremacy read as best in any heat).
 const COMFORT_SCAN = [0, 105];
-const COMFORT_DROP = 0.1;
+const COMFORT_DROP = 0.12;
 
 export function comfortRange(frag, { dewF = 55 } = {}) {
   const W = DAILY_WEIGHTS;

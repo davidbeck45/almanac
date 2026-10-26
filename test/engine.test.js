@@ -200,7 +200,8 @@ test('comfort range: heavy scents open toward the cold, fresh ones toward the he
   const byName = name => comfortRange(fragrances.find(f => f.name === name));
   const amber = byName('Amber Empire');
   assert.equal(amber.lowF, null);
-  assert.ok(amber.highF >= 40 && amber.highF <= 58, `Amber Empire tops out at ${amber.highF}°F`);
+  // Collectors wear rich ambers into cool fall evenings, not only in the frost.
+  assert.ok(amber.highF >= 45 && amber.highF <= 58, `Amber Empire tops out at ${amber.highF}°F`);
   assert.equal(amber.bestF, null, 'no single best for an open range');
   const fresh = byName('Essence de Blanc');
   assert.equal(fresh.highF, null);
@@ -208,6 +209,10 @@ test('comfort range: heavy scents open toward the cold, fresh ones toward the he
   const allRounder = byName('Sauvage');
   assert.ok(allRounder.lowF < 60 && allRounder.highF > 80, JSON.stringify(allRounder));
   assert.ok(allRounder.bestF > allRounder.lowF && allRounder.bestF < allRounder.highF);
+  // A range wide enough for that still closes on both ends for bottles with a best weather, not "any heat".
+  for (const name of ["Supremacy Collector's Edition Pour Homme", 'Sandalwood & Musk', 'Zahri Amara']) {
+    assert.notEqual(byName(name).bestF, null, `${name}: ${JSON.stringify(byName(name))}`);
+  }
   for (const f of fragrances) {
     const { lowF, highF } = comfortRange(f);
     assert.ok(lowF === null || highF === null || lowF < highF, f.name);
