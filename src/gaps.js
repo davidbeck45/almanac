@@ -625,7 +625,7 @@ const leanMult = (record, ctx) => {
 const PICK_KIN = 0.15;
 // Within SAME_SIM of an owned bottle a bottle smells too much alike, whatever
 // voters say: the buy check calls it redundant, and it's never suggested.
-// (Sauvage EDT and EDP are 0.80 alike, Club de Nuit Intense and Aventus 0.78.)
+// (Sauvage EDT and EDP are 0.82 alike, Club de Nuit Intense and Aventus 0.78.)
 export const SAME_SIM = 0.8;
 
 /**

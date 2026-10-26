@@ -8,7 +8,7 @@
 import { similarity, sharedTraits } from './similar.js';
 import { signalsOf } from './candidates.js';
 
-// Sauvage EDT and EDP are 0.80 alike, Liquid Brun and Althaïr 0.92: from
+// Sauvage EDT and EDP are 0.82 alike, Liquid Brun and Althaïr 0.92: from
 // 0.85 two bottles wear as one.
 export const DOUBLE_SIM = 0.85;
 // What ties a pair, strongest first.

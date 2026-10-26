@@ -76,7 +76,7 @@ test('the calendar eases across month boundaries and fades in the tropics', () =
 test('mugginess follows the dew point, not relative humidity', () => {
   assert.ok(Math.abs(dewPointF(86, 50) - 65) < 1, `${dewPointF(86, 50)}`);
   assert.ok(Math.abs(dewPointF(70, 100) - 70) < 0.1);
-  // 88°F at 55% is oppressive (dew ~70°F); 72°F at 85% is merely damp (~67°F).
+  // 88°F at 55% is oppressive (dew ~70°F); 72°F at 85% is sticky, not oppressive (~67°F).
   assert.ok(targetHeaviness({ feelsF: 88, dewF: 71 }) < targetHeaviness({ feelsF: 88, dewF: 50 }) - 0.2);
   assert.equal(targetHeaviness({ feelsF: 100, dewF: 40 }), targetHeaviness({ feelsF: 100, dewF: 55 }), 'dry heat adds nothing');
   const top = c => rank(fragrances, { ...hotHumidDay, feelsF: 86, ...c }, 'day').slice(0, 5);
