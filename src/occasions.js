@@ -1,7 +1,9 @@
 // Occasion presets. `profile` maps accords to how well they suit the occasion
 // (-1 wrong for it .. +1 made for it). `performance`, where the occasion cares,
 // says how loud and lasting it wants a bottle (sillage, longevity: -1 quiet or
-// fleeting .. +1 loud or lasting; Parfumo ratings, see src/engine.js).
+// fleeting .. +1 loud or lasting; Parfumo ratings, see src/engine.js;
+// `enough` names a wish for more that stops counting at the engine's
+// MORE_ENOUGH).
 // `slot` is the default time of day, `phrase` names the occasion in reason
 // text ("Woods & aromatics suit casual wear"), `icon` names a stroke icon in
 // src/ui.js, and `aliases` are names it went by, which typed names still find.
@@ -33,8 +35,12 @@ export const OCCASIONS = [
     slot: 'day',
     phrase: 'the office',
     // Moderate projection that lasts the working day: a quiet bottle counts
-    // only down to the engine's LESS_ENOUGH, and one that fades counts against.
-    performance: { sillage: -0.7, longevity: 0.5 },
+    // only down to the engine's LESS_ENOUGH, one that fades counts against,
+    // and one that lasts past the day only up to MORE_ENOUGH (`enough`). The
+    // wish for less is the most there is: at -0.7 a fresh bottle as loud as
+    // Sauvage still made the top 3 on mild nights, and members' "too loud for
+    // the office" agree with the fit more the stronger it is.
+    performance: { sillage: -1, longevity: 0.5, enough: ['longevity'] },
     profile: {
       citrus: 0.6, fresh: 0.6, iris: 0.6, aromatic: 0.5, powdery: 0.5, musky: 0.5, green: 0.5, soapy: 0.5,
       'fresh spicy': 0.4, lavender: 0.4, woody: 0.4, aldehydic: 0.4, aquatic: 0.4, ozonic: 0.4, marine: 0.4,
@@ -146,4 +152,4 @@ export const occasionById = id => OCCASIONS.find(o => o.id === id);
 // its 2nd and 98th percentile over the dataset's 8,000 bottles with 500+
 // rating votes, never narrower than the accords' fit alone spans (Office's
 // top is the accords'). Fitted by `node scripts/fit-occasions.mjs --write`.
-export const OCCASION_SCALE = { casual: [-0.026, 0.249], office: [-0.383, 0.446], date: [-0.236, 0.471], nightout: [-0.281, 0.552], formal: [-0.336, 0.402], outdoors: [-0.427, 0.423], cozy: [-0.189, 0.417] };
+export const OCCASION_SCALE = { casual: [-0.026, 0.249], office: [-0.49, 0.446], date: [-0.236, 0.471], nightout: [-0.281, 0.552], formal: [-0.336, 0.402], outdoors: [-0.427, 0.423], cozy: [-0.189, 0.417] };

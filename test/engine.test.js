@@ -245,12 +245,15 @@ test('office wants moderate projection that lasts the day, not a whisper that fa
   const office = occasionById('office');
   const base = fragrances.find(f => f.name === 'Cedrus Blanc');
   // Parfumo's 0–10: 6.2 sillage and 6.6 longevity read -1, 7.04 sillage -0.3, 7.8 longevity the middle.
-  const at = (sillage, longevity) => occasionRaw({ ...base, parfumo: { sillage, longevity, votes: 1000 } }, office);
+  const at = (sillage, longevity, occasion = office) => occasionRaw({ ...base, parfumo: { sillage, longevity, votes: 1000 } }, occasion);
   const moderate = at(7.04, 7.8);
   assert.ok(moderate > at(6.2, 6.6) + 0.1, 'a body mist gone by lunch');
   assert.ok(moderate > at(8.6, 7.8), 'a loud one');
   assert.ok(moderate > at(6.2, 7.8) && at(6.2, 7.8) > at(8.6, 7.8), 'quieter than enough earns nothing more, and still beats loud');
   assert.ok(at(7.04, 8.8) > moderate, 'lasting longer helps');
+  // Lasting the working day is enough: past it a beast earns nothing more, where Formal still counts it.
+  assert.equal(at(7.04, 8.8), at(7.04, 9.6));
+  assert.ok(at(7.04, 9.6, occasionById('formal')) > at(7.04, 8.8, occasionById('formal')));
   // The reason still says what it does.
   const reasons = rank([{ ...base, parfumo: { sillage: 6.2, longevity: 6.6, votes: 1000 } }], mildFallNight, 'day', { occasion: office })[0].reasons.map(r => r.text);
   assert.ok(reasons.includes('Stays close to the skin') && reasons.includes('Fades early'), reasons.join(' | '));

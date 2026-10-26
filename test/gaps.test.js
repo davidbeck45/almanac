@@ -358,16 +358,18 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   assert.match(dhi.reasons[0], /^It would barely beat your .+, and nowhere by more\.$/);
   assert.equal(dhi.reasons[1], 'Nothing you own smells like it.');
   assert.ok(dhi.overlap.sim < 0.5 && !dhi.overlap.link);
-  // Dior Homme Intense lasts the working day, so it edges his best for the office in the cold (by too little to
-  // fill anything: he's covered there); its clone doesn't.
+  // Dior Homme Intense projects as much as Sauvage, and lasting past the working day earns it nothing more, so
+  // for the office in the cold it doesn't beat his best: he's covered there. Lasting still counts: as weak as
+  // its clone Dark Door Intense (3.1 of 5 on Fragrantica), it would fall further.
   const cold = ctx.cc.cells.findIndex(c => c.id === 'office:day:cold'), m = ctx.cc.cells.length;
   const best = Math.max(...wardrobe.map((_, i) => ctx.ownTable[i * m + cold]));
-  const coldFit = name => fitTable([sameFooting(records.find(r => r.name === name))], ctx.cc)[cold];
-  assert.ok(coldFit('Dior Homme Intense 2011') > best && best > coldFit('Dark Door Intense'));
-  const dior = buyCheck(records.find(r => r.name === 'Dior Homme Intense 2011'), ctx);
+  const dhiRow = records.find(r => r.name === 'Dior Homme Intense 2011');
+  const coldFit = r => fitTable([sameFooting(r)], ctx.cc)[cold];
+  assert.ok(coldFit(dhiRow) < best);
+  assert.ok(coldFit({ ...dhiRow, id: 'my:fades', performance: { ...dhiRow.performance, longevity: 3.14 } }) < coldFit(dhiRow) - 0.02);
+  const dior = buyCheck(dhiRow, ctx);
   assert.equal(dior.verdict, 'Covered');
-  assert.match(dior.reasons[0], /^It would barely beat your Sandalwood & Musk for Office on cold days/);
-  assert.ok(!buyCheck(records.find(r => r.name === 'Dark Door Intense'), ctx).fills.some(f => f.cell.use === 'office'));
+  assert.ok(!dior.fills.some(f => f.cell.use === 'office'));
   // Risky shows through even when it fills nothing.
   const kouros = buyCheck(records.find(r => r.name === 'Kouros'), ctx);
   assert.equal(kouros.verdict, 'Risky');

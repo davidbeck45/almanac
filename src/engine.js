@@ -373,18 +373,32 @@ export function performanceLevel(frag, key) {
 // down, a body mist that's gone by lunch was the best office pick.
 const LESS_ENOUGH = -0.3;
 const LESS_BACK = 0.5;
-const wished = (wish, level) => (wish < 0 && level < LESS_ENOUGH ? LESS_ENOUGH + LESS_BACK * (LESS_ENOUGH - level) : level);
+// A wish for more can have its enough too, where the occasion names it
+// (`performance.enough`): lasting the working day is all the office asks,
+// so its longevity counts only up to MORE_ENOUGH (about Parfumo's 8 of 10).
+// Counted all the way up, a beast earned back for lasting what it lost for
+// projecting (every one of David's bottles past it projects too), and the
+// fit agreed less with members' "too loud for the office" than the accords
+// alone. Formal and Date Night count theirs all the way: members call
+// bottles that last formal and date-worthy more often, past it too.
+const MORE_ENOUGH = 0.2;
+const wished = (wish, level, enough) => {
+  if (wish < 0 && level < LESS_ENOUGH) return LESS_ENOUGH + LESS_BACK * (LESS_ENOUGH - level);
+  if (wish > 0 && enough && level > MORE_ENOUGH) return MORE_ENOUGH;
+  return level;
+};
 
 // What longevity and sillage add to a bottle's fit for the occasion: its
 // wish for each (`performance`, -1 quiet or fleeting .. +1 loud or lasting)
-// times the bottle's level, a wish for less only down to LESS_ENOUGH.
-// `plain` reads the level as it is, for what reasons say ("Stays close to
-// the skin" is still true of a whisper).
+// times the bottle's level, a wish for less only down to LESS_ENOUGH, one
+// for more the occasion calls enough only up to MORE_ENOUGH. `plain` reads
+// the level as it is, for what reasons say ("Stays close to the skin" is
+// still true of a whisper).
 export function performanceFit(frag, occasion, { plain = false } = {}) {
   const wish = occasion.performance ?? {};
   const part = key => {
     const w = wish[key] ?? 0, level = performanceLevel(frag, key);
-    return PERFORMANCE_WEIGHT * w * (plain ? level : wished(w, level));
+    return PERFORMANCE_WEIGHT * w * (plain ? level : wished(w, level, wish.enough?.includes(key)));
   };
   return { longevity: part('longevity'), sillage: part('sillage') };
 }
