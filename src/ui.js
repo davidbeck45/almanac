@@ -70,6 +70,30 @@ export function relativeDay(iso, todayISO) {
 
 export const matchPct = entry => Math.max(1, Math.min(99, Math.round(entry.score * 100)));
 
+export const ordinal = n => {
+  const tens = n % 100, ones = n % 10;
+  const suffix = tens >= 11 && tens <= 13 ? 'th' : ones === 1 ? 'st' : ones === 2 ? 'nd' : ones === 3 ? 'rd' : 'th';
+  return `${n}${suffix}`;
+};
+
+/**
+ * Where a bottle moved in a list once he rated it (the bottle page's "On
+ * your skin", Now's "Rate it"): "Now 3rd for tonight, was 1st." (places
+ * 1-based, null when it isn't in the list). `label` names the list.
+ */
+export function moveText(before, after, label) {
+  if (!after) return '';
+  if (!before || before === after) return `Still ${ordinal(after)} ${label}.`;
+  return `Now ${ordinal(after)} ${label}, was ${ordinal(before)}.`;
+}
+
+// "for tonight", "for date night tonight", "for Friday night".
+export function listLabel(win, occasion) {
+  if (!win) return '';
+  const when = /^(Today|Tonight|Tomorrow)\b/.test(win.label) ? win.label.toLowerCase() : `on ${win.label}`;
+  return occasion ? `for ${occasion.label.toLowerCase()} ${when}` : `for ${when.replace(/^on /, '')}`;
+}
+
 // Good reasons first for a bottle that ranks well, the catch first for one
 // that doesn't.
 export function displayReasons(entry, n) {

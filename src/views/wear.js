@@ -5,20 +5,22 @@
 // Occasion pane's "When and where?" in wear/when.js, and the place and date
 // pickers both use in wear/pickers.js. Styles: src/css/wear.css.
 import { renderScene, stagePoint, skyLight } from '../scene.js';
-import { calendarSeason, eventPhrase } from '../engine.js';
+import { calendarSeason, eventPhrase, PLAN_MARGIN } from '../engine.js';
 import { OCCASIONS, occasionById } from '../occasions.js';
 import { sprayGuide } from '../spray.js';
+import { planTies, tieLine, contrast } from '../contrast.js';
+import { setSkin, loadAsked, markAsked, wasAsked } from '../skin.js';
 import { theme } from '../theme.js';
 import { toggleWear, wornIn, journalStats, shiftISO } from '../history.js';
 import { routeHash } from '../app/router.js';
-import { esc, temp, deg, plural, shortDate, weekdayShort, windowRange, feelWords, displayReasons } from '../ui.js';
+import { esc, temp, deg, plural, shortDate, weekdayShort, windowRange, feelWords, displayReasons, moveText, listLabel } from '../ui.js';
 import {
   icon, img, slotIcon, wxIcon, wxIconFor, messageHTML, skeletonHTML, reasonsList, chips, matchBadge, shelfHTML,
-  wearButton, segHTML, sharedBannerHTML, accordColor, sectionHead,
+  wearButton, segHTML, starsHTML, sharedBannerHTML, accordColor, sectionHead,
 } from '../ui/components.js';
 import {
-  state, savePrefs, activeFragrances, sourceRecords, nowSlot, todaySlots, computeWeek, rankContext, canWear, wornId,
-  nowHour, findRecord, eventAt, setEvent,
+  state, savePrefs, activeFragrances, sourceRecords, rankedFragrances, nowSlot, todaySlots, computeToday, computeWeek,
+  rankContext, canWear, wornId, nowHour, findRecord, eventAt, setEvent,
 } from '../app/state.js';
 import * as trip from './wear/trip.js';
 import * as when from './wear/when.js';
@@ -175,12 +177,23 @@ export function sprayLine({ sprays: [lo, hi], where, unit = 'spray' }) {
   return `${count} · ${where.map(w => SPOT_WORDS[w] ?? w).join(', ')}`;
 }
 
+// "Legacy (fresher) and Aristo suit today just as well": the bottles that
+// suit the window as well as its pick (src/contrast.js tiesFor), each name
+// opening its page in the window's list.
+export function tiesHTML(ties, win, ctx) {
+  if (!ties?.length) return '';
+  const name = ({ entry }) => `<button class="link-btn" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(entry.fragrance.id)}">${esc(entry.fragrance.name)}</button>`;
+  return `<p class="ties">${icon.compare}<span>${tieLine(ties, win, { name, text: esc })}</span></p>`;
+}
+
 // The top pick. On Now the hero shows the bottle, so the card leads with why
 // and how much to spray (`spray`: sprayGuide's answer; it opens the bottle
-// page's spray section) and, for a window planned for an occasion (`event`,
-// the window), what for, with a way to clear it; elsewhere (`full`) it shows
-// the photo and name too.
-export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicker = '', spray = null, event = null } = {}) {
+// page's spray section), for a window planned for an occasion (`event`, the
+// window) what for, with a way to clear it, then the bottles that suit the
+// window as well (`ties`, in `win`) and Now's question about the pick, when
+// it asks one (`ask`, markup); elsewhere (`full`) it shows the photo and name
+// too.
+export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicker = '', spray = null, event = null, ties = [], win = null, ask = '' } = {}) {
   const f = entry.fragrance;
   const wash = `--accord:${accordColor(Object.keys(f.accords)[0])}`;
   const open = (cls, inner, label = '') => `<button class="${cls}" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(f.id)}"${label ? ` aria-label="${esc(label)}"` : ''}>${inner}</button>`;
@@ -191,8 +204,10 @@ export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicke
       ${eventTagHTML(event, { clear: true })}
       ${nudgeHTML(nudgeOf(entry))}
       ${reasonsList(reasonsOf(entry, 3), 'lead')}
+      ${tiesHTML(ties, win, ctx)}
       ${chips(f.accords)}
       ${canWear || hint ? `<div class="pick-actions">${hint}${canWear ? wearButton(entry, ctx, worn) : ''}</div>` : ''}
+      ${ask}
     </div>`;
   }
   return `<div class="pick full" style="${wash}">
@@ -234,14 +249,110 @@ export function nextWindowHTML({ win, pick }, worn, hour) {
   </aside>`;
 }
 
-// The rest of a window's ranking on the magnitude shelf.
-function alsoHTML(ranked, pick, ctx, worn, label) {
+// The rest of a window's ranking on the magnitude shelf. With `tags`, a
+// bottle within PLAN_MARGIN of the pick says in a word how it differs from
+// it (src/contrast.js: "fresher", "white floral", "louder").
+function alsoHTML(ranked, pick, ctx, worn, label, { tags = false } = {}) {
   const rest = ranked.filter(r => r !== pick);
   if (!rest.length) return '';
+  const tagOf = tags ? r => (Math.abs(pick.score - r.score) <= PLAN_MARGIN ? contrast(pick.fragrance, r.fragrance)[0] ?? null : null) : null;
   return `<div class="also">
     <h3 class="also-title">Also good ${esc(label)}</h3>
-    ${shelfHTML(rest, ctx, { wornId: worn })}
+    ${shelfHTML(rest, ctx, { wornId: worn, tagOf })}
   </div>`;
+}
+
+// ---------- Asking once ----------
+// Stars are the strongest say he has in picks (a 5★ wins the near ties most
+// days are), but rating meant opening the bottle's page. So Now asks: its
+// stars once he's wearing a bottle that has none, and how it wore the day
+// after (nobody knows by the morning whether it lasted). Each once per
+// bottle, answered or waved off (src/skin.js loadAsked), one at a time.
+
+/**
+ * The one question Now asks, or null: { kind: 'stars', f } for `worn`, the
+ * record he's wearing in the window shown, while it has no stars; else
+ * { kind: 'skin', f } for the first of `yesterday` (records worn yesterday,
+ * the night's first) with neither nudge of his own yet. `asked`: loadAsked().
+ */
+export function askFor({ worn = null, yesterday = [], asked = {} }) {
+  if (worn && !Number.isFinite(worn.personal?.rating) && !wasAsked(asked, worn.id, 'stars')) return { kind: 'stars', f: worn };
+  const f = yesterday.find(r => !r.personal?.longevity && !r.personal?.sillage && !wasAsked(asked, r.id, 'skin'));
+  return f ? { kind: 'skin', f } : null;
+}
+
+// How it wore, in the words of the day after: the bottle page's nudges
+// (src/views/bottle-skin.js), none chosen until he answers.
+const LASTED = [[-1, 'Faded early'], [0, 'As expected'], [1, 'Lasted longer']];
+const PROJECTED = [[-1, 'Less'], [0, 'As expected'], [1, 'More']];
+const answerSeg = (items, now, opts) => segHTML(items.map(([value, label]) => ({ value, label, on: value === now })), { ...opts, cls: 'wide' });
+
+// What the last answer did, under the question ("Rated 5★. Now 1st for
+// today, was 3rd."); screen readers hear it from app.announce.
+const saidHTML = said => (said ? `<p class="ask-said">${esc(said)}</p>` : '');
+
+/**
+ * Its stars, in the pick card under Wear this: five of them (the bottle
+ * page's), and Not now; once rated (`rating`), the stars stay for this
+ * visit with what the rating did (`said`), so arrows can still move it.
+ */
+export function askStarsHTML(f, { rating = null, said = '' } = {}) {
+  return `<div class="ask ask-stars">
+    <div class="ask-row">
+      <p class="ask-title" id="ask-title">${rating ? 'Your rating' : 'Rate it'}<span class="visually-hidden">: ${esc(f.name)}</span></p>
+      <div class="ask-pick">
+        ${starsHTML(rating, { action: 'ask-rate', labelledby: 'ask-title', id: f.id })}
+        ${said ? '' : `<button class="link-btn ask-skip" data-action="ask-skip" data-kind="stars" data-id="${esc(f.id)}">Not now</button>`}
+      </div>
+    </div>
+    ${saidHTML(said)}
+  </div>`;
+}
+
+/**
+ * How yesterday's bottle wore on him, under today's picks: how long it
+ * lasted and how far it projected against the crowd's votes (the bottle
+ * page's nudges). Nothing chosen until he answers (`answers`, this visit's);
+ * then what was saved (`said`), and Done for Not now.
+ */
+export function askSkinHTML(f, { answers = {}, said = '' } = {}) {
+  const id = f.id;
+  const answered = 'longevity' in answers || 'sillage' in answers;
+  return `<div class="ask ask-skin" role="group" aria-labelledby="ask-title">
+    <div class="ask-head">${img(f)}<p class="ask-title" id="ask-title">How did <b>${esc(f.name)}</b> wear yesterday?</p></div>
+    <div class="ask-row stacked"><span class="ask-label">It lasted</span>${answerSeg(LASTED, answers.longevity, { action: 'ask-lasts', label: 'How long it lasted', id })}</div>
+    <div class="ask-row stacked"><span class="ask-label">It projected</span>${answerSeg(PROJECTED, answers.sillage, { action: 'ask-projects', label: 'How far it projected', id })}</div>
+    ${saidHTML(said)}
+    <div class="ask-actions"><button class="btn tertiary compact" data-action="ask-skip" data-kind="skin" data-id="${esc(id)}">${answered ? 'Done' : 'Not now'}</button></div>
+  </div>`;
+}
+
+// The question answered on this visit to Now (a visit is state.base: the
+// next starts afresh), so it stays put while he answers: its kind, bottle,
+// the answers so far and what the last one did.
+let held = null; // { kind, id, base, answers, said }
+const heldNow = () => (held && held.base === state.base ? held : null);
+
+/** Forget the question held on screen (tests; a new visit does it itself). */
+export function forgetAsked() {
+  held = null;
+}
+
+// Now's question as markup: { inPick } for the pick's stars, { below } for
+// how yesterday's bottle wore. One at a time; one being answered holds its
+// place.
+function nowQuestion(pick, worn) {
+  const records = rankedFragrances();
+  const byId = id => records.find(f => f.id === id) ?? null;
+  const wearing = worn && pick.fragrance.id === worn ? pick.fragrance : null;
+  const h = heldNow();
+  if (h?.kind === 'stars' && wearing?.id === h.id) return { inPick: askStarsHTML(wearing, { rating: wearing.personal?.rating ?? null, said: h.said }), below: '' };
+  if (h?.kind === 'skin' && byId(h.id)) return { inPick: '', below: askSkinHTML(byId(h.id), h) };
+  const day = shiftISO(state.wx.todayISO, -1);
+  const yesterday = [...new Set(['night', 'day'].map(slot => wornIn(state.history, day, slot)?.id).filter(Boolean))].map(byId).filter(Boolean);
+  const ask = askFor({ worn: wearing, yesterday, asked: loadAsked() });
+  if (ask?.kind === 'stars') return { inPick: askStarsHTML(ask.f), below: '' };
+  return { inPick: '', below: ask ? askSkinHTML(ask.f) : '' };
 }
 
 // ---------- Week ----------
@@ -389,15 +500,20 @@ function nowPane() {
   if (!nowSlot()) return skeletonHTML(1);
   const { win, ranked, pick } = nowSlot();
   const worn = wornId(win);
-  const other = todaySlots().find(p => p.win.slot !== win.slot);
+  const slots = todaySlots();
+  const other = slots.find(p => p.win.slot !== win.slot);
+  // Ties as the CLI finds them for the same plan: none once he's wearing one.
+  const ties = planTies(slots, { history: state.history })[slots.findIndex(p => p.win === win)] ?? [];
+  const ask = nowQuestion(pick, worn);
   return `${banner()}
     <section class="card slot" aria-labelledby="slot-title">
       ${slotHeadHTML(win, nowHour(), { id: 'slot-title' })}
       <div class="now-picks">
-        ${pickHTML(pick, win.slot, worn, { canWear: canWear(win), spray: sprayGuide(pick.fragrance, win, win.occasion ?? null), event: win })}
+        ${pickHTML(pick, win.slot, worn, { canWear: canWear(win), spray: sprayGuide(pick.fragrance, win, win.occasion ?? null), event: win, ties, win, ask: ask.inPick })}
         ${other ? nextWindowHTML(other, wornId(other.win), nowHour()) : ''}
       </div>
-      ${alsoHTML(ranked, pick, win.slot, worn, win.slot === 'day' ? 'by day' : 'tonight')}
+      ${ask.below}
+      ${alsoHTML(ranked, pick, win.slot, worn, win.slot === 'day' ? 'by day' : 'tonight', { tags: true })}
     </section>
     ${journalTeaser()}`;
 }
@@ -529,6 +645,27 @@ function showSpraySection(tries = 0) {
   head.focus({ preventScroll: true });
 }
 
+// What a nudge of his own says once saved: "Saved: it lasts longer and
+// sits closer on you."
+const LASTS_WORDS = { 1: 'lasts longer', [-1]: 'fades faster' };
+const PROJECTS_WORDS = { 1: 'projects more', [-1]: 'sits closer' };
+export function skinSaid({ longevity = 0, sillage = 0 }) {
+  const words = [LASTS_WORDS[longevity], PROJECTS_WORDS[sillage]].filter(Boolean);
+  return words.length ? `Saved: it ${words.join(' and ')} on you.` : 'Saved: it wears as voters say.';
+}
+
+function answerSkin(el, app, key) {
+  const { id } = el.dataset;
+  const value = Number(el.dataset.value);
+  setSkin(id, { [key]: value });
+  markAsked(id, 'skin');
+  const h = heldNow()?.kind === 'skin' && held.id === id ? held : null;
+  const answers = { ...h?.answers, [key]: value };
+  held = { kind: 'skin', id, base: state.base, answers, said: skinSaid(answers) };
+  app.keepingFocus(el, '#app', app.render);
+  app.announce?.(held.said);
+}
+
 export const actions = {
   ...trip.actions,
   ...when.actions,
@@ -559,6 +696,47 @@ export const actions = {
     app.render();
     globalThis.document?.querySelector('.now-picks .pick-top [data-action="open"]')?.focus({ preventScroll: true });
     if (win) app.showToast(`<span>${esc(`${win.label} is back to everyday picks.`)}</span>`);
+  },
+  // Now's "Rate it": the stars save as the bottle page's do and stay for
+  // this visit, saying where the bottle moved in the window's list. The same
+  // star tapped again takes the rating off; keys only ever choose.
+  'ask-rate'(el, app, event) {
+    const id = el.dataset.id;
+    const ctx = state.contexts[nowSlot()?.win.slot];
+    if (!ctx) return;
+    const again = el.getAttribute('aria-checked') === 'true';
+    if (again && !(event?.detail > 0)) return;
+    const stars = again ? null : Number(el.dataset.value);
+    const placeOf = () => { const i = state.contexts[ctx.win.slot]?.ranked.findIndex(r => r.fragrance.id === id) ?? -1; return i >= 0 ? i + 1 : null; };
+    const before = placeOf();
+    setSkin(id, { rating: stars });
+    markAsked(id, 'stars');
+    computeToday();
+    const moved = moveText(before, placeOf(), listLabel(ctx.win));
+    held = { kind: 'stars', id, base: state.base, said: `${stars ? `Rated ${stars}★.` : 'Rating cleared.'} ${moved}`.trim() };
+    app.keepingFocus(el, '#app', app.render);
+    app.announce?.(held.said);
+  },
+  // How yesterday's bottle wore: each answer saves at once (asked from the
+  // first), and the question stays for the other until Done.
+  'ask-lasts'(el, app) {
+    answerSkin(el, app, 'longevity');
+  },
+  'ask-projects'(el, app) {
+    answerSkin(el, app, 'sillage');
+  },
+  // Not now (or Done): never asked again about this bottle. Focus goes on to
+  // what follows the question: Wear this after the stars, the shelf after
+  // how yesterday's wore.
+  'ask-skip'(el, app) {
+    const { id, kind } = el.dataset;
+    markAsked(id, kind);
+    held = null;
+    const seen = app.inSight?.(el) ?? false;
+    app.render();
+    if (!globalThis.document || el.isConnected) return;
+    const next = document.querySelector(kind === 'stars' ? '#app .pick .wear-btn' : '#app .also .shelf-item') ?? document.querySelector('#app .pick .wear-btn');
+    if (next) app.refocus(next, '#app', { reveal: seen });
   },
   // Now's Day/Night toggle in the hero.
   slot(el, app) {

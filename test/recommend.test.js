@@ -405,3 +405,38 @@ test('--doubles names pairs that wear as one, or the closest pair', () => {
   assert.ok(out.closest.alike > 50 && out.closest.alike < 85, `closest ${out.closest.a} and ${out.closest.b}`);
   assert.match(cli('--doubles').stdout, /^No doubles in \d+ bottles: every one smells its own way\.\nClosest pair: .+ and .+, \d+% alike \(/);
 });
+
+test('a pick names the bottles that suit its window just as well, each with how it differs, never one worn lately', async () => {
+  const [single, text, plan, week, date] = await Promise.all([
+    run('--loc', '40.7,-74', '--json', '--slot', 'night'),
+    run('--loc', '40.7,-74', '--slot', 'night'),
+    run('--loc', '40.7,-74', '--json'),
+    run('--loc', '40.7,-74', '--json', '--week'),
+    run('--loc', '40.7,-74', '--json', '--date', dayISO(2), '--slot', 'day'),
+  ]);
+  const night = JSON.parse(single.stdout).slots[0];
+  assert.ok(night.pick.ties.length, 'the synthetic night is a toss-up');
+  for (const t of night.pick.ties) {
+    assert.notEqual(t.name, night.pick.name);
+    assert.ok(Math.abs(t.score - night.pick.score) < 0.02, `${t.name} within a point of the match`);
+    assert.ok(Array.isArray(t.tags) && t.tags.length <= 2 && t.brand);
+  }
+  // The text offers them on the pick's line: "…, or Liam (fresher, vanilla)".
+  const first = night.pick.ties[0];
+  assert.ok(text.stdout.includes(`), or ${first.name}${first.tags.length ? ` (${first.tags.join(', ')})` : ''}`), text.stdout);
+  // A plan's picks carry them too, never the next window's pick.
+  const slots = JSON.parse(plan.stdout).slots;
+  for (const [i, s] of slots.entries()) {
+    assert.ok(Array.isArray(s.pick.ties));
+    for (const other of slots.filter((_, j) => j !== i)) assert.ok(!s.pick.ties.some(t => t.name === other.pick.name), `${s.slot} doesn’t offer ${other.pick.name}`);
+  }
+  assert.ok(JSON.parse(week.stdout).days.every(d => d.picks.every(p => Array.isArray(p.ties))));
+  assert.ok(Array.isArray(JSON.parse(date.stdout).slots[0].pick.ties));
+  // Worn last night, it isn't offered tonight.
+  const worn = fragrances.find(f => f.name === first.name);
+  const dir = mkdtempSync(join(tmpdir(), 'scentcast-'));
+  const file = join(dir, 'journal.json');
+  writeFileSync(file, JSON.stringify({ app: 'scentcast-journal', history: [{ id: String(worn.id), date: new Date(Date.parse(`${night.window.date}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10), slot: 'night' }] }));
+  const after = JSON.parse(cli('--loc', '40.7,-74', '--json', '--slot', 'night', '--journal', file).stdout).slots[0];
+  assert.ok(!after.pick.ties.some(t => t.name === worn.name));
+});

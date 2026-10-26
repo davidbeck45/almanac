@@ -50,6 +50,7 @@ import { fragranticaLibrary, loadPool, fromPool, loadPoolStyles, loadAbout } fro
 import { applySkin } from '../src/skin.js';
 import { packTrip, withEvents, picksFor, tripOccasion } from '../src/pack.js';
 import { sprayGuide } from '../src/spray.js';
+import { tiesFor, planTies, tieName } from '../src/contrast.js';
 import { doubles } from '../src/doubles.js';
 import { gapContext, gapReport, buyCheck, checkJSON, cellLabel, ratingText, DEFAULT_CLIMATE, USES, useLabel } from '../src/gaps.js';
 import { fetchClimate } from '../src/climate.js';
@@ -773,8 +774,11 @@ async function main() {
   if (!args.city && !args.loc) fail(USAGE);
 
   const place = await resolvePlace();
-  // A window an event is on (--events) carries its occasion, and says so.
-  const pickJSON = (pick, ranked, win, occ = null) => ({
+  // A window's pick, with the bottles that suit it just as well (`ties`,
+  // src/contrast.js: within a point of its match, not worn lately, each with
+  // how it differs from the pick). A window an event is on (--events)
+  // carries its occasion, and says so.
+  const pickJSON = (pick, ranked, win, occ = null, ties = []) => ({
     ...(win.occasion && { occasion: win.occasion.id }),
     tier: pick.tier,
     name: pick.fragrance.name,
@@ -783,6 +787,7 @@ async function main() {
     score: +pick.score.toFixed(3),
     reasons: pick.reasons.map(sign),
     runnerUp: ranked.find(r => r !== pick)?.fragrance.name ?? null,
+    ties: ties.map(({ entry, tags }) => ({ name: entry.fragrance.name, brand: entry.fragrance.brand, score: +entry.score.toFixed(3), tags })),
     spray: sprayJSON(sprayGuide(pick.fragrance, win, win.occasion ?? occ)),
   });
   const phrase = o => o.phrase ?? o.label.toLowerCase();
@@ -799,14 +804,16 @@ async function main() {
     return withEvents(windows, events);
   };
   const why = pick => pick.reasons.filter(r => r.tone === 'good').map(r => r.text).join('; ') || pick.reasons.map(r => r.text).join('; ');
+  // "Cream Velvet (Lattafa), or Legacy (fresher)": a pick's name and its ties.
+  const orTies = ties => ties.map(t => `, or ${tieName(t)}`).join('');
   // One window's ranking, as JSON and as text under a heading.
-  const slotJSON = ({ win, ranked, pick }) => ({
+  const slotJSON = ({ win, ranked, pick }, ties = []) => ({
     slot: win.slot,
     window: { label: win.label, date: win.dateISO, feelsF: Math.round(win.feelsF), humidity: Math.round(win.humidity), dewF: Math.round(win.dewF), condition: win.condition, rainChance: win.pop, ...(win.typical && { typical: true }) },
-    pick: pickJSON(pick, ranked, win, occasion),
+    pick: pickJSON(pick, ranked, win, occasion, ties),
     ranked: ranked.map(r => ({ tier: r.tier, name: r.fragrance.name, brand: r.fragrance.brand, inspiredBy: inspiredBy(r.fragrance), score: +r.score.toFixed(3), reasons: r.reasons.map(sign) })),
   });
-  const printSlot = ({ win, ranked, pick }, heading) => {
+  const printSlot = ({ win, ranked, pick }, heading, ties = []) => {
     console.log(`\n${heading}`);
     for (const tier of ['S', 'A', 'B', 'C']) {
       const rows = ranked.filter(r => r.tier === tier);
@@ -814,10 +821,13 @@ async function main() {
     }
     const shown = [pick, ...ranked.filter(r => r !== pick)].slice(0, Math.max(1, top));
     for (const [i, r] of shown.entries()) {
-      console.log(`  ${i ? ' ' : '→'} ${r.fragrance.name} (${r.fragrance.brand}${r.fragrance.original ? `, inspired by ${inspiredBy(r.fragrance)}` : ''}): ${r.reasons.map(sign).join('; ')}`);
+      console.log(`  ${i ? ' ' : '→'} ${r.fragrance.name} (${r.fragrance.brand}${r.fragrance.original ? `, inspired by ${inspiredBy(r.fragrance)}` : ''})${i ? '' : orTies(ties)}: ${r.reasons.map(sign).join('; ')}`);
       if (!i) console.log(`    Spray: ${sprayGuide(r.fragrance, win, win.occasion ?? occasion).text}`);
     }
   };
+  // Each window's ties: a plan's leave out its neighbours' picks; one
+  // window ranked alone takes its top.
+  const tiesOf = (result, planned) => (planned ? planTies(result, { history }) : result.map(r => tiesFor(r.pick, r.ranked)));
 
   // One date anywhere: the forecast's windows, or typical weather past them.
   // With --events on it, the date's windows are planned around them.
@@ -838,19 +848,20 @@ async function main() {
     if (windows?.length) result = planWindows(fragrances, onWindows(windows, `--date ${args.date}`), { occasion, history, nudge });
     if (!result?.length) fail(`No weather came back for ${args.date}`);
     const typical = result.some(r => r.win.typical);
+    const ties = tiesOf(result, !wanted || events.length > 0);
     if (args.json) {
       console.log(JSON.stringify({
         place,
         date: args.date,
         weather: typical ? 'typical' : 'forecast',
         occasion: occasion?.id ?? null,
-        slots: result.map(slotJSON),
+        slots: result.map((r, i) => slotJSON(r, ties[i])),
       }, null, 2));
     } else {
       console.log(`${place.name} · ${shortDate(args.date)}${typical ? ' · typical weather for the date (past the forecast)' : ''}${occasion ? ` · occasion: ${occasion.label}` : ''}`);
-      for (const r of result) {
+      for (const [i, r] of result.entries()) {
         const win = r.win;
-        printSlot(r, `${win.slot === 'day' ? 'Day' : 'Night'}${forEvent(win)}: ${win.typical ? 'typically ' : ''}${win.condition.toLowerCase()}, feels ${Math.round(win.feelsF)}°F, ${Math.round(win.humidity)}% humidity${win.pop >= 30 ? (win.typical ? `, wet on ${win.pop}% of these dates in past years` : `, ${win.pop}% rain`) : ''}`);
+        printSlot(r, `${win.slot === 'day' ? 'Day' : 'Night'}${forEvent(win)}: ${win.typical ? 'typically ' : ''}${win.condition.toLowerCase()}, feels ${Math.round(win.feelsF)}°F, ${Math.round(win.humidity)}% humidity${win.pop >= 30 ? (win.typical ? `, wet on ${win.pop}% of these dates in past years` : `, ${win.pop}% rain`) : ''}`, ties[i]);
       }
     }
     return;
@@ -864,6 +875,7 @@ async function main() {
     const wanted = slot ?? occasion?.slot ?? null;
     const windows = onWindows(days.flatMap(d => [d.day, d.night].filter(w => w && (!wanted || w.slot === wanted))), 'the week ahead');
     const plan = planWindows(fragrances, windows, { occasion, history, nudge });
+    const ties = new Map(planTies(plan, { history }).map((t, i) => [plan[i], t]));
     const pickFor = win => plan.find(p => p.win === win);
     const rows = days.map(d => ({ day: d, slots: windows.filter(w => w.dateISO === d.dateISO).map(pickFor) }))
       .filter(r => r.slots.length);
@@ -878,15 +890,16 @@ async function main() {
           loF: Math.round(day.loF),
           condition: day.condition,
           rainChance: day.pop,
-          picks: slots.map(({ win, pick, ranked }) => ({ slot: win.slot, feelsF: Math.round(win.feelsF), ...pickJSON(pick, ranked, win, occasion) })),
+          picks: slots.map(p => ({ slot: p.win.slot, feelsF: Math.round(p.win.feelsF), ...pickJSON(p.pick, p.ranked, p.win, occasion, ties.get(p)) })),
         })),
       }, null, 2));
     } else {
       console.log(`${place.name} · the week ahead${occasion ? ` · occasion: ${occasion.label}` : ''}`);
       for (const { day, slots } of rows) {
         console.log(`\n${day.name} ${day.dateISO}: ${day.condition}, ${Math.round(day.hiF)}°/${Math.round(day.loF)}°F${day.pop >= 30 ? `, ${day.pop}% rain` : ''}`);
-        for (const { win, pick } of slots) {
-          console.log(`  ${win.slot === 'day' ? 'day  ' : 'night'} ${String(Math.round(win.feelsF)).padStart(3)}°F  ${pick.tier}  ${pick.fragrance.name} (${pick.fragrance.brand})${win.occasion ? ` for ${phrase(win.occasion)}` : ''}: ${why(pick)}`);
+        for (const p of slots) {
+          const { win, pick } = p;
+          console.log(`  ${win.slot === 'day' ? 'day  ' : 'night'} ${String(Math.round(win.feelsF)).padStart(3)}°F  ${pick.tier}  ${pick.fragrance.name} (${pick.fragrance.brand})${win.occasion ? ` for ${phrase(win.occasion)}` : ''}${orTies(ties.get(p))}: ${why(pick)}`);
         }
       }
     }
@@ -914,6 +927,7 @@ async function main() {
       })
       : planWindows(fragrances, shown, { history, nudge });
   }
+  const ties = tiesOf(result, !wanted || events.length > 0);
 
   if (args.json) {
     const eventJSON = ({ win, pick }) => ({ date: win.dateISO, slot: win.slot, occasion: win.occasion.id, pick: pick.fragrance.name });
@@ -921,14 +935,14 @@ async function main() {
       place,
       now: wx.now,
       occasion: occasion?.id ?? null,
-      slots: result.map(slotJSON),
+      slots: result.map((r, i) => slotJSON(r, ties[i])),
       ...(events.length && { events: [...result, ...ahead].filter(p => p.win.occasion).map(eventJSON) }),
     }, null, 2));
   } else {
     console.log(`${place.name} · now ${Math.round(wx.now.tempF)}°F ${wx.now.label}${occasion ? ` · occasion: ${occasion.label}` : ''}`);
-    for (const r of result) {
+    for (const [i, r] of result.entries()) {
       const win = r.win;
-      printSlot(r, `${win.label}${forEvent(win)}: ${win.condition}, feels ${Math.round(win.feelsF)}°F, ${Math.round(win.humidity)}% humidity${win.pop >= 30 ? `, ${win.pop}% rain` : ''}`);
+      printSlot(r, `${win.label}${forEvent(win)}: ${win.condition}, feels ${Math.round(win.feelsF)}°F, ${Math.round(win.humidity)}% humidity${win.pop >= 30 ? `, ${win.pop}% rain` : ''}`, ties[i]);
     }
     if (ahead.length) console.log('');
     for (const { win, pick } of ahead) {

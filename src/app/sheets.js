@@ -353,6 +353,32 @@ export function watchToast() {
   }, true);
 }
 
+// ---------- Saying what a save did ----------
+// A line a save draws (the bottle page's "On your skin", Now's questions) is
+// drawn anew with its page, and a live region that arrives holding its text
+// isn't heard, so what it says goes into one that outlasts the renders too:
+// #bp-status at the end of the body, made at boot (statusNode), cleared,
+// then filled on the next frame (announce, app.announce for views).
+
+export function statusNode() {
+  let el = document.getElementById('bp-status');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'bp-status';
+    el.className = 'visually-hidden';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    document.body.append(el);
+  }
+  return el;
+}
+
+export function announce(text) {
+  const el = statusNode();
+  el.textContent = '';
+  if (text) requestAnimationFrame(() => { el.textContent = text; });
+}
+
 // The top of what's on screen: an open sheet's Close, the bottle page's
 // Close, else the page's heading.
 export function focusTop() {

@@ -5,7 +5,8 @@ import { packTrip, withEvents } from '../src/pack.js';
 import { rank, PLAN_MARGIN } from '../src/engine.js';
 import { OCCASIONS, occasionById } from '../src/occasions.js';
 import { sprayGuide } from '../src/spray.js';
-import { setSkin } from '../src/skin.js';
+import { setSkin, loadSkin, loadAsked, markAsked } from '../src/skin.js';
+import { planTies } from '../src/contrast.js';
 import { summarize, week } from '../src/weather.js';
 import { renderScene } from '../src/scene.js';
 import { shiftISO } from '../src/history.js';
@@ -688,4 +689,140 @@ test('the Occasion pane plans the window shown, at home only, and ranks a planne
     state.history = [];
     for (const e of [...state.events]) app.setEvent(e.dateISO, e.slot, null);
   }
+});
+
+// Now on a forecast that starts today, David's wardrobe, nothing worn: the
+// pane as the shell draws it (computeToday, then the pane).
+function nowOnToday(history = []) {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  Object.assign(state, { demo: { fetched: today, fragrances }, forecast: live, wx: summarize(live), loc: { name: 'Here', lat: 40, lon: -74 }, shared: null, active: 'demo', slot: null, history });
+  const pane = wear.wear.panes.find(p => p.id === 'now');
+  const draw = () => {
+    app.computeToday();
+    return clean(pane.render({}, { dest: 'wear', pane: 'now' }), 'Now');
+  };
+  return { state, draw };
+}
+
+test('Now says which bottles suit the window just as well, and how each differs, until he’s wearing one', () => {
+  const { state, draw } = nowOnToday();
+  let html = draw();
+  const slots = app.todaySlots(), now = app.nowSlot();
+  const ties = planTies(slots)[slots.indexOf(now)];
+  assert.ok(ties.length, 'the fixture’s window is a toss-up');
+  assert.match(html, /<p class="ties">/);
+  for (const t of ties) {
+    assert.ok(html.includes(`data-action="open" data-ctx="${now.win.slot}" data-id="${t.entry.fragrance.id}">${esc(t.entry.fragrance.name)}</button>`), `${t.entry.fragrance.name} opens its page`);
+  }
+  assert.match(html, /suits? (today|tonight) just as well\./);
+  assert.ok(html.indexOf('class="ties"') > html.indexOf('class="reasons lead"') && html.indexOf('class="ties"') < html.indexOf('class="chips"'), 'one line under the reasons');
+  // The Also good shelf tags the bottles within reach of the pick in a word,
+  // above it or below.
+  const tagged = html => [...html.matchAll(/data-id="([^"]+)" aria-label="[^"]*">(?:(?!<\/button>)[\s\S])*<span class="shelf-tag">/g)].map(m => m[1]);
+  const within = (ids, slot) => ids.every(id => Math.abs(slot.ranked.find(r => r.fragrance.id === id).score - slot.pick.score) <= PLAN_MARGIN);
+  assert.ok(tagged(html).length && within(tagged(html), now), 'only bottles within reach of the pick');
+  // Wearing the pick: the choice is made. Wearing one far down the list,
+  // the bottles well above it go untagged too.
+  state.history = [{ id: now.pick.fragrance.id, date: now.win.dateISO, slot: now.win.slot, occasion: 'daily' }];
+  html = draw();
+  assert.ok(!html.includes('class="ties"'));
+  state.history = [{ id: now.ranked.at(-1).fragrance.id, date: now.win.dateISO, slot: now.win.slot, occasion: 'daily' }];
+  html = draw();
+  assert.ok(within(tagged(html), app.nowSlot()));
+  assert.ok(!tagged(html).includes(now.ranked[0].fragrance.id));
+  // Every bottle within a point worn lately: nothing to offer.
+  state.history = ties.map((t, i) => ({ id: t.entry.fragrance.id, date: shiftISO(now.win.dateISO, -1 - i), slot: 'day' }));
+  html = draw();
+  const after = planTies(app.todaySlots())[app.todaySlots().indexOf(app.nowSlot())];
+  assert.ok(!after.some(t => ties.some(u => u.entry.fragrance.id === t.entry.fragrance.id)), 'what he wore lately isn’t offered');
+  assert.equal(html.includes('class="ties"'), after.length > 0);
+});
+
+test('Now asks what it needs once each: stars for the unrated bottle he’s wearing, then how yesterday’s wore', () => {
+  wear.forgetAsked();
+  const { state, draw } = nowOnToday();
+  state.base = { dest: 'wear', pane: 'now' };
+  let html = draw();
+  const now = app.nowSlot(), pick = now.pick.fragrance.id;
+  const day = shiftISO(app.state.wx.todayISO, -1);
+  const worn = fragrances.find(f => f.id !== pick && f.id !== evil.id);
+  assert.ok(!html.includes('class="ask'), 'nothing worn, nothing asked');
+
+  // Worn yesterday: how it wore, under today's picks.
+  const yesterday = { id: worn.id, date: day, slot: 'night', occasion: 'daily' };
+  state.history = [yesterday];
+  html = draw();
+  assert.ok(html.includes(`How did <b>${esc(worn.name)}</b> wear yesterday?`));
+  assert.ok(html.indexOf('ask-skin') > html.indexOf('class="now-picks"') && html.indexOf('ask-skin') < html.indexOf('class="also"'));
+  assert.match(html, /data-action="ask-lasts" data-value="1" data-id="[^"]+" aria-pressed="false"><span>Lasted longer/);
+  assert.ok(!/aria-pressed="true"/.test(html.slice(html.indexOf('ask-skin'))), 'no answer chosen for him');
+
+  // Wearing today's pick, unrated: its stars, in the pick card, alone.
+  state.history = [{ id: pick, date: now.win.dateISO, slot: now.win.slot, occasion: 'daily' }, yesterday];
+  html = draw();
+  assert.match(html, /<div class="ask ask-stars">/);
+  assert.ok(html.indexOf('ask-stars') > html.indexOf('data-action="wear"') && html.indexOf('ask-stars') < html.indexOf('class="next-window"'), 'beside Wear this');
+  assert.ok(!html.includes('ask-skin'), 'one question at a time');
+  assert.equal((html.match(/data-action="ask-rate"/g) ?? []).length, 5);
+
+  // Rating it saves the stars, and they stay this visit, saying where it moved.
+  const ui = { keepingFocus(el, scope, fn) { fn(); }, render() { app.computeToday(); } };
+  wear.actions['ask-rate']({ dataset: { id: pick, value: '5' }, getAttribute: () => 'false' }, ui, { detail: 1 });
+  assert.equal(loadSkin()[pick].rating, 5);
+  assert.ok(loadAsked()[pick].stars);
+  html = draw();
+  assert.match(html, /<p class="ask-said">Rated 5★\. (Still|Now) \d+(st|nd|rd|th) for (today|tonight)[.,]/);
+  assert.match(html, /data-action="ask-rate" data-value="5" data-id="[^"]+" aria-label="5 stars"/);
+  assert.match(html, /aria-checked="true" tabindex="0" data-action="ask-rate" data-value="5"/);
+  assert.ok(!html.includes('ask-skin'), 'still one at a time');
+
+  // The next visit: rated, so not asked again, even once the stars are cleared; yesterday's turn.
+  state.base = { dest: 'wear', pane: 'now' };
+  setSkin(pick, { rating: null });
+  html = draw();
+  assert.ok(!html.includes('data-action="ask-rate"'), 'asked once');
+  assert.ok(html.includes('ask-skin'));
+
+  // An answer saves at once and holds the question for the other, then Done.
+  wear.actions['ask-lasts']({ dataset: { id: worn.id, value: '1' } }, ui);
+  assert.equal(loadSkin()[worn.id].longevity, 1);
+  assert.ok(loadAsked()[worn.id].skin, 'asked from the first answer');
+  html = draw();
+  assert.ok(html.includes('Saved: it lasts longer on you.'));
+  assert.match(html, /data-action="ask-lasts" data-value="1" data-id="[^"]+" aria-pressed="true"/);
+  assert.match(html, /data-action="ask-skip" data-kind="skin" data-id="[^"]+">Done</);
+  wear.actions['ask-projects']({ dataset: { id: worn.id, value: '-1' } }, ui);
+  assert.ok(draw().includes('Saved: it lasts longer and sits closer on you.'));
+  wear.actions['ask-skip']({ dataset: { id: worn.id, kind: 'skin' }, isConnected: false }, ui);
+  html = draw();
+  assert.ok(!html.includes('class="ask'), 'Done puts it away');
+  state.base = { dest: 'wear', pane: 'now' };
+  assert.ok(!draw().includes('class="ask'), 'and it never comes back');
+  wear.forgetAsked();
+});
+
+test('Not now waves a question off for good; a bottle with his own nudges isn’t asked how it wore', () => {
+  wear.forgetAsked();
+  const a = { ...fragrances[1] }, b = { ...fragrances[2] }, c = { ...fragrances[3], personal: { rating: 4, longevity: 1, sillage: 0 } };
+  assert.deepEqual(wear.askFor({ worn: a, yesterday: [b], asked: {} }), { kind: 'stars', f: a });
+  assert.deepEqual(wear.askFor({ worn: { ...a, personal: { rating: 4, longevity: 0, sillage: 0 } }, yesterday: [b], asked: {} }), { kind: 'skin', f: b }, 'rated already: how yesterday’s wore');
+  assert.deepEqual(wear.askFor({ worn: null, yesterday: [c, b], asked: {} }), { kind: 'skin', f: b }, 'his own nudge says it already');
+  assert.equal(wear.askFor({ worn: a, yesterday: [b], asked: { [a.id]: { stars: '2026-10-01' }, [b.id]: { skin: '2026-10-01' } } }), null);
+  assert.deepEqual(wear.askFor({ worn: a, yesterday: [], asked: { [a.id]: { skin: '2026-10-01' } } }), { kind: 'stars', f: a }, 'asked how it wore isn’t asked for stars');
+
+  const { state, draw } = nowOnToday();
+  state.base = { dest: 'wear', pane: 'now' };
+  app.computeToday();
+  const now = app.nowSlot(), pick = now.pick.fragrance.id;
+  state.history = [{ id: pick, date: now.win.dateISO, slot: now.win.slot, occasion: 'daily' }];
+  assert.ok(draw().includes('data-action="ask-skip" data-kind="stars"'));
+  wear.actions['ask-skip']({ dataset: { id: pick, kind: 'stars' }, isConnected: false }, { render() {} });
+  assert.ok(!draw().includes('class="ask'));
+  assert.ok(!loadSkin()[pick], 'nothing saved');
+  // Stored asks read back whole; anything else in the key is dropped.
+  markAsked('x', 'skin', '2026-10-02');
+  localStorage.setItem('scentcast.asked', JSON.stringify({ ...JSON.parse(localStorage.getItem('scentcast.asked')), y: { stars: 3 }, z: 'no' }));
+  assert.deepEqual(loadAsked().x, { skin: '2026-10-02' });
+  assert.ok(!('y' in loadAsked()) && !('z' in loadAsked()));
 });
