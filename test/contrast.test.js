@@ -83,6 +83,10 @@ test('ties leave out what was worn or planned lately, what he rates 2★ or lowe
   const nudged = [entry('Sauvage', 0.86, { nudged: true }), entry('Legacy', 0.87), entry('Aristo', 0.865)];
   assert.deepEqual(tiesFor(nudged[0], nudged), [], 'the nudge chose it on purpose');
   assert.deepEqual(tiesFor(null, ranked), []);
+  // One the plan saves for an event later on isn't offered before it.
+  const saving = [entry('Legacy', 0.885), entry('Aristo', 0.881), entry('Cedrus Blanc', 0.879)];
+  saving[1].parts.saved = { dateISO: '2026-10-31', slot: 'night', occasion: { id: 'formal' } };
+  assert.deepEqual(tiesFor(saving[0], saving).map(t => t.entry.fragrance.name), ['Cedrus Blanc']);
 });
 
 test('a plan’s ties leave out the picks either side, and none for a window already worn', () => {

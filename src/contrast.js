@@ -44,8 +44,9 @@ export function contrast(pick, other) {
  * `pick`, its pick (a plan's fresh bottle or a logged wear may not be
  * ranked[0]): within TIE_POINTS of the pick's own displayed match, either
  * way. Left out: any worn or planned within the rotation window (it carries
- * a rotation penalty: he wore it lately, or the plan has it earlier), a
- * bottle he rates DISLIKED or lower, and the ids in `skip` (the plan's picks
+ * a rotation penalty: he wore it lately, or the plan has it earlier), one the
+ * plan saves for an event later on (`parts.saved`), a bottle he rates
+ * DISLIKED or lower, and the ids in `skip` (the plan's picks
  * for its other windows, shown beside it). None when the pick was nudged:
  * the nudge chose it on purpose over closer fits. -> [{ entry, tags }], best
  * first, at most TIES_MAX.
@@ -56,7 +57,7 @@ export function tiesFor(pick, ranked, { skip = [] } = {}) {
   const at = matchPct(pick);
   return ranked
     .filter(r => r !== pick && r.fragrance.id !== pick.fragrance.id && !leave.has(String(r.fragrance.id))
-      && !(r.parts?.rotation > 0) && !isDisliked(r.fragrance) && Math.abs(matchPct(r) - at) <= TIE_POINTS)
+      && !(r.parts?.rotation > 0) && !r.parts?.saved && !isDisliked(r.fragrance) && Math.abs(matchPct(r) - at) <= TIE_POINTS)
     .slice(0, TIES_MAX)
     .map(entry => ({ entry, tags: contrast(pick.fragrance, entry.fragrance) }));
 }
