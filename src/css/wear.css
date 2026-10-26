@@ -273,9 +273,10 @@
 .ask-title, .ask-label { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .ask-title { font-weight: 600; }
 .ask-title b { color: var(--text-primary); font-family: var(--display); font-style: italic; font-weight: 600; }
-/* The stars and Not now keep to one line; the label goes above them when
-   the three don't fit (a phone's card). */
-.ask-pick { display: flex; flex: 1 1 auto; align-items: center; gap: var(--s-3); }
+/* The label goes above the stars when the three don't fit (a phone's card),
+   and Not now under them, to the right, when even the two don't (a phone
+   under about 375px). */
+.ask-pick { display: flex; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; align-items: center; gap: 0 var(--s-3); }
 .ask-skip { margin-left: auto; font-size: var(--fs-footnote); white-space: nowrap; }
 .ask-said { padding: var(--s-2) var(--s-3); border-radius: var(--r-control); background: color-mix(in srgb, var(--ambient) 12%, transparent); color: var(--text-primary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
 .ask-skin { gap: var(--s-3); margin-top: var(--s-3); padding: var(--s-4); border-radius: var(--r-inset); border: 1px solid var(--border-subtle); background: var(--fill-faint); }
