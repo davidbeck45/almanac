@@ -336,14 +336,18 @@ export function comfortRange(frag, { dewF = 55 } = {}) {
 const PERSONAL_RATING_WEIGHT = 0.8;
 const PERSONAL_SHIFT = 0.5;
 // What your stars add to a score on top of quality(), which is only 5% of it
-// (with quality's own change, about -0.13, -0.08, -0.02, 0 and +0.03): a
+// (with quality's own change, about -0.14, -0.08, -0.02, 0 and +0.03): a
 // bottle you rate 1★ or 2★ drops out of the top 3 unless it's clearly the
-// only fit (it led the 4th by about 0.13 or 0.08; in David's wardrobe the
+// only fit (it led the 4th by about 0.14 or 0.08; in David's wardrobe the
 // lead is under 0.05 half the time and over 0.09 a tenth), and a 5★ one wins
 // near ties (half the time it sits second to fourth) without taking every
-// window. 4★ is what most bottles you keep would get, so it moves a bottle
-// only through quality(). By stars, 1 to 5.
-const PERSONAL_PICK = [-0.1, -0.06, -0.01, 0, 0.02];
+// window. 1★ was -0.1 until the heat penalty (HEAT_WEIGHT) let a fresh bottle
+// lead a small wardrobe's hot night out by 0.142 (a third of David's: Supremacy
+// over Legacy), more than a 1★ took off; at -0.11 it never stays the pick
+// there, and one leading the 4th by 0.15 still shows in the top 3.
+// 4★ is what most bottles you keep would get, so it moves a bottle only
+// through quality(). By stars, 1 to 5.
+const PERSONAL_PICK = [-0.11, -0.06, -0.01, 0, 0.02];
 // Ratings at or below this mean you'd rather not wear it: no nudges, no packing.
 export const DISLIKED = 2;
 
