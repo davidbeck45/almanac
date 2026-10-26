@@ -631,7 +631,8 @@ const NUDGE_EVERY = 3;
 // its idle days as `parts.idle`, and `parts.unworn` when the journal has no
 // wear of it), unless the top pick is one already. Wears and plans before
 // this window count; the journal starts at its first logged wear. A bottle
-// saved for an event later in the plan (`saved`) is never the one nudged.
+// saved for an event later in the plan (`saved`) is never the one nudged,
+// nor the top that a nudge is measured from.
 function nudgeIdle(scored, history, todayISO, slot, saved) {
   let start = null;
   const last = new Map();
@@ -646,10 +647,13 @@ function nudgeIdle(scored, history, todayISO, slot, saved) {
     return last.get(f.id) ?? (added > start ? added : start);
   };
   const idle = s => daysBetween(since(s.fragrance), todayISO);
-  const [top] = scored;
+  // A bottle saved for an event isn't worn before it, so the top it's held to is the first one free.
+  const t = scored.findIndex(s => !saved?.has(s.fragrance.id));
+  if (t < 0) return;
+  const top = scored[t];
   if (idle(top) >= NUDGE_AFTER) return;
   // Tiers fall in rank order, so the first bottle out of the top's tier ends the search.
-  for (let i = 1; i < scored.length && top.score - scored[i].score <= PLAN_MARGIN && scored[i].tier === top.tier; i++) {
+  for (let i = t + 1; i < scored.length && top.score - scored[i].score <= PLAN_MARGIN && scored[i].tier === top.tier; i++) {
     const days = idle(scored[i]);
     if (days < NUDGE_AFTER || isDisliked(scored[i].fragrance) || saved?.has(scored[i].fragrance.id)) continue;
     const [pick] = scored.splice(i, 1);

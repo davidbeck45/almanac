@@ -142,6 +142,21 @@ test('a bottle saved for an event is never the one nudged before it', () => {
   }
 });
 
+test('a neglected bottle saved for an event doesn’t keep another neglected one from its nudge before it', () => {
+  const warm = dateISO => ({ slot: 'night', dateISO, date: new Date(`${dateISO}T12:00:00`), lat: 40, category: 'clear', feelsF: 76, humidity: 60, dewF: 62 });
+  const nightOut = { ...warm('2026-10-14'), occasion: occasionById('nightout') };
+  const windows = [warm(TODAY), nightOut];
+  const [held, free, idle] = rank(fragrances, windows[0], 'night');
+  assert.equal(rank(fragrances, nightOut, 'night', { occasion: nightOut.occasion })[0].fragrance.id, held.fragrance.id, 'tonight’s top is the night out’s best');
+  assert.ok(free.score - idle.score <= PLAN_MARGIN && idle.tier === free.tier);
+  // Both sat since August; the held one isn't worn tonight, so the other comes back over the next free bottle.
+  const history = journal({ last: { [held.fragrance.name]: '2026-08-20', [idle.fragrance.name]: '2026-08-20' } });
+  const [tonight] = planWindows(fragrances, windows, { history, nudge: true });
+  assert.equal(tonight.pick.fragrance.id, idle.fragrance.id, `${idle.fragrance.name} over ${free.fragrance.name}`);
+  assert.ok(tonight.pick.nudged);
+  assert.equal(reasons(tonight.pick)[0], 'Not worn in 53 days');
+});
+
 test('Copy for Claude plans as the whole journal does, nudges and all', () => {
   // Four months of following the plan through a swing of weather, then a week ahead from several days.
   const windowOf = (dateISO, slot) => {
