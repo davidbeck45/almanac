@@ -34,7 +34,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
-import { rank, planWindows, scoreOf, steadyShares, comfortRange, performanceLevel, DAILY_WEIGHTS, OCCASION_WEIGHTS, ROTATION_PENALTY } from '../src/engine.js';
+import { rank, planWindows, scoreOf, steadyShares, comfortRange, performanceLevel, occasionWeights, DAILY_WEIGHTS, ROTATION_PENALTY } from '../src/engine.js';
 import { windowOn } from '../src/weather.js';
 import { describe } from '../src/wmo.js';
 import { OCCASIONS, occasionById } from '../src/occasions.js';
@@ -203,12 +203,19 @@ export class Journal {
 
 const weatherOf = (city, win) => ({ city, dateISO: win.dateISO, slot: win.slot, feelsF: win.feelsF, dewF: win.dewF, category: win.category });
 
+// The parts a score weighs (scoreOf): the heat penalty's too, for an
+// occasion spent outside.
+const weighedParts = occasion => {
+  const W = occasion ? occasionWeights(occasion) : DAILY_WEIGHTS;
+  return Object.keys(W).filter(k => W[k] > 0);
+};
+
 // A ranking cut to what the figures read: its top 3, the lead over the
 // second, and the top pick with each weighted part left out (scoreOf on
 // rank's own parts), which says what decides it.
 function summary(ranked, occasion) {
   const drop = {};
-  for (const part of Object.keys(occasion ? OCCASION_WEIGHTS : DAILY_WEIGHTS)) {
+  for (const part of weighedParts(occasion)) {
     let best = null, bestScore = -Infinity;
     for (const r of ranked) {
       const s = scoreOf({ ...r.parts, [part]: 0 }, occasion);
@@ -418,7 +425,7 @@ export function figures({ daily, occasions }, wardrobe, { latOf = () => 45 } = {
       share: share(rows, misfit, weight), examples: hits.slice(0, 3).map(show),
     };
   };
-  const drops = (rows, occasion, weight = () => 1) => Object.fromEntries(Object.keys(occasion ? OCCASION_WEIGHTS : DAILY_WEIGHTS)
+  const drops = (rows, occasion, weight = () => 1) => Object.fromEntries(weighedParts(occasion)
     .map(part => [part, share(rows, r => r.drop[part] !== r.top[0], weight)]));
   const fourSeasons = daily.filter(r => Math.abs(latOf(r.city)) >= FOUR_SEASONS_LAT);
   const useOf = o => USES.find(u => u.occasion === o.id);

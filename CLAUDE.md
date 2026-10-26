@@ -311,7 +311,7 @@ A wear records the use it was logged for (`toggleWear(id, date, slot, where, occ
 - the most-worn bottle in any 28 days (Now's is what a month of wearing every pick would show, Raw's the engine's own concentration) and distinct bottles per 14 days;
 - Now picks losing more than 0.06 to the window's best (rotation giving up a real fit), by slot and band, and how many the nudge brought;
 - Raw's lead over the second by slot and band (under 0.01 is a coin toss) and how often its pick changes on steady days (feels-like within 3°F, dew point within 4, the same sky);
-- what decides a pick: the share of windows whose top pick changes when each weighted part is left out (`scoreOf` on rank's own parts);
+- what decides a pick: the share of windows whose top pick changes when each weighted part is left out (`scoreOf` on rank's own parts, the weights `occasionWeights` gives, so the heat penalty too where an occasion weighs it: it decides 16% of Date Night's weighted picks, Houston's hot nights);
 - blatant misfits: a warm bottle (two thirds of its steadied season votes fall and winter, `kindOf`) at 78°F+, a fresh one (two thirds spring and summer) at 45°F or below;
 - bottles never in a daily top 3 (and the occasions whose top 3 they make), and each bottle's share of picks by band (Now and Raw) and by month (Now, four-season cities);
 - per occasion: its picks and leader by band, lead, steady flips, part drops, misfits and how often a warm bottle sits in its top 3 at 78°F+; for Office, any bottle a fifth of a level louder than the middle (Sauvage and up) or that fades fast (`weakLongevity`) in its top 3, day or night, the guard `test/engine.test.js` pins on a grid.

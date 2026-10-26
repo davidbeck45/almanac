@@ -147,6 +147,13 @@ test('figures and --against read a replay', () => {
   assert.ok(fig.now.worst.count < fig.raw.worst.count, 'rotation spreads the wears');
   assert.ok(fig.occasions.office.guard.night.of === 28 && fig.occasions.date.picks.length);
   assert.ok(Math.abs(fig.occasions.date.picks.reduce((s, [, x]) => s + x, 0) - 1) < 1e-9);
+  // What decides a pick counts every part the score weighs: the heat
+  // penalty for an occasion spent outside, which on hot nights decides
+  // Date Night's, but never Cozy's or a daily pick's.
+  assert.ok('heat' in fig.occasions.date.drops && !('heat' in fig.occasions.cozy.drops) && !('heat' in fig.raw.drops.night));
+  const hot = cityDays(archive(7, () => ({ feels: 95 }), '2024-07-01'), '2024-07-01', '2024-07-07');
+  const nights = replayOccasion(wardrobe, hot, occasionById('date'), { city: 'Here' }).filter(r => r.slot === 'night');
+  assert.ok(nights.some(r => r.drop.heat !== r.top[0]), 'heat decides some hot nights');
   // The same replay moves nothing; one window's new top pick moves one.
   const before = snapshotWindows(rows);
   const after = structuredClone(before);
