@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, restReason, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, seasonFit, SEASONS, votedShares, performanceLevel } from '../src/engine.js';
+import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, restReason, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, seasonFit, SEASONS, votedShares, performanceLevel, PLAN_MARGIN } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { heaviness } from '../src/accords.js';
 import { predictedShares } from '../src/custom.js';
@@ -335,6 +335,33 @@ test('scoreOf is the score rank() orders by', () => {
 test('formal favors iris and powder', () => {
   const formal = groupTiers(rank(fragrances, mildFallNight, 'night', { occasion: occasionById('formal') }));
   assert.ok(names(formal.S).includes('Meant To Be Seen'));
+});
+
+test('casual reads like daily picks with a tilt: winter bottles on a cold day, nothing fresh', () => {
+  const casual = occasionById('casual');
+  const cold = { feelsF: 20, humidity: 60, dewF: 12, category: 'clear', date: JAN, dateISO: '2027-01-15', lat: 40 };
+  for (const slot of ['day', 'night']) {
+    const daily = names(rank(fragrances, cold, slot).slice(0, 3)), top = names(rank(fragrances, cold, slot, { occasion: casual }).slice(0, 5));
+    assert.ok(daily.includes(top[0]), `${slot}: ${top[0]} leads Casual, the day's best are ${daily.join(', ')}`);
+    for (const n of top) assert.ok(!FRESH.includes(n), `${slot}: ${top.join(', ')}`);
+  }
+  // Its mild profile once read on a 0..1 stretch like Formal's and outweighed
+  // the weather: a near-fresh woody led every cold day and Cream Velvet sat
+  // 21st. Now its pick is nearly always one daily picks would offer too.
+  let within = 0, n = 0;
+  for (const month of ['01', '04', '07', '10']) {
+    for (const feelsF of [5, 20, 35, 50, 65, 80, 95]) {
+      for (const slot of ['day', 'night']) {
+        const dateISO = `2026-${month}-15`;
+        const c = { feelsF, humidity: 60, dewF: Math.min(feelsF - 8, 72), category: 'clear', date: new Date(`${dateISO}T12:00:00`), dateISO, lat: 40 };
+        const daily = rank(fragrances, c, slot), pick = rank(fragrances, c, slot, { occasion: casual })[0];
+        const best = daily[0].score, as = daily.find(r => r.fragrance.id === pick.fragrance.id).score;
+        n++;
+        if (best - as <= PLAN_MARGIN) within++;
+      }
+    }
+  }
+  assert.ok(within >= 0.9 * n, `${within} of ${n} within PLAN_MARGIN of the day's best`);
 });
 
 test('wearing something yesterday pushes it down today', () => {
