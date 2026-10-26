@@ -15,7 +15,7 @@ Live at **https://davidbeck45.github.io/scentcast/**. It opens on my wardrobe; a
 **Wardrobe**
 - **Owned**: your bottles, each switched in or out of rotation. Add them by search, paste a list, or enter one no database has by its accords. Share the list as a link.
 - **Wishlist**: bottles you want, each with a verdict on how it would fit your shelf (Strong fit, Good, Covered, Risky or Redundant) and what it would fill. "I bought it" moves it into your collection.
-- **Worn**: the wear journal. "Wear this" logs today's pick so the next picks rotate; a calendar, your most-worn bottles and the ones gathering dust. Export saves it as a file; Copy for Claude copies a short version (the last ten days' wears, your stars and switched-off bottles, no places) to paste to Claude, so its picks skip what you just wore.
+- **Worn**: the wear journal. "Wear this" logs today's pick so the next picks rotate; a calendar, your most-worn bottles and the ones gathering dust. Export saves it as a file; Copy for Claude copies a short version (the last ten days' wears, your stars and switched-off bottles, no places) to paste to Claude or the Omarchy widget, so their picks skip what you just wore.
 - **Insights**: what your wardrobe still needs. A map of every occasion against your climate's weather, by day and by night, filled as far as your bottles cover it; where it's thin, and the bottles that would fill it, with a cheaper twin and blind-buy risk. Then your style mix, more of the styles you like (skin scent, clean, intimate…), a safe first bottle for each style you don't own, and any bottles you own that smell alike. Tell it how often you dress for each occasion, and whether to stick to great value.
 
 **Discover**: search 137,000 Fragrantica perfumes by name or by notes ("iris leather", "smoky vanilla"), get more of the styles you love or more like bottles you pick, and filter by season, time of day, lean, longevity, projection, value and blind-buy safety. Each pick says why: the bottle you own it's closest to, what voters say it smells like, a cheaper twin. Add it to your wishlist or your collection in a tap.
@@ -95,5 +95,6 @@ Left click opens the popup, middle click refreshes, right click opens the site. 
 
 - `location`: a city or `lat,lon`. Empty follows Omarchy's weather location, then the IP address (looked up with wttr.in).
 - `hidden`: comma-separated bottles to leave out. Unset keeps the site's defaults; `""` shows every bottle.
+- `journal`: the app's Copy for Claude (Wardrobe › Worn), or the path to a file holding it or a journal export, so the plan skips what you just wore and applies your stars and switched-off bottles. A pasted copy goes stale; a file is read again on every refresh. Empty plans without your wears, and the popup's status line says so.
 - `units`: `auto`, `F` or `C`.
 - `refreshMinutes`: default 30.
