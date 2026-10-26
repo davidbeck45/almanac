@@ -7,7 +7,7 @@
 // The sections in their own modules are src/views/bottle-*.js; the ones that
 // ask the suggestion pool keep their answers with pooled(), and draw again
 // on their own when an answer lands (redrawSection).
-import { rank, comfortRange, restReason, SEASONS } from '../engine.js';
+import { rank, comfortRange, restReason, occasionWeights, SEASONS } from '../engine.js';
 import { layerPicks, pairingKept, warmPairing } from '../layering.js';
 import { setHidden } from '../hidden.js';
 import { loadWants, saveWants, hasWant, setWant } from '../wishlist.js';
@@ -408,7 +408,7 @@ function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned, inMine,
 // Why a bottle is given a rest, in the words of its reason (src/engine.js).
 const restText = (parts, slot) => restReason(parts, slot) ?? (parts.planned ? 'Picked for a day nearby' : 'Worn recently');
 
-function whySection({ entry, solo, win }) {
+function whySection({ entry, solo, win, occasion }) {
   if (!entry) return '';
   const p = entry.parts;
   // The rating bar is mostly your stars once you've rated it (engine
@@ -423,8 +423,11 @@ function whySection({ entry, solo, win }) {
   const rotation = p.rotation > 0
     ? `<p class="why-note">${esc(restText(p, win?.slot))}: ${Math.round(p.rotation * 100)}% lower so others get a turn.</p>`
     : '';
+  // What the heat takes off a rich bottle for an occasion (engine richInHeat).
+  const heat = occasion && p.heat ? Math.round(occasionWeights(occasion).heat * p.heat * 100) : 0;
+  const heavy = heat > 0 ? `<p class="why-note">Rich for this heat: ${heat}% lower for ${esc(occasion.phrase ?? occasion.label.toLowerCase())}.</p>` : '';
   const title = solo ? `How it would do ${win.slot === 'day' ? 'by day' : 'tonight'}` : 'Why it ranks here';
-  return `<section class="bp-section"><h3>${title} <span class="h3-aside">${matchPct(entry)}% match</span></h3><div class="bars why">${bars}</div>${rotation}</section>`;
+  return `<section class="bp-section"><h3>${title} <span class="h3-aside">${matchPct(entry)}% match</span></h3><div class="bars why">${bars}</div>${heavy}${rotation}</section>`;
 }
 
 // Only the relative words go lower case: "Also good for tonight", "Also good for Saturday night".

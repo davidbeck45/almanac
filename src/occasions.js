@@ -5,6 +5,8 @@
 // `slot` is the default time of day, `phrase` names the occasion in reason
 // text ("Woods & aromatics suit casual wear"), `icon` names a stroke icon in
 // src/ui.js, and `aliases` are names it went by, which typed names still find.
+// `indoors` spares a rich bottle the engine's penalty for heat (HEAT_WEIGHT):
+// the weather outside doesn't decide what suits a night in.
 export const OCCASIONS = [
   {
     id: 'casual',
@@ -128,6 +130,8 @@ export const OCCASIONS = [
     blurb: 'Home, movie night, sweater weather',
     slot: 'night',
     phrase: 'a night in',
+    // The gap finder weighs its warm and hot nights down instead (USES' bands).
+    indoors: true,
     profile: {
       vanilla: 0.7, caramel: 0.6, honey: 0.5, powdery: 0.5, lactonic: 0.5, chocolate: 0.5, cacao: 0.5, sweet: 0.4,
       amber: 0.4, cinnamon: 0.4, musky: 0.4, 'warm spicy': 0.4, almond: 0.4, nutty: 0.4, coffee: 0.4,

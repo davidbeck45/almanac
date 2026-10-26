@@ -12,7 +12,7 @@
 // point come from real days). Owned bottles are measured against the
 // suggestion pool's scores in the same cell, every bottle read on the
 // pool's evidence (sameFooting).
-import { seasonFit, timeFit, weatherFit, quality, personalPart, occasionRaw, occasionPart, scoreOf, targetSeasonWeights, isDisliked } from './engine.js';
+import { seasonFit, timeFit, weatherFit, richInHeat, quality, personalPart, occasionRaw, occasionPart, scoreOf, targetSeasonWeights, isDisliked } from './engine.js';
 import { occasionById } from './occasions.js';
 import { similarity, sharedTraits } from './similar.js';
 import { styleScores, styleMix, styleById, topOf, shownOf, closeOf } from './scent-styles.js';
@@ -193,8 +193,9 @@ const allFooted = records => footedLists.get(records) ?? footedLists.set(records
  * with no recent wears, averaged over the cell's windows, your stars included
  * (`personal`: only owned records carry them, so the pool's table and
  * reference stay the crowd's). The score is linear in the parts, so the
- * season and weather fits are averaged per slot × band and shared by every
- * use, and occasionPart is worked out once per occasion.
+ * season and weather fits (and richness in heat) are averaged per slot ×
+ * band and shared by every use, and occasionPart is worked out once per
+ * occasion.
  */
 export function fitTable(bottles, { cells, slotBands }) {
   const m = cells.length, out = new Float32Array(bottles.length * m);
@@ -207,16 +208,17 @@ export function fitTable(bottles, { cells, slotBands }) {
     for (const o of occasions) occ.set(o, occasionPart(occasionRaw(b, o), o));
     for (const k of keys) {
       const { wins } = slotBands[k];
-      let season = 0, weather = 0;
+      let season = 0, weather = 0, heat = 0;
       for (const w of wins) {
         season += seasonFit(b, w.weights);
         weather += weatherFit(b, w.cond);
+        heat += richInHeat(b, w.cond);
       }
-      fit.set(k, [season / wins.length, weather / wins.length]);
+      fit.set(k, [season / wins.length, weather / wins.length, heat / wins.length]);
     }
     for (let j = 0; j < m; j++) {
-      const c = cells[j], [season, weather] = fit.get(c.sb);
-      const parts = { season, time: time[c.slot], weather, quality: q, occasion: c.occasion ? occ.get(c.occasion) : null, personal };
+      const c = cells[j], [season, weather, heat] = fit.get(c.sb);
+      const parts = { season, time: time[c.slot], weather, quality: q, occasion: c.occasion ? occ.get(c.occasion) : null, heat, personal };
       out[i * m + j] = scoreOf(parts, c.occasion);
     }
   });

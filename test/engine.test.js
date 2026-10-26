@@ -337,6 +337,24 @@ test('formal favors iris and powder', () => {
   assert.ok(names(formal.S).includes('Meant To Be Seen'));
 });
 
+test('a sweltering night keeps winter bottles out of a date’s and a night out’s top tiers, not out of a night in', () => {
+  // 90°F at a dew point of 70: the date's love of vanilla and amber once put
+  // Liquid Brun third and five of these A, each "Too rich for sticky heat".
+  const RICH = [...HEAVY, 'Cream Velvet', 'Sticky Fingers'];
+  const sweltering = { feelsF: 90, humidity: 75, dewF: 70, category: 'clear', date: AUG, dateISO: '2026-08-05', lat: 40 };
+  for (const id of ['date', 'nightout']) {
+    const ranked = rank(fragrances, sweltering, 'night', { occasion: occasionById(id) });
+    const top = names(ranked.slice(0, 3));
+    for (const n of top) assert.ok(!RICH.includes(n), `${id}: ${top.join(', ')}`);
+    for (const r of ranked.filter(r => RICH.includes(r.fragrance.name))) assert.ok(r.tier === 'B' || r.tier === 'C', `${id}: ${r.fragrance.name} is ${r.tier}`);
+  }
+  // A night in is spent indoors: Cream Velvet still makes its top 3.
+  assert.ok(names(rank(fragrances, sweltering, 'night', { occasion: occasionById('cozy') }).slice(0, 3)).includes('Cream Velvet'));
+  // Daily picks pay nothing extra: the penalty is an occasion's.
+  const daily = rank(fragrances, sweltering, 'night');
+  assert.ok(daily.every(r => r.parts.heat === null) && daily.every(r => r.score === scoreOf(r.parts)));
+});
+
 test('casual reads like daily picks with a tilt: winter bottles on a cold day, nothing fresh', () => {
   const casual = occasionById('casual');
   const cold = { feelsF: 20, humidity: 60, dewF: 12, category: 'clear', date: JAN, dateISO: '2027-01-15', lat: 40 };
