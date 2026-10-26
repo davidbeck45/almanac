@@ -78,7 +78,8 @@ Pushing to `main` publishes the site.
 ## Data and credits
 
 - **Fragrance data**: [Fragrantica](https://www.fragrantica.com), through [Le Decanteur's Kaggle dataset](https://www.kaggle.com/datasets/ledecanteur/fragrantica-perfumes), licensed [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). `data/fragrantica/`, `data/extras.jsonl` and the values derived from it carry the same license: credit Le Decanteur, no commercial use, share alike (see `data/fragrantica/README.md`). The pros and cons are Fragrantica's AI summary of its members' reviews.
-- **Longevity, sillage, occasion and layering votes**: [Parfumo](https://www.parfumo.com).
+- **Longevity and sillage**: [Parfumo](https://www.parfumo.com)'s ratings and Fragrantica's votes (the dataset's), each counted by how many there are.
+- **Occasion and layering votes**: [Parfumo](https://www.parfumo.com).
 - **Weather**: [Open-Meteo](https://open-meteo.com) (forecast, historical weather and city search), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 - **Fonts**: Fraunces and Inter, self-hosted under the SIL Open Font License (`fonts/`).
 

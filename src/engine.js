@@ -537,7 +537,8 @@ const FALLBACK_SCALE = [-0.3, 0.5];
 const OCCASION_KNEE = 0.1;
 // Profiles share one unit (-1..1 an accord), so how far an occasion's fit
 // spreads over the dataset says how much it cares: Formal's, Date Night's and
-// the rest span 0.6 to 0.85, Casual's, which only leans (woods and aromatics
+// the rest span 0.6 to 0.94 (Office's widest, its quiet wish widening it),
+// Casual's, which only leans (woods and aromatics
 // a little up, gourmands and leather a little down), 0.28. Stretched to 0..1
 // like the others, that lean outweighed the weather: a near-fresh woody
 // topped every Casual day of a Chicago January, and Cream Velvet, the daily
