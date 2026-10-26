@@ -32,6 +32,14 @@ test('profiles only name accords the engine knows, within -1..1', () => {
   }
 });
 
+test('every occasion says how much of it is spent outside, a night in none of it', () => {
+  // The engine's cold penalty and the spray guide's cold step both read it.
+  for (const o of OCCASIONS) assert.ok(Number.isFinite(o.outside) && o.outside >= 0 && o.outside <= 1, `${o.id}: ${o.outside}`);
+  assert.equal(occasionById('cozy').outside, 0);
+  assert.equal(occasionById('outdoors').outside, 1);
+  assert.ok(occasionById('office').outside < occasionById('date').outside && occasionById('date').outside < occasionById('nightout').outside);
+});
+
 test('an aquatic suits the office better than a boozy leather, on accords alone', () => {
   const accordsOnly = f => ({ ...f, parfumo: undefined, performance: undefined });
   const office = occasionById('office');

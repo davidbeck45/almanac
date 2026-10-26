@@ -12,7 +12,7 @@
 // point come from real days). Owned bottles are measured against the
 // suggestion pool's scores in the same cell, every bottle read on the
 // pool's evidence (sameFooting).
-import { seasonFit, timeFit, timeForgiven, weatherFit, richInHeat, quality, personalPart, occasionRaw, occasionPart, scoreOf, targetSeasonWeights, isDisliked } from './engine.js';
+import { seasonFit, timeFit, timeForgiven, weatherFit, richInHeat, thinInCold, quality, personalPart, occasionRaw, occasionPart, scoreOf, targetSeasonWeights, isDisliked } from './engine.js';
 import { occasionById } from './occasions.js';
 import { similarity, sharedTraits } from './similar.js';
 import { styleScores, styleMix, styleById, topOf, shownOf, closeOf } from './scent-styles.js';
@@ -195,11 +195,11 @@ const allFooted = records => footedLists.get(records) ?? footedLists.set(records
  * with no recent wears, averaged over the cell's windows, your stars included
  * (`personal`: only owned records carry them, so the pool's table and
  * reference stay the crowd's). The score is linear in the parts, so the
- * season, time and weather fits (and richness in heat) are averaged per
- * slot × band and shared by every use, and occasionPart is worked out once
- * per occasion. Only the time fit's forgiveness moves with the weather
- * (timeFit adds it to the votes' fit as fit + (1 − fit) × forgiven), so the
- * votes' fit is worked out once.
+ * season, time and weather fits (and richness in heat, thinness in the cold)
+ * are averaged per slot × band and shared by every use, and occasionPart is
+ * worked out once per occasion. Only the time fit's forgiveness moves with
+ * the weather (timeFit adds it to the votes' fit as fit + (1 − fit) ×
+ * forgiven), so the votes' fit is worked out once.
  */
 export function fitTable(bottles, { cells, slotBands }) {
   const m = cells.length, out = new Float32Array(bottles.length * m);
@@ -212,19 +212,20 @@ export function fitTable(bottles, { cells, slotBands }) {
     const voted = { day: timeFit(b, 'day'), night: timeFit(b, 'night') };
     for (const k of keys) {
       const { wins, slot } = slotBands[k];
-      let season = 0, forgiven = 0, weather = 0, heat = 0;
+      let season = 0, forgiven = 0, weather = 0, heat = 0, cold = 0;
       for (const w of wins) {
         season += seasonFit(b, w.weights);
         forgiven += timeForgiven(b, slot, w.cond);
         weather += weatherFit(b, w.cond);
         heat += richInHeat(b, w.cond);
+        cold += thinInCold(b, w.cond);
       }
       const time = voted[slot] + (1 - voted[slot]) * forgiven / wins.length;
-      fit.set(k, [season / wins.length, time, weather / wins.length, heat / wins.length]);
+      fit.set(k, [season / wins.length, time, weather / wins.length, heat / wins.length, cold / wins.length]);
     }
     for (let j = 0; j < m; j++) {
-      const c = cells[j], [season, time, weather, heat] = fit.get(c.sb);
-      const parts = { season, time, weather, quality: q, occasion: c.occasion ? occ.get(c.occasion) : null, heat, personal };
+      const c = cells[j], [season, time, weather, heat, cold] = fit.get(c.sb);
+      const parts = { season, time, weather, quality: q, occasion: c.occasion ? occ.get(c.occasion) : null, heat, cold, personal };
       out[i * m + j] = scoreOf(parts, c.occasion);
     }
   });
