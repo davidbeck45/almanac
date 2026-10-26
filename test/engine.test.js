@@ -637,19 +637,23 @@ test('an event takes the occasion’s best, and the plan around it barely moves'
   const drift = others.reduce((sum, i) => sum + plan[i].pick.score - plain[i].pick.score, 0) / others.length;
   assert.ok(Math.abs(drift) <= 0.005, `the other windows moved ${drift.toFixed(4)} a window`);
   for (const i of others) assert.ok(plan[i].ranked[0].score - plan[i].pick.score <= PLAN_MARGIN);
-  // Its bottle sits out the windows before it, saying why, and counts as planned after it.
+  // Its bottle sits out the windows before it, saying why as on the plan's
+  // first day, and counts as planned after it.
   const id = best.fragrance.id;
   for (const p of plan.slice(0, at)) {
     assert.notEqual(p.pick.fragrance.id, id, `${p.win.dateISO} ${p.win.slot}`);
     const entry = p.ranked.find(r => r.fragrance.id === id);
-    assert.ok(entry.reasons.some(r => r.text === (p.win.dateISO === '2026-10-03' ? 'Saved for formal wear tonight' : p.win.dateISO === '2026-10-02' ? 'Saved for formal wear tomorrow night' : 'Saved for formal wear on Saturday night')), entry.reasons.map(r => r.text).join('; '));
+    assert.ok(entry.reasons.some(r => r.text === 'Saved for formal wear on Saturday night'), entry.reasons.map(r => r.text).join('; '));
   }
+  // Planned from the Friday, every window says it from there, Saturday's day included.
+  const fromFriday = planWindows(fragrances, windows.slice(2), { nowISO: '2026-10-02' });
+  for (const p of fromFriday.slice(0, at - 2)) assert.ok(p.ranked.find(r => r.fragrance.id === id).reasons.some(r => r.text === 'Saved for formal wear tomorrow night'), `${p.win.dateISO} ${p.win.slot}`);
   // On the event's own day it's saved, not already picked: it keeps its score and says so once.
   const sameDay = plan[at - 1].ranked.find(r => r.fragrance.id === id);
   const alone = rank(fragrances, windows[at - 1], 'day', { todayISO: '2026-10-03' }).find(r => r.fragrance.id === id);
   assert.equal(sameDay.parts.rotation, 0);
   assert.equal(sameDay.score, alone.score);
-  assert.deepEqual(sameDay.reasons.filter(r => /^(Saved|Already|Picked)/.test(r.text)).map(r => r.text), ['Saved for formal wear tonight']);
+  assert.deepEqual(sameDay.reasons.filter(r => /^(Saved|Already|Picked)/.test(r.text)).map(r => r.text), ['Saved for formal wear on Saturday night']);
   assert.ok(plan[at + 1].ranked.find(r => r.fragrance.id === id).reasons.some(r => r.text === 'Picked the day before'));
   assert.ok(plan.slice(at + 1).every(p => !p.ranked.some(r => r.parts.saved)), 'nothing saved once it’s past');
   // Without an event nothing is saved.

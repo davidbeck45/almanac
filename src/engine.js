@@ -774,7 +774,7 @@ function reasonsFor(frag, parts, ctx) {
 
   const rest = restReason(parts, ctx.slot);
   if (rest) bad(rest, parts.rotation, true);
-  if (parts.saved) bad(savedReason(parts.saved, ctx.todayISO), SAVED_STRENGTH, true);
+  if (parts.saved) bad(savedReason(parts.saved, ctx.nowISO), SAVED_STRENGTH, true);
 
   return out.sort((a, b) => b.specific - a.specific || b.strength - a.strength);
 }
@@ -822,10 +822,11 @@ export function restReason({ daysAgo: d, planned }, slot) {
  *   nudge?: put a neglected bottle within reach first (see NUDGE_AFTER),
  *   saved?: Map(id -> event { dateISO, slot, occasion }) of bottles a plan
  *   keeps for an event later on: they keep their score, say so
- *   (`parts.saved`, savedReason) and are never nudged }
+ *   (`parts.saved`, savedReason) and are never nudged,
+ *   nowISO?: the date that note is said on, the plan's today (default todayISO) }
  */
 export function rank(fragrances, conditions, slot, opts = {}) {
-  const { occasion = null, history = [], todayISO = conditions.dateISO ?? localISO(new Date()), nudge = false, saved = null } = opts;
+  const { occasion = null, history = [], todayISO = conditions.dateISO ?? localISO(new Date()), nudge = false, saved = null, nowISO = todayISO } = opts;
   const weights = targetSeasonWeights(conditions.feelsF, conditions.date, conditions.lat);
 
   const scored = fragrances.map(frag => {
@@ -858,7 +859,7 @@ export function rank(fragrances, conditions, slot, opts = {}) {
   }
   if (nudge) nudgeIdle(scored, history, todayISO, slot, saved);
 
-  const ctx = { conditions, slot, weights, occasion, todayISO };
+  const ctx = { conditions, slot, weights, occasion, todayISO, nowISO };
   for (const s of scored) s.reasons = reasonsFor(s.fragrance, s.parts, ctx);
   return scored;
 }
@@ -891,11 +892,13 @@ export function rankEvent(fragrances, win, occasion = win.occasion) {
  * night event too), so a new bottle within PLAN_MARGIN takes them (with
  * nothing that close it can still be worn), and as planned for the windows
  * after it. Events never nudge, and without one nothing changes.
- * Two events can share their best bottle.
+ * Two events can share their best bottle. The note is said as on
+ * opts.nowISO, the plan's today (default: its first window's date), so
+ * tomorrow's day window on Now says "Saved for a date tomorrow night".
  * Returns [{ win, ranked, pick }].
  */
 export function planWindows(fragrances, windows, opts = {}) {
-  const { occasion = null, history = [], nudge = false } = opts;
+  const { occasion = null, history = [], nudge = false, nowISO = windows[0]?.dateISO } = opts;
   const loggedIn = win => history.find(h => h.date === win.dateISO && h.slot === win.slot);
   // Each event's pick, fixed before the windows around it are planned.
   const events = windows.flatMap((win, i) => {
@@ -922,7 +925,7 @@ export function planWindows(fragrances, windows, opts = {}) {
     for (const e of events) if (e.i > i && e.pick && !saved.has(e.pick.fragrance.id)) saved.set(e.pick.fragrance.id, { dateISO: e.win.dateISO, slot: e.win.slot, occasion: e.win.occasion });
     const logged = loggedIn(win);
     const canNudge = nudge && !logged && (nudgedOn === null || daysBetween(nudgedOn, win.dateISO) >= NUDGE_EVERY);
-    const asked = { occasion, todayISO: win.dateISO, nudge: canNudge, ...(saved.size && { saved }) };
+    const asked = { occasion, todayISO: win.dateISO, nowISO, nudge: canNudge, ...(saved.size && { saved }) };
     const known = [...planned, ...eventPlans.filter(e => e.i < i).map(e => e.entry)];
     let ranked = rank(fragrances, win, win.slot, { ...asked, history: known });
     // A nudged bottle leads the list, and is new to the plan. A bottle you
@@ -941,7 +944,7 @@ export function planWindows(fragrances, windows, opts = {}) {
     }
     // Likewise a bottle saved for an event that's worn anyway doesn't say it's saved.
     if (pick?.parts.saved) {
-      const text = savedReason(pick.parts.saved, win.dateISO);
+      const text = savedReason(pick.parts.saved, nowISO);
       pick.reasons = pick.reasons.filter(r => r.text !== text);
       delete pick.parts.saved;
     }

@@ -413,7 +413,7 @@ function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned, inMine,
 // Why a bottle is given a rest, in the words of its reason (src/engine.js).
 const restText = (parts, slot) => restReason(parts, slot) ?? (parts.planned ? 'Picked for a day nearby' : 'Worn recently');
 
-function whySection({ entry, solo, win, occasion }) {
+function whySection({ entry, solo, win, occasion, todayISO: today }) {
   if (!entry) return '';
   const p = entry.parts;
   // The rating bar is mostly your stars once you've rated it (engine
@@ -431,8 +431,9 @@ function whySection({ entry, solo, win, occasion }) {
   // What the heat takes off a rich bottle for an occasion (engine richInHeat).
   const heat = occasion && p.heat ? Math.round(occasionWeights(occasion).heat * p.heat * 100) : 0;
   const heavy = heat > 0 ? `<p class="why-note">Rich for this heat: ${heat}% lower for ${esc(occasion.phrase ?? occasion.label.toLowerCase())}.</p>` : '';
-  // Kept for an event later in the plan (planWindows' `saved`): its match stands, another bottle takes the window.
-  const saved = p.saved && win ? `<p class="why-note">${esc(savedReason(p.saved, win.dateISO))}, so the plan picks another bottle here.</p>` : '';
+  // Kept for an event later in the plan (planWindows' `saved`): its match
+  // stands, another bottle takes the window. Said as on today, as the plan says it.
+  const saved = p.saved && win ? `<p class="why-note">${esc(savedReason(p.saved, today ?? win.dateISO))}, so the plan picks another bottle here.</p>` : '';
   const title = solo ? `How it would do ${win.slot === 'day' ? 'by day' : 'tonight'}` : 'Why it ranks here';
   return `<section class="bp-section"><h3>${title} <span class="h3-aside">${matchPct(entry)}% match</span></h3><div class="bars why">${bars}</div>${heavy}${rotation}${saved}</section>`;
 }

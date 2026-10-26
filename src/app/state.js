@@ -240,7 +240,7 @@ export function computeToday() {
   const today = withStoredEvents([state.wx.day, state.wx.night].filter(Boolean).sort(byTime), state.events);
   const last = today.at(-1);
   const ahead = last && state.events.length && state.forecast ? weekWindows().filter(w => w.occasion && byTime(w, last) > 0) : [];
-  const plan = planWindows(rankedFragrances(), [...today, ...ahead], { history: state.history, nudge: true });
+  const plan = planWindows(rankedFragrances(), [...today, ...ahead], { history: state.history, nudge: true, nowISO: todayISO() });
   state.ahead = plan.slice(today.length);
   state.today = {};
   for (const p of plan.slice(0, today.length)) {
@@ -266,7 +266,7 @@ export function nowSlot() {
 export function computeWeek() {
   const days = week(state.forecast);
   const windows = withStoredEvents(days.flatMap(d => [d.day, d.night].filter(Boolean)), state.events);
-  const plan = planWindows(rankedFragrances(), windows, { history: state.history, nudge: true });
+  const plan = planWindows(rankedFragrances(), windows, { history: state.history, nudge: true, nowISO: todayISO() });
   const byWindow = new Map(plan.map(p => [`${p.win.dateISO}:${p.win.slot}`, p]));
   const slotPlan = win => {
     if (!win) return null;

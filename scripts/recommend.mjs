@@ -902,7 +902,7 @@ async function main() {
     const days = week(forecast);
     const wanted = slot ?? occasion?.slot ?? null;
     const windows = onWindows(days.flatMap(d => [d.day, d.night].filter(w => w && (!wanted || w.slot === wanted))), 'the week ahead');
-    const plan = planWindows(fragrances, windows, { occasion, history, nudge });
+    const plan = planWindows(fragrances, windows, { occasion, history, nudge, nowISO: summarize(forecast).todayISO });
     const ties = new Map(planTies(plan, { history }).map((t, i) => [plan[i], t]));
     const pickFor = win => plan.find(p => p.win === win);
     const rows = days.map(d => ({ day: d, slots: windows.filter(w => w.dateISO === d.dateISO).map(pickFor) }))
@@ -947,7 +947,7 @@ async function main() {
   if (events.length) {
     const weekly = onWindows(week(forecast).flatMap(d => [d.day, d.night].filter(w => w && (!wanted || w.slot === wanted))), 'the week ahead');
     const later = weekly.filter(w => w.occasion && (!shown.length || byTime(w, shown.at(-1)) > 0));
-    const plan = planWindows(fragrances, [...withEvents(shown, events), ...later], { occasion, history, nudge });
+    const plan = planWindows(fragrances, [...withEvents(shown, events), ...later], { occasion, history, nudge, nowISO: wx.todayISO });
     [result, ahead] = [plan.slice(0, shown.length), plan.slice(shown.length)];
   } else {
     result = wanted
