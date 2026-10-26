@@ -91,6 +91,21 @@ test('the export carries ratings when there are some, and older files still read
   assert.equal(old.history[0].id, '4310');
 });
 
+test('the export and Copy for Claude carry the days and nights planned in the app, and older ones read without', () => {
+  const events = [{ dateISO: '2026-10-25', slot: 'night', occasion: 'date' }, { dateISO: '2026-10-31', slot: 'night', occasion: 'formal' }, { dateISO: '2026-11-02', slot: 'day', occasion: 'office' }];
+  const data = journalExport(history, null, new Set(), { nowISO: '2026-10-26T12:00:00Z', events });
+  assert.deepEqual(parseJournal(JSON.parse(JSON.stringify(data))).events, events);
+  assert.ok(!('events' in journalExport(history, null, new Set())), 'no empty events key');
+  const token = journalToken(history, [], {}, { todayISO: '2026-10-26', events });
+  assert.deepEqual(readJournal(token).events, events, 'a day back too: a place can be behind the device');
+  // Before events were carried, neither had any.
+  assert.deepEqual(readJournal(journalToken(history, [], {}, { todayISO: '2026-10-26' })).events, []);
+  assert.deepEqual(parseJournal({ app: 'scentcast-journal', history: [] }).events, []);
+  // An event in another shape is left out of a file; a token's is garbled.
+  assert.deepEqual(parseJournal({ app: 'scentcast-journal', history: [], events: [{ dateISO: '2026-10-31', slot: 'evening', occasion: 'date' }, null, events[1]] }).events, [events[1]]);
+  assert.throws(() => journalFromToken(`scj1.${btoa('{"t":"2026-10-26","i":[],"w":[],"e":[[5,2,"date"]]}')}`), /garbled/);
+});
+
 test('the stored log keeps only wears it can read: a real date, day or night', () => {
   const real = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
   const store = new Map();

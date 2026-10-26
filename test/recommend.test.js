@@ -294,6 +294,27 @@ test('--week, --date and today\'s picks plan around --events: each takes the occ
   assert.match(now2.stdout, /\nFor formal wear (tomorrow night|on \w+day night): /);
 });
 
+test('the days and nights planned in the app come with the journal and plan like --events, left out quietly where they don\'t fit', async () => {
+  // Dates by the place's clock, as the CLI plans them.
+  const days = JSON.parse(cli('--loc', '40.7,-74', '--week', '--json').stdout).days.map(d => d.date);
+  const [night, office] = [days[2], days[3]];
+  const events = [{ dateISO: night, slot: 'night', occasion: 'formal' }, { dateISO: office, slot: 'day', occasion: 'office' }, { dateISO: dayISO(-5), slot: 'night', occasion: 'date' }, { dateISO: dayISO(40), slot: 'night', occasion: 'date' }];
+  const token = journalToken([], [], {}, { todayISO: dayISO(0), events });
+  const [stored, typed, nights, over, today] = await Promise.all([
+    run('--loc', '40.7,-74', '--week', '--journal', token, '--json'),
+    run('--loc', '40.7,-74', '--week', '--events', `${night} night formal; ${office} day office`, '--json'),
+    run('--loc', '40.7,-74', '--week', '--slot', 'night', '--journal', token, '--json'),
+    run('--loc', '40.7,-74', '--week', '--journal', token, '--events', `${night} night date`, '--json'),
+    run('--loc', '40.7,-74', '--journal', token, '--json'),
+  ]);
+  for (const r of [stored, typed, nights, over, today]) assert.equal(r.status, 0, r.stderr);
+  const picks = r => JSON.parse(r.stdout).days.flatMap(d => d.picks.map(p => [d.date, p.slot, p.name, p.occasion ?? null]));
+  assert.deepEqual(picks(stored), picks(typed), 'as if typed; the past date and the one past the week drop out');
+  assert.deepEqual(picks(nights).filter(p => p[3]).map(p => p.slice(0, 2).concat(p[3])), [[night, 'night', 'formal']], 'the office day isn’t a night');
+  assert.equal(picks(over).find(p => p[0] === night && p[1] === 'night')[3], 'date', '--events wins on its window');
+  assert.ok(JSON.parse(today.stdout).events.some(e => e.date === night && e.occasion === 'formal'), 'today’s picks name it ahead');
+});
+
 test('--events stops on a window the plan doesn\'t cover, and on a mode that doesn\'t plan', () => {
   for (const [args, message] of [
     [['--loc', '40.7,-74', '--week', '--events', `${dayISO(9)} night formal`], /^--events: \S+ is outside the week ahead \(/],

@@ -5,6 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { activeBottles, loadJournal, resolvePlace, widgetBottles, widgetPayload } from '../omarchy/widget.mjs';
 import { journalToken } from '../src/history.js';
+import { withStoredEvents } from '../src/events.js';
+import { planWindows } from '../src/engine.js';
+import { week } from '../src/weather.js';
 import { syntheticForecast } from './fixtures.js';
 
 const { fragrances } = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url)));
@@ -65,6 +68,23 @@ test('with the app’s Copy for Claude the widget skips yesterday’s bottle, an
   // Three days on, the panel says so.
   const later = widgetPayload(fragrances, syntheticForecast(7, { start: '2026-09-30' }), place, Date.parse('2026-10-01T00:00:00Z'), journal);
   assert.equal(later.journalNote, 'newest wear 3 days ago');
+});
+
+test('with the app’s plans in the journal the widget plans around them, as Now and the Week do', () => {
+  const at = Date.parse('2026-09-28T13:00:00Z'); // 09:00 on the 28th
+  const bare = widgetPayload(fragrances, syntheticForecast(7), place, at);
+  const night = bare.days[3];
+  const token = journalToken([{ id: bare.now.id, date: '2026-09-27', slot: 'night' }], [], {}, { todayISO: '2026-09-28', events: [{ dateISO: night.date, slot: 'night', occasion: 'formal' }] });
+  const journal = loadJournal(token);
+  const out = widgetPayload(fragrances, syntheticForecast(7), place, at, journal);
+  const windows = withStoredEvents(week(syntheticForecast(7), at).flatMap(d => [d.day, d.night].filter(Boolean)), journal.events);
+  const plan = planWindows(fragrances.map(f => ({ ...f, id: String(f.id) })), windows, { history: journal.history, nudge: true });
+  const formal = plan.find(p => p.win.occasion);
+  assert.equal(out.days[3].night.id, String(formal.pick.fragrance.id), 'the formal night gets the app’s pick');
+  assert.equal(out.days[3].night.occasion, 'formal');
+  assert.deepEqual(out.days.flatMap(d => [d.day?.id, d.night?.id]).filter(Boolean), plan.map(p => String(p.pick.fragrance.id)), 'every window as the app plans it');
+  const plain = widgetPayload(fragrances, syntheticForecast(7), place, at, { ...journal, events: [] });
+  assert.notEqual(plain.days[3].night.id, out.days[3].night.id, 'without it the night goes to the daily pick');
 });
 
 test('the journal setting reads a file of either kind, and says plainly when it can’t', () => {

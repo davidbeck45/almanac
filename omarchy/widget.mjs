@@ -18,6 +18,8 @@ import { planWindows } from '../src/engine.js';
 import { accordColor } from '../src/accords.js';
 import { DEFAULT_HIDDEN } from '../src/hidden.js';
 import { readJournal, isJournalToken, journalFreshness } from '../src/history.js';
+import { withStoredEvents } from '../src/events.js';
+import { occasionById } from '../src/occasions.js';
 import { applySkin } from '../src/skin.js';
 import { searchCities } from '../src/location.js';
 import { fetchForecast, week } from '../src/weather.js';
@@ -108,7 +110,7 @@ const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
 function brief(p) {
   if (!p?.pick) return null;
   const f = p.pick.fragrance;
-  return { slot: p.win.slot, label: p.win.label, id: String(f.id), name: f.name, brand: f.brand, tier: p.pick.tier };
+  return { slot: p.win.slot, label: p.win.label, id: String(f.id), name: f.name, brand: f.brand, tier: p.pick.tier, ...(p.win.occasion && { occasion: p.win.occasion.id }) };
 }
 
 function detail(p) {
@@ -143,15 +145,21 @@ function journalNote(freshness) {
 // The week ahead planned the way the app plans it, so the widget, Today and
 // Week agree. The first window still ahead is the one to wear now. With a
 // journal (parseJournal's shape) its wears rotate and the nudge is on, as
-// in the app; `journal` says how current they are (journalFreshness), null
-// without one, and `journalNote` puts that in a few words for the panel.
+// in the app, and the days and nights planned for an occasion in the app go
+// on their windows as Now and the Week put them; `journal` says how current
+// the wears are (journalFreshness), null without one, and `journalNote` puts
+// that in a few words for the panel.
 export function widgetPayload(fragrances, forecast, place, nowMs = Date.now(), journal = null) {
   const days = week(forecast, nowMs);
   // The app's and the journal's ids are strings; data/collection.json has numbers.
   const bottles = fragrances.map(f => (typeof f.id === 'string' ? f : { ...f, id: String(f.id) }));
   const history = journal ? journal.history.filter(h => !h.planned) : [];
-  const plan = planWindows(bottles, days.flatMap(d => [d.day, d.night].filter(Boolean)), { history, nudge: history.length > 0 });
-  const byWindow = new Map(plan.map(p => [p.win, p]));
+  const events = (journal?.events ?? []).filter(e => occasionById(e.occasion));
+  const windows = withStoredEvents(days.flatMap(d => [d.day, d.night].filter(Boolean)), events);
+  const plan = planWindows(bottles, windows, { history, nudge: history.length > 0 });
+  // By date and slot: an event's window is a copy with its occasion on.
+  const key = win => win && `${win.dateISO}:${win.slot}`;
+  const byWindow = new Map(plan.map(p => [key(p.win), p]));
   const freshness = journal && journalFreshness(history, days[0]?.dateISO ?? new Date(nowMs).toISOString().slice(0, 10));
   return {
     place,
@@ -168,8 +176,8 @@ export function widgetPayload(fragrances, forecast, place, nowMs = Date.now(), j
       condition: d.condition,
       category: d.category,
       rainChance: d.pop,
-      day: brief(byWindow.get(d.day)),
-      night: brief(byWindow.get(d.night)),
+      day: brief(byWindow.get(key(d.day))),
+      night: brief(byWindow.get(key(d.night))),
     })),
   };
 }

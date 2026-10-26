@@ -40,7 +40,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { rank, planWindows, comfortRange, eventPhrase } from '../src/engine.js';
 import { layerPicks, byPick } from '../src/layering.js';
-import { OCCASIONS } from '../src/occasions.js';
+import { OCCASIONS, occasionById } from '../src/occasions.js';
 import { DEFAULT_HIDDEN } from '../src/hidden.js';
 import { readJournal, isJournalToken, journalFreshness, occasionCounts } from '../src/history.js';
 import { normalize } from '../src/collections.js';
@@ -331,6 +331,21 @@ async function main() {
     history = journal.history.filter(h => !h.planned);
     wardrobe = applySkin(wardrobe, journal.skin);
     for (const id of journal.hidden) off.add(id);
+  }
+  // The days and nights planned in the app (the journal's `events`) go on
+  // today's picks, --week and --date as Now and the Week put them, after
+  // --events, which wins on its window. One that doesn't fit what's asked
+  // (gone by, the other slot, another date) is left out without a word,
+  // since David didn't type it; trips keep their own.
+  const planless = PLANLESS.some(k => args[k] !== undefined && args[k] !== false);
+  if (journal?.events.length && !planless && !args.pack) {
+    const only = slot ?? occasion?.slot;
+    for (const e of journal.events) {
+      const o = occasionById(e.occasion);
+      if (!o || e.dateISO < earliest || (only && e.slot !== only) || (args.date && e.dateISO !== args.date)) continue;
+      if (events.some(t => t.dateISO === e.dateISO && t.slot === e.slot)) continue;
+      events.push({ dateISO: e.dateISO, slot: e.slot, occasion: o, stored: true });
+    }
   }
   // With a journal, a bottle left unworn for a month takes a slot it nearly wins.
   const nudge = history.length > 0;
@@ -819,10 +834,11 @@ async function main() {
   const phrase = o => o.phrase ?? o.label.toLowerCase();
   const forEvent = win => (win.occasion ? `, for ${phrase(win.occasion)}` : '');
   // Puts --events on a plan's windows, or stops on one that isn't among
-  // them: outside the dates planned (`what`), or a window already over.
+  // them: outside the dates planned (`what`), or a window already over. The
+  // journal's events go only where they fit.
   const onWindows = (windows, what) => {
     for (const e of events) {
-      if (windows.some(w => w.dateISO === e.dateISO && w.slot === e.slot)) continue;
+      if (e.stored || windows.some(w => w.dateISO === e.dateISO && w.slot === e.slot)) continue;
       const [first, last] = [windows[0]?.dateISO, windows.at(-1)?.dateISO];
       if (e.dateISO >= first && e.dateISO <= last) fail(`--events: the ${e.slot === 'day' ? 'daytime' : 'night'} of ${e.dateISO} is over`);
       fail(`--events: ${e.dateISO} is outside ${what}${first ? ` (${shortDate(first)} to ${shortDate(last)})` : ''}`);

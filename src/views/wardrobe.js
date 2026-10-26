@@ -819,9 +819,9 @@ export const actions = {
     app.closeShared();
     app.render();
   },
-  // With your own ratings and skin nudges (src/skin.js), for journal-check.
+  // With your own ratings and skin nudges (src/skin.js) and the plans made at home (src/events.js), for journal-check.
   'journal-export'() {
-    const data = journalExport(state.history, state.loc, hiddenIn(true), { skin: loadSkin() });
+    const data = journalExport(state.history, state.loc, hiddenIn(true), { skin: loadSkin(), events: state.events });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
     // Named by the device's date: an evening export in the Americas is already tomorrow in UTC.
@@ -829,11 +829,12 @@ export const actions = {
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   },
-  // The last ten days, stars and switched-off bottles as a short token
-  // (journalToken) for Claude's picks and the Omarchy widget: the clipboard,
-  // else the share sheet's field, selected, to copy by hand.
+  // The last ten days, stars, switched-off bottles and planned days and
+  // nights as a short token (journalToken) for Claude's picks and the
+  // Omarchy widget: the clipboard, else the share sheet's field, selected,
+  // to copy by hand.
   async 'journal-claude'(el, app) {
-    const token = journalToken(state.history, hiddenIn(true), loadSkin(), { todayISO: deviceToday() });
+    const token = journalToken(state.history, hiddenIn(true), loadSkin(), { todayISO: deviceToday(), events: state.events });
     try {
       await navigator.clipboard.writeText(token);
       app.showToast('<span>Copied. Paste it to Claude so its picks know what you’ve worn.</span>');

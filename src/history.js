@@ -9,6 +9,11 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const isWear = h => Boolean(h) && typeof h === 'object' && h.id != null && h.id !== ''
   && typeof h.date === 'string' && ISO_DATE.test(h.date) && !Number.isNaN(Date.parse(h.date)) && (h.slot === 'day' || h.slot === 'night');
 const wearsOf = list => (Array.isArray(list) ? list.filter(isWear).map(h => ({ ...h, id: String(h.id) })) : []);
+// A planned event as src/events.js keeps one ({ dateISO, slot, occasion id });
+// whether the app has the occasion is for the reader to check.
+const isEvent = e => Boolean(e) && typeof e === 'object' && typeof e.dateISO === 'string' && ISO_DATE.test(e.dateISO)
+  && !Number.isNaN(Date.parse(e.dateISO)) && (e.slot === 'day' || e.slot === 'night') && typeof e.occasion === 'string' && e.occasion !== '';
+const eventsOf = list => (Array.isArray(list) ? list.filter(isEvent).map(({ dateISO, slot, occasion }) => ({ dateISO, slot, occasion })) : []);
 
 // Entries stored in another shape (a date as a number, an unknown slot) are left out.
 export function loadHistory() {
@@ -47,9 +52,12 @@ export function toggleWear(id, dateISO, slot, where = null, occasion = null) {
 }
 
 // The journal as a file: the wears, plus the device's place and hidden bottles
-// so a check can rebuild what the app was choosing from, and your own
-// ratings and skin nudges (`skin`, src/skin.js's loadSkin()) when there are any.
-export function journalExport(history, loc, hidden, { nowISO = new Date().toISOString(), skin = null } = {}) {
+// so a check can rebuild what the app was choosing from, your own ratings
+// and skin nudges (`skin`, src/skin.js's loadSkin()) and the days and nights
+// planned for an occasion (`events`, src/events.js's loadEvents()) when
+// there are any.
+export function journalExport(history, loc, hidden, { nowISO = new Date().toISOString(), skin = null, events = [] } = {}) {
+  const planned = eventsOf(events);
   return {
     app: 'scentcast-journal',
     version: 1,
@@ -58,6 +66,7 @@ export function journalExport(history, loc, hidden, { nowISO = new Date().toISOS
     hidden: [...hidden].map(String),
     history,
     ...(skin && Object.keys(skin).length && { skin }),
+    ...(planned.length && { events: planned }),
   };
 }
 
@@ -67,7 +76,9 @@ export function journalExport(history, loc, hidden, { nowISO = new Date().toISOS
 // ISO date and day or night, and a `hidden` that isn't a list, are left out.
 // `counts` is a Copy for Claude's wears per use (occasionCounts over the
 // whole log, which its wears are only part of); null from a file, whose
-// wears are all there to count.
+// wears are all there to count. `events` are the plans made in the app
+// ({ dateISO, slot, occasion id }, [] from files made before they were
+// carried), for a plan to put on its windows (src/events.js withStoredEvents).
 export function parseJournal(data) {
   if (data?.app !== 'scentcast-journal' || !Array.isArray(data.history)) return null;
   const skin = data.skin && typeof data.skin === 'object' && !Array.isArray(data.skin) ? data.skin : {};
@@ -80,6 +91,7 @@ export function parseJournal(data) {
     history: wearsOf(data.history),
     skin: Object.fromEntries(Object.entries(skin).map(([id, e]) => [String(id), e])),
     counts,
+    events: eventsOf(data.events),
   };
 }
 
@@ -89,8 +101,10 @@ export function parseJournal(data) {
 // "scj1." then base64url of { t: the device's date, i: the bottle ids the
 // rest point into, w: wears as [bottle, days before t, 0 day | 1 night,
 // use?], h: switched-off bottles, s: stars and skin nudges as [bottle,
-// stars or 0, longevity, sillage], c: wears per use }. A wear's use is left
-// out for 'daily' and 0 when it was logged without one. The wears are the
+// stars or 0, longevity, sillage], c: wears per use, e: the days and nights
+// planned for an occasion as [days after t, 0 day | 1 night, occasion id]
+// }. A wear's use is left out for 'daily' and 0 when it was logged without
+// one; readers from before `e` skip it. The wears are the
 // last RECENT_DAYS days' (rotation), each other bottle's latest and the
 // journal's first (the nudge counts idle days from them), so a plan reads
 // them as it reads the whole log. No places: Claude and the widget are
@@ -108,8 +122,8 @@ const fromBase64Url = s => new TextDecoder('utf-8', { fatal: true }).decode(
 // Numeric ids (Fragrantica's) go as numbers, two characters shorter each.
 const packId = id => (/^[1-9]\d{0,14}$/.test(id) ? Number(id) : id);
 
-/** The Copy for Claude token for a log, the device's hidden bottles and its ratings (loadSkin()). */
-export function journalToken(history, hidden = [], skin = {}, { todayISO }) {
+/** The Copy for Claude token for a log, the device's hidden bottles, its ratings (loadSkin()) and its plans (loadEvents()). */
+export function journalToken(history, hidden = [], skin = {}, { todayISO, events = [] }) {
   const logged = wearsOf(history).filter(h => !h.planned)
     .sort((a, b) => b.date.localeCompare(a.date) || (a.slot === b.slot ? 0 : a.slot === 'night' ? -1 : 1));
   const since = shiftISO(todayISO, -(RECENT_DAYS - 1));
@@ -134,7 +148,8 @@ export function journalToken(history, hidden = [], skin = {}, { todayISO }) {
     while (row.length > 2 && !row.at(-1)) row.pop();
     return row;
   });
-  const body = { t: todayISO, i: ids, w, ...(h.length && { h }), ...(s.length && { s }), c: occasionCounts(logged) };
+  const e = eventsOf(events).map(ev => [daysBetweenISO(todayISO, ev.dateISO), ev.slot === 'night' ? 1 : 0, ev.occasion]);
+  const body = { t: todayISO, i: ids, w, ...(h.length && { h }), ...(s.length && { s }), c: occasionCounts(logged), ...(e.length && { e }) };
   return `scj${TOKEN_VERSION}.${toBase64Url(JSON.stringify(body))}`;
 }
 
@@ -157,9 +172,9 @@ export function journalFromToken(token) {
   need(m && Number(m[1]) === TOKEN_VERSION);
   let body = null;
   try { body = JSON.parse(fromBase64Url(m[2])); } catch {}
-  const { t, i: ids, w = [], h = [], s = [], c = null } = body ?? {};
+  const { t, i: ids, w = [], h = [], s = [], c = null, e = [] } = body ?? {};
   need(ISO_DATE.test(t ?? '') && !Number.isNaN(Date.parse(t)) && Array.isArray(ids) && ids.every(id => typeof id === 'string' || Number.isInteger(id)));
-  need([w, h, s].every(Array.isArray));
+  need([w, h, s, e].every(Array.isArray));
   const bottle = k => {
     need(Number.isInteger(k) && k >= 0 && k < ids.length);
     return String(ids[k]);
@@ -175,7 +190,11 @@ export function journalFromToken(token) {
     const [k, rating = 0, longevity = 0, sillage = 0] = e;
     return [bottle(k), { rating: rating || null, longevity, sillage }];
   }));
-  return { app: 'scentcast-journal', version: 1, exported: t, location: null, hidden: h.map(bottle), history, skin, counts: c };
+  const events = e.map(ev => {
+    need(Array.isArray(ev) && Number.isInteger(ev[0]) && [0, 1].includes(ev[1]) && typeof ev[2] === 'string');
+    return { dateISO: shiftISO(t, ev[0]), slot: ev[1] ? 'night' : 'day', occasion: ev[2] };
+  });
+  return { app: 'scentcast-journal', version: 1, exported: t, location: null, hidden: h.map(bottle), history, skin, counts: c, events };
 }
 
 /**
