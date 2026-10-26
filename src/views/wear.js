@@ -5,9 +5,10 @@
 // Occasion pane's "When and where?" in wear/when.js, and the place and date
 // pickers both use in wear/pickers.js. Styles: src/css/wear.css.
 import { renderScene, stagePoint, skyLight } from '../scene.js';
-import { calendarSeason } from '../engine.js';
+import { calendarSeason, PLAN_MARGIN } from '../engine.js';
 import { OCCASIONS, occasionById } from '../occasions.js';
 import { sprayGuide } from '../spray.js';
+import { planTies, tieLine, contrast } from '../contrast.js';
 import { theme } from '../theme.js';
 import { toggleWear, wornIn, journalStats, shiftISO } from '../history.js';
 import { routeHash } from '../app/router.js';
@@ -165,10 +166,20 @@ export function sprayLine({ sprays: [lo, hi], where, unit = 'spray' }) {
   return `${count} · ${where.map(w => SPOT_WORDS[w] ?? w).join(', ')}`;
 }
 
+// "Legacy (fresher) and Aristo suit today just as well": the bottles that
+// suit the window as well as its pick (src/contrast.js tiesFor), each name
+// opening its page in the window's list.
+export function tiesHTML(ties, win, ctx) {
+  if (!ties?.length) return '';
+  const name = ({ entry }) => `<button class="link-btn" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(entry.fragrance.id)}">${esc(entry.fragrance.name)}</button>`;
+  return `<p class="ties">${icon.compare}<span>${tieLine(ties, win, { name, text: esc })}</span></p>`;
+}
+
 // The top pick. On Now the hero shows the bottle, so the card leads with why
 // and how much to spray (`spray`: sprayGuide's answer; it opens the bottle
-// page's spray section); elsewhere (`full`) it shows the photo and name too.
-export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicker = '', spray = null } = {}) {
+// page's spray section), then the bottles that suit the window as well
+// (`ties`, in `win`); elsewhere (`full`) it shows the photo and name too.
+export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicker = '', spray = null, ties = [], win = null } = {}) {
   const f = entry.fragrance;
   const wash = `--accord:${accordColor(Object.keys(f.accords)[0])}`;
   const open = (cls, inner, label = '') => `<button class="${cls}" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(f.id)}"${label ? ` aria-label="${esc(label)}"` : ''}>${inner}</button>`;
@@ -178,6 +189,7 @@ export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicke
       <div class="pick-top">${matchBadge(entry)}${open('btn tertiary compact', `Details${icon.chevron}`, `Details for ${f.name}`)}</div>
       ${nudgeHTML(nudgeOf(entry))}
       ${reasonsList(reasonsOf(entry, 3), 'lead')}
+      ${tiesHTML(ties, win, ctx)}
       ${chips(f.accords)}
       ${canWear || hint ? `<div class="pick-actions">${hint}${canWear ? wearButton(entry, ctx, worn) : ''}</div>` : ''}
     </div>`;
@@ -220,13 +232,16 @@ export function nextWindowHTML({ win, pick }, worn, hour) {
   </aside>`;
 }
 
-// The rest of a window's ranking on the magnitude shelf.
-function alsoHTML(ranked, pick, ctx, worn, label) {
+// The rest of a window's ranking on the magnitude shelf. With `tags`, a
+// bottle within PLAN_MARGIN of the pick says in a word how it differs from
+// it (src/contrast.js: "fresher", "white floral", "louder").
+function alsoHTML(ranked, pick, ctx, worn, label, { tags = false } = {}) {
   const rest = ranked.filter(r => r !== pick);
   if (!rest.length) return '';
+  const tagOf = tags ? r => (Math.abs(pick.score - r.score) <= PLAN_MARGIN ? contrast(pick.fragrance, r.fragrance)[0] ?? null : null) : null;
   return `<div class="also">
     <h3 class="also-title">Also good ${esc(label)}</h3>
-    ${shelfHTML(rest, ctx, { wornId: worn })}
+    ${shelfHTML(rest, ctx, { wornId: worn, tagOf })}
   </div>`;
 }
 
@@ -367,15 +382,18 @@ function nowPane() {
   if (!nowSlot()) return skeletonHTML(1);
   const { win, ranked, pick } = nowSlot();
   const worn = wornId(win);
-  const other = todaySlots().find(p => p.win.slot !== win.slot);
+  const slots = todaySlots();
+  const other = slots.find(p => p.win.slot !== win.slot);
+  // Ties as the CLI finds them for the same plan: none once he's wearing one.
+  const ties = planTies(slots, { history: state.history })[slots.findIndex(p => p.win === win)] ?? [];
   return `${banner()}
     <section class="card slot" aria-labelledby="slot-title">
       ${slotHeadHTML(win, nowHour(), { id: 'slot-title' })}
       <div class="now-picks">
-        ${pickHTML(pick, win.slot, worn, { canWear: canWear(win), spray: sprayGuide(pick.fragrance, win) })}
+        ${pickHTML(pick, win.slot, worn, { canWear: canWear(win), spray: sprayGuide(pick.fragrance, win), ties, win })}
         ${other ? nextWindowHTML(other, wornId(other.win), nowHour()) : ''}
       </div>
-      ${alsoHTML(ranked, pick, win.slot, worn, win.slot === 'day' ? 'by day' : 'tonight')}
+      ${alsoHTML(ranked, pick, win.slot, worn, win.slot === 'day' ? 'by day' : 'tonight', { tags: true })}
     </section>
     ${journalTeaser()}`;
 }

@@ -181,14 +181,16 @@ const TIER_WORDS = { S: 'top pick', A: 'strong', B: 'good' };
 // and a magnitude dot, B and C dimmed. Scrolls sideways on phones and stacks
 // into rows on wide screens. Each opens its bottle page in context `ctx`.
 // It keeps its sideways scroll through a re-render (data-keep-scroll), so
-// focus coming back to a bottle far along it finds it in view.
-export function shelfHTML(ranked, ctx, { wornId = null } = {}) {
+// focus coming back to a bottle far along it finds it in view. `tagOf(entry)`
+// can put a word under a name (Now's "fresher" beside its pick), or null.
+export function shelfHTML(ranked, ctx, { wornId = null, tagOf = null } = {}) {
   if (!ranked.length) return '';
   return `<ul class="shelf" data-keep-scroll="shelf-${esc(ctx)}">${ranked.map(r => {
     const f = r.fragrance;
-    return `<li class="shelf-slot" data-tier="${r.tier}"><button class="shelf-item${wornId === f.id ? ' worn' : ''}" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(f.id)}" aria-label="${esc([f.name, `${matchPct(r)}% match`, TIER_WORDS[r.tier]].filter(Boolean).join(', '))}">
+    const tag = tagOf?.(r) ?? null;
+    return `<li class="shelf-slot" data-tier="${r.tier}"><button class="shelf-item${wornId === f.id ? ' worn' : ''}" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(f.id)}" aria-label="${esc([f.name, tag, `${matchPct(r)}% match`, TIER_WORDS[r.tier]].filter(Boolean).join(', '))}">
       <span class="shelf-bottle">${img(f)}${magDot(r.tier)}</span>
-      <span class="shelf-name">${esc(f.name)}</span>
+      <span class="shelf-name">${esc(f.name)}</span>${tag ? `<span class="shelf-tag">${esc(tag)}</span>` : ''}
     </button></li>`;
   }).join('')}</ul>`;
 }

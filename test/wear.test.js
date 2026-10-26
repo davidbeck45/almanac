@@ -6,6 +6,7 @@ import { rank, PLAN_MARGIN } from '../src/engine.js';
 import { OCCASIONS, occasionById } from '../src/occasions.js';
 import { sprayGuide } from '../src/spray.js';
 import { setSkin } from '../src/skin.js';
+import { planTies } from '../src/contrast.js';
 import { summarize, week } from '../src/weather.js';
 import { renderScene } from '../src/scene.js';
 import { shiftISO } from '../src/history.js';
@@ -594,4 +595,52 @@ test('in forced colors the chosen occasion tile keeps a ring of its own', () => 
   const css = readFileSync(new URL('../src/css/wear.css', import.meta.url), 'utf8');
   const forced = [...css.matchAll(/@media \(forced-colors: active\) \{([\s\S]*?)\n\}/g)].map(m => m[1]).join('');
   assert.match(forced, /\.occ\[aria-checked='true'\] \{ outline: 2px solid Highlight/);
+});
+
+// Now on a forecast that starts today, David's wardrobe, nothing worn: the
+// pane as the shell draws it (computeToday, then the pane).
+function nowOnToday(history = []) {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  Object.assign(state, { demo: { fetched: today, fragrances }, forecast: live, wx: summarize(live), loc: { name: 'Here', lat: 40, lon: -74 }, shared: null, active: 'demo', slot: null, history });
+  const pane = wear.wear.panes.find(p => p.id === 'now');
+  const draw = () => {
+    app.computeToday();
+    return clean(pane.render({}, { dest: 'wear', pane: 'now' }), 'Now');
+  };
+  return { state, draw };
+}
+
+test('Now says which bottles suit the window just as well, and how each differs, until he’s wearing one', () => {
+  const { state, draw } = nowOnToday();
+  let html = draw();
+  const slots = app.todaySlots(), now = app.nowSlot();
+  const ties = planTies(slots)[slots.indexOf(now)];
+  assert.ok(ties.length, 'the fixture’s window is a toss-up');
+  assert.match(html, /<p class="ties">/);
+  for (const t of ties) {
+    assert.ok(html.includes(`data-action="open" data-ctx="${now.win.slot}" data-id="${t.entry.fragrance.id}">${esc(t.entry.fragrance.name)}</button>`), `${t.entry.fragrance.name} opens its page`);
+  }
+  assert.match(html, /suits? (today|tonight) just as well\./);
+  assert.ok(html.indexOf('class="ties"') > html.indexOf('class="reasons lead"') && html.indexOf('class="ties"') < html.indexOf('class="chips"'), 'one line under the reasons');
+  // The Also good shelf tags the bottles within reach of the pick in a word,
+  // above it or below.
+  const tagged = html => [...html.matchAll(/data-id="([^"]+)" aria-label="[^"]*">(?:(?!<\/button>)[\s\S])*<span class="shelf-tag">/g)].map(m => m[1]);
+  const within = (ids, slot) => ids.every(id => Math.abs(slot.ranked.find(r => r.fragrance.id === id).score - slot.pick.score) <= PLAN_MARGIN);
+  assert.ok(tagged(html).length && within(tagged(html), now), 'only bottles within reach of the pick');
+  // Wearing the pick: the choice is made. Wearing one far down the list,
+  // the bottles well above it go untagged too.
+  state.history = [{ id: now.pick.fragrance.id, date: now.win.dateISO, slot: now.win.slot, occasion: 'daily' }];
+  html = draw();
+  assert.ok(!html.includes('class="ties"'));
+  state.history = [{ id: now.ranked.at(-1).fragrance.id, date: now.win.dateISO, slot: now.win.slot, occasion: 'daily' }];
+  html = draw();
+  assert.ok(within(tagged(html), app.nowSlot()));
+  assert.ok(!tagged(html).includes(now.ranked[0].fragrance.id));
+  // Every bottle within a point worn lately: nothing to offer.
+  state.history = ties.map((t, i) => ({ id: t.entry.fragrance.id, date: shiftISO(now.win.dateISO, -1 - i), slot: 'day' }));
+  html = draw();
+  const after = planTies(app.todaySlots())[app.todaySlots().indexOf(app.nowSlot())];
+  assert.ok(!after.some(t => ties.some(u => u.entry.fragrance.id === t.entry.fragrance.id)), 'what he wore lately isn’t offered');
+  assert.equal(html.includes('class="ties"'), after.length > 0);
 });

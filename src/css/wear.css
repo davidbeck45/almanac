@@ -251,6 +251,11 @@
 .nudge svg { width: 14px; height: 14px; flex: none; }
 .pick.full .nudge { margin-top: calc(-1 * var(--s-1)); }
 .next-window .nudge { align-self: flex-start; margin: 0; }
+/* Toss-ups: the bottles that suit the window as well as the pick, under
+   its reasons, each name a link to its page. */
+.ties { display: flex; align-items: flex-start; gap: var(--s-2); margin: calc(-1 * var(--s-1)) 0 var(--s-3); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.ties svg { width: 16px; height: 16px; flex: none; margin-top: 1px; color: var(--ambient); }
+.ties .link-btn { color: var(--text-primary); font-weight: 500; }
 /* How much to spray: one line that opens the bottle page's spray section. */
 .spray-hint {
   position: relative;
