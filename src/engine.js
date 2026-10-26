@@ -42,9 +42,11 @@ const TIER_SIZES = [['S', 3], ['A', 5], ['B', 6]];
 const TIER_FLOORS = { S: 0.75, A: 0.6, B: 0, C: -Infinity };
 const TIERS = ['S', 'A', 'B', 'C'];
 
-// Worn today, yesterday, 2 days ago … 9 days ago. Top scores sit within a few
-// hundredths of each other, so a 3-day memory cycled the same 3 bottles
-// through a month of steady weather; a 10-day tail rotates 9–17.
+// Worn today, yesterday, 2 days ago … 9 days ago. In mild weather top scores
+// sit within a few hundredths of each other, so a 3-day memory cycled the
+// same 3 bottles through a month of steady weather; a 10-day tail rotates
+// 9–17. A cold day's top leads by more (a median 0.035), so a winter month
+// wears 8 bottles or more, none more than 12 times in 56 windows.
 export const ROTATION_PENALTY = Object.freeze([0.2, 0.12, 0.08, 0.06, 0.045, 0.035, 0.025, 0.02, 0.015, 0.01]);
 
 const RAIN_ACCORDS = ['green', 'earthy', 'woody', 'aromatic', 'mossy', 'aquatic'];
@@ -210,11 +212,34 @@ export function seasonFit(frag, weights) {
   return 0.5 * relative + 0.5 * clamp(lift / 1.6, 0, 1);
 }
 
-export function timeFit(frag, slot) {
+// Voters call rich bottles night scents (the night share tracks accord
+// heaviness, r 0.74 over the pool), and the weather part reads that richness
+// already, so on a cold day the votes marked down the very bottles the cold
+// calls for: Cream Velvet, the one rich bottle voted half by day, topped
+// every cold day and was worn 16 days of 28 in a Chicago winter. By day the
+// time fit forgives up to TIME_FORGIVE of a bottle's shortfall, in step with
+// how much richness the weather calls for (targetHeaviness, up to 1) and how
+// rich the bottle is (fully from RICH_BY_DAY). Nights stay as voted:
+// forgiving a fresh bottle's day lean on a hot night only handed hot nights
+// to one fresh bottle.
+const TIME_FORGIVE = 0.6;
+const RICH_BY_DAY = 0.4;
+
+// The share of a bottle's time-of-day shortfall the weather forgives, 0..TIME_FORGIVE.
+export function timeForgiven(frag, slot, conditions) {
+  if (slot !== 'day' || !conditions) return 0;
+  const want = targetHeaviness(conditions);
+  if (want <= 0) return 0;
+  return TIME_FORGIVE * Math.min(want, 1) * clamp(heaviness(frag.accords) / RICH_BY_DAY, 0, 1);
+}
+
+// The votes' fit for the slot, its shortfall partly forgiven in `conditions` (timeForgiven).
+export function timeFit(frag, slot, conditions = null) {
   const { dayNight } = steadyShares(frag);
   const peak = Math.max(dayNight.day, dayNight.night) || 1;
   const lift = dayNight[slot] / 0.5;
-  return 0.5 * (dayNight[slot] / peak) + 0.5 * clamp(lift / 1.3, 0, 1);
+  const fit = 0.5 * (dayNight[slot] / peak) + 0.5 * clamp(lift / 1.3, 0, 1);
+  return fit + (1 - fit) * timeForgiven(frag, slot, conditions);
 }
 
 // Dew point (°F): src/wmo.js has it, so the forecast needn't load the engine.
@@ -256,9 +281,11 @@ export function weatherFit(frag, conditions) {
 // between April and October). The range runs out from the peak to where the
 // fit falls COMFORT_DROP below it; lowF / highF are null when it runs off the
 // scan (nothing is too cold for a winter scent). bestF, the middle of the
-// peak, is only given for a range closed on both ends.
+// peak, is only given for a range closed on both ends. At a 0.1 drop rich
+// bottles topped out in the low 40s, though collectors wear them into the
+// 50s; 0.15 opened most two-sided ranges (Supremacy read as best in any heat).
 const COMFORT_SCAN = [0, 105];
-const COMFORT_DROP = 0.1;
+const COMFORT_DROP = 0.12;
 
 export function comfortRange(frag, { dewF = 55 } = {}) {
   const W = DAILY_WEIGHTS;
@@ -607,12 +634,17 @@ function reasonsFor(frag, parts, ctx) {
   else if (comfort >= 0.85) good(`Fits ${nowSeason} weather`, W.season * 0.5);
   else if (comfort < 0.55) bad(voted ? `Voted for ${fragSeason}, not ${nowSeason}` : `Better in ${fragSeason} than ${nowSeason}`, W.season * (1 - comfort));
 
-  // As for seasons: "a favorite" only when voters said so.
+  // As for seasons: "a favorite" only when voters said so. A rich bottle's
+  // night lean goes unsaid on a day cold enough that timeForgiven lets off
+  // more than half of what it can: the score has stopped holding it against
+  // the bottle.
   const share = dayNight[slot], timeVoted = votedShares(frag).time;
   if (share >= 0.62) {
     good(slot === 'night' ? (timeVoted ? 'Built for nighttime' : 'A night scent') : (timeVoted ? 'Daytime favorite' : 'A daytime scent'), W.time * share);
   }
-  else if (share <= 0.38) bad(slot === 'night' ? 'Better in daylight' : 'More of a night scent', W.time * (1 - share));
+  else if (share <= 0.38 && timeForgiven(frag, slot, conditions) <= TIME_FORGIVE / 2) {
+    bad(slot === 'night' ? 'Better in daylight' : 'More of a night scent', W.time * (1 - share));
+  }
 
   const h = heaviness(frag.accords);
   const sticky = isSticky(conditions);
@@ -710,7 +742,7 @@ export function rank(fragrances, conditions, slot, opts = {}) {
     const { penalty, daysAgo, planned } = rotationPenalty(frag.id, history, todayISO, slot);
     const parts = {
       season: seasonFit(frag, weights),
-      time: timeFit(frag, slot),
+      time: timeFit(frag, slot, conditions),
       weather: weatherFit(frag, conditions),
       quality: quality(frag),
       occasion: occasion ? occasionPart(occasionRaw(frag, occasion), occasion) : null,

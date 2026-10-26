@@ -192,10 +192,10 @@ test('David’s gaps name real situations, gaps before room to grow, and his str
   assert.ok(office.every(g => g.slot === 'day' && g.bands.join() === 'cold' && g.status === 'room'), office.map(g => g.title).join('; '));
   assert.ok(report.strengths.some(s => s.use === 'office' && s.bands.includes('cool') && s.bands.includes('hot')), 'the office is a strength');
   assert.match(report.overview.text, /^Your wardrobe covers every situation well; here’s where it could go further\./);
-  // Cold days: Cream Velvet leads, Détour Noir and Liam close behind, so it isn't thin.
+  // Cold days: Cream Velvet leads, CH Men Prive and Rifaaqat close behind (the cold forgives their night lean), so it isn't thin.
   const cold = ctx.cov.find(c => c.cell.id === 'daily:day:cold');
   assert.equal(cold.status, 'covered');
-  assert.deepEqual(cold.top.map(t => t.bottle.name), ['Cream Velvet', 'Détour Noir', 'Liam']);
+  assert.deepEqual(cold.top.map(t => t.bottle.name), ['Cream Velvet', 'CH Men Prive', 'Rifaaqat']);
   // A runner-up just under the strong line is depth too: thin needs the next best under the 85th percentile.
   const q = ctx.ref[ctx.cc.cells.indexOf(cold.cell)];
   const statusWith = second => coverage([{ name: 'a' }, { name: 'b' }], Float32Array.of(q[99], second), [cold.cell], [q])[0].status;
@@ -367,7 +367,8 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   assert.match(tobacco.reasons[0], /^It would barely beat your Terra for /);
   // A new direction he doesn't need isn't called a duplicate: he's covered there. Dior Homme Intense projects
   // as much as Sauvage, so lasting the working day only just edges his best for the office in the cold (by too
-  // little to fill anything), where Encre Noire, a quiet vetiver that lasts, fills it.
+  // little to fill anything), where Encre Noire, a quiet vetiver that lasts, fills it. His best there is Détour
+  // Noir, whose night lean the cold forgives by day.
   const cold = ctx.cc.cells.findIndex(c => c.id === 'office:day:cold'), m = ctx.cc.cells.length;
   const best = Math.max(...wardrobe.map((_, i) => ctx.ownTable[i * m + cold]));
   const dhiRow = records.find(r => r.name === 'Dior Homme Intense 2011');
@@ -375,7 +376,7 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   assert.ok(coldFit(dhiRow) > best && coldFit(dhiRow) < best + 0.02);
   const dior = buyCheck(dhiRow, ctx);
   assert.equal(dior.verdict, 'Covered');
-  assert.match(dior.reasons[0], /^It would barely beat your Vintage Radio for Office on cold days, and nowhere by more\.$/);
+  assert.match(dior.reasons[0], /^It would barely beat your Détour Noir for Office on cold days, and nowhere by more\.$/);
   assert.equal(dior.reasons[1], 'Nothing you own smells like it.');
   assert.ok(dior.overlap.sim < 0.5 && !dior.overlap.link);
   // Lasting still counts: as weak as its clone Dark Door Intense (3.1 of 5 on Fragrantica), it wouldn't edge him.
