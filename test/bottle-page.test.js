@@ -677,12 +677,17 @@ test('compare marks one leader by the value it shows, and calls lasting and loud
   assert.match(lasts, /≈ 8\.6<small> of 10<\/small><span class="visually-hidden">, estimated from Fragrantica votes/);
   assert.match(lasts, />8\.4<small> of 10/, 'Parfumo’s own rating stands as it is');
   assert.ok(!lasts.includes('cmp-cell lead'), 'an estimate doesn’t outlast a real rating');
-  assert.match(mixed, /estimated \(≈\) from Fragrantica votes where Parfumo lacks the bottle/);
-  assert.ok(!page(rated, byName('Sauvage')).includes('≈'), 'all on Parfumo: no estimates, none credited');
+  assert.match(mixed, /from Parfumo’s ratings and Fragrantica’s votes, each counted by how many there are, estimated \(≈\) where most are Fragrantica’s\./);
+  assert.ok(!page(rated, byName('Sauvage')).includes('≈'), 'mostly Parfumo’s: no estimates, none credited');
   const guesses = page(guess, { ...byName('Jake'), parfumo: undefined });
   assert.match(guesses, /cmp-lead-tag">Longest</, 'estimates lead each other');
+  // Sandalwood & Musk's 11 Parfumo votes count, but its 23 on Fragrantica count more: marked as an estimate too.
+  const few = page(rated, byName('Sandalwood & Musk'));
+  assert.match(few, /title="Estimated mostly from Fragrantica votes">≈ 6\.8<small> of 10<\/small><span class="visually-hidden">, estimated mostly from Fragrantica votes/);
   // The bottle page says it with the same words.
-  assert.match(bottlePageHTML(modelOf(rated)), /Lasts 8\.4 · Projects \d\.\d <span>of 10 on/);
+  assert.match(bottlePageHTML(modelOf(rated)), /Lasts 8\.4 · Projects \d\.\d <span>of 10 on <a [^>]*>Parfumo<\/a> and Fragrantica<\/span>/);
+  assert.match(bottlePageHTML(modelOf(byName('Sandalwood & Musk'))), /Lasts ≈ 6\.8 · Projects ≈ 6\.7 <span>of 10 on/);
+  assert.match(bottlePageHTML(modelOf({ ...rated, performance: undefined })), /Lasts 8\.4 · Projects 8\.1 <span>of 10 on <a [^>]*>Parfumo<\/a><\/span>/, 'Parfumo’s alone');
   assert.match(bottlePageHTML(modelOf(guess)), /Lasts 4\.0 of 5 · Projects 2\.9 of 4 <span>on Fragrantica/);
 });
 

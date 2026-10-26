@@ -168,14 +168,16 @@ const footed = new WeakMap();
 /**
  * A record as the gap finder scores it, on the pool's evidence: no Parfumo
  * occasion votes (the pool has none, and a lucky vote shouldn't read as
- * coverage) and its MAX_ACCORDS strongest accords. Parfumo's longevity and
- * sillage stay: the pool has Fragrantica's, on the same scale. The same
- * record comes back when nothing changes.
+ * coverage), its MAX_ACCORDS strongest accords, and longevity and sillage
+ * from Fragrantica's votes alone, as the pool's are read. Parfumo's stay
+ * only for a bottle the dataset has no votes for, the one reading there is.
+ * The same record comes back when nothing changes.
  */
 export function sameFooting(record) {
   if (footed.has(record)) return footed.get(record);
   const patch = {};
-  if (record.parfumo?.occasion) {
+  if (record.parfumo && record.performance) patch.parfumo = undefined;
+  else if (record.parfumo?.occasion) {
     const { occasion, occasionVotes, ...parfumo } = record.parfumo;
     patch.parfumo = parfumo;
   }

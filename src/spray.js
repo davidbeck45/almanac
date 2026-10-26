@@ -4,7 +4,7 @@
 // bottle actually performs: concentration doesn't decide sillage. Starts
 // from BASE and moves by
 // - sillage and longevity (the engine's performanceLevel: Parfumo's ratings
-//   or the dataset's votes, with your own skin nudges),
+//   and the dataset's votes, with your own skin nudges),
 // - the strength the name claims (Extrait, Elixir, EDT, Cologne…), half as
 //   much when voters have rated its performance,
 // - the weather: heat and sticky air carry scent (fewer, lower on the body),
@@ -21,7 +21,8 @@ const BASE = 3;
 const SPRAYS = [1, 6];
 const SILLAGE_STEP = 1.5; // sprays per sillage level (-1..1)
 const LONGEVITY_STEP = { fades: 0.6, lasts: 0.3 };
-// Votes on performance that make the name's claim count half.
+// Votes on performance that make the name's claim count half (both crowds',
+// in Parfumo votes, the fewer of longevity's and sillage's).
 const RATED_VOTES = 50;
 // Feels-like (°F) where heat starts taking sprays off and where it takes HEAT_STEP;
 // where cold starts adding them and where it adds COLD_STEP.
@@ -141,7 +142,8 @@ export function sprayGuide(record, conditions, occasion = null, skin = null) {
 
   const strength = strengthOf(frag);
   if (strength) {
-    const rated = (performanceRating(frag)?.votes ?? 0) >= RATED_VOTES;
+    const votes = performanceRating(frag)?.votes;
+    const rated = Math.min(votes?.longevity ?? 0, votes?.sillage ?? 0) >= RATED_VOTES;
     add(strength.sprays * (rated ? 0.5 : 1), strength.why, `it’s ${strength.why.charAt(0).toLowerCase()}${strength.why.slice(1)}`);
   }
 

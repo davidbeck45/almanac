@@ -11,8 +11,8 @@
 //   voted note; a listed note nobody voted for counts UNVOTED; a bottle with no
 //   note votes uses its pyramid tier). Evidence = noisy-OR of weight x salience.
 // - sillage (Intimate, and a nudge for Skin scent and Clean), on Parfumo's
-//   0..10 scale via the engine's performanceRating, shrunk toward the middle
-//   when few voted.
+//   0..10 scale via the engine's performanceRating (both crowds, by their
+//   votes), shrunk toward the middle when few voted.
 // base = ACC x accord evidence + NOTE x note evidence (+ style extras), damped
 // by exp(-penalty), the weighted strength of accords that pull away from the
 // style (vanilla and oud aren't "fresh citrus"), then eased toward 1 above 0.8.
@@ -460,8 +460,9 @@ function features(frag) {
 
   let quiet = null, loud = 0;
   const p = performanceRating(frag);
-  if (p?.sillage != null && p.votes > 0) {
-    const sil = (p.votes * p.sillage + SILLAGE_PRIOR_VOTES * SILLAGE_MID) / (p.votes + SILLAGE_PRIOR_VOTES);
+  if (p?.sillage != null) {
+    const n = p.votes.sillage;
+    const sil = (n * p.sillage + SILLAGE_PRIOR_VOTES * SILLAGE_MID) / (n + SILLAGE_PRIOR_VOTES);
     quiet = clamp((QUIET_FROM - sil) / QUIET_SPAN);
     loud = clamp((sil - LOUD_FROM) / LOUD_SPAN);
   }

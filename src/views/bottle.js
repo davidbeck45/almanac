@@ -7,7 +7,7 @@
 // The sections in their own modules are src/views/bottle-*.js; the ones that
 // ask the suggestion pool keep their answers with pooled(), and draw again
 // on their own when an answer lands (redrawSection).
-import { rank, comfortRange, restReason, SEASONS } from '../engine.js';
+import { rank, comfortRange, restReason, SEASONS, performanceRating } from '../engine.js';
 import { layerPicks, pairingKept, warmPairing } from '../layering.js';
 import { setHidden } from '../hidden.js';
 import { loadWants, saveWants, hasWant, setWant } from '../wishlist.js';
@@ -331,11 +331,15 @@ function headSection({ f, entry, ctxLabel, solo }) {
     ? '<span class="by-hand">Entered by hand</span>'
     : !f.rating ? 'Unrated'
     : `★ ${f.rating.toFixed(2)} <span>${esc(f.source === 'fragella' ? 'Fragella rating' : `${f.ratingVotes.toLocaleString()} votes`)}</span>`;
-  // Parfumo's 0–10 ratings when we have them, else Fragrantica's votes, else
+  // Parfumo's 0–10 ratings when we have them, with Fragrantica's votes counted
+  // in as the engine reads both (performanceRating; ≈ where most are
+  // Fragrantica's, as Compare marks it), else Fragrantica's votes, else
   // Fragella's words; Lasts and Projects, as compare and On your skin say it.
-  const pf = f.parfumo, fv = f.performance;
+  const pf = f.parfumo, fv = f.performance, p = pf && performanceRating(f);
+  const figure = key => `${p.parfumoShare[key] < 0.5 ? '≈ ' : ''}${p[key].toFixed(1)}`;
+  const parfumo = pf && `<a href="${esc(pf.url)}" target="_blank" rel="noopener" data-focus="bp-parfumo">Parfumo</a>`;
   const performance = pf
-    ? `Lasts ${pf.longevity.toFixed(1)} · Projects ${pf.sillage.toFixed(1)} <span>of 10 on <a href="${esc(pf.url)}" target="_blank" rel="noopener" data-focus="bp-parfumo">Parfumo</a></span>`
+    ? `Lasts ${figure('longevity')} · Projects ${figure('sillage')} <span>of 10 on ${parfumo}${p.parfumoShare.longevity < 1 || p.parfumoShare.sillage < 1 ? ' and Fragrantica' : ''}</span>`
     : fv
     ? `Lasts ${fv.longevity.toFixed(1)} of 5 · Projects ${fv.sillage.toFixed(1)} of 4 <span>on Fragrantica</span>`
     : [f.longevity, f.sillage && `${f.sillage} projection`].filter(Boolean).map(esc).join(' · ');

@@ -108,11 +108,16 @@ test('a bottle nobody has voted on carries its accords’ estimate', () => {
 test('Fragrantica longevity and sillage stand in for Parfumo’s on its scale', () => {
   const r = fromFragrantica('1', { s: 'X/Y', n: 'Y', b: 'X', a: { woody: 100 }, l: [4.2, 500], si: [3.1, 480] });
   const p = performanceRating(r);
-  assert.equal(p.votes, 480);
+  assert.deepEqual([p.votes, p.parfumoShare], [{ longevity: 480, sillage: 480 }, { longevity: 0, sillage: 0 }]);
   assert.ok(p.longevity > 8.5 && p.longevity < 9.5, `${p.longevity}`);
   assert.ok(p.sillage > 8.5 && p.sillage < 9.3, `${p.sillage}`);
-  const both = { ...r, parfumo: { longevity: 6, sillage: 5, votes: 40 } };
-  assert.equal(performanceRating(both).longevity, 6, 'Parfumo first');
+  // With Parfumo's ratings too, each reads both by votes: 40 Parfumo votes against
+  // Fragrantica's 480, worth about 83 and 45 of Parfumo's.
+  const both = performanceRating({ ...r, parfumo: { longevity: 6, sillage: 5, votes: 40 } });
+  assert.ok(both.longevity > 7.5 && both.longevity < p.longevity, `${both.longevity}`);
+  assert.ok(both.sillage > 6.9 && both.sillage < 7.3, `${both.sillage}`);
+  assert.ok(Math.abs(both.votes.longevity - (40 + 1 / (1 / 480 + 1 / 100))) < 1e-9 && both.votes.sillage < both.votes.longevity);
+  assert.ok(Math.abs(both.parfumoShare.longevity - 40 / both.votes.longevity) < 1e-9);
 });
 
 test('accord profiles are fitted to this version of the dataset', () => {

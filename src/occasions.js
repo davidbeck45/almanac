@@ -1,7 +1,7 @@
 // Occasion presets. `profile` maps accords to how well they suit the occasion
 // (-1 wrong for it .. +1 made for it). `performance`, where the occasion cares,
 // says how loud and lasting it wants a bottle (sillage, longevity: -1 quiet or
-// fleeting .. +1 loud or lasting; Parfumo ratings, see src/engine.js;
+// fleeting .. +1 loud or lasting, read from both crowds, see src/engine.js;
 // `enough` names a wish for more that stops counting at the engine's
 // MORE_ENOUGH).
 // `slot` is the default time of day, `phrase` names the occasion in reason

@@ -49,6 +49,8 @@ const CASES = [
   ['Sauvage on a mild day', byName('Sauvage'), MILD, null, 2, 3],
   ['Jake, a faint cologne, on a mild day', byName('Jake'), MILD, null, 4, 6],
   ['Shiyaaka Sky, a skin scent, outdoors', byName('Shiyaaka Sky'), MILD, 'outdoors', 4, 6],
+  // A skin scent 11 Parfumo voters rate as most do, which its 23 on Fragrantica say fades.
+  ['Sandalwood & Musk, a quiet powdery musk, on a mild day', byName('Sandalwood & Musk'), MILD, null, 4, 5],
 ];
 
 test('spray counts a fragrance enthusiast would agree with', () => {
