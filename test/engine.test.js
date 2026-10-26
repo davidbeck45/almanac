@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, restReason, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, seasonFit, SEASONS, votedShares, performanceLevel } from '../src/engine.js';
+import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, restReason, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, seasonFit, timeFit, SEASONS, votedShares, performanceLevel } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { heaviness } from '../src/accords.js';
 import { predictedShares } from '../src/custom.js';
@@ -179,6 +179,23 @@ test('cold night: heavy scents on top, fresh ones at the bottom', () => {
   for (const n of FRESH) assert.ok(names(tiers.C).includes(n), `${n} should be C on a cold night`);
 });
 
+test('a cold day forgives a rich bottle its night votes, and stops calling it a night scent', () => {
+  const coldDay = { ...coldNight, feelsF: 10 }, mildDay = { ...mildFallNight, feelsF: 58 };
+  const byName = name => fragrances.find(f => f.name === name);
+  const nightLean = r => r.reasons.some(x => x.text === 'More of a night scent');
+  const prive = byName('CH Men Prive');
+  assert.ok(timeFit(prive, 'day', coldDay) >= timeFit(prive, 'day') + 0.3, 'most of its shortfall goes by day in the cold');
+  assert.ok(timeFit(prive, 'day', mildDay) < timeFit(prive, 'day') + 0.1, 'little of it on a mild day');
+  assert.equal(timeFit(prive, 'day', hotHumidDay), timeFit(prive, 'day'), 'none in the heat');
+  assert.equal(timeFit(prive, 'night', coldNight), timeFit(prive, 'night'), 'nights stay as voted');
+  for (const name of FRESH) assert.equal(timeFit(byName(name), 'day', coldDay), timeFit(byName(name), 'day'), `${name} is no richer for the cold`);
+  // The rich bottles share the cold day's top with Cream Velvet, with no reason against them by day.
+  const cold = rank(fragrances, coldDay, 'day');
+  assert.ok(HEAVY.filter(name => names(cold.slice(0, 6)).includes(name)).length >= 3, names(cold.slice(0, 6)).join(', '));
+  assert.ok(cold.every(r => !nightLean(r)), cold.filter(nightLean).map(r => r.fragrance.name).join(', '));
+  assert.ok(nightLean(rank(fragrances, mildDay, 'day').find(r => r.fragrance === prive)), 'a mild day still says so');
+});
+
 test('comfort range: heavy scents open toward the cold, fresh ones toward the heat', () => {
   const byName = name => comfortRange(fragrances.find(f => f.name === name));
   const amber = byName('Amber Empire');
@@ -347,24 +364,46 @@ test('wearing something yesterday pushes it down today', () => {
   assert.ok(moved.reasons.some(r => r.text === 'Worn yesterday'));
 });
 
-test('a month of steady weather rotates through the wardrobe', () => {
-  // Wear every Today pick for 28 days at 62°F by day and 54°F at night.
+// Wear every Today pick for 28 days of steady weather from the 1st of a
+// month (Date.UTC's year and month), [feelsF, dewF] by day and at night.
+// -> how often each bottle was worn, in all and by day.
+function wearMonth(year, month, [dayF, dayDew], [nightF, nightDew]) {
   let history = [];
-  const worn = new Map();
+  const worn = new Map(), byDay = new Map();
+  const add = (map, name) => map.set(name, (map.get(name) ?? 0) + 1);
   for (let i = 0; i < 28; i++) {
-    const dateISO = new Date(Date.UTC(2026, 9, 1 + i)).toISOString().slice(0, 10);
+    const dateISO = new Date(Date.UTC(year, month, 1 + i)).toISOString().slice(0, 10);
     const date = new Date(`${dateISO}T12:00:00`);
     const windows = [
-      { ...mildFallNight, feelsF: 62, dewF: 50, date, dateISO, slot: 'day' },
-      { ...mildFallNight, feelsF: 54, dewF: 46, date, dateISO, slot: 'night' },
+      { ...mildFallNight, feelsF: dayF, dewF: dayDew, date, dateISO, slot: 'day' },
+      { ...mildFallNight, feelsF: nightF, dewF: nightDew, date, dateISO, slot: 'night' },
     ];
     for (const { win, pick } of planWindows(fragrances, windows, { history })) {
       history = [{ id: pick.fragrance.id, date: dateISO, slot: win.slot }, ...history];
-      worn.set(pick.fragrance.name, (worn.get(pick.fragrance.name) ?? 0) + 1);
+      add(worn, pick.fragrance.name);
+      if (win.slot === 'day') add(byDay, pick.fragrance.name);
     }
   }
+  return { worn, byDay };
+}
+
+test('a month of steady weather rotates through the wardrobe', () => {
+  // October at 62°F by day and 54°F at night.
+  const { worn } = wearMonth(2026, 9, [62, 50], [54, 46]);
   assert.ok(worn.size >= 12, `only ${worn.size} bottles in 56 wears: ${[...worn].join(', ')}`);
   assert.ok(Math.max(...worn.values()) <= 10, 'no bottle takes over');
+});
+
+test('a winter month shares its days among the rich bottles', () => {
+  // Voters call most rich bottles night scents, which a cold day forgives:
+  // held against them, Cream Velvet (voted half by day) took 14 of 56 wears.
+  for (const [day, night] of [[[22, 14], [15, 7]], [[35, 27], [28, 20]]]) {
+    const { worn, byDay } = wearMonth(2027, 0, day, night);
+    const list = [...worn].map(([name, n]) => `${name} ${n}`).join(', ');
+    assert.ok(Math.max(...worn.values()) <= 11, `no bottle takes over at ${day[0]}°F: ${list}`);
+    assert.ok(!FRESH.some(name => worn.has(name)), `nothing fresh at ${day[0]}°F: ${list}`);
+    if (day[0] < 30) assert.ok(HEAVY.filter(name => byDay.has(name)).length >= 3, `rich bottles take cold days: ${[...byDay.keys()].join(', ')}`);
+  }
 });
 
 test('a wear lingers in the ranking for ten days, fading', () => {

@@ -179,10 +179,10 @@ test('David’s gaps name real situations, gaps before room to grow, and his str
   assert.ok(!gaps.some(g => g.use === 'office'), gaps.map(g => g.title).join('; '));
   assert.ok(report.strengths.some(s => s.use === 'office'), 'the office is a strength');
   assert.match(report.overview.text, /^Your wardrobe covers every situation well; here’s where it could go further\./);
-  // Cold days: Cream Velvet leads, Détour Noir and Liam close behind, so it isn't thin.
+  // Cold days: Cream Velvet leads, CH Men Prive and Rifaaqat close behind (the cold forgives their night lean), so it isn't thin.
   const cold = ctx.cov.find(c => c.cell.id === 'daily:day:cold');
   assert.equal(cold.status, 'covered');
-  assert.deepEqual(cold.top.map(t => t.bottle.name), ['Cream Velvet', 'Détour Noir', 'Liam']);
+  assert.deepEqual(cold.top.map(t => t.bottle.name), ['Cream Velvet', 'CH Men Prive', 'Rifaaqat']);
   // A runner-up just under the strong line is depth too: thin needs the next best under the 85th percentile.
   const q = ctx.ref[ctx.cc.cells.indexOf(cold.cell)];
   const statusWith = second => coverage([{ name: 'a' }, { name: 'b' }], Float32Array.of(q[99], second), [cold.cell], [q])[0].status;
@@ -358,15 +358,16 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   assert.match(dhi.reasons[0], /^It would barely beat your .+, and nowhere by more\.$/);
   assert.equal(dhi.reasons[1], 'Nothing you own smells like it.');
   assert.ok(dhi.overlap.sim < 0.5 && !dhi.overlap.link);
-  // Dior Homme Intense lasts the working day, so it edges his best for the office in the cold (by too little to
-  // fill anything: he's covered there); its clone doesn't.
+  // Dior Homme Intense lasts the working day, and the cold forgives its night lean, so it beats his best for the
+  // office in the cold by enough to fill it (though he's well stocked there); its clone doesn't.
   const cold = ctx.cc.cells.findIndex(c => c.id === 'office:day:cold'), m = ctx.cc.cells.length;
   const best = Math.max(...wardrobe.map((_, i) => ctx.ownTable[i * m + cold]));
   const coldFit = name => fitTable([sameFooting(records.find(r => r.name === name))], ctx.cc)[cold];
   assert.ok(coldFit('Dior Homme Intense 2011') > best && best > coldFit('Dark Door Intense'));
   const dior = buyCheck(records.find(r => r.name === 'Dior Homme Intense 2011'), ctx);
-  assert.equal(dior.verdict, 'Covered');
-  assert.match(dior.reasons[0], /^It would barely beat your Sandalwood & Musk for Office on cold days/);
+  assert.equal(dior.verdict, 'Good');
+  assert.match(dior.reasons[0], /^It would be your best for Office on cold days, though you’re well stocked there\.$/);
+  assert.deepEqual(dior.fills.filter(f => f.matters).map(f => f.cell.id), ['office:day:cold']);
   assert.ok(!buyCheck(records.find(r => r.name === 'Dark Door Intense'), ctx).fills.some(f => f.cell.use === 'office'));
   // Risky shows through even when it fills nothing.
   const kouros = buyCheck(records.find(r => r.name === 'Kouros'), ctx);
