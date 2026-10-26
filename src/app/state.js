@@ -2,12 +2,13 @@
 // ranked, the ranked contexts bottle pages read, prefs, and finding bottles
 // in the dataset. No DOM here, so views and tests import it in Node; the
 // shell (src/app/shell.js) renders and handles events.
-import { rank, planWindows } from '../engine.js';
+import { rank, rankEvent, planWindows } from '../engine.js';
 import { week } from '../weather.js';
 import { loadLocation } from '../location.js';
 import { loadHistory, wornIn, journalStats, journalCalendar, occasionCounts } from '../history.js';
 import { loadHidden, hiddenFor } from '../hidden.js';
 import { applySkin, loadSkin, skinStamp } from '../skin.js';
+import { loadEvents, setEvent as storeEvent, eventOn, withStoredEvents } from '../events.js';
 import { loadMine, saveMine, loadActive, saveActive, localMatches } from '../collections.js';
 import { fragranticaLibrary } from '../fragrantica.js';
 import { onPoolRecords } from './pool.js';
@@ -70,6 +71,7 @@ export const state = {
   occasionSlot: null,
   slot: null, // the window Now shows ('day' | 'night'); null = the next one
   history: loadHistory(),
+  events: loadEvents(), // what a day or night at home is for, set on the Occasion pane (src/events.js)
   hiding: loadHidden(), // { hidden, shown }: this device's hides and the defaults it switched on (src/hidden.js)
   // ctx key -> { win, occasion, ranked, entries: Map(id -> ranked entry) }.
   // No prototype: the key comes from the URL (?ctx=constructor finds nothing).
@@ -188,35 +190,58 @@ export function addToMine(record) {
 // Every list of bottles stores the ranking it shows under a context key, and
 // a bottle page reads its entry from there (`#/bottle/<id>?ctx=<key>`). Keys:
 // 'day' and 'night' (Now), 'occ' (Occasion), 'w:<dateISO>:<slot>' (Week).
+// A window planned for an event carries its occasion, so a wear logged from
+// it counts for that use, and `event` (ranked as rankEvent ranks one).
 
 const SLOT_ORDER = { day: 0, night: 1 };
 export const byTime = (a, b) => a.dateISO.localeCompare(b.dateISO) || SLOT_ORDER[a.slot] - SLOT_ORDER[b.slot];
 
-export function storeContext(key, win, occasion, ranked) {
-  state.contexts[key] = { win, occasion, ranked, entries: new Map(ranked.map(r => [r.fragrance.id, r])) };
+export function storeContext(key, win, occasion, ranked, event = Boolean(win.occasion)) {
+  state.contexts[key] = { win, occasion, ranked, event, entries: new Map(ranked.map(r => [r.fragrance.id, r])) };
 }
 
 // Rankings put a bottle left on the shelf a month first when it's within
 // reach of the top (the engine's rotation nudge: "Not worn in 34 days").
 // Only for a window you're about to wear in: `nudge: false` for a later date
-// or another place (an event), where the journal can't say what's idle then.
-export function rankContext(key, win, occasion, { nudge = true } = {}) {
-  const ranked = rank(rankedFragrances(), win, win.slot, { occasion, history: state.history, todayISO: win.dateISO, nudge });
-  storeContext(key, win, occasion, ranked);
+// or another place, where the journal can't say what's idle then. A window
+// planned for this occasion (`event`) ranks as the plan ranks it (rankEvent:
+// the best for it, recent wears or not), so the two agree.
+export function rankContext(key, win, occasion, { nudge = true, event = false } = {}) {
+  const ranked = event ? rankEvent(rankedFragrances(), win, occasion)
+    : rank(rankedFragrances(), win, win.slot, { occasion, history: state.history, todayISO: win.dateISO, nudge });
+  storeContext(key, win, occasion, ranked, event);
   return ranked;
 }
 
+// ---------- Events ----------
+
+/** The stored event on a window at home ({ dateISO, slot }), or null. */
+export const eventAt = win => eventOn(state.events, win);
+
+/** Sets what a window at home is for (an occasion id), or clears it (null). Now and the Week plan around it. */
+export function setEvent(dateISO, slot, occasion) {
+  state.events = storeEvent(dateISO, slot, occasion, todayISO());
+}
+
+// The week's windows with the stored events on them.
+const weekWindows = () => withStoredEvents(week(state.forecast).flatMap(d => [d.day, d.night].filter(Boolean)), state.events);
+
 // Today's day and night are planned together, so the evening pick doesn't
-// repeat the daytime one and a logged wear becomes that window's pick.
+// repeat the daytime one and a logged wear becomes that window's pick. The
+// week's events are planned with them (each event first, and its bottle left
+// be before it), so Now and the Week agree about today.
 export function computeToday() {
   if (!state.wx || !rankedFragrances().length) {
     state.today = null;
     return;
   }
-  const plan = planWindows(rankedFragrances(), [state.wx.day, state.wx.night].filter(Boolean).sort(byTime), { history: state.history, nudge: true });
+  const today = withStoredEvents([state.wx.day, state.wx.night].filter(Boolean).sort(byTime), state.events);
+  const last = today.at(-1);
+  const ahead = last && state.events.length && state.forecast ? weekWindows().filter(w => w.occasion && byTime(w, last) > 0) : [];
+  const plan = planWindows(rankedFragrances(), [...today, ...ahead], { history: state.history, nudge: true }).slice(0, today.length);
   state.today = {};
   for (const p of plan) {
-    storeContext(p.win.slot, p.win, null, p.ranked);
+    storeContext(p.win.slot, p.win, p.win.occasion ?? null, p.ranked);
     state.today[p.win.slot] = p;
   }
 }
@@ -234,14 +259,14 @@ export function nowSlot() {
 
 export function computeWeek() {
   const days = week(state.forecast);
-  const windows = days.flatMap(d => [d.day, d.night].filter(Boolean));
+  const windows = withStoredEvents(days.flatMap(d => [d.day, d.night].filter(Boolean)), state.events);
   const plan = planWindows(rankedFragrances(), windows, { history: state.history, nudge: true });
   const byWindow = new Map(plan.map(p => [`${p.win.dateISO}:${p.win.slot}`, p]));
   const slotPlan = win => {
     if (!win) return null;
     const p = byWindow.get(`${win.dateISO}:${win.slot}`);
     const ctx = `w:${win.dateISO}:${win.slot}`;
-    storeContext(ctx, win, null, p.ranked);
+    storeContext(ctx, p.win, p.win.occasion ?? null, p.ranked);
     return { ...p, ctx, worn: wornIn(state.history, win.dateISO, win.slot)?.id === p.pick.fragrance.id };
   };
   return days.map(d => ({ ...d, day: slotPlan(d.day), night: slotPlan(d.night) }));
