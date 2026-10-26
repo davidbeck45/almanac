@@ -207,9 +207,24 @@ export function wearButton(entry, ctx, wornId) {
 }
 
 // A segmented control of toggle buttons. items: [{ value, label, icon?, on }];
-// each button carries data-action and data-value. `glass` draws it over the scene.
-export function segHTML(items, { action, label, cls = '' }) {
-  return `<div class="seg ${cls}" role="group" aria-label="${esc(label)}">${items.map(i => `<button type="button" data-action="${esc(action)}" data-value="${esc(i.value)}" aria-pressed="${Boolean(i.on)}">${i.icon ?? ''}<span>${esc(i.label)}</span></button>`).join('')}</div>`;
+// each button carries data-action and data-value, and `id` as data-id when
+// the action needs to know which bottle. `glass` draws it over the scene.
+export function segHTML(items, { action, label, cls = '', id = null }) {
+  const which = id == null ? '' : ` data-id="${esc(id)}"`;
+  return `<div class="seg ${cls}" role="group" aria-label="${esc(label)}">${items.map(i => `<button type="button" data-action="${esc(action)}" data-value="${esc(i.value)}"${which} aria-pressed="${Boolean(i.on)}">${i.icon ?? ''}<span>${esc(i.label)}</span></button>`).join('')}</div>`;
+}
+
+/**
+ * Your stars as five buttons in one radio group (the bottle page's "On your
+ * skin", Now's "Rate it"): `rating` lit, each with `action` and its stars as
+ * data-value, `id` as data-id when the action needs the bottle, named by
+ * the element `labelledby`. Arrow keys choose, as on any radio group (the
+ * shell's roving keys).
+ */
+export function starsHTML(rating, { action, labelledby, id = null }) {
+  const which = id == null ? '' : ` data-id="${esc(id)}"`;
+  const stars = [1, 2, 3, 4, 5].map(n => `<button type="button" class="skin-star${rating && n <= rating ? ' lit' : ''}" role="radio" aria-checked="${n === rating}" tabindex="${n === (rating ?? 1) ? 0 : -1}" data-action="${esc(action)}" data-value="${n}"${which} aria-label="${n} star${n === 1 ? '' : 's'}">${icon.star}</button>`).join('');
+  return `<div class="skin-stars" role="radiogroup" aria-labelledby="${esc(labelledby)}">${stars}</div>`;
 }
 
 // Sub-navigation: the same look as segHTML, but links (it changes the route).
