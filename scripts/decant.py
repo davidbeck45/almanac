@@ -18,7 +18,7 @@ Its season and day/night shares match our own scrapes to a fraction of a point.
   python3 scripts/decant.py similar "liquid brun"
   python3 scripts/decant.py dupes             check data/dupes.json, suggest originals for the rest
   python3 scripts/decant.py add originals 9828 ...   lines for data/<stem>.jsonl, no browser
-  python3 scripts/decant.py refresh           newer vote counts into data/*.jsonl, and extras
+  python3 scripts/decant.py refresh           newer vote counts into data/*.jsonl, note votes a line lacks, and extras
 
 `download` needs a Kaggle API token in ~/.kaggle/access_token (kaggle.com,
 Settings, API, Create New Token). The raw dump stays in .cache/ (ignored).
@@ -795,15 +795,24 @@ def dupes() -> None:
 GENDER_WORDS = {"female": "women", "male": "men", "unisex": "women and men"}
 
 
+def note_weights(r: dict) -> dict[str, float]:
+    """Each note's weight (0-100) in a dataset row, tiered and flat."""
+    tiered = r["notes"]["tiered"]
+    return {n["name"]: n["weight"] for n in [*sum((tiered.get(k, []) for k in ("top", "middle", "base")), []), *r["notes"]["flat"]]}
+
+
+def note_votes(weights: dict[str, float]) -> dict[str, int]:
+    """Note weights turned back into relative votes, the top note 1000; unweighted notes left out."""
+    return {n: round(1000 * (w / 100) ** (1 / NOTE_WEIGHT_POWER)) for n, w in weights.items() if w}
+
+
 def jsonl_line(r: dict) -> dict:
     """A data/*.jsonl line built from the dataset, in the shape scripts/build_collection.py reads."""
-    weights = {}
+    weights = note_weights(r)
     tiered = r["notes"]["tiered"]
     notes = {k: [n["name"] for n in tiered.get(src, [])] for k, src in (("top", "top"), ("mid", "middle"), ("base", "base")) if tiered.get(src)}
     if not notes and r["notes"]["flat"]:
         notes = {"all": [n["name"] for n in r["notes"]["flat"]]}
-    for n in [*sum((tiered.get(k, []) for k in ("top", "middle", "base")), []), *r["notes"]["flat"]]:
-        weights[n["name"]] = n["weight"]
     line = {
         "slug": f"{r['slug']}-{r['id']}",
         "source": "decant",
@@ -818,8 +827,22 @@ def jsonl_line(r: dict) -> dict:
         "notes": notes,
     }
     if any(weights.values()):
-        line["noteVotes"] = {n: round(1000 * (w / 100) ** (1 / NOTE_WEIGHT_POWER)) for n, w in weights.items() if w}
+        line["noteVotes"] = note_votes(weights)
     return line
+
+
+def fill_note_votes(line: dict, r: dict) -> bool:
+    """Note votes from the dataset's weights for a line that has none (a page
+    read without them: Cedrus Blanc's), under the line's own spelling of each
+    note. Votes a line has are never touched. True when it filled some."""
+    if line.get("noteVotes"):
+        return False
+    weights = {normalize(n): w for n, w in note_weights(r).items()}
+    listed = [n for names in line["notes"].values() for n in names]
+    votes = note_votes({n: weights.get(normalize(n), 0) for n in listed})
+    if votes:
+        line["noteVotes"] = votes
+    return bool(votes)
 
 
 def line_id(line: dict) -> int:
@@ -854,24 +877,28 @@ def refresh() -> None:
     Season and day/night votes come from the dataset's page capture, exact where
     our extractor reads Fragrantica's rounded "22.6k". Its ratings can come from
     an older index, so they're taken only when they have more votes too.
+    A line without note votes gets the dataset's (`fill_note_votes`).
     Then data/extras.jsonl is written afresh.
     """
     stems = ("collection", "catalog", "originals", "calibration")
     files = {stem: [json.loads(l) for l in (ROOT / f"data/{stem}.jsonl").read_text().splitlines() if l.strip()] for stem in stems}
     dump = dataset()
     for stem, lines in files.items():
-        changed = 0
+        changed = filled = 0
         for line in lines:
             r = dump.get(line_id(line))
+            if not r:
+                continue
+            filled += fill_note_votes(line, r)
             ours = sum(line["wear"][s] for s in ("winter", "spring", "summer", "fall"))
-            if not r or season_votes(r) <= ours:
+            if season_votes(r) <= ours:
                 continue
             line["wear"] = {**{("fall" if s == "autumn" else s): r["seasons"][s] for s in SEASONS}, **r["daypart"]}
             if total(r["rating"]) > line["votes"]:
                 line["rating"], line["votes"] = r["rating"]["average"], total(r["rating"])
             changed += 1
         (ROOT / f"data/{stem}.jsonl").write_text("".join(json.dumps(l, ensure_ascii=False, separators=(",", ":")) + "\n" for l in lines))
-        print(f"data/{stem}.jsonl: {changed} of {len(lines)} lines had newer votes")
+        print(f"data/{stem}.jsonl: {changed} of {len(lines)} lines had newer votes{f', {filled} gained note votes' if filled else ''}")
     extras(Signals(dump))
     print("then: npm run build:data, npm run fit, npm test")
 

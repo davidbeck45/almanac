@@ -161,8 +161,9 @@ export function votedShares(frag) {
 // counts as PRIOR_VOTES votes, about how far well-voted bottles stray from it
 // out of sample (scripts/fit-profiles.mjs).
 // A dupe's original (`original`, from data/dupes.json) predicts its split
-// better: across the wardrobe's 18 dupes it strays about as far as 120 votes
-// would, for seasons and day/night alike. Both count toward the prior.
+// better: across the wardrobe's 19 dupes it strays about as far as 120 votes
+// would, for seasons and day/night alike (133 and 137 when measured again
+// in October 2026). Both count toward the prior.
 // Flat votes (flatVotes) count as none, so the prediction (and an original)
 // decides. Fragella and hand-entered bottles are estimates already and pass
 // through.

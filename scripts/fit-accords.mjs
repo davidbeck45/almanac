@@ -14,7 +14,7 @@ import { parseArgs } from 'node:util';
 import { ACCORDS } from '../src/accords.js';
 
 // How hard weights are pulled back to their priors. Leave-one-out error is
-// lowest around 0.1–0.3 on 85 bottles; the higher end trusts the votes less.
+// lowest around 0.1–0.3 on 105 bottles; the higher end trusts the votes less.
 const LAMBDA = 0.3;
 
 const load = stem => JSON.parse(readFileSync(new URL(`../data/${stem}.json`, import.meta.url))).fragrances;
