@@ -120,8 +120,17 @@ LIKE_MIN_SEASON, LIKE_MIN_TIME = 100, 30
 # Our extractor reads Fragrantica's accord bars, drawn 30% + 0.7 x strength wide;
 # the dataset has the strength itself (fitted on 683 accords, median error 0.3).
 BAR_FLOOR, BAR_SLOPE = 30, 0.7
-# Note weights are 100 x (votes / the bottle's top note's votes) ^ 1.61 (fitted
-# on 348 notes against our own vote counts); turned back into relative votes.
+# Note weights are min-max scaled votes, 100 x (votes - the least-voted note's)
+# / (the top note's - the least's): against our own vote counts that misses by
+# 0.3 a note (485 notes), a power of votes / the top's by 4.4. So the
+# least-voted note weighs 0 whatever its votes; note_votes turns weights back
+# into relative votes with it at NOTE_FLOOR of the top's, the median share of
+# a page's least-voted note on our own pages (22%).
+NOTE_FLOOR = 0.2
+# How src/fragrantica.js reads a weight back, as (votes / top) ^ (1 / 1.61): the
+# power fit, which misses the scaling above. The pool's notes are packed to
+# match it, so they round-trip; changing the reading moves every dataset
+# record's note vector (similarity, layering, the stored pool styles).
 NOTE_WEIGHT_POWER = 1.61
 LICENSE = ("CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/): derived from Le Decanteur's "
            f"Fragrantica dataset (https://www.kaggle.com/datasets/{DATASET}), from Fragrantica members' votes")
@@ -802,8 +811,11 @@ def note_weights(r: dict) -> dict[str, float]:
 
 
 def note_votes(weights: dict[str, float]) -> dict[str, int]:
-    """Note weights turned back into relative votes, the top note 1000; unweighted notes left out."""
-    return {n: round(1000 * (w / 100) ** (1 / NOTE_WEIGHT_POWER)) for n, w in weights.items() if w}
+    """Note weights turned back into relative votes, the top note 1000 and the
+    least-voted (weight 0) NOTE_FLOOR of it; none when no note is weighted."""
+    if not any(weights.values()):
+        return {}
+    return {n: round(1000 * (NOTE_FLOOR + (1 - NOTE_FLOOR) * w / 100)) for n, w in weights.items()}
 
 
 def jsonl_line(r: dict) -> dict:
@@ -839,7 +851,8 @@ def fill_note_votes(line: dict, r: dict) -> bool:
         return False
     weights = {normalize(n): w for n, w in note_weights(r).items()}
     listed = [n for names in line["notes"].values() for n in names]
-    votes = note_votes({n: weights.get(normalize(n), 0) for n in listed})
+    # Only the notes the row has: one it lacks (spelled apart) gets no votes.
+    votes = note_votes({n: weights[normalize(n)] for n in listed if normalize(n) in weights})
     if votes:
         line["noteVotes"] = votes
     return bool(votes)

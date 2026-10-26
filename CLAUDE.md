@@ -113,7 +113,7 @@ The pros and cons are Fragrantica's AI summary of its members' reviews. Quote th
 
 Gotchas:
 - Records keep accords as Fragrantica's bar widths, which our extractor reads and the engine's weights are tuned on: 30 + 0.7 × the dataset's strength (`barWidth` and `barStrength` in `src/accords.js`).
-- Note weights are 100 × (votes / the top note's votes)^1.61; records turn them back into relative `noteVotes`.
+- Note weights are min-max scaled votes, 100 × (votes − the least-voted note's) / (the top note's − the least's), so the least-voted note weighs 0 though people voted for it (a fifth of the top's, at the median). `decant.py`'s lines (`add`, and `refresh`'s fill) turn them back with that note at `NOTE_FLOOR` (0.2) of the top; `src/fragrantica.js` still reads them as (weight / 100)^(1 / 1.61), an older power fit that drops it, and changing that moves every dataset record's note vector (similarity and its thresholds, layering, the stored pool styles).
 - Its season and day/night votes are exact and match our scrapes; its ratings can come from an older index.
 - Some descriptions hold a raw U+2028, which Node's readline and Python's `splitlines()` treat as a line break; read the raw dump line by line in Python, as `decant.py` does.
 - Some brands are in capitals (MAISON ASRAR, PARIS CORNER, ALREHAB PERFUMES). Records read them in title case where they're made (`brandCase` in `src/fragrantica.js`, `brand_case` in `scripts/build_collection.py`; past 4 letters, so BDK and YSL stay); the dataset's files and page slugs keep Fragrantica's.

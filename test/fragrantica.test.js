@@ -69,6 +69,20 @@ test('notes written in lowercase read in title case, in records and the built wa
   assert.deepEqual(wardrobe.flatMap(lower), [], 'npm run build:data writes them so');
 });
 
+test('note votes filled from the dataset keep its least-voted note, at a fifth of the top’s', () => {
+  // The dataset's weights are min-max scaled, so that note weighs 0 though
+  // people voted for it (decant.py note_votes): Cedrus Blanc's Bergamot.
+  const lines = stem => readFileSync(new URL(`../data/${stem}.jsonl`, import.meta.url), 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l));
+  const filled = [...lines('calibration'), ...lines('collection').filter(l => /Cedrus-Blanc/.test(l.slug)), ...lines('originals').filter(l => /Cedar-Chic/.test(l.slug))];
+  assert.equal(filled.length, 54);
+  for (const l of filled) {
+    const listed = Object.values(l.notes).flat();
+    assert.deepEqual(listed.filter(n => !(n in (l.noteVotes ?? {}))), [], l.slug);
+    const votes = Object.values(l.noteVotes);
+    assert.deepEqual([Math.max(...votes), Math.min(...votes)], [1000, 200], l.slug);
+  }
+});
+
 test('brands written in capitals read in title case, as the build writes them; short acronyms stay', async () => {
   assert.deepEqual(['MAISON ASRAR', 'PARIS CORNER', 'ALREHAB PERFUMES', 'D’ORSAY', 'BDK Parfums', 'YSL', 'ZARA', 'Lattafa'].map(brandCase),
     ['Maison Asrar', 'Paris Corner', 'Alrehab Perfumes', 'D’Orsay', 'BDK Parfums', 'YSL', 'ZARA', 'Lattafa']);

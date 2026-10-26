@@ -11,7 +11,12 @@ import { predictedShares } from './custom.js';
 const SHARDS = 512;
 // As scripts/decant.py: words too common to split the index by.
 const STOP = new Set('de la le les des du di el en et by of the and for pour eau parfum parfums perfume perfumes edp edt'.split(' '));
-// Note weights are 100 × (votes / the top note's votes) ^ 1.61; layering reads relative votes.
+// Note weights are min-max scaled votes, 100 × (votes − the least-voted
+// note's) / (the top's − the least's), so the least-voted weighs 0 (see
+// scripts/decant.py's NOTE_FLOOR). Records read them back as (weight / 100)
+// ^ (1 / 1.61), an older power fit that drops that note and skews the rest;
+// changing it moves every dataset record's note vector, so it waits on a
+// pass over similarity, layering and the stored pool styles.
 const NOTE_WEIGHT_POWER = 1.61;
 const GENDER = { f: 'women', m: 'men', u: 'women and men' };
 const NOTE_TIERS = { t: 'top', m: 'mid', b: 'base', f: 'all' };
