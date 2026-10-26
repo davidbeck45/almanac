@@ -21,6 +21,7 @@ const HOT_DRY = { feelsF: 96, humidity: 20, dewF: 45 };
 const MILD = { feelsF: 64, humidity: 55, dewF: 48 };
 const COOL = { feelsF: 52, humidity: 60, dewF: 40 };
 const COLD = { feelsF: 28, humidity: 60, dewF: 18 };
+const FREEZING = { feelsF: 15, humidity: 60, dewF: 5 };
 
 // [what, record, conditions, occasion, fewest, most]: the range must sit inside [fewest, most].
 const CASES = [
@@ -46,6 +47,9 @@ const CASES = [
   ['Terra, a beast, on a hot sticky day', byName('Terra'), HOT_STICKY, null, 1, 1],
   ['Terra on a date', byName('Terra'), COOL, 'date', 1, 1],
   ['Liquid Brun on a cold night out', byName('Liquid Brun'), COLD, 'nightout', 3, 4],
+  // Cold counts for the time spent outside: the coat comes off indoors.
+  ['Sticky Fingers at a formal on a cold night', byName('Sticky Fingers'), COLD, 'formal', 2, 2],
+  ['Cream Velvet, a vanilla gourmand, on a freezing night in', byName('Cream Velvet'), FREEZING, 'cozy', 2, 3],
   ['Sauvage on a mild day', byName('Sauvage'), MILD, null, 2, 3],
   ['Jake, a faint cologne, on a mild day', byName('Jake'), MILD, null, 4, 6],
   ['Shiyaaka Sky, a skin scent, outdoors', byName('Shiyaaka Sky'), MILD, 'outdoors', 4, 6],
@@ -75,6 +79,42 @@ test('heat and the office keep it low and under a shirt; a date by the neck; col
   for (const [, record, conditions, occasion] of CASES) {
     const g = sprayGuide(record, conditions, occasion);
     assert.ok(g.where.length >= 1 && g.where.length <= g.sprays[1], g.text);
+  }
+});
+
+test('cold counts for the time spent outside: indoors the coat comes off', () => {
+  const mid = g => (g.sprays[0] + g.sprays[1]) / 2;
+  // A night in: the weather outside adds nothing, and nothing goes on a collar or scarf.
+  for (const f of [byName('Cream Velvet'), byName('Amber Empire'), byName('Sticky Fingers'), SKIN, MIDDLE, LOUD]) {
+    const mild = sprayGuide(f, MILD, 'cozy');
+    for (const c of [COLD, FREEZING]) {
+      const g = sprayGuide(f, c, 'cozy');
+      assert.ok(!g.where.includes('collar or scarf'), `${f.name}: ${g.text}`);
+      assert.ok(mid(g) <= mid(mild), `${f.name}: ${g.text}, against ${mild.text}`);
+      assert.doesNotMatch(g.text, /cold air/, g.text);
+    }
+  }
+  // A formal or a night out checks the coat, but a night out still has the queue and the walk
+  // home: never fewer than on a mild night.
+  for (const f of [byName('Liquid Brun'), byName('Sticky Fingers'), byName('Cream Velvet'), MIDDLE, LOUD, BREEZE]) {
+    for (const c of [COLD, FREEZING]) {
+      for (const occasion of ['formal', 'nightout']) {
+        const g = sprayGuide(f, c, occasion);
+        assert.ok(!g.where.includes('collar or scarf'), `${f.name} ${occasion}: ${g.text}`);
+      }
+      const out = sprayGuide(f, c, 'nightout'), mild = sprayGuide(f, MILD, 'nightout');
+      assert.ok(mid(out) >= mid(mild), `${f.name}: ${out.text}, against ${mild.text}`);
+    }
+  }
+  // The office: the commute's chill isn't worth a word.
+  for (const c of [COLD, FREEZING]) {
+    const office = sprayGuide(byName('Meant To Be Seen'), c, 'office');
+    assert.doesNotMatch(office.text, /cold air mutes it/, office.text);
+  }
+  // Out in it, or with no occasion, the cold counts whole and fabric holds it.
+  for (const occasion of [null, 'casual', 'outdoors']) {
+    const g = sprayGuide(MIDDLE, COLD, occasion);
+    assert.ok(g.where.includes('collar or scarf') && g.why.includes('Cold air mutes it'), `${occasion}: ${g.text}`);
   }
 });
 
