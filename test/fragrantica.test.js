@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { fromFragrantica, fragranticaLibrary, loadPool, fromPool, brandCase, noteCase } from '../src/fragrantica.js';
+import { fromFragrantica, fragranticaLibrary, loadPool, fromPool, brandCase, noteCase, noteFloor, noteVotesOf } from '../src/fragrantica.js';
 import { performanceRating, steadyShares } from '../src/engine.js';
 import { DATASET_VERSION } from '../src/profiles.js';
 import { nameMatches } from '../src/collections.js';
@@ -69,9 +69,10 @@ test('notes written in lowercase read in title case, in records and the built wa
   assert.deepEqual(wardrobe.flatMap(lower), [], 'npm run build:data writes them so');
 });
 
-test('note votes filled from the dataset keep its least-voted note, at a fifth of the top’s', () => {
+test('note votes filled from the dataset keep its least-voted note, at the share a pyramid that size gives it', () => {
   // The dataset's weights are min-max scaled, so that note weighs 0 though
-  // people voted for it (decant.py note_votes): Cedrus Blanc's Bergamot.
+  // people voted for it (decant.py note_votes): Cedrus Blanc's Bergamot, at
+  // 0.38 of the top's for its 4 notes.
   const lines = stem => readFileSync(new URL(`../data/${stem}.jsonl`, import.meta.url), 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l));
   const filled = [...lines('calibration'), ...lines('collection').filter(l => /Cedrus-Blanc/.test(l.slug)), ...lines('originals').filter(l => /Cedar-Chic/.test(l.slug))];
   assert.equal(filled.length, 54);
@@ -79,7 +80,27 @@ test('note votes filled from the dataset keep its least-voted note, at a fifth o
     const listed = Object.values(l.notes).flat();
     assert.deepEqual(listed.filter(n => !(n in (l.noteVotes ?? {}))), [], l.slug);
     const votes = Object.values(l.noteVotes);
-    assert.deepEqual([Math.max(...votes), Math.min(...votes)], [1000, 200], l.slug);
+    assert.deepEqual([Math.max(...votes), Math.min(...votes)], [1000, Math.round(1000 * noteFloor(Array(votes.length).fill(0)))], l.slug);
+  }
+  assert.equal(filled.find(l => /Cedrus-Blanc/.test(l.slug)).noteVotes.Bergamot, 384);
+});
+
+test('records read note weights as min-max scaled votes, the least-voted at its pyramid’s share', async () => {
+  // Fitted on our own pages' votes: about a third of the top's at 5 notes, a fifth at 8, an eighth at 15.
+  assert.deepEqual([5, 8, 15].map(n => Math.round(100 * noteFloor(Array(n).fill(0)))), [32, 22, 13]);
+  assert.equal(noteFloor([100, 57, 14]), 0, 'a row with no note at 0 was scaled to the top alone');
+  assert.deepEqual(noteVotesOf({ Pear: 100, Musk: 73, Meringue: 0 }), { Pear: 1000, Musk: 861, Meringue: 485 });
+  assert.equal(noteVotesOf({ Citruses: 0, 'Woodsy Notes': 0 }), null, 'nobody voted');
+  // The pool keeps 8 notes, each read off the whole pyramid: within a tenth of the r/ record's.
+  const pool = await loadPool(async path => {
+    const file = new URL(path, dir);
+    return existsSync(file) ? readFileSync(file, 'utf8') : null;
+  });
+  const ids = ['31861', '9828', '33519', '46885'];
+  const records = await library.records(ids);
+  for (const id of ids) {
+    const full = records.get(id).noteVotes, kept = fromPool(pool, pool.index.get(id)).noteVotes;
+    for (const [note, v] of Object.entries(kept)) assert.ok(Math.abs(v - full[note]) <= 50, `${id} ${note}: ${v} vs ${full[note]}`);
   }
 });
 

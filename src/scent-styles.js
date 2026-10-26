@@ -50,9 +50,10 @@ const QUIET_FROM = 7.05, QUIET_SPAN = 0.8;
 const LOUD_FROM = 7.6, LOUD_SPAN = 0.9;
 
 // Clean's soapy-iris facet: an iris accord with neroli (or musk) reads as
-// fine soap (Prada L'Homme). The modern chypre: bergamot over patchouli or
-// labdanum without the moss (31 Rue Cambon).
-const SOAPY_IRIS = 0.5;
+// fine soap (Prada L'Homme, its neroli at 0.57 of its iris's votes). The
+// modern chypre: bergamot over patchouli or labdanum without the moss (31
+// Rue Cambon).
+const SOAPY_IRIS = 0.55;
 const MODERN_CHYPRE = 0.45;
 
 // Note patterns shared by several styles.
