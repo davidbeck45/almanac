@@ -639,6 +639,12 @@ test('a night planned for a date: Now and the Week plan around it, say what for,
     const ui = { keepingFocus() {}, render() {} };
     wear.actions.wear({ dataset: { ctx: 'night', id: night.pick.fragrance.id } }, ui);
     assert.equal(state.history.find(h => h.date === wx.night.dateISO && h.slot === 'night').occasion, 'date');
+    // Its stars on Now say where it stands for the date, as the bottle page does.
+    wear.forgetAsked();
+    wear.actions['ask-rate']({ dataset: { id: night.pick.fragrance.id, value: '5' }, getAttribute: () => 'false' }, { keepingFocus(el, scope, fn) { fn(); }, render() { app.computeToday(); } }, { detail: 1 });
+    assert.match(wear.wear.panes.find(p => p.id === 'now').render({}, state.route), /<p class="ask-said">Rated 5★\. (Still|Now) \d+\w+ for date night (tonight|tomorrow night)[.,]/);
+    wear.forgetAsked();
+    setSkin(night.pick.fragrance.id, { rating: null });
     // Clear: tonight is everyday again.
     wear.actions['event-clear']({ dataset: { date: wx.night.dateISO, slot: 'night' } }, { render() { app.computeToday(); }, showToast() {} });
     assert.equal(app.eventAt(wx.night), null);
@@ -781,6 +787,12 @@ test('Now asks what it needs once each: stars for the unrated bottle he’s wear
   assert.match(html, /data-action="ask-rate" data-value="5" data-id="[^"]+" aria-label="5 stars"/);
   assert.match(html, /aria-checked="true" tabindex="0" data-action="ask-rate" data-value="5"/);
   assert.ok(!html.includes('ask-skin'), 'still one at a time');
+  // The bottle page beside it rates it again: the stars follow, and the line about 5★ goes.
+  setSkin(pick, { rating: 2 });
+  html = draw();
+  assert.match(html, /aria-checked="true" tabindex="0" data-action="ask-rate" data-value="2"/);
+  assert.ok(!html.includes('class="ask-said"') && !html.includes('data-action="ask-skip"'));
+  setSkin(pick, { rating: 5 });
 
   // The next visit: rated, so not asked again, even once the stars are cleared; yesterday's turn.
   state.base = { dest: 'wear', pane: 'now' };
@@ -797,6 +809,13 @@ test('Now asks what it needs once each: stars for the unrated bottle he’s wear
   assert.ok(html.includes('Saved: it lasts longer on you.'));
   assert.match(html, /data-action="ask-lasts" data-value="1" data-id="[^"]+" aria-pressed="true"/);
   assert.match(html, /data-action="ask-skip" data-kind="skin" data-id="[^"]+">Done</);
+  // Changed on the bottle page meanwhile: the answer follows, and the saved line goes.
+  setSkin(worn.id, { longevity: -1 });
+  html = draw();
+  assert.match(html, /data-action="ask-lasts" data-value="-1" data-id="[^"]+" aria-pressed="true"/);
+  assert.ok(!html.includes('Saved: it lasts longer'));
+  setSkin(worn.id, { longevity: 1 });
+  assert.ok(draw().includes('Saved: it lasts longer on you.'), 'back as it was said');
   wear.actions['ask-projects']({ dataset: { id: worn.id, value: '-1' } }, ui);
   assert.ok(draw().includes('Saved: it lasts longer and sits closer on you.'));
   wear.actions['ask-skip']({ dataset: { id: worn.id, kind: 'skin' }, isConnected: false }, ui);

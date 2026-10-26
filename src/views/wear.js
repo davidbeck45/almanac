@@ -9,7 +9,7 @@ import { calendarSeason, eventPhrase, PLAN_MARGIN } from '../engine.js';
 import { OCCASIONS, occasionById } from '../occasions.js';
 import { sprayGuide } from '../spray.js';
 import { planTies, tieLine, contrast } from '../contrast.js';
-import { setSkin, loadAsked, markAsked, wasAsked } from '../skin.js';
+import { setSkin, loadSkin, loadAsked, markAsked, wasAsked } from '../skin.js';
 import { theme } from '../theme.js';
 import { toggleWear, wornIn, journalStats, shiftISO } from '../history.js';
 import { routeHash } from '../app/router.js';
@@ -302,7 +302,7 @@ export function askStarsHTML(f, { rating = null, said = '' } = {}) {
       <p class="ask-title" id="ask-title">${rating ? 'Your rating' : 'Rate it'}<span class="visually-hidden">: ${esc(f.name)}</span></p>
       <div class="ask-pick">
         ${starsHTML(rating, { action: 'ask-rate', labelledby: 'ask-title', id: f.id })}
-        ${said ? '' : `<button class="link-btn ask-skip" data-action="ask-skip" data-kind="stars" data-id="${esc(f.id)}">Not now</button>`}
+        ${said || rating ? '' : `<button class="link-btn ask-skip" data-action="ask-skip" data-kind="stars" data-id="${esc(f.id)}">Not now</button>`}
       </div>
     </div>
     ${saidHTML(said)}
@@ -329,9 +329,13 @@ export function askSkinHTML(f, { answers = {}, said = '' } = {}) {
 
 // The question answered on this visit to Now (a visit is state.base: the
 // next starts afresh), so it stays put while he answers: its kind, bottle,
-// the answers so far and what the last one did.
-let held = null; // { kind, id, base, answers, said }
+// the answers so far (the stars as `rating`) and what the last one did. The
+// bottle page can change the same bottle meanwhile (it docks beside Now from
+// 1100px), so what's pressed reads the saved ratings, and `said` shows only
+// while they're still what it was written for.
+let held = null; // { kind, id, base, rating?, answers?, said }
 const heldNow = () => (held && held.base === state.base ? held : null);
+const sameAnswers = (a, b) => Object.keys(a).every(k => a[k] === b[k]);
 
 /** Forget the question held on screen (tests; a new visit does it itself). */
 export function forgetAsked() {
@@ -346,8 +350,15 @@ function nowQuestion(pick, worn) {
   const byId = id => records.find(f => f.id === id) ?? null;
   const wearing = worn && pick.fragrance.id === worn ? pick.fragrance : null;
   const h = heldNow();
-  if (h?.kind === 'stars' && wearing?.id === h.id) return { inPick: askStarsHTML(wearing, { rating: wearing.personal?.rating ?? null, said: h.said }), below: '' };
-  if (h?.kind === 'skin' && byId(h.id)) return { inPick: '', below: askSkinHTML(byId(h.id), h) };
+  if (h?.kind === 'stars' && wearing?.id === h.id) {
+    const rating = wearing.personal?.rating ?? null;
+    return { inPick: askStarsHTML(wearing, { rating, said: rating === h.rating ? h.said : '' }), below: '' };
+  }
+  if (h?.kind === 'skin' && byId(h.id)) {
+    const saved = loadSkin()[h.id] ?? {};
+    const answers = Object.fromEntries(Object.keys(h.answers).map(k => [k, saved[k] ?? 0]));
+    return { inPick: '', below: askSkinHTML(byId(h.id), { answers, said: sameAnswers(h.answers, answers) ? h.said : '' }) };
+  }
   const day = shiftISO(state.wx.todayISO, -1);
   const yesterday = [...new Set(['night', 'day'].map(slot => wornIn(state.history, day, slot)?.id).filter(Boolean))].map(byId).filter(Boolean);
   const ask = askFor({ worn: wearing, yesterday, asked: loadAsked() });
@@ -713,8 +724,8 @@ export const actions = {
     setSkin(id, { rating: stars });
     markAsked(id, 'stars');
     computeToday();
-    const moved = moveText(before, placeOf(), listLabel(ctx.win));
-    held = { kind: 'stars', id, base: state.base, said: `${stars ? `Rated ${stars}★.` : 'Rating cleared.'} ${moved}`.trim() };
+    const moved = moveText(before, placeOf(), listLabel(ctx.win, ctx.occasion));
+    held = { kind: 'stars', id, base: state.base, rating: stars, said: `${stars ? `Rated ${stars}★.` : 'Rating cleared.'} ${moved}`.trim() };
     app.keepingFocus(el, '#app', app.render);
     app.announce?.(held.said);
   },
