@@ -6,7 +6,7 @@ import { rank, PLAN_MARGIN } from '../src/engine.js';
 import { OCCASIONS, occasionById } from '../src/occasions.js';
 import { sprayGuide } from '../src/spray.js';
 import { setSkin, loadSkin, loadAsked, markAsked } from '../src/skin.js';
-import { planTies } from '../src/contrast.js';
+import { planTies, whenOf } from '../src/contrast.js';
 import { summarize, week } from '../src/weather.js';
 import { renderScene } from '../src/scene.js';
 import { shiftISO } from '../src/history.js';
@@ -621,7 +621,7 @@ test('a night planned for a date: Now and the Week plan around it, say what for,
     assert.deepEqual(app.todaySlots().map(p => p.pick.fragrance.id), first.map(p => p.pick.fragrance.id));
     const sat = days.find(d => d.dateISO === later.dateISO).night;
     assert.equal(sat.pick.fragrance.id, rank(app.rankedFragrances(), later, 'night', { occasion: formal, todayISO: later.dateISO })[0].fragrance.id);
-    assert.ok(days.slice(0, 3).every(d => [d.day, d.night].every(p => !p || p.pick.fragrance.id !== sat.pick.fragrance.id)), 'not worn the days before');
+    assert.ok(days.filter(d => d.dateISO < later.dateISO).every(d => [d.day, d.night].every(p => !p || p.pick.fragrance.id !== sat.pick.fragrance.id)), 'not worn the days before');
     // Now reads tonight's ties with the formal night's plan, so they never offer its bottle.
     const plan = app.todayPlan();
     assert.equal(plan.at(-1).win.occasion.id, 'formal');
@@ -630,7 +630,7 @@ test('a night planned for a date: Now and the Week plan around it, say what for,
     // Now's card says what tonight is for, with a way to clear it; the Week marks the planned nights.
     state.slot = 'night';
     const now = wear.wear.panes.find(p => p.id === 'now').render({}, state.route);
-    assert.match(now, /<span class="event-tag">.*<span>For a date<\/span><\/span><button class="link-btn" data-action="event-clear" data-date="[\d-]+" data-slot="night">Clear<span class="visually-hidden">: Tonight isn’t for a date<\/span><\/button>/s);
+    assert.match(now, /<span class="event-tag">.*<span>For a date<\/span><\/span><button class="link-btn" data-action="event-clear" data-date="[\d-]+" data-slot="night">Clear<span class="visually-hidden">: (Tonight|Tomorrow night) isn’t for a date<\/span><\/button>/s);
     const board = wear.weekHTML(days);
     assert.equal((board.match(/class="wk-mark wk-event"/g) ?? []).length, 2);
     assert.match(board, /aria-label="[^"]+ night: [^"]+, for formal wear"/);
@@ -720,7 +720,7 @@ test('Now says which bottles suit the window just as well, and how each differs,
   for (const t of ties) {
     assert.ok(html.includes(`data-action="open" data-ctx="${now.win.slot}" data-id="${t.entry.fragrance.id}">${esc(t.entry.fragrance.name)}</button>`), `${t.entry.fragrance.name} opens its page`);
   }
-  assert.match(html, /suits? (today|tonight) just as well\./);
+  assert.ok(html.includes(` ${whenOf(now.win)} just as well.`), 'today, tonight, or tomorrow once tonight is over');
   assert.ok(html.indexOf('class="ties"') > html.indexOf('class="reasons lead"') && html.indexOf('class="ties"') < html.indexOf('class="chips"'), 'one line under the reasons');
   // The Also good shelf tags the bottles within reach of the pick in a word,
   // above it or below.
@@ -777,7 +777,7 @@ test('Now asks what it needs once each: stars for the unrated bottle he’s wear
   assert.equal(loadSkin()[pick].rating, 5);
   assert.ok(loadAsked()[pick].stars);
   html = draw();
-  assert.match(html, /<p class="ask-said">Rated 5★\. (Still|Now) \d+(st|nd|rd|th) for (today|tonight)[.,]/);
+  assert.match(html, /<p class="ask-said">Rated 5★\. (Still|Now) \d+(st|nd|rd|th) for (today|tonight|tomorrow)[.,]/);
   assert.match(html, /data-action="ask-rate" data-value="5" data-id="[^"]+" aria-label="5 stars"/);
   assert.match(html, /aria-checked="true" tabindex="0" data-action="ask-rate" data-value="5"/);
   assert.ok(!html.includes('ask-skin'), 'still one at a time');

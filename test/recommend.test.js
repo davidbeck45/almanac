@@ -289,7 +289,9 @@ test('--week, --date and today\'s picks plan around --events: each takes the occ
   assert.equal(date.slots[1].pick.name, top.name);
   const text = cli('--loc', '40.7,-74', '--week', '--events', `${night} night formal`);
   assert.match(text.stdout, new RegExp(`night .+${top.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\(.+\\) for formal wear: `));
-  const now2 = cli('--loc', '40.7,-74', '--events', `${dayISO(0)} night date; ${night} night formal`);
+  // Tonight by the place's clock (tomorrow night once tonight is over there), not this machine's.
+  const tonight = JSON.parse(cli('--loc', '40.7,-74', '--json').stdout).slots.find(s => s.slot === 'night').window.date;
+  const now2 = cli('--loc', '40.7,-74', '--events', `${tonight} night date; ${night} night formal`);
   assert.match(now2.stdout, /\n(Tonight|Tomorrow night), for a date: /);
   assert.match(now2.stdout, /\nFor formal wear (tomorrow night|on \w+day night): /);
 });
