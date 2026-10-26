@@ -24,7 +24,7 @@ Live at **https://davidbeck45.github.io/scentcast/**. It opens on my wardrobe; a
 
 **Settings**: your place, °F or °C, two themes, a still sky, which list is ranked, and the journal export.
 
-Picks come from Fragrantica's community votes (seasons, day or night, and those of the bottles voters say it smells like), each bottle's main accords against the temperature and how sticky the air is, the occasion's accord profile, and for some occasions how long it lasts and how far it projects, by Parfumo's votes.
+Picks come from Fragrantica's community votes (seasons, day or night, and those of the bottles voters say it smells like), each bottle's main accords against the temperature and how sticky the air is, the occasion's accord profile, and for some occasions how long it lasts and how far it projects, by Parfumo's and Fragrantica's votes, each counted by how many there are.
 
 ## Privacy
 

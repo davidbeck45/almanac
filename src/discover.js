@@ -90,7 +90,7 @@ export const FILTERS = Object.freeze({
   seasons: null, // ['winter', …]: suits any of them
   slot: null, // 'day' | 'night'
   lean: null, // a LEAN_WINDOWS key; else the wardrobe's window (allowContext)
-  minLongevity: null, // Parfumo's 0–10 (performanceRating), as the detail sheet shows
+  minLongevity: null, // on Parfumo's 0–10 scale, both crowds read together (performanceRating), as Compare shows
   minSillage: null,
   minValue: null, // 1–5
   minSafe: null, // blind-buy safety percentile, 0–100

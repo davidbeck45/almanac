@@ -430,7 +430,7 @@ export function cheaperTwin(record, byId, ctx = null) {
 /** Whether voters say a bottle fades fast: longevity under WEAK_LONGEVITY from WEAK_VOTES votes. */
 export function weakLongevity(record) {
   const p = performanceRating(record);
-  return p?.longevity != null && p.votes >= WEAK_VOTES && p.longevity < WEAK_LONGEVITY;
+  return p?.longevity != null && p.votes.longevity >= WEAK_VOTES && p.longevity < WEAK_LONGEVITY;
 }
 
 /**

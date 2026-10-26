@@ -245,12 +245,15 @@ test('office wants moderate projection that lasts the day, not a whisper that fa
   const office = occasionById('office');
   const base = fragrances.find(f => f.name === 'Cedrus Blanc');
   // Parfumo's 0–10: 6.2 sillage and 6.6 longevity read -1, 7.04 sillage -0.3, 7.8 longevity the middle.
-  const at = (sillage, longevity) => occasionRaw({ ...base, parfumo: { sillage, longevity, votes: 1000 } }, office);
+  const at = (sillage, longevity, occasion = office) => occasionRaw({ ...base, parfumo: { sillage, longevity, votes: 1000 }, performance: undefined }, occasion);
   const moderate = at(7.04, 7.8);
   assert.ok(moderate > at(6.2, 6.6) + 0.1, 'a body mist gone by lunch');
   assert.ok(moderate > at(8.6, 7.8), 'a loud one');
   assert.ok(moderate > at(6.2, 7.8) && at(6.2, 7.8) > at(8.6, 7.8), 'quieter than enough earns nothing more, and still beats loud');
   assert.ok(at(7.04, 8.8) > moderate, 'lasting longer helps');
+  // Lasting the working day is enough: past it a beast earns nothing more, where Formal still counts it.
+  assert.equal(at(7.04, 8.8), at(7.04, 9.6));
+  assert.ok(at(7.04, 9.6, occasionById('formal')) > at(7.04, 8.8, occasionById('formal')));
   // The reason still says what it does.
   const reasons = rank([{ ...base, parfumo: { sillage: 6.2, longevity: 6.6, votes: 1000 } }], mildFallNight, 'day', { occasion: office })[0].reasons.map(r => r.text);
   assert.ok(reasons.includes('Stays close to the skin') && reasons.includes('Fades early'), reasons.join(' | '));
@@ -268,6 +271,26 @@ test('office wants moderate projection that lasts the day, not a whisper that fa
       }
     }
   }
+});
+
+test('longevity and sillage read both crowds, each by its votes', () => {
+  const base = { id: 'x', accords: { woody: 100 } };
+  // Fragrantica's 3.0 of 5 and 2.0 of 4 put on Parfumo's scale: about 6.7 and 6.6, both under the middle.
+  const fragrantica = { longevity: 3, sillage: 2, votes: 500 };
+  const level = (parfumo, key) => performanceLevel({ ...base, parfumo, performance: fragrantica }, key);
+  const alone = key => performanceLevel({ ...base, performance: fragrantica }, key);
+  const few = { longevity: 8.4, sillage: 8.2, votes: 11 }, many = { ...few, votes: 5000 };
+  for (const key of ['longevity', 'sillage']) {
+    assert.ok(level(few, key) < 0 && level(few, key) - alone(key) < 0.4, `${key}: 11 Parfumo votes don't outweigh 500 on Fragrantica`);
+    assert.ok(Math.abs(level(many, key) - performanceLevel({ ...base, parfumo: many }, key)) < 0.05, `${key}: 5,000 barely move`);
+  }
+  // Sandalwood & Musk: 11 Parfumo votes said it lasts nearly as long as most; its 23 on Fragrantica, that it fades.
+  const sm = fragrances.find(f => f.name === 'Sandalwood & Musk');
+  assert.ok(performanceLevel(sm, 'longevity') < performanceLevel({ ...sm, performance: undefined }, 'longevity') - 0.2);
+  assert.ok(performanceLevel(sm, 'longevity') < -0.5, `${performanceLevel(sm, 'longevity')}`);
+  // Sauvage's thousands on both agree, and Parfumo's lead.
+  const sauvage = fragrances.find(f => f.name === 'Sauvage');
+  assert.ok(Math.abs(performanceLevel(sauvage, 'sillage') - performanceLevel({ ...sauvage, performance: undefined }, 'sillage')) < 0.02);
 });
 
 test('Parfumo occasion votes nudge a bottle toward what voters wear it for', () => {

@@ -326,17 +326,23 @@ export function quality(frag) {
   return PERSONAL_RATING_WEIGHT * clamp((mine - 1) / 4, 0, 1) + (1 - PERSONAL_RATING_WEIGHT) * crowd;
 }
 
-// Parfumo's longevity and sillage ratings (0–10 averages, `parfumo` from
-// data/parfumo.jsonl) as -1 (fades fast, stays close) .. +1 (lasts, projects)
-// around the middle of the bottles in data/. A bottle Parfumo lacks reads
-// Fragrantica's votes instead (`performance`: longevity 1–5, sillage 1–4),
-// put on Parfumo's scale by a line fitted on the 53 bottles both rate
-// (r 0.91 and 0.88). A rating from few votes leans toward the middle, and a
-// bottle without one sits there.
+// Longevity and sillage as -1 (fades fast, stays close) .. +1 (lasts,
+// projects) around the middle of the bottles in data/, read from both
+// crowds (performanceRating): Parfumo's ratings (0–10 averages, `parfumo`
+// from data/parfumo.jsonl) and Fragrantica's votes (`performance`: longevity
+// 1–5, sillage 1–4), put on Parfumo's scale by a line fitted on the 53
+// bottles both rate (r 0.91 and 0.88). A rating from few votes leans toward
+// the middle, and a bottle without one sits there.
 const PERFORMANCE_MID = { longevity: 7.8, sillage: 7.4 };
 const PERFORMANCE_SPAN = 1.2;
 const PERFORMANCE_PRIOR_VOTES = 10;
 const FRAGRANTICA_TO_PARFUMO = { longevity: [1.17, 1.839], sillage: [2.53, 2.047] };
+// What Fragrantica's reading is worth at most, in Parfumo votes: on bottles
+// well voted on both, the line misses Parfumo's own by 0.18 (longevity) and
+// 0.27 (sillage), as about 100 and 50 Parfumo votes would (an upper bound:
+// the line was fitted on those bottles). Its votes count as
+// 1 / (1/votes + 1/worth), so a few still count about one for one.
+const FRAGRANTICA_WORTH = { longevity: 100, sillage: 50 };
 // How much an occasion's wish for longevity or sillage counts against its accords.
 const PERFORMANCE_WEIGHT = 0.4;
 // What a nudge of your own reads as, up and down.
@@ -347,13 +353,33 @@ const PERSONAL_PERFORMANCE = {
 // The share of an occasion's fit that earns a reason ("Stays close to the skin").
 const PERFORMANCE_REASON = 0.1;
 
-// { longevity, sillage, votes } on Parfumo's 0–10 scale, or null.
+/**
+ * What both crowds say of a bottle's longevity and sillage, on Parfumo's
+ * 0–10 scale: { longevity, sillage, votes, parfumoShare }, or null when
+ * neither rates it. Each is Parfumo's average and Fragrantica's scaled one
+ * weighted by votes, so a few Parfumo votes don't outweigh hundreds on
+ * Fragrantica (Sandalwood & Musk: 11 against 23, both under the middle).
+ * `votes` is each one's count in Parfumo votes ({ longevity, sillage }), and
+ * `parfumoShare` the part of it that's Parfumo's own (0 for Fragrantica's
+ * alone, 1 for Parfumo's). A bottle only one site rates reads that site on
+ * its own votes. Every reader takes it from here (levels, spray counts,
+ * styles, filters, Compare), so they stand on the same evidence.
+ */
 export function performanceRating(frag) {
-  if (frag.parfumo) return frag.parfumo;
-  const p = frag.performance;
-  if (!p) return null;
-  const scale = key => FRAGRANTICA_TO_PARFUMO[key][0] + FRAGRANTICA_TO_PARFUMO[key][1] * p[key];
-  return { longevity: scale('longevity'), sillage: scale('sillage'), votes: p.votes };
+  const pf = frag.parfumo?.votes > 0 ? frag.parfumo : null, fv = frag.performance?.votes > 0 ? frag.performance : null;
+  if (!pf && !fv) return null;
+  const out = { votes: {}, parfumoShare: {} };
+  for (const key of ['longevity', 'sillage']) {
+    const [a, b] = FRAGRANTICA_TO_PARFUMO[key];
+    const p = pf?.[key] != null, f = fv?.[key] != null;
+    const vP = p ? pf.votes : 0;
+    const vF = !f ? 0 : p ? 1 / (1 / fv.votes + 1 / FRAGRANTICA_WORTH[key]) : fv.votes;
+    const votes = vP + vF;
+    out[key] = votes ? ((p ? vP * pf[key] : 0) + (f ? vF * (a + b * fv[key]) : 0)) / votes : null;
+    out.votes[key] = votes;
+    out.parfumoShare[key] = votes ? vP / votes : 0;
+  }
+  return out;
 }
 
 // A nudge of your own ("lasts longer on me") shifts the level from there.
@@ -361,7 +387,8 @@ export function performanceLevel(frag, key) {
   const p = performanceRating(frag);
   let level = 0;
   if (p && p[key] != null) {
-    const steady = (p.votes * p[key] + PERFORMANCE_PRIOR_VOTES * PERFORMANCE_MID[key]) / (p.votes + PERFORMANCE_PRIOR_VOTES);
+    const n = p.votes[key];
+    const steady = (n * p[key] + PERFORMANCE_PRIOR_VOTES * PERFORMANCE_MID[key]) / (n + PERFORMANCE_PRIOR_VOTES);
     level = clamp((steady - PERFORMANCE_MID[key]) / PERFORMANCE_SPAN, -1, 1);
   }
   const mine = frag.personal?.[key];
@@ -374,18 +401,32 @@ export function performanceLevel(frag, key) {
 // down, a body mist that's gone by lunch was the best office pick.
 const LESS_ENOUGH = -0.3;
 const LESS_BACK = 0.5;
-const wished = (wish, level) => (wish < 0 && level < LESS_ENOUGH ? LESS_ENOUGH + LESS_BACK * (LESS_ENOUGH - level) : level);
+// A wish for more can have its enough too, where the occasion names it
+// (`performance.enough`): lasting the working day is all the office asks,
+// so its longevity counts only up to MORE_ENOUGH (about Parfumo's 8 of 10).
+// Counted all the way up, a beast earned back for lasting what it lost for
+// projecting (every one of David's bottles past it projects too), and the
+// fit agreed less with members' "too loud for the office" than the accords
+// alone. Formal and Date Night count theirs all the way: members call
+// bottles that last formal and date-worthy more often, past it too.
+const MORE_ENOUGH = 0.2;
+const wished = (wish, level, enough) => {
+  if (wish < 0 && level < LESS_ENOUGH) return LESS_ENOUGH + LESS_BACK * (LESS_ENOUGH - level);
+  if (wish > 0 && enough && level > MORE_ENOUGH) return MORE_ENOUGH;
+  return level;
+};
 
 // What longevity and sillage add to a bottle's fit for the occasion: its
 // wish for each (`performance`, -1 quiet or fleeting .. +1 loud or lasting)
-// times the bottle's level, a wish for less only down to LESS_ENOUGH.
-// `plain` reads the level as it is, for what reasons say ("Stays close to
-// the skin" is still true of a whisper).
+// times the bottle's level, a wish for less only down to LESS_ENOUGH, one
+// for more the occasion calls enough only up to MORE_ENOUGH. `plain` reads
+// the level as it is, for what reasons say ("Stays close to the skin" is
+// still true of a whisper).
 export function performanceFit(frag, occasion, { plain = false } = {}) {
   const wish = occasion.performance ?? {};
   const part = key => {
     const w = wish[key] ?? 0, level = performanceLevel(frag, key);
-    return PERFORMANCE_WEIGHT * w * (plain ? level : wished(w, level));
+    return PERFORMANCE_WEIGHT * w * (plain ? level : wished(w, level, wish.enough?.includes(key)));
   };
   return { longevity: part('longevity'), sillage: part('sillage') };
 }

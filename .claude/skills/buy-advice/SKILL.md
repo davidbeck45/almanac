@@ -98,8 +98,9 @@ Stderr matters: "matches N bottles (…); using the most voted" (confirm the bra
 
 The shape, from a `--gaps` run (the bottles change as the data does):
 
-> Nothing's missing: you're covered everywhere, with the most room to grow on Date Night on mild and warm nights, and on hot nights.
-> 1. **Zenith** (Riiffs, 4.5★ from 1,055 votes, value 4.1, low risk): your best date-night bottle on mild nights, 88% against Infini Rose's 81%, and on warm ones. Closest you own is Cream Velvet (62% alike, vanilla and powdery), so it's your lane, not a copy.
-> 2. **Infinity For Men** (Armaf, 4.6★ from 613 votes, value 4.1, low risk): for hot nights, where Jake tops out at 79%. Nearest to it is Absolu Aventus 2023, the original of your Supremacy, at 61% alike.
+> Nothing's missing: you're covered everywhere, with the most room to grow on Date Night on mild and warm nights, the office on cold days and formal cool nights.
+> 1. **Zenith** (Riiffs, 4.5★ from 1,055 votes, value 4.1, low risk): your best date-night bottle on mild nights, 88% against Infini Rose's 80%, and on warm ones. Closest you own is Cream Velvet (62% alike, vanilla and powdery), so it's your lane, not a copy.
+> 2. **Encre Noire** (Lalique, 4.1★ from 25,605 votes, value 4.4, low risk): a quiet vetiver that lasts, for the office in the cold, 82% against Vintage Radio's 78%. Closest you own is Liam, only 45% alike, so it's a new direction.
+> 3. **Kayaan Classic** (Al Wataniah, 4.5★ from 1,746 votes, value 4.4, low risk): for formal cool nights, 90% against Sticky Fingers' 87%. Closest you own is Meant To Be Seen (60% alike, iris and powder).
 >
-> Nothing else would fill these gaps by enough. (Le Decanteur's Fragrantica dataset)
+> Infinity For Men (Armaf) would take hot nights too. Nothing else would fill these gaps by enough. (Le Decanteur's Fragrantica dataset)
