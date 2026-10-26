@@ -103,6 +103,24 @@ test('a plan’s ties leave out the picks either side, and none for a window alr
   assert.equal(planTies([day, night], { history: [{ id: 'x', date: '2026-10-26', slot: 'day', planned: true }] })[0].length, 1, 'a plan’s own pick is no wear');
 });
 
+test('an event’s ties leave out the other events’ picks and what was worn or planned in the days before it', () => {
+  const win = (dateISO, occasion) => ({ dateISO, slot: 'night', label: dateISO, ...(occasion && { occasion: { id: occasion } }) });
+  const window = (w, ...names) => {
+    const ranked = names.map((name, i) => entry(name, 0.88 - i * 0.001));
+    return { win: w, ranked, pick: ranked[0] };
+  };
+  // Ranked as rankEvent ranks them: no rotation, nothing saved.
+  const wed = window(win('2026-10-28'), 'Cedrus Blanc', 'Legacy');
+  const thu = window(win('2026-10-29'), 'Liam', 'Legacy');
+  const fri = window(win('2026-10-30', 'nightout'), 'Terra', 'Amber Empire', 'Liquid Brun', 'Cedrus Blanc', 'Aristo');
+  const sat = window(win('2026-10-31', 'date'), 'Amber Empire', 'Terra', 'Rifaaqat');
+  const history = [{ id: named('Liquid Brun').id, date: '2026-10-27', slot: 'night' }];
+  const [, , friTies, satTies] = planTies([wed, thu, fri, sat], { history });
+  // Not Saturday's Amber Empire, Tuesday's Liquid Brun, Wednesday's Cedrus Blanc or Thursday's Liam.
+  assert.deepEqual(friTies.map(t => t.entry.fragrance.name), ['Aristo']);
+  assert.deepEqual(satTies.map(t => t.entry.fragrance.name), ['Rifaaqat'], 'not Friday’s Terra');
+});
+
 test('the tie line says who suits the window just as well, with their tags, or both tags once', () => {
   const t = (name, tags) => ({ entry: { fragrance: { name } }, tags });
   assert.equal(tieLine([], { label: 'Today' }), '');

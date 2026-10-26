@@ -957,7 +957,8 @@ async function main() {
       })
       : planWindows(fragrances, shown, { history, nudge });
   }
-  const ties = tiesOf(result, !wanted || events.length > 0);
+  // A plan's ties are read over the events after today's windows too, which hold their bottles.
+  const ties = events.length ? planTies([...result, ...ahead], { history }).slice(0, result.length) : tiesOf(result, !wanted);
 
   if (args.json) {
     const eventJSON = ({ win, pick }) => ({ date: win.dateISO, slot: win.slot, occasion: win.occasion.id, pick: pick.fragrance.name });

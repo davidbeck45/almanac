@@ -5,7 +5,7 @@
 // error moves picks by more than that. Pure: Now's card (src/views/wear.js)
 // and the CLI's answers (scripts/recommend.mjs) both read it.
 import { heaviness } from './accords.js';
-import { performanceLevel, isDisliked } from './engine.js';
+import { performanceLevel, isDisliked, rotationPenalty } from './engine.js';
 import { styleScores, shownOf } from './scent-styles.js';
 import { matchPct } from './ui.js';
 
@@ -64,14 +64,24 @@ export function tiesFor(pick, ranked, { skip = [] } = {}) {
 
 /**
  * tiesFor every window of a plan (planWindows' [{ win, ranked, pick }], in
- * time order), leaving out the picks of the windows either side, which a
- * swap would move (the one before already carries a rotation penalty). A
- * window with a wear logged in `history` has none: the choice is made.
+ * time order, with any events later on), leaving out the picks of the
+ * windows either side, which a swap would move (the one before already
+ * carries a rotation penalty). An event's window is ranked with no rotation
+ * and nothing saved (rankEvent), so its ties also leave out the other
+ * events' picks and any bottle worn or planned within the rotation window
+ * before it. A window with a wear logged in `history` has none: the choice
+ * is made.
  */
 export function planTies(plan, { history = [] } = {}) {
+  const worn = history.filter(h => !h.planned);
   return plan.map((p, i) => {
-    if (history.some(h => !h.planned && h.date === p.win.dateISO && h.slot === p.win.slot)) return [];
+    if (worn.some(h => h.date === p.win.dateISO && h.slot === p.win.slot)) return [];
     const skip = [plan[i - 1], plan[i + 1]].map(q => q?.pick?.fragrance.id).filter(id => id != null);
+    if (p.win.occasion) {
+      for (const q of plan) if (q !== p && q.win.occasion && q.pick) skip.push(q.pick.fragrance.id);
+      const lately = [...worn, ...plan.slice(0, i).filter(q => q.pick).map(q => ({ id: q.pick.fragrance.id, date: q.win.dateISO, slot: q.win.slot, planned: true }))];
+      for (const r of p.ranked) if (rotationPenalty(r.fragrance.id, lately, p.win.dateISO, p.win.slot).penalty > 0) skip.push(r.fragrance.id);
+    }
     return tiesFor(p.pick, p.ranked, { skip });
   });
 }

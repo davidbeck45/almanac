@@ -622,6 +622,11 @@ test('a night planned for a date: Now and the Week plan around it, say what for,
     const sat = days.find(d => d.dateISO === later.dateISO).night;
     assert.equal(sat.pick.fragrance.id, rank(app.rankedFragrances(), later, 'night', { occasion: formal, todayISO: later.dateISO })[0].fragrance.id);
     assert.ok(days.slice(0, 3).every(d => [d.day, d.night].every(p => !p || p.pick.fragrance.id !== sat.pick.fragrance.id)), 'not worn the days before');
+    // Now reads tonight's ties with the formal night's plan, so they never offer its bottle.
+    const plan = app.todayPlan();
+    assert.equal(plan.at(-1).win.occasion.id, 'formal');
+    assert.equal(plan.at(-1).pick.fragrance.id, sat.pick.fragrance.id);
+    assert.ok(!planTies(plan)[plan.indexOf(night)].some(t => t.entry.fragrance.id === sat.pick.fragrance.id));
     // Now's card says what tonight is for, with a way to clear it; the Week marks the planned nights.
     state.slot = 'night';
     const now = wear.wear.panes.find(p => p.id === 'now').render({}, state.route);

@@ -19,7 +19,7 @@ import {
   wearButton, segHTML, starsHTML, sharedBannerHTML, accordColor, sectionHead,
 } from '../ui/components.js';
 import {
-  state, savePrefs, activeFragrances, sourceRecords, rankedFragrances, nowSlot, todaySlots, computeToday, computeWeek,
+  state, savePrefs, activeFragrances, sourceRecords, rankedFragrances, nowSlot, todaySlots, todayPlan, computeToday, computeWeek,
   rankContext, canWear, wornId, nowHour, findRecord, eventAt, setEvent,
 } from '../app/state.js';
 import * as trip from './wear/trip.js';
@@ -502,8 +502,9 @@ function nowPane() {
   const worn = wornId(win);
   const slots = todaySlots();
   const other = slots.find(p => p.win.slot !== win.slot);
-  // Ties as the CLI finds them for the same plan: none once he's wearing one.
-  const ties = planTies(slots, { history: state.history })[slots.findIndex(p => p.win === win)] ?? [];
+  // Ties as the CLI finds them for the same plan, the week's later events
+  // with it: none once he's wearing one.
+  const ties = planTies(todayPlan(), { history: state.history })[slots.findIndex(p => p.win === win)] ?? [];
   const ask = nowQuestion(pick, worn);
   return `${banner()}
     <section class="card slot" aria-labelledby="slot-title">

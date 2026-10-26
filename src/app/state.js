@@ -77,6 +77,7 @@ export const state = {
   // No prototype: the key comes from the URL (?ctx=constructor finds nothing).
   contexts: Object.create(null),
   today: null, // { day: plan, night: plan } where plan = { win, ranked, pick }
+  ahead: [], // the plans of the week's events after today's windows, which Now's plan holds bottles for
   bottles: new Map(), // dataset records loaded for bottle pages, and every one a pool answer names (keepBottles), by id
   about: new Map(), // id -> loadAbout() result (null: none), for bottle pages
   // Ids whose about data couldn't load (offline): the bottle page says so,
@@ -233,14 +234,16 @@ const weekWindows = () => withStoredEvents(week(state.forecast).flatMap(d => [d.
 export function computeToday() {
   if (!state.wx || !rankedFragrances().length) {
     state.today = null;
+    state.ahead = [];
     return;
   }
   const today = withStoredEvents([state.wx.day, state.wx.night].filter(Boolean).sort(byTime), state.events);
   const last = today.at(-1);
   const ahead = last && state.events.length && state.forecast ? weekWindows().filter(w => w.occasion && byTime(w, last) > 0) : [];
-  const plan = planWindows(rankedFragrances(), [...today, ...ahead], { history: state.history, nudge: true }).slice(0, today.length);
+  const plan = planWindows(rankedFragrances(), [...today, ...ahead], { history: state.history, nudge: true });
+  state.ahead = plan.slice(today.length);
   state.today = {};
-  for (const p of plan) {
+  for (const p of plan.slice(0, today.length)) {
     storeContext(p.win.slot, p.win, p.win.occasion ?? null, p.ranked);
     state.today[p.win.slot] = p;
   }
@@ -250,6 +253,9 @@ export function computeToday() {
 export function todaySlots() {
   return state.today ? Object.values(state.today).sort((a, b) => byTime(a.win, b.win)) : [];
 }
+
+// Today's windows and the week's events after them, as Now planned them (for planTies).
+export const todayPlan = () => [...todaySlots(), ...(state.today ? state.ahead : [])];
 
 // The window Now shows: the one picked with the Day/Night toggle, else the next.
 export function nowSlot() {
