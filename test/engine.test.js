@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, restReason, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, seasonFit, SEASONS, votedShares, performanceLevel } from '../src/engine.js';
+import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, restReason, savedReason, eventPhrase, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, seasonFit, SEASONS, votedShares, performanceLevel, PLAN_MARGIN } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { heaviness } from '../src/accords.js';
 import { predictedShares } from '../src/custom.js';
@@ -494,4 +494,78 @@ test('a logged wear stays the pick for its window', () => {
   const last = rank(fragrances, win, 'night').at(-1).fragrance;
   const [p] = planWindows(fragrances, [win], { history: [{ id: last.id, date: dateISO, slot: 'night' }] });
   assert.equal(p.pick.fragrance.id, last.id);
+});
+
+// A week of mild fall weather, Thursday Oct 1 to Wednesday Oct 7, with a
+// formal Saturday night (Oct 3) when `formal` is set.
+function eventWeek(events = {}) {
+  const windows = [];
+  for (let i = 0; i < 7; i++) {
+    const dateISO = `2026-10-${String(i + 1).padStart(2, '0')}`;
+    const date = new Date(`${dateISO}T12:00:00`);
+    for (const slot of ['day', 'night']) {
+      const occasion = events[`${dateISO} ${slot}`];
+      windows.push({ ...mildFallNight, ...(slot === 'day' && { feelsF: 66 }), date, dateISO, slot, ...(occasion && { occasion: occasionById(occasion) }) });
+    }
+  }
+  return windows;
+}
+
+test('an event takes the occasion’s best, and the plan around it barely moves', () => {
+  const plain = planWindows(fragrances, eventWeek());
+  const windows = eventWeek({ '2026-10-03 night': 'formal' });
+  const at = windows.findIndex(w => w.occasion);
+  const plan = planWindows(fragrances, windows);
+  const best = rank(fragrances, windows[at], 'night', { occasion: occasionById('formal'), todayISO: '2026-10-03' })[0];
+  assert.equal(plan[at].pick.fragrance.id, best.fragrance.id, 'rank()’s formal top');
+  assert.equal(plan[at].pick.score, best.score, 'scored as rank() scores it');
+  assert.ok(plan[at].pick.score > plain[at].pick.score + 0.02, `the event gains: ${plan[at].pick.score} against ${plain[at].pick.score}`);
+  // Elsewhere the plan stays as good as it was, and every pick within reach of its window's top.
+  const others = plan.map((p, i) => i).filter(i => i !== at);
+  const drift = others.reduce((sum, i) => sum + plan[i].pick.score - plain[i].pick.score, 0) / others.length;
+  assert.ok(Math.abs(drift) <= 0.005, `the other windows moved ${drift.toFixed(4)} a window`);
+  for (const i of others) assert.ok(plan[i].ranked[0].score - plan[i].pick.score <= PLAN_MARGIN);
+  // Its bottle sits out the windows before it, saying why, and counts as planned after it.
+  const id = best.fragrance.id;
+  for (const p of plan.slice(0, at)) {
+    assert.notEqual(p.pick.fragrance.id, id, `${p.win.dateISO} ${p.win.slot}`);
+    const entry = p.ranked.find(r => r.fragrance.id === id);
+    assert.ok(entry.reasons.some(r => r.text === (p.win.dateISO === '2026-10-03' ? 'Saved for formal wear tonight' : p.win.dateISO === '2026-10-02' ? 'Saved for formal wear tomorrow night' : 'Saved for formal wear on Saturday night')), entry.reasons.map(r => r.text).join('; '));
+  }
+  assert.ok(plan[at + 1].ranked.find(r => r.fragrance.id === id).reasons.some(r => r.text === 'Picked the day before'));
+  assert.ok(plan.slice(at + 1).every(p => !p.ranked.some(r => r.parts.saved)), 'nothing saved once it’s past');
+  // Without an event nothing is saved.
+  assert.ok(plain.every(p => p.ranked.every(r => !r.parts.saved)));
+});
+
+test('an event wants the best bottle: wears before it don’t count there, its own logged wear does', () => {
+  const windows = eventWeek({ '2026-10-03 night': 'formal' });
+  const at = windows.findIndex(w => w.occasion);
+  const best = planWindows(fragrances, windows)[at].pick.fragrance;
+  // Worn the night before: the day after still rotates it out; the event keeps it.
+  const history = [{ id: best.id, date: '2026-10-02', slot: 'night' }];
+  const plan = planWindows(fragrances, windows, { history, nudge: true });
+  assert.equal(plan[at].pick.fragrance.id, best.id);
+  assert.equal(plan[at].pick.parts.rotation, 0);
+  assert.ok(!plan[at].ranked.some(r => r.nudged), 'never nudged');
+  const other = fragrances.find(f => f.id !== best.id && f.name === 'Amber Empire');
+  const logged = planWindows(fragrances, windows, { history: [{ id: other.id, date: '2026-10-03', slot: 'night' }] });
+  assert.equal(logged[at].pick.fragrance.id, other.id, 'what he wore stays the pick');
+  // A pick that's worn anyway, with nothing new close, doesn't say it's saved.
+  const one = [best];
+  const lone = planWindows(one, windows);
+  assert.ok(lone.every(p => p.pick.fragrance.id === best.id && !p.pick.reasons.some(r => /^Saved/.test(r.text))));
+  // Two events can share their best bottle.
+  const two = planWindows(fragrances, eventWeek({ '2026-10-02 night': 'formal', '2026-10-03 night': 'formal' }));
+  assert.equal(two[3].pick.fragrance.id, best.id);
+  assert.equal(two[5].pick.fragrance.id, best.id);
+});
+
+test('a saved bottle is said in plain words, no temperature', () => {
+  const formal = occasionById('formal'), date = occasionById('date'), office = occasionById('office');
+  assert.equal(savedReason({ dateISO: '2026-10-03', slot: 'night', occasion: date }, '2026-10-03'), 'Saved for a date tonight');
+  assert.equal(savedReason({ dateISO: '2026-10-04', slot: 'day', occasion: office }, '2026-10-03'), 'Saved for the office tomorrow');
+  assert.equal(savedReason({ dateISO: '2026-10-03', slot: 'night', occasion: formal }, '2026-09-29'), 'Saved for formal wear on Saturday night');
+  assert.equal(eventPhrase({ dateISO: '2026-10-05', slot: 'day', occasion: office }, '2026-10-01'), 'the office on Monday');
+  assert.equal(eventPhrase({ dateISO: '2026-12-12', slot: 'night', occasion: formal }, '2026-10-01'), 'formal wear on the night of Dec 12');
 });

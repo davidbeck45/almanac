@@ -7,7 +7,7 @@
 // The sections in their own modules are src/views/bottle-*.js; the ones that
 // ask the suggestion pool keep their answers with pooled(), and draw again
 // on their own when an answer lands (redrawSection).
-import { rank, comfortRange, restReason, SEASONS } from '../engine.js';
+import { rank, comfortRange, restReason, savedReason, SEASONS } from '../engine.js';
 import { layerPicks, pairingKept, warmPairing } from '../layering.js';
 import { setHidden } from '../hidden.js';
 import { loadWants, saveWants, hasWant, setWant } from '../wishlist.js';
@@ -245,7 +245,8 @@ export function bottleModel(route) {
   if (!f) return null;
   const solo = !entry;
   const win = ctx?.win ?? null;
-  if (!entry && win) entry = rank(applySkin([f], loadSkin()), win, win.slot, { occasion: ctx.occasion, history: state.history, todayISO: win.dateISO })[0];
+  // An event's window ranks as the plan ranks it (rankEvent): recent wears don't count there.
+  if (!entry && win) entry = rank(applySkin([f], loadSkin()), win, win.slot, { occasion: ctx.occasion, history: ctx.event ? [] : state.history, todayISO: win.dateISO })[0];
   const owned = inSource(f.id);
   const active = isActive(f.id);
   const others = activeFragrances().filter(o => o.id !== f.id);
@@ -423,8 +424,10 @@ function whySection({ entry, solo, win }) {
   const rotation = p.rotation > 0
     ? `<p class="why-note">${esc(restText(p, win?.slot))}: ${Math.round(p.rotation * 100)}% lower so others get a turn.</p>`
     : '';
+  // Kept for an event later in the plan (planWindows' `saved`): its match stands, another bottle takes the window.
+  const saved = p.saved && win ? `<p class="why-note">${esc(savedReason(p.saved, win.dateISO))}, so the plan picks another bottle here.</p>` : '';
   const title = solo ? `How it would do ${win.slot === 'day' ? 'by day' : 'tonight'}` : 'Why it ranks here';
-  return `<section class="bp-section"><h3>${title} <span class="h3-aside">${matchPct(entry)}% match</span></h3><div class="bars why">${bars}</div>${rotation}</section>`;
+  return `<section class="bp-section"><h3>${title} <span class="h3-aside">${matchPct(entry)}% match</span></h3><div class="bars why">${bars}</div>${rotation}${saved}</section>`;
 }
 
 // Only the relative words go lower case: "Also good for tonight", "Also good for Saturday night".

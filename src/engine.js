@@ -504,8 +504,9 @@ const NUDGE_EVERY = 3;
 // Moves the best neglected bottle within reach to the front (`nudged`, with
 // its idle days as `parts.idle`, and `parts.unworn` when the journal has no
 // wear of it), unless the top pick is one already. Wears and plans before
-// this window count; the journal starts at its first logged wear.
-function nudgeIdle(scored, history, todayISO, slot) {
+// this window count; the journal starts at its first logged wear. A bottle
+// saved for an event later in the plan (`saved`) is never the one nudged.
+function nudgeIdle(scored, history, todayISO, slot, saved) {
   let start = null;
   const last = new Map();
   for (const h of history) {
@@ -524,7 +525,7 @@ function nudgeIdle(scored, history, todayISO, slot) {
   // Tiers fall in rank order, so the first bottle out of the top's tier ends the search.
   for (let i = 1; i < scored.length && top.score - scored[i].score <= PLAN_MARGIN && scored[i].tier === top.tier; i++) {
     const days = idle(scored[i]);
-    if (days < NUDGE_AFTER || isDisliked(scored[i].fragrance)) continue;
+    if (days < NUDGE_AFTER || isDisliked(scored[i].fragrance) || saved?.has(scored[i].fragrance.id)) continue;
     const [pick] = scored.splice(i, 1);
     pick.nudged = true;
     pick.parts.idle = days;
@@ -638,9 +639,34 @@ function reasonsFor(frag, parts, ctx) {
 
   const rest = restReason(parts, ctx.slot);
   if (rest) bad(rest, parts.rotation, true);
+  if (parts.saved) bad(savedReason(parts.saved, ctx.todayISO), SAVED_STRENGTH, true);
 
   return out.sort((a, b) => b.specific - a.specific || b.strength - a.strength);
 }
+
+// A bottle saved for an event leads its catches: it's why another bottle
+// takes the window.
+const SAVED_STRENGTH = 0.1;
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTH_DAY = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+
+/**
+ * An event ({ dateISO, slot, occasion }) as said on the date `fromISO`: "a
+ * date tonight", "the office tomorrow", "formal wear on Saturday night".
+ */
+export function eventPhrase({ dateISO, slot, occasion }, fromISO) {
+  const night = slot === 'night';
+  const days = daysBetween(fromISO, dateISO);
+  const at = new Date(`${dateISO}T12:00:00Z`);
+  const when = days <= 0 ? (night ? 'tonight' : 'today')
+    : days === 1 ? (night ? 'tomorrow night' : 'tomorrow')
+      : days < 7 ? `on ${WEEKDAYS[at.getUTCDay()]}${night ? ' night' : ''}`
+        : `on ${night ? 'the night of ' : ''}${MONTH_DAY.format(at)}`;
+  return `${occasion.phrase ?? occasion.label.toLowerCase()} ${when}`;
+}
+
+/** Why a plan leaves a bottle be for an event later on (planWindows' `saved`): "Saved for a date tonight". */
+export const savedReason = (event, fromISO) => `Saved for ${eventPhrase(event, fromISO)}`;
 
 /**
  * Why a recent wear or a plan's pick sets a bottle back in a window of
@@ -658,10 +684,13 @@ export function restReason({ daysAgo: d, planned }, slot) {
  * conditions: { feelsF, humidity, dewF?, category, date: Date, lat }
  * slot: 'day' | 'night'
  * opts: { occasion?, history?: [{id, date: 'YYYY-MM-DD'}], todayISO? (default: the window's dateISO),
- *   nudge?: put a neglected bottle within reach first (see NUDGE_AFTER) }
+ *   nudge?: put a neglected bottle within reach first (see NUDGE_AFTER),
+ *   saved?: Map(id -> event { dateISO, slot, occasion }) of bottles a plan
+ *   keeps for an event later on: they keep their score, say so
+ *   (`parts.saved`, savedReason) and are never nudged }
  */
 export function rank(fragrances, conditions, slot, opts = {}) {
-  const { occasion = null, history = [], todayISO = conditions.dateISO ?? localISO(new Date()), nudge = false } = opts;
+  const { occasion = null, history = [], todayISO = conditions.dateISO ?? localISO(new Date()), nudge = false, saved = null } = opts;
   const weights = targetSeasonWeights(conditions.feelsF, conditions.date, conditions.lat);
 
   const scored = fragrances.map(frag => {
@@ -676,6 +705,7 @@ export function rank(fragrances, conditions, slot, opts = {}) {
       rotation: penalty,
       daysAgo,
       planned,
+      ...(saved?.has(frag.id) && { saved: saved.get(frag.id) }),
     };
     return { fragrance: frag, score: scoreOf(parts, occasion), parts };
   });
@@ -690,38 +720,75 @@ export function rank(fragrances, conditions, slot, opts = {}) {
   for (const s of scored) {
     while (s.score < TIER_FLOORS[s.tier]) s.tier = TIERS[TIERS.indexOf(s.tier) + 1];
   }
-  if (nudge) nudgeIdle(scored, history, todayISO, slot);
+  if (nudge) nudgeIdle(scored, history, todayISO, slot, saved);
 
-  const ctx = { conditions, slot, weights, occasion };
+  const ctx = { conditions, slot, weights, occasion, todayISO };
   for (const s of scored) s.reasons = reasonsFor(s.fragrance, s.parts, ctx);
   return scored;
+}
+
+/**
+ * An event's window (`win.occasion`: Saturday night's wedding) ranked as
+ * planWindows plans it: for its occasion, with no rotation and no nudge. A
+ * wedding wants the best bottle, so neither a wear in the days before nor
+ * the plan around it sets one back there (the Occasion pane ranks a planned
+ * window the same way).
+ */
+export function rankEvent(fragrances, win, occasion = win.occasion) {
+  return rank(fragrances, win, win.slot, { occasion, todayISO: win.dateISO });
 }
 
 /**
  * Plan a run of windows in time order (e.g. the week ahead, day then night).
  * Each planned pick counts as worn for the windows after it, and a bottle not
  * yet in the plan wins over a repeat when it scores within PLAN_MARGIN.
- * A wear already logged for a window is kept as that window's pick. A window
- * can carry its own occasion (`win.occasion`, a formal dinner on a trip's
- * third night) over opts.occasion. With opts.nudge, a neglected bottle takes
- * a slot at most once every NUDGE_EVERY days. A bottle you rate DISLIKED or
- * lower is planned only where it ranks first with no new bottle within
- * PLAN_MARGIN.
+ * A wear already logged for a window is kept as that window's pick. With
+ * opts.nudge, a neglected bottle takes a slot at most once every
+ * NUDGE_EVERY days. A bottle you rate DISLIKED or lower is planned only where
+ * it ranks first with no new bottle within PLAN_MARGIN. opts.occasion goes
+ * on every window.
+ * A window with its own occasion is an event (`win.occasion`, a date on
+ * Friday night), planned first: it takes its top as rankEvent ranks it (its
+ * logged wear, when it has one), and the plan around it treats that bottle
+ * as already in the plan for the windows before it ("Saved for a date on
+ * Friday night", `parts.saved`), so a new bottle within PLAN_MARGIN takes
+ * them (with nothing that close it can still be worn), and as planned from
+ * the event's date on. Events never nudge, and without one nothing changes.
+ * Two events can share their best bottle.
  * Returns [{ win, ranked, pick }].
  */
 export function planWindows(fragrances, windows, opts = {}) {
   const { occasion = null, history = [], nudge = false } = opts;
+  const loggedIn = win => history.find(h => h.date === win.dateISO && h.slot === win.slot);
+  // Each event's pick, fixed before the windows around it are planned.
+  const events = windows.flatMap((win, i) => {
+    if (!win.occasion) return [];
+    const ranked = rankEvent(fragrances, win);
+    const logged = loggedIn(win);
+    const pick = (logged && ranked.find(r => r.fragrance.id === logged.id)) ?? ranked[0] ?? null;
+    return [{ i, win, ranked, pick, logged }];
+  });
   let planned = [...history];
+  for (const e of events) if (e.pick && !e.logged) planned.push({ id: e.pick.fragrance.id, date: e.win.dateISO, slot: e.win.slot, planned: true });
   const used = new Set();
   let nudgedOn = null;
-  return windows.map(win => {
-    const logged = history.find(h => h.date === win.dateISO && h.slot === win.slot);
+  return windows.map((win, i) => {
+    const event = events.find(e => e.i === i);
+    if (event) {
+      if (event.pick) used.add(event.pick.fragrance.id);
+      return { win, ranked: event.ranked, pick: event.pick };
+    }
+    // Bottles kept for the events still to come, each for the nearest.
+    const saved = new Map();
+    for (const e of events) if (e.i > i && e.pick && !saved.has(e.pick.fragrance.id)) saved.set(e.pick.fragrance.id, { dateISO: e.win.dateISO, slot: e.win.slot, occasion: e.win.occasion });
+    const logged = loggedIn(win);
     const canNudge = nudge && !logged && (nudgedOn === null || daysBetween(nudgedOn, win.dateISO) >= NUDGE_EVERY);
-    let ranked = rank(fragrances, win, win.slot, { occasion: win.occasion ?? occasion, history: planned, todayISO: win.dateISO, nudge: canNudge });
+    const asked = { occasion, todayISO: win.dateISO, nudge: canNudge, ...(saved.size && { saved }) };
+    let ranked = rank(fragrances, win, win.slot, { ...asked, history: planned });
     // A nudged bottle leads the list, and is new to the plan. A bottle you
     // rate DISLIKED or lower never counts as the fresh one, so it's planned
     // only where it ranks first and nothing new to the plan comes close.
-    const fresh = ranked.find(r => !used.has(r.fragrance.id) && !isDisliked(r.fragrance));
+    const fresh = ranked.find(r => !used.has(r.fragrance.id) && !saved.has(r.fragrance.id) && !isDisliked(r.fragrance));
     let pick = logged && ranked.find(r => r.fragrance.id === logged.id);
     if (!pick) pick = fresh && ranked[0].score - fresh.score <= PLAN_MARGIN ? fresh : ranked[0];
     // A repeat of the plan that tops the list anyway (the only bottle, or
@@ -729,8 +796,14 @@ export function planWindows(fragrances, windows, opts = {}) {
     // nothing, so it neither lowers it nor leads its reasons.
     if (pick && !logged && pick === ranked[0] && pick.parts.planned) {
       const id = pick.fragrance.id;
-      ranked = rank(fragrances, win, win.slot, { occasion: win.occasion ?? occasion, history: planned.filter(h => !(h.planned && h.id === id)), todayISO: win.dateISO, nudge: canNudge });
+      ranked = rank(fragrances, win, win.slot, { ...asked, history: planned.filter(h => !(h.planned && h.id === id)) });
       pick = ranked.find(r => r.fragrance.id === id);
+    }
+    // Likewise a bottle saved for an event that's worn anyway doesn't say it's saved.
+    if (pick?.parts.saved) {
+      const text = savedReason(pick.parts.saved, win.dateISO);
+      pick.reasons = pick.reasons.filter(r => r.text !== text);
+      delete pick.parts.saved;
     }
     if (pick?.nudged) nudgedOn = win.dateISO;
     if (pick) {

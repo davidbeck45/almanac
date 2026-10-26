@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { rank, planWindows, daysBetween, PLAN_MARGIN, NUDGE_AFTER } from '../src/engine.js';
 import { shiftISO } from '../src/history.js';
+import { occasionById } from '../src/occasions.js';
 
 const fragrances = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url))).fragrances
   .map(f => ({ ...f, id: String(f.id) }));
@@ -120,4 +121,23 @@ test('a plan nudges at most once every three days, and keeps logged wears', () =
   // A wear logged for a window stays its pick.
   const logged = [{ id: idOf('Terra'), date: TODAY, slot: 'day' }, ...history];
   assert.equal(planWindows(fragrances, windows, { history: logged, nudge: true })[0].pick.fragrance.name, 'Terra');
+});
+
+test('a bottle saved for an event is never the one nudged before it', () => {
+  const formal = occasionById('formal');
+  const dates = Array.from({ length: 7 }, (_, i) => shiftISO(TODAY, i));
+  const windows = dates.flatMap(d => [mildDay(d, 'day'), mildDay(d, 'night')]);
+  const at = 11; // the sixth night
+  const event = { ...windows[at], occasion: formal };
+  const best = rank(fragrances, event, 'night', { occasion: formal })[0].fragrance;
+  // Everything worn lately but the event's best, which has sat since August.
+  const history = journal({ recent: '2026-09-25', last: { [best.name]: '2026-08-20' } });
+  const plain = planWindows(fragrances, windows, { history, nudge: true });
+  assert.ok(plain.slice(0, at).some(p => p.pick.nudged && p.pick.fragrance.id === best.id), 'without the event the plan brings it back early');
+  const plan = planWindows(fragrances, windows.map((w, i) => (i === at ? event : w)), { history, nudge: true });
+  assert.equal(plan[at].pick.fragrance.id, best.id);
+  for (const p of plan.slice(0, at)) {
+    assert.notEqual(p.pick.fragrance.id, best.id);
+    assert.ok(!p.ranked.some(r => r.nudged && r.fragrance.id === best.id), `${p.win.dateISO} ${p.win.slot}`);
+  }
 });
