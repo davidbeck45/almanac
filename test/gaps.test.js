@@ -201,7 +201,9 @@ test('David’s gaps name real situations, gaps before room to grow, and his str
   const statusWith = second => coverage([{ name: 'a' }, { name: 'b' }], Float32Array.of(q[99], second), [cold.cell], [q])[0].status;
   assert.notEqual(statusWith(q[88]), 'thin');
   assert.equal(statusWith(q[60]), 'thin');
-  const date = report.strengths.find(s => s.use === 'date');
+  // The report names four strengths, most strong bottles first; Formal on mild nights (6) now edges out Date
+  // Night in the cold (5 or more), which is still a strength.
+  const date = strengths(ctx.cov, { limit: 8 }).find(s => s.use === 'date');
   assert.ok(date?.bands.includes('cold'), 'date nights in the cold are a strength');
   assert.match(date.text, /^Date Night on cold and cool nights: \d+ or more strong bottles, led by /);
   // A run whose leader changes names both ends.
@@ -246,7 +248,9 @@ test('gap fillers keep near the wardrobe’s own leans', () => {
   assert.ok(past.length <= 1, past.map(p => `${p.record.name} ${genderLean(p.record, byId)}`).join(', '));
   assert.ok(picks.every(p => genderLean(p.record, byId) < hi + 0.15), picks.map(p => `${p.record.name} ${genderLean(p.record, byId)}`).join(', '));
   // David's picks hold.
-  assert.deepEqual(report.picks.map(p => p.name), ['Zenith', 'Encre Noire', 'Kayaan Classic', 'Infinity For Men']);
+  // Kayaan Classic, an iris that lasts and keeps close, fills Office on cold days as well as Formal on cool
+  // nights, so Encre Noire (Good on its own, below) isn't needed after it.
+  assert.deepEqual(report.picks.map(p => p.name), ['Zenith', 'Kayaan Classic', 'Infinity For Men']);
 });
 
 test('without its fresh bottles, the wardrobe’s top gaps are warm and hot days', () => {

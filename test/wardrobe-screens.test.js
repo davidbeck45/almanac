@@ -151,7 +151,11 @@ test('the headline reads plainly, and the thin spots name what fills them', () =
   const zenith = report.picks.find(p => p.name === 'Zenith');
   if (zenith) assert.ok(html.includes(`data-id="${zenith.id}">Zenith</button>`), 'Zenith fills a thin spot');
   assert.ok(!/match;\s*$|NaN%/.test(html));
-  assert.match(insights.strongHTML(report), /Plenty for Date Night on cold/);
+  // Each strength shows as a row, led by its best bottle (Formal on mild nights edges Date Night in the cold off the four).
+  const strong = insights.strongHTML(report);
+  assert.equal((strong.match(/class="strong-row"/g) ?? []).length, report.strengths.length);
+  for (const s of report.strengths) assert.ok(strong.includes(`Plenty for ${esc(s.title)}`), s.title);
+  assert.match(strong, /Plenty for Formal on mild nights<\/b><span>Meant To Be Seen and \d+ more/);
 });
 
 test('a suggestion card shows its fills against your best, its facts and its actions', () => {
