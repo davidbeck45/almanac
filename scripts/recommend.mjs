@@ -21,15 +21,17 @@
 //   node scripts/recommend.mjs --dupes "Aventus"           (its original, cheaper alternatives and smell-alikes)
 // Suggestions (--gaps, --style, --more-like, --notes) leave out body mists and
 // sprays; --mists lets them in.
-// --journal FILE takes the app's journal export (Export in the wear journal), so
-// recent wears rotate out as they do in the app. --top N gives reasons for the
+// --journal takes the app's journal export (Export in the wear journal) or its
+// Copy for Claude (a token beside Export: the last ten days' wears and what
+// the nudge reads, stars and switched-off bottles), so recent wears rotate
+// out as they do in the app; plans without one say so. --top N gives reasons for the
 // first N picks. Every bottle in the wardrobe counts, Jake included (these
 // answers are for David); --demo leaves out DEFAULT_HIDDEN like the site does
 // for a first-time visitor. Bottles hidden in the app live in the phone's
 // storage; pass them via --exclude (part of a name is enough), or with the
-// journal export, which carries them. Like the app, picks leave switched-off
+// journal, which carries them. Like the app, picks leave switched-off
 // bottles out, and suggestions and checks count them as owned (never
-// suggested back; "You own it."). A journal export also carries his own
+// suggested back; "You own it."). A journal also carries his own
 // ratings and skin nudges, and turns on the rotation nudge (a bottle unworn
 // for a month takes a slot it nearly wins), and the gap finder reads its
 // wears' occasions into the use shares.
@@ -39,7 +41,7 @@ import { rank, planWindows, comfortRange } from '../src/engine.js';
 import { layerPicks, byPick } from '../src/layering.js';
 import { OCCASIONS } from '../src/occasions.js';
 import { DEFAULT_HIDDEN } from '../src/hidden.js';
-import { parseJournal, occasionCounts } from '../src/history.js';
+import { readJournal, isJournalToken, journalFreshness, occasionCounts } from '../src/history.js';
 import { normalize } from '../src/collections.js';
 import { excluding } from '../src/pool-tasks.js';
 import { fetchForecast, summarize, week, tripWindows, forecastError } from '../src/weather.js';
@@ -199,6 +201,20 @@ export function parseEvents(text) {
   return events;
 }
 
+/**
+ * --journal: the app's Copy for Claude (a token, told apart by its shape)
+ * or a file holding an export or a token. -> parseJournal's shape; throws
+ * with a sentence for the user.
+ */
+export function loadJournal(arg) {
+  if (isJournalToken(arg)) return readJournal(arg);
+  let text;
+  try { text = readFileSync(arg, 'utf8'); } catch { throw new Error(`Can't read ${arg}`); }
+  const journal = readJournal(text);
+  if (!journal) throw new Error(`${arg} isn't a Scentcast journal export (the wear journal's Export button) or its Copy for Claude`);
+  return journal;
+}
+
 // Standard situations for --spray without a place.
 const SPRAY_SITUATIONS = [
   { label: 'Hot, sticky day', slot: 'day', feelsF: 90, humidity: 65, dewF: 72, category: 'clear' },
@@ -290,16 +306,26 @@ async function main() {
 
   let history = [], journal = null;
   if (args.journal) {
-    let text;
-    try { text = readFileSync(args.journal, 'utf8'); } catch { fail(`Can't read ${args.journal}`); }
-    try { journal = parseJournal(JSON.parse(text)); } catch {}
-    if (!journal) fail(`${args.journal} isn't a Scentcast journal export (the wear journal's Export button)`);
+    try { journal = loadJournal(args.journal); } catch (err) { fail(err.message); }
     history = journal.history.filter(h => !h.planned);
     wardrobe = applySkin(wardrobe, journal.skin);
     for (const id of journal.hidden) off.add(id);
   }
   // With a journal, a bottle left unworn for a month takes a slot it nearly wins.
   const nudge = history.length > 0;
+  // Plans say whether they counted recent wears (`journal` in the JSON: false,
+  // or how current its wears are), and the text says so when they didn't, or
+  // when the newest wear is days old.
+  const freshness = journal && journalFreshness(history, today);
+  const journalLine = () => {
+    if (!journal) return 'Not counting what you\'ve worn lately: send the app\'s Copy for Claude (Wardrobe › Worn) to fix that.';
+    if (freshness.daysAgo >= 2) return `Newest wear in the journal: ${shortDate(freshness.newest)}, ${freshness.daysAgo} days ago; anything worn since isn't counted.`;
+    return null;
+  };
+  const sayJournal = () => {
+    const line = journalLine();
+    if (line) console.log(`\n${line}`);
+  };
   // Picks rank the bottles switched on; suggestions and checks count the rest as owned (`hidden`).
   const fragrances = wardrobe.filter(f => !off.has(f.id)), hidden = wardrobe.filter(f => off.has(f.id));
   const suggesting = Boolean(args.gaps || args.check || args.style || args['more-like'] || args.notes || args.dupes);
@@ -636,7 +662,7 @@ async function main() {
     let shares = null;
     if (args.uses || history.length) {
       try {
-        shares = sharesFrom(parseUses(args.uses ?? ''), history.length ? occasionCounts(history) : null);
+        shares = sharesFrom(parseUses(args.uses ?? ''), history.length ? journal?.counts ?? occasionCounts(history) : null);
       } catch (err) {
         fail(`--uses: ${err.message}`);
       }
@@ -806,6 +832,7 @@ async function main() {
         date: args.date,
         weather: typical ? 'typical' : 'forecast',
         occasion: occasion?.id ?? null,
+        journal: freshness || false,
         slots: result.map(slotJSON),
       }, null, 2));
     } else {
@@ -814,6 +841,7 @@ async function main() {
         const win = r.win;
         printSlot(r, `${win.slot === 'day' ? 'Day' : 'Night'}: ${win.typical ? 'typically ' : ''}${win.condition.toLowerCase()}, feels ${Math.round(win.feelsF)}°F, ${Math.round(win.humidity)}% humidity${win.pop >= 30 ? (win.typical ? `, wet on ${win.pop}% of these dates in past years` : `, ${win.pop}% rain`) : ''}`);
       }
+      sayJournal();
     }
     return;
   }
@@ -833,6 +861,7 @@ async function main() {
       console.log(JSON.stringify({
         place,
         occasion: occasion?.id ?? null,
+        journal: freshness || false,
         days: rows.map(({ day, slots }) => ({
           date: day.dateISO,
           name: day.name,
@@ -851,6 +880,7 @@ async function main() {
           console.log(`  ${win.slot === 'day' ? 'day  ' : 'night'} ${String(Math.round(win.feelsF)).padStart(3)}°F  ${pick.tier}  ${pick.fragrance.name} (${pick.fragrance.brand}): ${why(pick)}`);
         }
       }
+      sayJournal();
     }
     return;
   }
@@ -870,6 +900,7 @@ async function main() {
       place,
       now: wx.now,
       occasion: occasion?.id ?? null,
+      journal: freshness || false,
       slots: result.map(slotJSON),
     }, null, 2));
   } else {
@@ -878,6 +909,7 @@ async function main() {
       const win = r.win;
       printSlot(r, `${win.label}: ${win.condition}, feels ${Math.round(win.feelsF)}°F, ${Math.round(win.humidity)}% humidity${win.pop >= 30 ? `, ${win.pop}% rain` : ''}`);
     }
+    sayJournal();
   }
 }
 
@@ -1029,17 +1061,17 @@ async function discover(args, fragrances, { slot, count, history, hidden }) {
   console.log(`\n${CREDIT}.`);
 }
 
-const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,NAME]) [--occasion ${OCCASIONS.map(o => o.id).join('|')}] [--slot day|night] [--week] [--journal FILE] [--exclude NAME,NAME] [--demo] [--top N] [--json]
+const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,NAME]) [--occasion ${OCCASIONS.map(o => o.id).join('|')}] [--slot day|night] [--week] [--journal FILE|TOKEN] [--exclude NAME,NAME] [--demo] [--top N] [--json]
        node scripts/recommend.mjs --layer NAME|all [--city NAME | --loc LAT,LON[,NAME]] [--slot day|night] [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --ideal NAME [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --mix [--exclude NAME,NAME] [--demo] [--json]
        node scripts/recommend.mjs --doubles [--exclude NAME,NAME] [--demo] [--json]
        node scripts/recommend.mjs --styles NAME [--json]
-       node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,NAME]) --date YYYY-MM-DD [--occasion ID] [--slot day|night] [--journal FILE] [--json]
+       node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,NAME]) --date YYYY-MM-DD [--occasion ID] [--slot day|night] [--journal FILE|TOKEN] [--json]
        node scripts/recommend.mjs --pack (--city NAME | --loc LAT,LON[,NAME]) --from YYYY-MM-DD --to YYYY-MM-DD [--max N] [--events "DATE [day|night] OCCASION; …"] [--json]
        node scripts/recommend.mjs --spray NAME [--city NAME | --loc LAT,LON[,NAME]] [--date YYYY-MM-DD] [--occasion ID] [--slot day|night] [--json]
-       node scripts/recommend.mjs --gaps [--city NAME | --loc LAT,LON[,NAME]] [--uses USE=never|sometimes|often,…] [--value | --no-value] [--mists] [--top N] [--exclude NAME,NAME] [--journal FILE] [--demo] [--json]
-       node scripts/recommend.mjs --check NAME|ID|id:ID [--city NAME | --loc LAT,LON[,NAME]] [--uses …] [--value | --no-value] [--style STYLE,STYLE] [--exclude NAME,NAME] [--journal FILE] [--json]
+       node scripts/recommend.mjs --gaps [--city NAME | --loc LAT,LON[,NAME]] [--uses USE=never|sometimes|often,…] [--value | --no-value] [--mists] [--top N] [--exclude NAME,NAME] [--journal FILE|TOKEN] [--demo] [--json]
+       node scripts/recommend.mjs --check NAME|ID|id:ID [--city NAME | --loc LAT,LON[,NAME]] [--uses …] [--value | --no-value] [--style STYLE,STYLE] [--exclude NAME,NAME] [--journal FILE|TOKEN] [--json]
        node scripts/recommend.mjs (--style STYLE,STYLE|liked [--all] | --more-like NAME,NAME|favorites | --notes "NOTE NOTE") [--season S,S] [--slot day|night] [--lean feminine|unisex|masculine] [--min-value V] [--min-rating R] [--mists] [--top N] [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --dupes NAME [--top N] [--json]`;
 

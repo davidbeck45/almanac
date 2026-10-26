@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findOccasion, matchBottles, parseEvents, weatherFailure } from '../scripts/recommend.mjs';
+import { journalExport, journalToken, shiftISO } from '../src/history.js';
 
 const script = fileURLToPath(new URL('../scripts/recommend.mjs', import.meta.url));
 const mock = fileURLToPath(new URL('./mock-fetch.mjs', import.meta.url));
@@ -167,6 +168,48 @@ test('--journal rotates out what was just worn, and --week --occasion plans its 
   const week = JSON.parse(cli('--loc', '40.7,-74', '--json', '--week', '--occasion', 'date night').stdout);
   const slots = week.days.flatMap(d => d.picks.map(p => p.slot));
   assert.ok(slots.length >= 6 && slots.every(s => s === 'night'), slots.join(','));
+});
+
+test('--journal takes the app’s Copy for Claude as it takes an export, and a plan without either says so', () => {
+  const bare = cli('--loc', '40.7,-74', '--json', '--slot', 'night');
+  const first = JSON.parse(bare.stdout);
+  assert.equal(first.journal, false);
+  assert.match(cli('--loc', '40.7,-74').stdout, /\n\nNot counting what you've worn lately: send the app's Copy for Claude \(Wardrobe › Worn\) to fix that\.\n$/);
+  assert.match(cli('--loc', '40.7,-74', '--week').stdout, /Not counting what you've worn lately/);
+  const night = first.slots[0];
+  const worn = fragrances.find(f => f.name === night.pick.name);
+  const runnerUp = fragrances.find(f => f.name === night.pick.runnerUp);
+  const jake = fragrances.find(f => f.name === 'Jake');
+  const today = night.window.date;
+  const yesterday = shiftISO(today, -1);
+  const history = [{ id: String(worn.id), date: yesterday, slot: 'night', occasion: 'daily' }];
+  const skin = { [runnerUp.id]: { rating: 5, longevity: 0, sillage: 0 } };
+  const token = journalToken(history, [String(jake.id)], skin, { todayISO: today });
+
+  const run = cli('--loc', '40.7,-74', '--json', '--slot', 'night', '--journal', token);
+  assert.equal(run.status, 0, run.stderr);
+  const out = JSON.parse(run.stdout);
+  assert.deepEqual([out.journal.newest, out.journal.recent], [yesterday, 1]);
+  const after = out.slots[0];
+  assert.notEqual(after.pick.name, worn.name);
+  assert.ok(after.ranked.find(r => r.name === worn.name).reasons.includes('- Worn yesterday'));
+  assert.ok(after.ranked.find(r => r.name === runnerUp.name).reasons.includes('+ You rate it 5★'));
+  assert.ok(!after.ranked.some(r => r.name === 'Jake'), 'switched off in the app');
+  // The same as the export it stands for, and a file can hold the token too.
+  const dir = mkdtempSync(join(tmpdir(), 'scentcast-'));
+  const file = join(dir, 'journal.json'), held = join(dir, 'token.txt');
+  writeFileSync(file, JSON.stringify(journalExport(history, null, [String(jake.id)], { skin })));
+  writeFileSync(held, `${token}\n`);
+  assert.deepEqual(JSON.parse(cli('--loc', '40.7,-74', '--json', '--slot', 'night', '--journal', file).stdout).slots, out.slots);
+  assert.deepEqual(JSON.parse(cli('--loc', '40.7,-74', '--json', '--slot', 'night', '--journal', held).stdout).slots, out.slots);
+  assert.doesNotMatch(cli('--loc', '40.7,-74', '--journal', token).stdout, /Not counting|Newest wear/, 'a current journal goes without saying');
+
+  // Days old, it says what it may be missing; cut short, it says so plainly.
+  const old = journalToken([{ id: String(worn.id), date: shiftISO(today, -4), slot: 'night' }], [], {}, { todayISO: shiftISO(today, -3) });
+  assert.match(cli('--loc', '40.7,-74', '--journal', old).stdout, /\nNewest wear in the journal: \w{3}, \w{3} \d+, \d+ days ago; anything worn since isn't counted\.\n$/);
+  const cut = cli('--loc', '40.7,-74', '--journal', token.slice(0, -5));
+  assert.equal(cut.status, 1);
+  assert.equal(cut.stderr, 'This Copy for Claude is cut short or garbled: copy it again from Wardrobe › Worn and paste it whole.\n');
 });
 
 test('an ambiguous name says which bottle it took', () => {

@@ -102,6 +102,13 @@ test('a share link that can’t go to the clipboard shows whole, to copy by hand
   assert.match(html, /David’s bottles/);
   assert.match(wardrobe.shareSheetHTML({ url, copied: true }), /<span>Copied<\/span>/);
   assert.match(wardrobe.shareSheetHTML({ url, copied: 'Couldn’t copy' }), /<p class="muted small">Couldn’t copy<\/p>/);
+  // The journal's Copy for Claude falls back on the same sheet, in its own words.
+  const claude = wardrobe.shareSheetHTML({ url: 'scj1.eyJ0Ijoi', claude: true });
+  assert.match(claude, /<h2 id="share-title" class="sheet-title">Copy for Claude<\/h2>/);
+  assert.match(claude, /Paste it to Claude so its picks know what you’ve worn/);
+  assert.match(claude, /value="scj1\.eyJ0Ijoi" readonly/);
+  assert.match(claude, /<span>Copy<\/span>/);
+  assert.doesNotMatch(claude, /link/i);
 });
 
 test('the journal says it covers every list when the ranked one isn’t all it holds', () => {
@@ -115,6 +122,7 @@ test('the journal says it covers every list when the ranked one isn’t all it h
   assert.match(mixed, /<h3>Gathering dust<\/h3><p class="muted small journal-scope">From Mine: in rotation, not worn in 30 days\.<\/p>/);
   assert.ok(!wardrobe.wornHTML(data, resolve).includes('journal-scope'), 'one list: nothing to say');
   assert.match(wardrobe.wornHTML(data, resolve, { confirmClear: true }), /Press again to clear/, 'no Tap on a desktop');
+  assert.match(wardrobe.wornHTML(data, resolve), /data-action="journal-export">.*Export<\/button>\s*<button class="btn secondary" data-action="journal-claude">.*Copy for Claude<\/button>/, 'beside Export');
 });
 
 test('the accord chips are one Tab stop, and a chosen chip says its rank in words', () => {

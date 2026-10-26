@@ -65,16 +65,139 @@ export function journalExport(history, loc, hidden, { nowISO = new Date().toISOS
 // ids as strings like the app keeps them. Null when it isn't one. Files from
 // before ratings were exported read with an empty `skin`. Wears without an
 // ISO date and day or night, and a `hidden` that isn't a list, are left out.
+// `counts` is a Copy for Claude's wears per use (occasionCounts over the
+// whole log, which its wears are only part of); null from a file, whose
+// wears are all there to count.
 export function parseJournal(data) {
   if (data?.app !== 'scentcast-journal' || !Array.isArray(data.history)) return null;
   const skin = data.skin && typeof data.skin === 'object' && !Array.isArray(data.skin) ? data.skin : {};
   const loc = data.location;
+  const counts = data.counts && typeof data.counts === 'object' && !Array.isArray(data.counts)
+    && Object.values(data.counts).every(n => Number.isInteger(n) && n >= 0) ? { ...data.counts } : null;
   return {
     location: loc && Number.isFinite(loc.lat) && Number.isFinite(loc.lon) ? loc : null,
     hidden: Array.isArray(data.hidden) ? data.hidden.map(String) : [],
     history: wearsOf(data.history),
     skin: Object.fromEntries(Object.entries(skin).map(([id, e]) => [String(id), e])),
+    counts,
   };
+}
+
+// ---------- Copy for Claude ----------
+// A short token (Wardrobe › Worn's Copy for Claude) that carries what the
+// CLI's and the Omarchy widget's plans read to agree with the app's:
+// "scj1." then base64url of { t: the device's date, i: the bottle ids the
+// rest point into, w: wears as [bottle, days before t, 0 day | 1 night,
+// use?], h: switched-off bottles, s: stars and skin nudges as [bottle,
+// stars or 0, longevity, sillage], c: wears per use }. A wear's use is left
+// out for 'daily' and 0 when it was logged without one. The wears are the
+// last RECENT_DAYS days' (rotation), each other bottle's latest and the
+// journal's first (the nudge counts idle days from them), so a plan reads
+// them as it reads the whole log. No places: Claude and the widget are
+// told where. Under a kilobyte for David's wardrobe, about 1.1 KB with every
+// bottle rated.
+const TOKEN = /^scj(\d+)\.([\w-]*)$/;
+const TOKEN_VERSION = 1;
+// How far back rotation reaches (ROTATION_PENALTY's length in src/engine.js).
+export const RECENT_DAYS = 10;
+
+const toBase64Url = s => btoa(String.fromCharCode(...new TextEncoder().encode(s)))
+  .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const fromBase64Url = s => new TextDecoder('utf-8', { fatal: true }).decode(
+  Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)));
+// Numeric ids (Fragrantica's) go as numbers, two characters shorter each.
+const packId = id => (/^[1-9]\d{0,14}$/.test(id) ? Number(id) : id);
+
+/** The Copy for Claude token for a log, the device's hidden bottles and its ratings (loadSkin()). */
+export function journalToken(history, hidden = [], skin = {}, { todayISO }) {
+  const logged = wearsOf(history).filter(h => !h.planned)
+    .sort((a, b) => b.date.localeCompare(a.date) || (a.slot === b.slot ? 0 : a.slot === 'night' ? -1 : 1));
+  const since = shiftISO(todayISO, -(RECENT_DAYS - 1));
+  const kept = logged.filter(h => h.date >= since);
+  const seen = new Set(kept.map(h => h.id));
+  for (const h of logged) if (!seen.has(h.id)) { seen.add(h.id); kept.push(h); }
+  const first = logged.at(-1);
+  if (first && !kept.includes(first)) kept.push(first);
+  const ids = [], at = new Map();
+  const ref = id => {
+    const key = String(id);
+    if (!at.has(key)) { at.set(key, ids.length); ids.push(packId(key)); }
+    return at.get(key);
+  };
+  const w = kept.map(h => {
+    const use = !h.occasion ? 0 : h.occasion === 'daily' ? undefined : String(h.occasion);
+    return [ref(h.id), daysBetweenISO(h.date, todayISO), h.slot === 'night' ? 1 : 0, ...(use === undefined ? [] : [use])];
+  });
+  const h = [...hidden].map(ref);
+  const s = Object.entries(skin ?? {}).map(([id, e]) => {
+    const row = [ref(id), e.rating ?? 0, e.longevity ?? 0, e.sillage ?? 0];
+    while (row.length > 2 && !row.at(-1)) row.pop();
+    return row;
+  });
+  const body = { t: todayISO, i: ids, w, ...(h.length && { h }), ...(s.length && { s }), c: occasionCounts(logged) };
+  return `scj${TOKEN_VERSION}.${toBase64Url(JSON.stringify(body))}`;
+}
+
+// A token as pasted from a chat: quotes or a full stop around it aren't part of it.
+const unwrap = text => String(text ?? '').trim().replace(/^[`'"“‘]+|[`'"”’.,;]+$/g, '');
+
+/** Whether text reads as a Copy for Claude token (any version), not a file name. */
+export const isJournalToken = text => /^scj\d+\./.test(unwrap(text));
+
+/**
+ * A Copy for Claude token as the journal file it stands for, for
+ * parseJournal. Throws an Error whose message is a sentence for the user.
+ */
+export function journalFromToken(token) {
+  const m = unwrap(token).match(TOKEN);
+  if (m && Number(m[1]) > TOKEN_VERSION) throw new Error(`This Copy for Claude comes from a newer Scentcast (scj${m[1]}) than this checkout reads; update it.`);
+  const need = ok => {
+    if (!ok) throw new Error('This Copy for Claude is cut short or garbled: copy it again from Wardrobe › Worn and paste it whole.');
+  };
+  need(m && Number(m[1]) === TOKEN_VERSION);
+  let body = null;
+  try { body = JSON.parse(fromBase64Url(m[2])); } catch {}
+  const { t, i: ids, w = [], h = [], s = [], c = null } = body ?? {};
+  need(ISO_DATE.test(t ?? '') && !Number.isNaN(Date.parse(t)) && Array.isArray(ids) && ids.every(id => typeof id === 'string' || Number.isInteger(id)));
+  need([w, h, s].every(Array.isArray));
+  const bottle = k => {
+    need(Number.isInteger(k) && k >= 0 && k < ids.length);
+    return String(ids[k]);
+  };
+  const history = w.map(e => {
+    need(Array.isArray(e) && Number.isInteger(e[1]) && [0, 1].includes(e[2]));
+    const use = e.length < 4 ? 'daily' : e[3];
+    need(use === 0 || typeof use === 'string');
+    return { id: bottle(e[0]), date: shiftISO(t, -e[1]), slot: e[2] ? 'night' : 'day', ...(use && { occasion: use }) };
+  });
+  const skin = Object.fromEntries(s.map(e => {
+    need(Array.isArray(e));
+    const [k, rating = 0, longevity = 0, sillage = 0] = e;
+    return [bottle(k), { rating: rating || null, longevity, sillage }];
+  }));
+  return { app: 'scentcast-journal', version: 1, exported: t, location: null, hidden: h.map(bottle), history, skin, counts: c };
+}
+
+/**
+ * A journal as given to the CLI or the widget: a Copy for Claude token, or
+ * the text of a file holding an export or a token. parseJournal's shape, or
+ * null when it's neither; a bad token throws with a sentence.
+ */
+export function readJournal(text) {
+  if (isJournalToken(text)) return parseJournal(journalFromToken(text));
+  try { return parseJournal(JSON.parse(text)); } catch { return null; }
+}
+
+/**
+ * How current a journal's wears are on `todayISO`: the newest logged wear
+ * on or before it, how many days ago that was, and how many wears fall in
+ * the last RECENT_DAYS days (what rotation reads).
+ */
+export function journalFreshness(history, todayISO) {
+  const logged = history.filter(h => !h.planned && h.date <= todayISO);
+  const newest = logged.reduce((a, h) => (a === null || h.date > a ? h.date : a), null);
+  const since = shiftISO(todayISO, -(RECENT_DAYS - 1));
+  return { newest, daysAgo: newest && daysBetweenISO(newest, todayISO), recent: logged.filter(h => h.date >= since).length };
 }
 
 /**
@@ -100,6 +223,7 @@ export function clearHistory() {
 }
 
 const shiftISO = (iso, days) => new Date(Date.parse(`${iso}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+const daysBetweenISO = (from, to) => Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000);
 
 // Wear counts and last-worn dates for the journal. `days` is the look-back
 // window for counts; last-worn dates cover the whole log.
