@@ -12,7 +12,7 @@
 // point come from real days). Owned bottles are measured against the
 // suggestion pool's scores in the same cell, every bottle read on the
 // pool's evidence (sameFooting).
-import { seasonFit, timeFit, timeForgiven, weatherFit, richInHeat, thinInCold, quality, personalPart, occasionRaw, occasionPart, scoreOf, targetSeasonWeights, isDisliked } from './engine.js';
+import { seasonFit, timeFit, timeForgiven, weatherFit, richInHeat, thinInCold, quality, personalPart, occasionRaw, occasionPart, nightLean, scoreOf, targetSeasonWeights, isDisliked } from './engine.js';
 import { occasionById } from './occasions.js';
 import { similarity, sharedTraits } from './similar.js';
 import { styleScores, styleMix, styleById, topOf, shownOf, closeOf } from './scent-styles.js';
@@ -196,19 +196,24 @@ const allFooted = records => footedLists.get(records) ?? footedLists.set(records
  * (`personal`: only owned records carry them, so the pool's table and
  * reference stay the crowd's). The score is linear in the parts, so the
  * season, time and weather fits (and richness in heat, thinness in the cold)
- * are averaged per slot × band and shared by every use, and occasionPart is
- * worked out once per occasion. Only the time fit's forgiveness moves with
- * the weather (timeFit adds it to the votes' fit as fit + (1 − fit) ×
- * forgiven), so the votes' fit is worked out once.
+ * are averaged per slot × band and shared by every use, and occasionRaw is
+ * worked out once per occasion. The time fit's forgiveness moves with the
+ * weather (timeFit adds it to the votes' fit as fit + (1 − fit) × forgiven),
+ * so the votes' fit is worked out once; and on a night slot the night lean
+ * (nightLean) does, so an occasion that has one adds it to the raw fit per
+ * window and averages the parts past the knee (occasionRaw ends by adding
+ * it, so the sum is rank()'s to the bit).
  */
 export function fitTable(bottles, { cells, slotBands }) {
   const m = cells.length, out = new Float32Array(bottles.length * m);
   const keys = [...new Set(cells.map(c => c.sb))];
   const occasions = [...new Set(cells.map(c => c.occasion).filter(Boolean))];
-  const fit = new Map(), occ = new Map();
+  const fit = new Map(), occ = new Map(), raw = new Map();
   bottles.forEach((b, i) => {
     const q = quality(b), personal = personalPart(b);
-    for (const o of occasions) occ.set(o, occasionPart(occasionRaw(b, o), o));
+    // The night lean (nightLean) moves an occasion's raw fit with the
+    // weather, so those occasions' parts are averaged per window, past the knee.
+    for (const o of occasions) { const r = occasionRaw(b, o); raw.set(o, r); occ.set(o, occasionPart(r, o)); }
     const voted = { day: timeFit(b, 'day'), night: timeFit(b, 'night') };
     for (const k of keys) {
       const { wins, slot } = slotBands[k];
@@ -221,11 +226,20 @@ export function fitTable(bottles, { cells, slotBands }) {
         cold += thinInCold(b, w.cond);
       }
       const time = voted[slot] + (1 - voted[slot]) * forgiven / wins.length;
-      fit.set(k, [season / wins.length, time, weather / wins.length, heat / wins.length, cold / wins.length]);
+      const night = new Map();
+      for (const o of occasions) {
+        if (!o.night || slot !== 'night') continue;
+        let sum = 0;
+        const r = raw.get(o);
+        for (const w of wins) sum += occasionPart(r + nightLean(b, o, slot, w.cond), o);
+        night.set(o, sum / wins.length);
+      }
+      fit.set(k, [season / wins.length, time, weather / wins.length, heat / wins.length, cold / wins.length, night]);
     }
     for (let j = 0; j < m; j++) {
-      const c = cells[j], [season, time, weather, heat, cold] = fit.get(c.sb);
-      const parts = { season, time, weather, quality: q, occasion: c.occasion ? occ.get(c.occasion) : null, heat, cold, personal };
+      const c = cells[j], [season, time, weather, heat, cold, night] = fit.get(c.sb);
+      const occasion = c.occasion ? (night.get(c.occasion) ?? occ.get(c.occasion)) : null;
+      const parts = { season, time, weather, quality: q, occasion, heat, cold, personal };
       out[i * m + j] = scoreOf(parts, c.occasion);
     }
   });

@@ -54,6 +54,33 @@ test('a bottle’s fit in a cell is exactly rank()’s score in that weather', (
   assert.ok(worst < 1e-6, `largest difference ${worst}`);
 });
 
+test('a cell of several windows is the mean of rank()’s scores, the night lean fading in them too', () => {
+  // Mild and warm nights where the night lean (nightLean) is partly faded, several to a cell.
+  const windows = [
+    ['2025-09-20', 'night', 60, 52], ['2025-09-02', 'night', 68, 60], ['2025-08-28', 'night', 71, 64],
+    ['2025-07-20', 'night', 74, 66], ['2025-08-02', 'night', 80, 70], ['2025-10-01', 'day', 66, 52], ['2025-06-10', 'day', 70, 55],
+  ].map(([dateISO, slot, feelsF, dewF]) => ({ dateISO, slot, feelsF, dewF, lat: 40.7 }));
+  const cc = cellsFor(climateSummary(windows, { perCell: 3 }));
+  const bottles = [...wardrobe.map(sameFooting), ...records.filter((_, i) => i % 211 === 0)];
+  const table = fitTable(bottles, cc);
+  let worst = 0, checked = 0;
+  cc.cells.forEach((cell, j) => {
+    const { wins } = cc.slotBands[cell.sb];
+    if (wins.length < 2) return;
+    const sums = new Map();
+    for (const { cond } of wins) {
+      for (const r of rank(bottles, cond, cell.slot, { occasion: cell.occasion })) sums.set(r.fragrance, (sums.get(r.fragrance) ?? 0) + r.score);
+    }
+    for (const [b, sum] of sums) {
+      worst = Math.max(worst, Math.abs(sum / wins.length - table[bottles.indexOf(b) * cc.cells.length + j]));
+      checked++;
+    }
+  });
+  assert.ok(cc.cells.some(c => c.occasion?.night && c.slot === 'night' && cc.slotBands[c.sb].wins.length === 3), 'a night cell of three windows');
+  assert.ok(checked > 1000);
+  assert.ok(worst < 1e-6, `largest difference ${worst}`);
+});
+
 test('owned bottles stand on the pool’s footing: no Parfumo votes, 8 accords', () => {
   const lb = owned('Liquid Brun'), same = sameFooting(lb);
   // Longevity and sillage from Fragrantica's votes alone, as the pool's are read.
@@ -182,9 +209,10 @@ test('David’s gaps name real situations, gaps before room to grow, and his str
     assert.doesNotMatch(g.text, /°|\d+ ?F\b/, 'no temperatures');
     assert.ok(order.includes(g.status));
   }
-  // His date nights in the warm fall just short of the best bottles out there: room to grow, his biggest.
+  // His date nights in the warm fall just short of the best bottles out there: room to grow (second to Office
+  // in the cold since Date Night counts night votes, which his date bottles have).
   assert.ok(gaps.every(g => g.status === 'room'), gaps.map(g => `${g.title} ${g.status}`).join('; '));
-  assert.ok(gaps[0].use === 'date' && gaps[0].bands.includes('warm'), gaps[0].title);
+  assert.ok(gaps.slice(0, 2).some(g => g.use === 'date' && g.bands.includes('warm')), gaps.map(g => g.title).join('; '));
   // Office wants a bottle that lasts the day, and his fresh clones do: a strength from cool days to hot ones.
   // In the cold, on Fragrantica's votes as the pool's are read, nothing of his both keeps close and lasts
   // (Sandalwood & Musk's 11 Parfumo votes had it lasting): room to grow there, not a gap.
@@ -397,10 +425,11 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   assert.equal(zenith.verdict, 'Strong fit');
   assert.match(zenith.reasons[0], /^It would be your best for Date Night on /);
   assert.ok(zenith.fills.every(f => f.matters) && zenith.fills.some(f => f.real));
-  // Shalimar Millésime Tonka's flat votes read as none: a gourmand for mild date nights, not warm ones.
+  // Shalimar Millésime Tonka's flat votes read as none: a gourmand for mild date nights, not warm ones. Since
+  // Date Night counts night votes (nightLean), his night-voted gourmands cover those nights, so it only comes close.
   const tonka = verdict('76063');
-  assert.equal(tonka.verdict, 'Good');
-  assert.deepEqual(tonka.fills.map(f => f.cell.id), ['date:night:mild']);
+  assert.equal(tonka.verdict, 'Covered');
+  assert.match(tonka.reasons[0], /^It would barely beat your .+ for Date Night on mild nights, and nowhere by more\.$/);
   for (const c of [ctx, gapContext({ owned: [], records, byId })]) {
     const fills = buyCheck(byId.get('76063'), c).fills.filter(f => f.matters).map(f => f.cell.id);
     assert.ok(!fills.includes('date:night:warm') || fills.indexOf('date:night:warm') > fills.indexOf('date:night:cool'), fills.join());
