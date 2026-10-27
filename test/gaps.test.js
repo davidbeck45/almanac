@@ -54,6 +54,33 @@ test('a bottle’s fit in a cell is exactly rank()’s score in that weather', (
   assert.ok(worst < 1e-6, `largest difference ${worst}`);
 });
 
+test('a cell of several windows is the mean of rank()’s scores, the night lean fading in them too', () => {
+  // Mild and warm nights where the night lean (nightLean) is partly faded, several to a cell.
+  const windows = [
+    ['2025-09-20', 'night', 60, 52], ['2025-09-02', 'night', 68, 60], ['2025-08-28', 'night', 71, 64],
+    ['2025-07-20', 'night', 74, 66], ['2025-08-02', 'night', 80, 70], ['2025-10-01', 'day', 66, 52], ['2025-06-10', 'day', 70, 55],
+  ].map(([dateISO, slot, feelsF, dewF]) => ({ dateISO, slot, feelsF, dewF, lat: 40.7 }));
+  const cc = cellsFor(climateSummary(windows, { perCell: 3 }));
+  const bottles = [...wardrobe.map(sameFooting), ...records.filter((_, i) => i % 211 === 0)];
+  const table = fitTable(bottles, cc);
+  let worst = 0, checked = 0;
+  cc.cells.forEach((cell, j) => {
+    const { wins } = cc.slotBands[cell.sb];
+    if (wins.length < 2) return;
+    const sums = new Map();
+    for (const { cond } of wins) {
+      for (const r of rank(bottles, cond, cell.slot, { occasion: cell.occasion })) sums.set(r.fragrance, (sums.get(r.fragrance) ?? 0) + r.score);
+    }
+    for (const [b, sum] of sums) {
+      worst = Math.max(worst, Math.abs(sum / wins.length - table[bottles.indexOf(b) * cc.cells.length + j]));
+      checked++;
+    }
+  });
+  assert.ok(cc.cells.some(c => c.occasion?.night && c.slot === 'night' && cc.slotBands[c.sb].wins.length === 3), 'a night cell of three windows');
+  assert.ok(checked > 1000);
+  assert.ok(worst < 1e-6, `largest difference ${worst}`);
+});
+
 test('owned bottles stand on the pool’s footing: no Parfumo votes, 8 accords', () => {
   const lb = owned('Liquid Brun'), same = sameFooting(lb);
   // Longevity and sillage from Fragrantica's votes alone, as the pool's are read.
