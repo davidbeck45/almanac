@@ -602,7 +602,8 @@ function bandLists(ctx, scored, k, final, shares) {
 // best first. No bottle twice: a twin of a pick joins its `alike`, and of
 // twins in two lean bands the one whose band is further behind its share
 // leads (Narciso Rodriguez For Him Intense for a mostly masculine wardrobe,
-// not If You Musk), however close their scores.
+// not If You Musk), whatever their scores, as long as it clears LEAN_FLOOR
+// of its list's best.
 function mergeTurns(ctx, lists, k, shares) {
   const groups = Math.max(0, ...lists.map(l => l.group)) + 1, top = Array(groups).fill(0);
   for (const l of lists) top[l.group] = Math.max(top[l.group], l.picks[0]?.score ?? 0);
