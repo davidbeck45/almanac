@@ -23,10 +23,12 @@ const SILLAGE_STEP = 0.3;
 // A list ranked for an occasion names its ties only where they're news: for
 // an occasion whose card would name one on under a third of its windows in
 // every city measured (2023–2025 in Chicago, New York, London and Houston,
-// ranked without wears). Formal 11–16%; Cozy 41–48%, Office 38–70%, Date
-// Night 29–70%, Night Out 45–68%, Outdoors 66–83%, Casual 66–92%, where a
-// line on most windows stopped telling him anything.
-export const TIE_OCCASIONS = new Set(['formal']);
+// the card's own slot, ranked as the app ranks it, with a journal that
+// follows the daily picks, two wears a day or one). Formal 7–16%, Office
+// 7–22%, Cozy 10–22%; Casual 13–37%, Night Out 20–46%, Outdoors 13–49%,
+// Date Night 23–64%, where a line on most windows stopped telling him
+// anything.
+export const TIE_OCCASIONS = new Set(['formal', 'office', 'cozy']);
 export const tiesNews = occasion => !occasion || TIE_OCCASIONS.has(occasion.id);
 // What a pick's card shows of it: its first accords as chips (chips in
 // src/ui/components.js), and the accords each style names: those it counts

@@ -5,7 +5,7 @@ import { contrast, tiesFor, planTies, rankedTies, tieLine, tieName, gapParts, pi
 import { heaviness } from '../src/accords.js';
 import { performanceLevel, rank } from '../src/engine.js';
 import { OCCASIONS, occasionById } from '../src/occasions.js';
-import { styleScores, shownOf } from '../src/scent-styles.js';
+import { styleScores, shownOf, STYLES } from '../src/scent-styles.js';
 import { summarize } from '../src/weather.js';
 import { matchPct } from '../src/ui.js';
 import { syntheticForecast } from './fixtures.js';
@@ -26,6 +26,8 @@ test('contrast names how a bottle differs from the pick: fresher, a style the pi
   assert.deepEqual(contrast(named('Terra'), named('Shiyaaka Sky')), ['quieter', 'fresh citrus']);
   // Two vanillas: no style tells them apart, so only how they wear does.
   assert.ok(!contrast(named('Liquid Brun'), named('Rifaaqat')).includes('vanilla'));
+  // Amber Empire's card says Vanilla on a chip, so a tie beside it isn't tagged "vanilla".
+  assert.deepEqual(contrast(named('Amber Empire'), named('Liquid Brun')), ['louder', 'gourmand']);
   // A nudge of his own counts: Jake sits closer than Aristo by the votes, not
   // once he says it projects more on him.
   const jake = named('Jake'), aristo = named('Aristo');
@@ -35,8 +37,11 @@ test('contrast names how a bottle differs from the pick: fresher, a style the pi
 
 test('over every wardrobe pair the tags are honest: two at most, one way round, styles as the cards show them', () => {
   const comparisons = { fresher: 'richer', richer: 'fresher', quieter: 'louder', louder: 'quieter' };
+  // The accords a style is built on: those it counts half or more, and the one it's named for.
+  const built = new Map(STYLES.map(s => [s.label.toLowerCase(), new Set([s.id, ...Object.entries(s.acc ?? {}).filter(([, w]) => w >= 0.5).map(([x]) => x)])]));
   for (const a of fragrances) {
     const aShown = new Set(shownOf(styleScores(a)).map(s => s.label.toLowerCase()));
+    const chips = Object.keys(a.accords ?? {}).slice(0, 3);
     for (const b of fragrances) {
       if (a === b) continue;
       const tags = contrast(a, b);
@@ -54,6 +59,7 @@ test('over every wardrobe pair the tags are honest: two at most, one way round, 
       for (const t of tags.filter(x => !(x in comparisons))) {
         assert.ok(shownOf(styleScores(b)).some(s => s.label.toLowerCase() === t), `${what}: ${t} is on its card`);
         assert.ok(!aShown.has(t), `${what}: ${t} isn't on the pick's`);
+        assert.ok(!chips.some(x => built.get(t.replace(/^leans /, ''))?.has(x)), `${what}: ${t} isn't on the pick's chips`);
       }
       // The same comparison leads both ways round, reversed.
       const back = contrast(b, a);
@@ -116,7 +122,7 @@ test('an event’s ties leave out the other events’ picks and what was worn or
   // Ranked as rankEvent ranks them: no rotation, nothing saved.
   const wed = window(win('2026-10-28'), 'Cedrus Blanc', 'Legacy');
   const thu = window(win('2026-10-29'), 'Liam', 'Legacy');
-  // Formal both, the one occasion whose ties are news (TIE_OCCASIONS).
+  // Formal both, an occasion whose ties are news (TIE_OCCASIONS).
   const fri = window(win('2026-10-30', 'formal'), 'Terra', 'Amber Empire', 'Liquid Brun', 'Cedrus Blanc', 'Aristo');
   const sat = window(win('2026-10-31', 'formal'), 'Amber Empire', 'Terra', 'Rifaaqat');
   const history = [{ id: named('Liquid Brun').id, date: '2026-10-27', slot: 'night' }];

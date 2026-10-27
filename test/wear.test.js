@@ -6,7 +6,7 @@ import { rank, PLAN_MARGIN } from '../src/engine.js';
 import { OCCASIONS, occasionById } from '../src/occasions.js';
 import { sprayGuide } from '../src/spray.js';
 import { setSkin, loadSkin, loadAsked, markAsked } from '../src/skin.js';
-import { planTies, rankedTies, whenOf } from '../src/contrast.js';
+import { planTies, rankedTies, whenOf, TIE_OCCASIONS } from '../src/contrast.js';
 import { summarize, week } from '../src/weather.js';
 import { renderScene } from '../src/scene.js';
 import { shiftISO } from '../src/history.js';
@@ -365,13 +365,13 @@ test('Now and the Week name the same ties for today: Now plans the window after 
   assert.ok(!ties[slots.length - 1].some(t => t.entry.fragrance.id === state.after.pick.fragrance.id));
 });
 
-test('the Occasion card names the bottles that suit formal wear as well, until he’s wearing one, and no other occasion’s', () => {
+test('the Occasion card names the bottles that suit formal wear, the office or a night in as well, until he’s wearing one, and no other occasion’s', () => {
   const { state } = app;
   const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
   const base = { forecast: live, wx: summarize(live), loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], occasionSlot: null };
   const pane = wear.wear.panes.find(p => p.id === 'occasion');
   // Each occasion's pick with a twin of it beside it: a toss-up every time,
-  // named only for formal wear (TIE_OCCASIONS), where a tie is news.
+  // named only where a tie is news (TIE_OCCASIONS: formal wear, the office, a night in).
   const tossUp = o => {
     Object.assign(state, { ...base, demo: { fetched: today, fragrances } });
     pane.render({}, { dest: 'wear', pane: 'occasion', arg: o.id });
@@ -380,7 +380,8 @@ test('the Occasion card names the bottles that suit formal wear as well, until h
     const html = clean(pane.render({}, { dest: 'wear', pane: 'occasion', arg: o.id }), o.id);
     return { o, html, ranked: state.contexts.occ.ranked, win: state.contexts.occ.win };
   };
-  for (const o of OCCASIONS.filter(x => x.id !== 'formal')) assert.ok(!tossUp(o).html.includes('class="ties"'), o.id);
+  for (const o of OCCASIONS.filter(x => !TIE_OCCASIONS.has(x.id))) assert.ok(!tossUp(o).html.includes('class="ties"'), o.id);
+  for (const id of ['office', 'cozy']) assert.ok(tossUp(occasionById(id)).html.includes('class="ties"'), `${id} names its twin`);
   const found = tossUp(occasionById('formal'));
   assert.ok(found.html.includes('class="ties"'), 'formal wear names its twin');
   const { o, html, ranked, win } = found;
