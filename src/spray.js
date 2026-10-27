@@ -15,6 +15,7 @@
 // Text never names a temperature.
 import { performanceLevel, performanceRating, isSticky } from './engine.js';
 import { heaviness } from './accords.js';
+import { occasionById } from './occasions.js';
 import { wearsClose } from './scent-styles.js';
 
 const BASE = 3;
@@ -75,17 +76,18 @@ function strengthOf(record) {
 const OIL = /\b(?:perfume|fragrance|parfum|attar|concentrated|body) oil\b|\b(?:oil|attar)$/i;
 export const isOil = record => OIL.test(String(record?.name ?? ''));
 
-// By occasion id: sprays added, the most it should take, why, and the share
-// of the time spent outside (1 when it doesn't say), which is how much of
-// the cold step it takes: you spray for where you'll be, and a heated room
-// takes the chill off. The heat and sticky steps stay whole: the walk there,
-// the sun and a crowd keep a summer evening warm.
+// By occasion id: sprays added, the most it should take, and why. The cold
+// step counts for the occasion's share of time outside (`outside` in
+// src/occasions.js, 1 when it doesn't say, as the engine reads it): you
+// spray for where you'll be, and a heated room takes the chill off. The heat
+// and sticky steps stay whole: the walk there, the sun and a crowd keep a
+// summer evening warm.
 const OCCASIONS = {
-  office: { shift: -1, max: 2, why: 'The office wants it quiet', outside: 0.15 },
-  date: { shift: -0.5, max: 4, why: 'A date wants it close', outside: 0.3 },
-  cozy: { shift: -0.5, max: 3, why: 'At home a little goes far', outside: 0 },
-  formal: { shift: -0.25, why: 'Formal wear calls for restraint', outside: 0.3 },
-  nightout: { shift: 1, why: 'A night out can take more', outside: 0.5 },
+  office: { shift: -1, max: 2, why: 'The office wants it quiet' },
+  date: { shift: -0.5, max: 4, why: 'A date wants it close' },
+  cozy: { shift: -0.5, max: 3, why: 'At home a little goes far' },
+  formal: { shift: -0.25, why: 'Formal wear calls for restraint' },
+  nightout: { shift: 1, why: 'A night out can take more' },
   outdoors: { shift: 0.5, why: 'Open air thins it out' },
 };
 // Out this little of the time, the coat comes off (or goes to the
@@ -165,7 +167,7 @@ export function sprayGuide(record, conditions, occasion = null, skin = null) {
   // Cold counts for the time spent out in it. Under 0.25 of a spray (the
   // office's commute) it moves the count without a word, as any small term does.
   const cold = clamp((feels - COLD[0]) / (COLD[1] - COLD[0]), 0, 1);
-  const outside = occ.outside ?? 1;
+  const outside = occasionById(key)?.outside ?? 1;
   if (cold * outside > 0) add(COLD_STEP * cold * outside, 'Cold air mutes it');
 
   if (occ.shift) add(occ.shift, occ.why);

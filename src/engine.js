@@ -38,8 +38,30 @@ export const OCCASION_WEIGHTS = Object.freeze({ occasion: 0.4, season: 0.3, time
 // (parts.heat, richInHeat). With the occasion's fit at 0.4 and the weather
 // at 0.15, a date's love of vanilla and amber kept four winter bottles in a
 // 90°F night's top 6, all A; daily picks weigh season and weather at 0.7 and
-// need no such help. An occasion spent indoors (`indoors`) doesn't pay it.
+// need no such help. An occasion spent wholly indoors (`outside: 0`) doesn't
+// pay it; any other pays it whole, since the walk there, the sun and a crowd
+// keep a summer evening warm.
 const HEAT_WEIGHT = 0.3;
+// Its mirror, what a thin bottle loses where the weather calls for rich
+// (parts.cold, thinInCold), for the share of the occasion spent outside
+// (`outside` in src/occasions.js), where cold air mutes a fresh bottle: a
+// heated room takes the chill off. Outdoors' love of citrus and aquatics put
+// Cedrus Blanc, a cedar-citrus that goes flat in cold air, first on every
+// cold day of 2023–2025 in Chicago, New York, London and Houston; now
+// Sauvage and Vintage Radio take 94% of them, and the office (out 0.15 of
+// the time) keeps its pick. Scaling the heat by the same share let a warm
+// bottle into Date Night's top 3 on 38% of 78°F+ nights, against 9%.
+const COLD_WEIGHT = 0.3;
+// What the cold has to cost a bottle for its reason to say so, and how far
+// on the fresh side it has to sit (the weather's own "Thin in the cold"
+// needs -0.2): near neutral (Supremacy, Glorious Oud Royal Blanc) it pays a
+// little but isn't thin, and its winter votes may say the opposite.
+const COLD_REASON = 0.03;
+const THIN_REASON = -0.15;
+// Out this much of the time or more, the reason names the occasion ("Thin
+// for the outdoors in the cold"); less, and it's the weather's own words,
+// since an office or a dinner is spent inside.
+const OUT_REASON = 0.5;
 
 // Rank cutoffs: first 3 are S, next 5 A, next 6 B, rest C. A tier also needs
 // its floor score, so in a small collection on a sweltering day the third
@@ -292,6 +314,18 @@ export function weatherFit(frag, conditions) {
 export function richInHeat(frag, conditions) {
   const fresh = clamp(-targetHeaviness(conditions), 0, 1);
   return fresh * fresh * clamp(heaviness(frag.accords), 0, 1);
+}
+
+/**
+ * How thin a bottle is for the cold (parts.cold), 0..1: richInHeat's mirror,
+ * how far the bottle sits on the fresh side of neutral times the square of
+ * how far the weather calls for rich (targetHeaviness over 0), so a cool day
+ * costs it little and a freezing one a lot. Neutral and rich bottles read 0,
+ * so it reorders only the fresh ones, and only where it's cold.
+ */
+export function thinInCold(frag, conditions) {
+  const rich = clamp(targetHeaviness(conditions), 0, 1);
+  return rich * rich * clamp(-heaviness(frag.accords), 0, 1);
 }
 
 // Feels-like range a bottle suits on its own: its season and weather fit,
@@ -558,11 +592,13 @@ export function occasionPart(raw, occasion) {
 }
 
 /**
- * The weights an occasion's score uses: OCCASION_WEIGHTS and HEAT_WEIGHT
- * (none for an occasion spent indoors), blended toward DAILY_WEIGHTS for a
- * mild one by how far its fit falls short of MILD_SPAN.
+ * The weights an occasion's score uses: OCCASION_WEIGHTS, HEAT_WEIGHT (none
+ * for an occasion spent wholly indoors) and COLD_WEIGHT for its share of
+ * time outside, blended toward DAILY_WEIGHTS for a mild one by how far its
+ * fit falls short of MILD_SPAN.
  */
 const weightsOf = new WeakMap();
+const outsideOf = occasion => occasion.outside ?? 1;
 export function occasionWeights(occasion) {
   let W = weightsOf.get(occasion);
   if (W) return W;
@@ -571,7 +607,8 @@ export function occasionWeights(occasion) {
   const blend = key => t * O[key] + (1 - t) * D[key];
   W = Object.freeze({
     occasion: t * O.occasion, season: blend('season'), time: blend('time'), weather: blend('weather'), quality: blend('quality'),
-    heat: occasion.indoors ? 0 : t * HEAT_WEIGHT,
+    heat: outsideOf(occasion) > 0 ? t * HEAT_WEIGHT : 0,
+    cold: t * COLD_WEIGHT * outsideOf(occasion),
   });
   weightsOf.set(occasion, W);
   return W;
@@ -579,15 +616,15 @@ export function occasionWeights(occasion) {
 
 /**
  * A bottle's score from its parts (rank's `parts`): the weighted fits (for
- * an occasion, less what richness in heat costs it), plus your stars' term
- * (`personal`, when there is one), less the rotation penalty. Shared with
- * anything that scores bottles the way rank() does (the gap finder), so the
- * two can't drift apart.
+ * an occasion, less what richness in heat and thinness in the cold cost
+ * it), plus your stars' term (`personal`, when there is one), less the
+ * rotation penalty. Shared with anything that scores bottles the way rank()
+ * does (the gap finder), so the two can't drift apart.
  */
 export function scoreOf(parts, occasion = null) {
   const W = occasion ? occasionWeights(occasion) : DAILY_WEIGHTS;
   let score = W.season * parts.season + W.time * parts.time + W.weather * parts.weather + W.quality * parts.quality;
-  if (occasion) score += W.occasion * parts.occasion - W.heat * (parts.heat ?? 0);
+  if (occasion) score += W.occasion * parts.occasion - W.heat * (parts.heat ?? 0) - W.cold * (parts.cold ?? 0);
   return score + (parts.personal ?? 0) - (parts.rotation ?? 0);
 }
 
@@ -717,7 +754,16 @@ function reasonsFor(frag, parts, ctx) {
     else if (h >= 0.25) bad(sticky ? 'Too rich for sticky heat' : 'Heavy for this heat', W.weather + (occasion ? W.heat * parts.heat : 0), true);
   } else if (conditions.feelsF <= 52) {
     const warm = strongest(frag.accords, a => ACCORDS[a]?.weight >= 0.7);
+    // Where the cold costs a thin bottle COLD_REASON or more for an occasion
+    // (parts.cold), the reason counts the two together, and for one spent
+    // out OUT_REASON of the time or more says so in the occasion's words in
+    // place of the weather's own.
+    const thin = occasion && h <= THIN_REASON ? W.cold * parts.cold : 0;
     if (h >= 0.25) good(warm ? `${warmPhrase(warm)} for the cold` : 'A warm base for the cold', W.weather * 0.8, true);
+    else if (thin >= COLD_REASON) {
+      const text = outsideOf(occasion) >= OUT_REASON ? `Thin for ${occasion.phrase ?? occasion.label.toLowerCase()} in the cold` : 'Thin in the cold';
+      bad(text, W.weather * 0.8 + thin, true);
+    }
     else if (h <= -0.2) bad('Thin in the cold', W.weather * 0.8, true);
   }
   if (isWet(conditions.category) && accordShare(frag.accords, RAIN_ACCORDS) > 0.3) {
@@ -839,6 +885,7 @@ export function rank(fragrances, conditions, slot, opts = {}) {
       quality: quality(frag),
       occasion: occasion ? occasionPart(occasionRaw(frag, occasion), occasion) : null,
       heat: occasion ? richInHeat(frag, conditions) : null,
+      cold: occasion ? thinInCold(frag, conditions) : null,
       personal: personalPart(frag),
       rotation: penalty,
       daysAgo,

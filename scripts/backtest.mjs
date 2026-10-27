@@ -203,8 +203,8 @@ export class Journal {
 
 const weatherOf = (city, win) => ({ city, dateISO: win.dateISO, slot: win.slot, feelsF: win.feelsF, dewF: win.dewF, category: win.category });
 
-// The parts a score weighs (scoreOf): the heat penalty's too, for an
-// occasion spent outside.
+// The parts a score weighs (scoreOf): the heat and cold penalties too, for
+// an occasion spent outside.
 const weighedParts = occasion => {
   const W = occasion ? occasionWeights(occasion) : DAILY_WEIGHTS;
   return Object.keys(W).filter(k => W[k] > 0);

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, restReason, savedReason, eventPhrase, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, seasonFit, timeFit, SEASONS, votedShares, performanceLevel, PLAN_MARGIN } from '../src/engine.js';
+import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, restReason, savedReason, eventPhrase, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, occasionWeights, seasonFit, timeFit, SEASONS, votedShares, performanceLevel, PLAN_MARGIN } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { heaviness } from '../src/accords.js';
 import { predictedShares } from '../src/custom.js';
@@ -398,6 +398,54 @@ test('a sweltering night keeps winter bottles out of a date’s and a night out�
   // Daily picks pay nothing extra: the penalty is an occasion's.
   const daily = rank(fragrances, sweltering, 'night');
   assert.ok(daily.every(r => r.parts.heat === null) && daily.every(r => r.score === scoreOf(r.parts)));
+});
+
+test('a freezing day outdoors wants a bottle that carries in cold air, not a thin citrus; a hot one and a night in don’t move', () => {
+  // 25°F in mid-January: Outdoors' love of citrus once put Cedrus Blanc first
+  // on every cold day, over Sauvage by 0.024, "thin in the cold".
+  const outdoors = occasionById('outdoors'), cozy = occasionById('cozy');
+  const freezing = { feelsF: 25, humidity: 60, dewF: 17, category: 'clear', date: JAN, dateISO: '2027-01-15', lat: 41.9 };
+  const ranked = rank(fragrances, freezing, 'day', { occasion: outdoors });
+  const top = ranked[0].fragrance;
+  assert.ok(!FRESH.includes(top.name) && heaviness(top.accords) >= -0.15, `${top.name}: ${names(ranked.slice(0, 5)).join(', ')}`);
+  // What carries in cold air: fresh spice and aromatics over woods (Sauvage,
+  // Vintage Radio's lavender woods), or a little warmth (Détour Noir) and more.
+  const CARRIES = ['Sauvage', 'Vintage Radio', 'Détour Noir', ...HEAVY];
+  assert.ok(names(ranked.slice(0, 3)).some(n => CARRIES.includes(n)), names(ranked.slice(0, 3)).join(', '));
+  // A thin bottle says why, in the occasion's words and in place of the weather's, never both.
+  const texts = r => r.reasons.map(x => x.text);
+  assert.ok(texts(ranked.find(r => r.fragrance.name === 'Cedrus Blanc')).includes('Thin for the outdoors in the cold'));
+  assert.ok(texts(ranked.find(r => r.fragrance.name === 'Jake')).includes('Thin for the outdoors in the cold'));
+  for (const r of ranked) assert.ok(!(texts(r).includes('Thin in the cold') && texts(r).some(t => t.startsWith('Thin for'))), r.fragrance.name);
+  // A bottle near neutral pays a little but isn't called thin (Supremacy, -0.13).
+  const supremacy = ranked.find(r => r.fragrance.name.startsWith('Supremacy'));
+  assert.ok(heaviness(supremacy.fragrance.accords) > -0.15 && supremacy.parts.cold > 0);
+  assert.ok(!texts(supremacy).some(t => t.startsWith('Thin')), texts(supremacy).join(' | '));
+  // An occasion spent mostly inside keeps the weather's words, however much the cold costs:
+  // a date is out 0.3 of the time, a night out half of it.
+  const thinnest = { ...fragrances.find(f => f.name === 'Essence de Blanc'), id: 'thin', accords: { citrus: 100, aquatic: 95, ozonic: 90, fresh: 85, marine: 80 } };
+  const coldText = id => texts(rank([thinnest], freezing, occasionById(id).slot, { occasion: occasionById(id) })[0]).filter(t => t.startsWith('Thin'));
+  assert.deepEqual(coldText('office'), ['Thin in the cold']);
+  assert.deepEqual(coldText('date'), ['Thin in the cold']);
+  assert.deepEqual(coldText('nightout'), ['Thin for a night out in the cold']);
+  assert.ok(ranked.every(r => scoreOf(r.parts, outdoors) === r.score));
+  // Daily picks keep the weather's own words and pay nothing extra.
+  const daily = rank(fragrances, freezing, 'day');
+  assert.ok(daily.every(r => r.parts.cold === null) && texts(daily.find(r => r.fragrance.name === 'Jake')).includes('Thin in the cold'));
+  // A hot day costs no bottle anything for the cold: the fresh ones still lead.
+  const hot = rank(fragrances, { ...hotHumidDay, dateISO: '2026-08-05' }, 'day', { occasion: outdoors });
+  assert.ok(hot.every(r => r.parts.cold === 0));
+  for (const n of names(hot.slice(0, 3))) assert.ok(FRESH.includes(n), names(hot.slice(0, 3)).join(', '));
+  // A night in is spent indoors: the cold costs nothing there, and nothing says it does.
+  const cold = { ...freezing, feelsF: 20 };
+  const night = rank(fragrances, cold, 'night', { occasion: cozy });
+  assert.equal(occasionWeights(cozy).cold, 0);
+  assert.ok(night.every(r => !texts(r).some(t => t.startsWith('Thin for'))));
+  assert.deepEqual(names(night.slice(0, 2)).sort(), ['Amber Empire', 'Cream Velvet']);
+  // The office, out a little of the time, pays for that share: its cold-day best stays the same.
+  const office = occasionById('office');
+  assert.ok(Math.abs(occasionWeights(office).cold - office.outside * occasionWeights(outdoors).cold) < 1e-12);
+  assert.equal(rank(fragrances, freezing, 'day', { occasion: office })[0].fragrance.name, 'Meant To Be Seen');
 });
 
 test('casual reads like daily picks with a tilt: winter bottles on a cold day, nothing fresh', () => {

@@ -155,6 +155,23 @@ test('why it ranks here: the rating bar says whose rating it is, and a bottle no
   assert.ok(!hot(byName('Liquid Brun'), null).includes('Rich for this heat'), 'daily picks pay nothing');
   assert.ok(!hot(byName('Liquid Brun'), occasionById('cozy')).includes('Rich for this heat'), 'nor a night in');
   assert.ok(!hot(byName('Essence de Blanc'), date).includes('Rich for this heat'), 'nor a fresh bottle');
+  // A thin bottle on a freezing day outdoors: what the cold takes off, for the time spent out in it.
+  const freezing = { ...wx.day, feelsF: 25, dewF: 17 };
+  const cold = (rec, occasion) => {
+    const html = bottlePageHTML(modelOf(rec, { entry: rank([rec], freezing, 'day', { occasion })[0], occasion, win: freezing }));
+    return html.slice(html.indexOf('data-section="why"'), html.indexOf('data-section="alts"'));
+  };
+  assert.match(cold(byName('Cedrus Blanc'), occasionById('outdoors')), /Thin for this cold: \d+% lower for the outdoors\./);
+  assert.ok(!cold(byName('Cedrus Blanc'), null).includes('Thin for this cold'), 'daily picks pay nothing');
+  assert.ok(!cold(byName('Essence de Blanc'), occasionById('cozy')).includes('Thin for this cold'), 'nor a night in');
+  assert.ok(!cold(byName('Liquid Brun'), occasionById('outdoors')).includes('Thin for this cold'), 'nor a rich bottle');
+  // A point off isn't worth a line: the office's commute, or a mild day out.
+  assert.ok(!cold(byName('Cedrus Blanc'), occasionById('office')).includes('Thin for this cold'), 'the office');
+  const mild = { ...wx.day, feelsF: 58, dewF: 45 };
+  const mildEntry = rank([byName('Essence de Blanc')], mild, 'day', { occasion: occasionById('outdoors') })[0];
+  assert.ok(mildEntry.parts.cold > 0);
+  const mildHTML = bottlePageHTML(modelOf(byName('Essence de Blanc'), { entry: mildEntry, occasion: occasionById('outdoors'), win: mild }));
+  assert.ok(!mildHTML.includes('Thin for this cold'), 'a mild day');
 });
 
 test('day and night read as whole percents that add up to 100, as Compare shows them', () => {

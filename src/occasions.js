@@ -7,8 +7,11 @@
 // `slot` is the default time of day, `phrase` names the occasion in reason
 // text ("Woods & aromatics suit casual wear"), `icon` names a stroke icon in
 // src/ui.js, and `aliases` are names it went by, which typed names still find.
-// `indoors` spares a rich bottle the engine's penalty for heat (HEAT_WEIGHT):
-// the weather outside doesn't decide what suits a night in.
+// `outside` is the share of the time spent outside, 0..1: how much of the
+// cold a thin bottle pays for in the engine (COLD_WEIGHT) and the spray guide
+// adds sprays for (you spray for where you'll be, and a heated room takes the
+// chill off). One spent wholly indoors (0) pays nothing for heat either
+// (HEAT_WEIGHT): the weather outside doesn't decide what suits a night in.
 export const OCCASIONS = [
   {
     id: 'casual',
@@ -18,6 +21,7 @@ export const OCCASIONS = [
     blurb: 'Errands, weekends, hanging out',
     slot: 'day',
     phrase: 'casual wear',
+    outside: 1,
     profile: {
       'fresh spicy': 0.3, citrus: 0.3, woody: 0.3, aromatic: 0.3, fresh: 0.3, fruity: 0.2, musky: 0.2, lavender: 0.2,
       green: 0.2, herbal: 0.2, aquatic: 0.2, ozonic: 0.2, marine: 0.2, sweet: 0.1, powdery: 0.1, 'white floral': 0.1,
@@ -36,6 +40,7 @@ export const OCCASIONS = [
     blurb: 'Close quarters, nothing loud',
     slot: 'day',
     phrase: 'the office',
+    outside: 0.15,
     // Moderate projection that lasts the working day: a quiet bottle counts
     // only down to the engine's LESS_ENOUGH, one that fades counts against,
     // and one that lasts past the day only up to MORE_ENOUGH (`enough`). The
@@ -61,6 +66,7 @@ export const OCCASIONS = [
     blurb: 'Warm, close, a little sweet',
     slot: 'night',
     phrase: 'a date',
+    outside: 0.3,
     performance: { longevity: 0.3 },
     profile: {
       vanilla: 0.7, amber: 0.6, 'warm spicy': 0.5, leather: 0.5, musky: 0.5, whiskey: 0.5, sweet: 0.4, rose: 0.4,
@@ -80,6 +86,7 @@ export const OCCASIONS = [
     blurb: 'Bars, parties, crowds, projection',
     slot: 'night',
     phrase: 'a night out',
+    outside: 0.5,
     performance: { sillage: 0.5, longevity: 0.2 },
     profile: {
       sweet: 0.7, vanilla: 0.6, fruity: 0.5, 'warm spicy': 0.5, cinnamon: 0.5, amber: 0.5, whiskey: 0.4, caramel: 0.4,
@@ -99,6 +106,7 @@ export const OCCASIONS = [
     blurb: 'Weddings, suits, fancy dinners',
     slot: 'night',
     phrase: 'formal wear',
+    outside: 0.3,
     performance: { sillage: -0.3, longevity: 0.5 },
     profile: {
       iris: 0.7, powdery: 0.6, leather: 0.6, woody: 0.5, aldehydic: 0.5, amber: 0.4, rose: 0.4, violet: 0.4,
@@ -118,6 +126,7 @@ export const OCCASIONS = [
     blurb: 'Sun, beach, sports, gym',
     slot: 'day',
     phrase: 'the outdoors',
+    outside: 1,
     profile: {
       citrus: 0.8, aquatic: 0.8, ozonic: 0.8, marine: 0.8, fresh: 0.7, green: 0.6, salty: 0.6, 'fresh spicy': 0.4,
       herbal: 0.4, aromatic: 0.3, tropical: 0.3, fruity: 0.2, coconut: 0.2, lavender: 0.2, soapy: 0.2, musky: 0.1,
@@ -137,7 +146,7 @@ export const OCCASIONS = [
     slot: 'night',
     phrase: 'a night in',
     // The gap finder weighs its warm and hot nights down instead (USES' bands).
-    indoors: true,
+    outside: 0,
     profile: {
       vanilla: 0.7, caramel: 0.6, honey: 0.5, powdery: 0.5, lactonic: 0.5, chocolate: 0.5, cacao: 0.5, sweet: 0.4,
       amber: 0.4, cinnamon: 0.4, musky: 0.4, 'warm spicy': 0.4, almond: 0.4, nutty: 0.4, coffee: 0.4,
