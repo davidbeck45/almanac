@@ -378,7 +378,7 @@ function nowQuestion(pick, worn) {
 // (`ties`, planTies'): "or Liam", "or Liam +1" with two in a row, "+2 as
 // good" in the columns, where a name kept four letters; the board's note
 // explains them, the tooltip names them with their tags, and the pick's page
-// lists them on its shelf. An occasion in the board's narrow columns, where
+// leads its shelf with them (shelfOf). An occasion in the board's narrow columns, where
 // "Date Night" and "Night Out" didn't fit beside their glyphs (the cell's
 // tooltip says it whole).
 const COLUMN_LABEL = { date: 'Date', nightout: 'Out' };

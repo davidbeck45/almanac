@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { SECTIONS, bottlePageHTML, bottleModel, pooled, sectionsFor, linkId, likedStyleIds, likedTaste } from '../src/views/bottle.js';
+import { SECTIONS, bottlePageHTML, bottleModel, pooled, sectionsFor, linkId, likedStyleIds, likedTaste, shelfOf } from '../src/views/bottle.js';
 import { state, computeToday, nowSlot, keepBottles } from '../src/app/state.js';
 import '../src/views/sections.js';
 import { buyCheckHTML, checkable, fillGroups } from '../src/views/bottle-check.js';
@@ -895,4 +895,14 @@ test('the buy check reads the liked styles as Insights does: none liked is none,
     state.likedStyles = before;
     state.active = active;
   }
+});
+
+test('the pick’s page leads its shelf with the ties its Week cell names, however low they rank', () => {
+  const ranked = Array.from({ length: 9 }, (_, i) => ({ fragrance: { id: String(i), name: `B${i}` } }));
+  // A plan's pick needn't be ranked[0]; its ties sit 7th and 9th.
+  const ctx = { ranked, pick: ranked[2], ties: [ranked[6], ranked[8]] };
+  const ids = list => list.map(r => r.fragrance.id);
+  assert.deepEqual(ids(shelfOf(ctx, '2')), ['6', '8', '0', '1']);
+  assert.deepEqual(ids(shelfOf(ctx, '0')), ['1', '2', '3', '4'], 'another bottle’s page keeps the order');
+  assert.deepEqual(ids(shelfOf({ ranked, pick: ranked[0] }, '0')), ['1', '2', '3', '4'], 'a context without ties');
 });

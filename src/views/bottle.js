@@ -269,7 +269,9 @@ export function bottleModel(route) {
     canWear: Boolean(win) && active && canWear(win),
     wears: wearInfo(f.id),
     todayISO: todayISO(),
-    alts: ctx && !solo ? ctx.ranked.filter(r => r.fragrance.id !== id).slice(0, 4) : [],
+    // The rest of the list's best, led on the pick's own page by the ties
+    // its Week cell names (the context's `ties`), which may rank lower.
+    alts: ctx && !solo ? shelfOf(ctx, id) : [],
     // undefined while a long list's pairings are worked out after the page draws (layeringAfter).
     partners: !others.length ? null : others.length <= LAYER_NOW || pairingKept(others) ? layerPicks(f, others, 3, win ?? undefined) : undefined,
     comfort: comfortRange(f),
@@ -279,6 +281,13 @@ export function bottleModel(route) {
     aboutFailed: state.aboutFailed.has(id),
     arg: id,
   };
+}
+
+// "Also good" on a bottle's page: the context's top 4 after it, the pick's
+// ties first when it's the pick's page.
+export function shelfOf(ctx, id) {
+  const ties = ctx.pick?.fragrance.id === id ? (ctx.ties ?? []) : [];
+  return [...ties, ...ctx.ranked.filter(r => r.fragrance.id !== id && !ties.includes(r))].slice(0, 4);
 }
 
 /** A bottle's about data: the build's (wardrobe, catalog) or loadAbout's; undefined while that loads. */
