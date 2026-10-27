@@ -11,8 +11,8 @@
 // `outside` is the share of the time spent outside, 0..1: how much of the
 // cold a thin bottle pays for in the engine (COLD_WEIGHT) and the spray guide
 // adds sprays for (you spray for where you'll be, and a heated room takes the
-// chill off). One spent wholly indoors (0) pays nothing for heat either
-// (HEAT_WEIGHT): the weather outside doesn't decide what suits a night in.
+// chill off). One spent wholly indoors (0) pays a little for heat
+// (INDOOR_HEAT of HEAT_WEIGHT): a heat wave still reaches a night in.
 export const OCCASIONS = [
   {
     id: 'casual',
@@ -148,7 +148,7 @@ export const OCCASIONS = [
     blurb: 'Home, movie night, sweater weather',
     slot: 'night',
     phrase: 'a night in',
-    // The gap finder weighs its warm and hot nights down instead (USES' bands).
+    // The gap finder also weighs its warm and hot nights down (USES' bands).
     outside: 0,
     profile: {
       vanilla: 0.7, caramel: 0.6, honey: 0.5, powdery: 0.5, lactonic: 0.5, chocolate: 0.5, cacao: 0.5, sweet: 0.4,

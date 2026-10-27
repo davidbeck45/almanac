@@ -100,10 +100,11 @@ const SEARCH_LIMIT = 100_000;
  * window packs at least two, and one of LONG_TRIP_DAYS or more three, so
  * there's something to trade off; when `max` can't cover every window, the
  * set that covers the most. Among sets that cover as much, the one whose
- * plan scores best, each pick less its rotation penalty as planWindows
- * counts it: an extra bottle goes where it most improves the picks or
- * spares a bottle worn day after day (a night's top, not a copy of the
- * first). Bottles you rate DISLIKED or lower only go in for a window nothing
+ * plan scores best, each pick less its rotation penalty (ROTATION_PENALTY
+ * by days between, in full across slots, where planWindows counts an
+ * earlier day's other slot at OTHER_SLOT): an extra bottle goes where it
+ * most improves the picks or spares a bottle worn day after day (a night's
+ * top, not a copy of the first). Bottles you rate DISLIKED or lower only go in for a window nothing
  * else suits. On a trip of LONG_TRIP_DAYS or more, three or more bottles
  * that wear none every day (on every date, by day or night) win when they
  * plan nearly as well (VARIETY_MARGIN) and rest the most-worn bottle for real
