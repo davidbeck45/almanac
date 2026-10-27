@@ -24,9 +24,9 @@ const SILLAGE_STEP = 0.3;
 // an occasion whose card would name one on under a third of its windows in
 // every city measured (2023–2025 in Chicago, New York, London and Houston,
 // the card's own slot, ranked as the app ranks it, with a journal that
-// follows the daily picks, two wears a day or one). Formal 7–16%, Office
-// 7–22%, Cozy 10–22%; Casual 13–37%, Night Out 20–46%, Outdoors 13–49%,
-// Date Night 23–64%, where a line on most windows stopped telling him
+// follows the daily picks, two wears a day or one). Formal 4–14%, Office
+// 8–22%, Cozy 12–20%; Casual 13–40%, Outdoors 12–48%, Night Out 23–62%,
+// Date Night 27–70%, where a line on most windows stopped telling him
 // anything.
 export const TIE_OCCASIONS = new Set(['formal', 'office', 'cozy']);
 export const tiesNews = occasion => !occasion || TIE_OCCASIONS.has(occasion.id);
