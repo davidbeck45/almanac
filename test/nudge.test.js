@@ -173,8 +173,8 @@ test('Copy for Claude plans as the whole journal does, nudges and all', () => {
       log = [{ id: worn, date: d, slot: p.win.slot, occasion: 'daily' }, ...log];
     }
   }
-  // Few plans here nudge at all (one a start day at most), so the days are
-  // ones that do: Oct 9's stopped when other-slot wears began counting less.
+  // Few plans here nudge at all, so the start days include one that does:
+  // Oct 1's stopped when other-slot wears began counting less, Oct 8's didn't.
   let nudged = 0;
   for (const today of ['2026-10-01', '2026-10-04', '2026-10-08']) {
     const known = log.filter(h => h.date < today);

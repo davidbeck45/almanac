@@ -145,7 +145,7 @@ export const OCCASIONS = [
     blurb: 'Home, movie night, sweater weather',
     slot: 'night',
     phrase: 'a night in',
-    // The gap finder weighs its warm and hot nights down instead (USES' bands).
+    // The gap finder also weighs its warm and hot nights down (USES' bands).
     outside: 0,
     profile: {
       vanilla: 0.7, caramel: 0.6, honey: 0.5, powdery: 0.5, lactonic: 0.5, chocolate: 0.5, cacao: 0.5, sweet: 0.4,

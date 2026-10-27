@@ -544,6 +544,11 @@ test('the pick you log for a slot is not penalized in that slot', () => {
   assert.equal(rotationPenalty(1, history, '2026-09-29', 'night').penalty, 0.12 * OTHER_SLOT);
   assert.equal(rotationPenalty(1, history, '2026-09-29', 'day').penalty, 0.12);
   assert.equal(rotationPenalty(1, [{ id: 1, date: '2026-09-28' }], '2026-09-29', 'night').penalty, 0.12);
+  // Worn last night and by day two days back: the older wear weighs more, but the reason names last night's.
+  const both = rotationPenalty(1, [{ id: 1, date: '2027-01-14', slot: 'night' }, { id: 1, date: '2027-01-13', slot: 'day' }], '2027-01-15', 'day');
+  assert.equal(both.penalty, 0.08);
+  assert.equal(both.daysAgo, 1);
+  assert.equal(restReason(both, 'day'), 'Worn yesterday');
 });
 
 test('summarize splits the forecast into day and night windows in local time', () => {

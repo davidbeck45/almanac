@@ -84,8 +84,9 @@ const TIERS = ['S', 'A', 'B', 'C'];
 export const ROTATION_PENALTY = Object.freeze([0.2, 0.12, 0.08, 0.06, 0.045, 0.035, 0.025, 0.02, 0.015, 0.01]);
 // In the cold the rich bottles suit both slots, and last night's wear at full
 // weight sent cold days to mid-weight bottles (9.2% of the backtest's cold-day
-// Now picks gave up 0.06 or more to rotation; 6.7% at this weight). At 0.6 and
-// under, Jake starts taking 13 of 56 Houston summer windows.
+// Now picks gave up 0.06 or more to rotation; 6.7% at this weight). Around 0.6
+// Jake takes 12 to 13 of 56 Houston summer windows (the count moves by one
+// with each pick's knock-on through the rotation).
 export const OTHER_SLOT = 0.65;
 
 const RAIN_ACCORDS = ['green', 'earthy', 'woody', 'aromatic', 'mossy', 'aquatic'];
@@ -647,16 +648,20 @@ export function daysBetween(fromISO, toISO) {
 // Entries marked `planned` are picks from a plan (see planWindows), not wears.
 // A wear in the other slot on an earlier day counts OTHER_SLOT of its
 // penalty; the same day's other slot counts in full.
+// The penalty is the heaviest wear's; the reason (daysAgo, planned) names the
+// latest one, so last night's wear never reads as one two days back.
 export function rotationPenalty(fragId, history, todayISO, slot) {
-  let penalty = 0, daysAgo = null, planned = false;
+  let penalty = 0, daysAgo = null, planned = false, latest = 0;
   for (const h of history) {
     if (h.id !== fragId) continue;
     if (h.date === todayISO && h.slot === slot) continue;
     const d = daysBetween(h.date, todayISO);
-    const w = h.slot && slot && h.slot !== slot && d > 0 ? OTHER_SLOT : 1;
-    if (d >= 0 && d < ROTATION_PENALTY.length && ROTATION_PENALTY[d] * w > penalty) {
-      penalty = ROTATION_PENALTY[d] * w;
+    if (d < 0 || d >= ROTATION_PENALTY.length) continue;
+    const p = ROTATION_PENALTY[d] * (h.slot && slot && h.slot !== slot && d > 0 ? OTHER_SLOT : 1);
+    penalty = Math.max(penalty, p);
+    if (daysAgo === null || d < daysAgo || (d === daysAgo && p > latest)) {
       daysAgo = d;
+      latest = p;
       planned = !!h.planned;
     }
   }
