@@ -962,22 +962,33 @@ async function main() {
   const wx = summarize(forecast);
   const wanted = slot ?? occasion?.slot ?? null;
   const shown = (wanted ? [wx[wanted]] : [wx.day, wx.night]).filter(Boolean).sort(byTime);
-  let result, ahead = [];
+  // A plan of both windows plans the one after them too (unless it's an
+  // event, which `later` has) without showing it: planTies leaves its pick
+  // out of the last window's ties, as the app's Now and Week do.
+  const nextOf = windows => {
+    const first = !wanted && shown.length ? windows.find(w => byTime(w, shown.at(-1)) > 0) : null;
+    return first && !first.occasion ? [first] : [];
+  };
+  let result, ahead = [], after = [];
   if (events.length) {
     const weekly = onWindows(week(forecast).flatMap(d => [d.day, d.night].filter(w => w && (!wanted || w.slot === wanted))), 'the week ahead');
     const later = weekly.filter(w => w.occasion && (!shown.length || byTime(w, shown.at(-1)) > 0));
-    const plan = planWindows(fragrances, [...withEvents(shown, events), ...later], { occasion, history, nudge, nowISO: wx.todayISO });
-    [result, ahead] = [plan.slice(0, shown.length), plan.slice(shown.length)];
+    const next = nextOf(weekly);
+    const plan = planWindows(fragrances, [...withEvents(shown, events), ...next, ...later], { occasion, history, nudge, nowISO: wx.todayISO });
+    [result, after, ahead] = [plan.slice(0, shown.length), plan.slice(shown.length, shown.length + next.length), plan.slice(shown.length + next.length)];
+  } else if (wanted) {
+    result = shown.map(win => {
+      const ranked = rank(fragrances, win, win.slot, { occasion, history, nudge });
+      return { win, ranked, pick: ranked[0] };
+    });
   } else {
-    result = wanted
-      ? shown.map(win => {
-        const ranked = rank(fragrances, win, win.slot, { occasion, history, nudge });
-        return { win, ranked, pick: ranked[0] };
-      })
-      : planWindows(fragrances, shown, { history, nudge });
+    const next = nextOf(week(forecast).flatMap(d => [d.day, d.night].filter(Boolean)));
+    const plan = planWindows(fragrances, [...shown, ...next], { history, nudge });
+    [result, after] = [plan.slice(0, shown.length), plan.slice(shown.length)];
   }
-  // A plan's ties are read over the events after today's windows too, which hold their bottles.
-  const ties = events.length ? planTies([...result, ...ahead], { history }).slice(0, result.length) : tiesOf(result, !wanted);
+  // A plan's ties are read over the window after it and the events after
+  // today's windows too, which hold their bottles.
+  const ties = events.length || !wanted ? planTies([...result, ...after, ...ahead], { history }).slice(0, result.length) : tiesOf(result, false);
 
   if (args.json) {
     const eventJSON = ({ win, pick }) => ({ date: win.dateISO, slot: win.slot, occasion: win.occasion.id, pick: pick.fragrance.name });

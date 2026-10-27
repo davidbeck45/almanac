@@ -1,10 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { contrast, tiesFor, planTies, tieLine, tieName, TIES_MAX } from '../src/contrast.js';
+import { contrast, tiesFor, planTies, rankedTies, tieLine, tieName, gapParts, pickGapLine, TIES_MAX } from '../src/contrast.js';
 import { heaviness } from '../src/accords.js';
-import { performanceLevel } from '../src/engine.js';
+import { performanceLevel, rank } from '../src/engine.js';
+import { OCCASIONS, occasionById } from '../src/occasions.js';
 import { styleScores, shownOf } from '../src/scent-styles.js';
+import { summarize } from '../src/weather.js';
+import { matchPct } from '../src/ui.js';
+import { syntheticForecast } from './fixtures.js';
 
 const { fragrances } = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url)));
 for (const f of fragrances) f.id = String(f.id);
@@ -132,4 +136,87 @@ test('the tie line says who suits the window just as well, with their tags, or b
   // Markup: names drawn by the caller, the words around them escaped.
   const html = tieLine([t('A&B', ['x']), t('C', ['y'])], { label: 'Today' }, { name: x => `<b>${x.entry.fragrance.name.replace('&', '&amp;')}</b>`, text: s => s.replace(/&/g, '&amp;') });
   assert.equal(html, '<b>A&amp;B</b> (x) and <b>C</b> (y) suit today just as well.');
+  // What they suit, in place of the window: the Occasion card's.
+  assert.equal(tieLine([t('Terra', ['amber'])], { label: 'Tonight' }, { when: 'formal wear' }), 'Terra (amber) suits formal wear just as well.');
+});
+
+test('a list ranked on its own has ties until a wear is logged, and an event’s leave out what was worn before it', () => {
+  const win = { dateISO: '2026-10-30', slot: 'night', label: 'Friday night' };
+  const ranked = [entry('Terra', 0.885), entry('Amber Empire', 0.881), entry('Liquid Brun', 0.879)];
+  assert.deepEqual(rankedTies(ranked, win).map(t => t.entry.fragrance.name), ['Amber Empire', 'Liquid Brun']);
+  assert.deepEqual(rankedTies(ranked, win, { history: [{ id: named('Terra').id, date: win.dateISO, slot: 'night' }] }), [], 'he’s chosen');
+  assert.equal(rankedTies(ranked, win, { history: [{ id: 'x', date: win.dateISO, slot: 'night', planned: true }] }).length, 2, 'a plan is no wear');
+  // Ranked as an event (no rotation): Amber Empire worn two days before isn't offered.
+  const before = [{ id: named('Amber Empire').id, date: '2026-10-28', slot: 'night' }];
+  assert.deepEqual(rankedTies(ranked, win, { history: before, event: true }).map(t => t.entry.fragrance.name), ['Liquid Brun']);
+  assert.equal(rankedTies(ranked, win, { history: before }).length, 2, 'ranked with rotation, its penalty would say so itself');
+});
+
+// ---------- Beside the pick ----------
+
+const wx = summarize(syntheticForecast(7), Date.parse('2026-09-28T16:00:00Z'));
+const history = [{ id: named('Sandalwood').id, date: '2026-09-27', slot: 'night' }, { id: named('Liam').id, date: '2026-09-26', slot: 'day' }];
+const lists = [null, ...OCCASIONS].flatMap(occasion => [wx.day, wx.night, { ...wx.night, feelsF: 92, dewF: 72 }, { ...wx.day, feelsF: 25, dewF: 15 }]
+  .map(win => ({ win, occasion, ranked: rank(fragrances.map(f => (f.name === 'Jake' ? { ...f, personal: { rating: 2, longevity: 0, sillage: 0 } } : f)), win, win.slot, { occasion, history, todayISO: win.dateISO }) })));
+
+test('the gap’s parts add up to the gap between the two scores, daily and for every occasion', () => {
+  for (const { win, occasion, ranked } of lists) {
+    for (const e of ranked) {
+      const sum = Object.values(gapParts(e, ranked[0], occasion)).reduce((a, b) => a + b, 0);
+      assert.ok(Math.abs(sum - (ranked[0].score - e.score)) < 1e-9, `${e.fragrance.name} ${win.slot} ${occasion?.id}: ${sum}`);
+    }
+  }
+});
+
+test('beside the pick: as well as it within a point, else how many points under it and the part that makes most of the gap', () => {
+  const words = /^(\d+) points under (.+?) (for .+ )?(today|tonight), mostly (the season fit|the time-of-day fit|the weather fit|the occasion fit|the rating|your rating|the heat|the cold|a recent wear)( and (the season fit|the time-of-day fit|the weather fit|the occasion fit|the rating|your rating|the heat|the cold|a recent wear))?\.$/;
+  for (const { win, occasion, ranked } of lists) {
+    const pick = ranked[0];
+    assert.equal(pickGapLine(pick, pick, win, { occasion }), '', 'the pick itself');
+    for (const e of ranked.slice(1)) {
+      const line = pickGapLine(e, pick, win, { occasion });
+      const points = matchPct(pick) - matchPct(e);
+      assert.ok(!/°|\d+ ?F\b/.test(line), line);
+      if (Math.abs(points) <= 1) {
+        assert.equal(line, `Suits ${occasion ? `${occasion.phrase ?? occasion.label.toLowerCase()} ` : ''}${win.label.toLowerCase()} as well as ${pick.fragrance.name}.`);
+        continue;
+      }
+      const m = line.match(words);
+      if (pick.nudged && points < 0) continue;
+      assert.ok(m, line);
+      assert.equal(Number(m[1]), points, 'points as the badges show them');
+      assert.equal(m[2], pick.fragrance.name);
+      assert.equal(Boolean(m[3]), Boolean(occasion));
+      // The part named first is the one that makes most of the gap.
+      const gaps = gapParts(e, pick, occasion);
+      const top = Object.keys(gaps).reduce((a, b) => (gaps[b] > gaps[a] ? b : a));
+      const first = { season: 'the season fit', time: 'the time-of-day fit', weather: 'the weather fit', occasion: 'the occasion fit', heat: 'the heat', cold: 'the cold', rotation: 'a recent wear' }[top] ?? /the rating|your rating/;
+      if (typeof first === 'string') assert.equal(m[5], first, `${e.fragrance.name}: ${line}`);
+      else assert.match(m[5], first);
+    }
+  }
+  // Worn lately, the rest it's given is what keeps it under; his 2★ is his.
+  const night = lists.find(l => l.win === wx.night && !l.occasion);
+  const rested = night.ranked.find(r => r.fragrance.name.startsWith('Sandalwood'));
+  assert.match(pickGapLine(rested, night.ranked[0], wx.night), /, mostly (a recent wear|the \w+ fit and a recent wear)\.$/);
+  const day = lists.find(l => l.win === wx.day && !l.occasion);
+  const jake = day.ranked.find(r => r.fragrance.name === 'Jake');
+  assert.match(pickGapLine(jake, day.ranked[0], wx.day), /, mostly your rating\.$/);
+});
+
+test('above the pick, it says what chose the pick instead; a bottle saved for an event says so in its own note', () => {
+  const win = { ...wx.day, label: 'Today' };
+  const pick = entry('Legacy', 0.86), over = entry('Aristo', 0.9, { rotation: 0.02 });
+  over.parts.planned = true;
+  assert.equal(pickGapLine(over, pick, win), '4 points over Legacy today, but the plan gives Legacy a turn.');
+  assert.equal(pickGapLine(over, { ...pick, nudged: true }, win), '4 points over Legacy today, but Legacy is due a wear.');
+  assert.equal(pickGapLine(over, pick, win, { worn: pick.fragrance.id }), '4 points over Legacy today, but you’re wearing Legacy.');
+  assert.equal(pickGapLine(entry('Aristo', 0.9, { stars: 2 }), pick, win), '4 points over Legacy today, but you rate it 2★.');
+  const saved = entry('Aristo', 0.9);
+  saved.parts.saved = { dateISO: '2026-10-31', slot: 'night', occasion: occasionById('formal') };
+  assert.equal(pickGapLine(saved, pick, win), '');
+  assert.equal(pickGapLine(saved, pick, win, { occasion: occasionById('formal') }), '');
+  assert.equal(pickGapLine(entry('Aristo', 0.9), pick, { ...win, label: 'Friday night' }, { occasion: occasionById('date') }), '4 points over Legacy for a date Friday night, but the plan gives Legacy a turn.');
+  assert.equal(pickGapLine(null, pick, win), '');
+  assert.equal(pickGapLine(over, null, win), '');
 });

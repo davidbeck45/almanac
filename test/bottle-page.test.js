@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { SECTIONS, bottlePageHTML, pooled, sectionsFor, linkId, likedStyleIds, likedTaste } from '../src/views/bottle.js';
+import { SECTIONS, bottlePageHTML, bottleModel, pooled, sectionsFor, linkId, likedStyleIds, likedTaste, shelfOf } from '../src/views/bottle.js';
 import { state, computeToday, nowSlot, keepBottles } from '../src/app/state.js';
 import '../src/views/sections.js';
 import { buyCheckHTML, checkable, fillGroups } from '../src/views/bottle-check.js';
@@ -172,6 +172,35 @@ test('why it ranks here: the rating bar says whose rating it is, and a bottle no
   assert.ok(mildEntry.parts.cold > 0);
   const mildHTML = bottlePageHTML(modelOf(byName('Essence de Blanc'), { entry: mildEntry, occasion: occasionById('outdoors'), win: mild }));
   assert.ok(!mildHTML.includes('Thin for this cold'), 'a mild day');
+});
+
+test('why it ranks here: beside the list’s pick when that’s another bottle, in points as the badges show them', () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)) };
+  const why = html => html.slice(html.indexOf('data-section="why"'), html.indexOf('data-section="alts"'));
+  try {
+    Object.assign(state, { demo: { fragrances }, active: 'demo', shared: null, wx, history: [] });
+    computeToday();
+    const { win, ranked: list, pick } = state.today.night;
+    assert.equal(state.contexts.night.pick, pick, 'the context keeps the plan’s pick');
+    const page = id => bottlePageHTML(bottleModel({ dest: 'bottle', arg: id, query: { ctx: 'night' } }));
+    assert.ok(!why(page(pick.fragrance.id)).includes('why-vs'), 'not on the pick’s own page');
+    const under = list.find(r => matchPct(pick) - matchPct(r) >= 2);
+    const line = why(page(under.fragrance.id)).match(/<p class="why-vs">([^<]+)<\/p>/)?.[1];
+    assert.equal(line, esc(`${matchPct(pick) - matchPct(under)} points under ${pick.fragrance.name} ${win.label.toLowerCase()}, mostly ${line.split(', mostly ')[1].slice(0, -1)}.`));
+    assert.ok(why(page(under.fragrance.id)).indexOf('why-vs') < why(page(under.fragrance.id)).indexOf('class="bars why"'), 'it leads');
+    const tie = list.find(r => r !== pick && Math.abs(matchPct(pick) - matchPct(r)) <= 1);
+    if (tie) assert.match(why(page(tie.fragrance.id)), new RegExp(`<p class="why-vs">Suits ${win.label.toLowerCase()} as well as ${esc(pick.fragrance.name)}\\.</p>`));
+    // Ranked on its own (out of the list), it has no pick to stand beside.
+    assert.ok(!why(bottlePageHTML(modelOf(byName('Liquid Brun'), { solo: true, pick }))).includes('why-vs'));
+    // Nor a list that keeps none (a trip's).
+    assert.ok(!why(bottlePageHTML(modelOf(under.fragrance, { entry: under, pick: null }))).includes('why-vs'));
+    // The name is escaped.
+    assert.ok(why(bottlePageHTML(modelOf(under.fragrance, { entry: under, pick: { ...pick, fragrance: { ...pick.fragrance, id: 'x', name: EVIL } } }))).includes(esc(EVIL)));
+  } finally {
+    delete globalThis.localStorage;
+    Object.assign(state, { demo: null, wx: null, today: null, contexts: {} });
+  }
 });
 
 test('day and night read as whole percents that add up to 100, as Compare shows them', () => {
@@ -866,4 +895,14 @@ test('the buy check reads the liked styles as Insights does: none liked is none,
     state.likedStyles = before;
     state.active = active;
   }
+});
+
+test('the pick’s page leads its shelf with the ties its Week cell names, however low they rank', () => {
+  const ranked = Array.from({ length: 9 }, (_, i) => ({ fragrance: { id: String(i), name: `B${i}` } }));
+  // A plan's pick needn't be ranked[0]; its ties sit 7th and 9th.
+  const ctx = { ranked, pick: ranked[2], ties: [ranked[6], ranked[8]] };
+  const ids = list => list.map(r => r.fragrance.id);
+  assert.deepEqual(ids(shelfOf(ctx, '2')), ['6', '8', '0', '1']);
+  assert.deepEqual(ids(shelfOf(ctx, '0')), ['1', '2', '3', '4'], 'another bottle’s page keeps the order');
+  assert.deepEqual(ids(shelfOf({ ranked, pick: ranked[0] }, '0')), ['1', '2', '3', '4'], 'a context without ties');
 });

@@ -6,7 +6,7 @@ import { rank, PLAN_MARGIN } from '../src/engine.js';
 import { OCCASIONS, occasionById } from '../src/occasions.js';
 import { sprayGuide } from '../src/spray.js';
 import { setSkin, loadSkin, loadAsked, markAsked } from '../src/skin.js';
-import { planTies, whenOf } from '../src/contrast.js';
+import { planTies, rankedTies, whenOf } from '../src/contrast.js';
 import { summarize, week } from '../src/weather.js';
 import { renderScene } from '../src/scene.js';
 import { shiftISO } from '../src/history.js';
@@ -17,6 +17,7 @@ import { placeSheetHTML, datePillHTML } from '../src/views/wear/pickers.js';
 import { wxIconFor } from '../src/ui/components.js';
 import { esc } from '../src/ui.js';
 import * as app from '../src/app/state.js';
+import { bottleModel } from '../src/views/bottle.js';
 import { syntheticForecast } from './fixtures.js';
 
 // A stand-in for the browser's localStorage, fresh for each test.
@@ -292,6 +293,100 @@ test('the week board promises no repeats only when there are none, and says rain
   const wet = wear.weekHTML(varied.map((d, n) => ({ ...d, pop: n === 1 ? 87 : 10 })));
   assert.match(wet, /<span class="wk-pop">87%<span class="visually-hidden"> chance of<\/span> rain<\/span>/);
   assert.equal((wet.match(/% rain|chance of/g) ?? []).length, 1, 'only on the rainy day');
+});
+
+test('the Week names a window’s equals under its pick: “or Liam” in a row, a count in the columns, the rest in its tooltip and label', () => {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  Object.assign(state, { demo: { fetched: today, fragrances }, forecast: live, wx: summarize(live), loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], occasionSlot: null });
+  const days = app.computeWeek();
+  const slots = days.flatMap(d => [d.day, d.night]).filter(Boolean);
+  // The plan's own ties, as Now finds them.
+  const windows = slots.map(p => ({ win: p.win, ranked: p.ranked, pick: p.pick }));
+  assert.deepEqual(slots.map(p => p.ties.map(t => t.entry.fragrance.id)), planTies(windows).map(ts => ts.map(t => t.entry.fragrance.id)));
+  const one = slots.find(p => p.ties.length === 1), two = slots.find(p => p.ties.length === 2);
+  assert.ok(one && two, 'the fixture’s week has both');
+  // The board can't link them, so the pick's page leads its shelf with them, wherever they rank;
+  // another bottle's page keeps the list's order.
+  const shelf = (id, ctx) => bottleModel({ dest: 'bottle', arg: id, query: { ctx } }).alts.map(r => r.fragrance.id);
+  for (const p of [one, two]) {
+    const names = p.ties.map(t => t.entry.fragrance.id);
+    assert.deepEqual(shelf(p.pick.fragrance.id, p.ctx).slice(0, names.length), names);
+    assert.equal(new Set(shelf(p.pick.fragrance.id, p.ctx)).size, 4);
+  }
+  const other = two.ranked.find(r => r !== two.pick && !two.ties.some(t => t.entry === r));
+  assert.deepEqual(shelf(other.fragrance.id, two.ctx), two.ranked.filter(r => r !== other).slice(0, 4).map(r => r.fragrance.id));
+  const cell = p => clean(wear.weekPick(p, p.win.slot, 'Friday'), 'week pick');
+  const [first, second] = two.ties.map(t => t.entry.fragrance.name);
+  assert.match(cell(two), new RegExp(`<small class="wk-mark wk-tie">.*<span class="wk-long wk-or">or ${esc(first)}</span><span class="wk-long wk-more">\\+1</span><span class="wk-short">\\+2 as good</span></small>`, 's'));
+  assert.ok(!cell(one).includes('wk-more'));
+  assert.match(cell(one), /<span class="wk-short">\+1 as good<\/span>/);
+  assert.ok(cell(two).includes(`aria-label="${esc(`Friday ${two.win.slot === 'day' ? 'daytime' : 'night'}: ${two.pick.fragrance.name}, ${first} and ${second} suit it as well`)}"`));
+  assert.match(cell(two), / title="[^"]+ suit [^"]+ just as well\."/, 'the tooltip has their tags');
+  // An event's mark says what it's for instead; a worn window has none.
+  assert.ok(!cell({ ...two, win: { ...two.win, occasion: occasionById('formal') } }).includes('wk-tie'));
+  assert.ok(!cell({ ...two, ties: [] }).includes('wk-tie'));
+  // The note under the head says what "or" means, only when one shows.
+  const board = clean(wear.weekHTML(days), 'week');
+  assert.match(board, /<p class="wk-legend">.*<span>Bottles that suit a window just as well as its pick\.<\/span><\/p>/s);
+  assert.match(board, /class="wk-list marked"/);
+  assert.ok(!wear.weekHTML(days.map(d => ({ ...d, day: d.day && { ...d.day, ties: [] }, night: d.night && { ...d.night, ties: [] } }))).includes('as well as its pick'));
+  // Worn: that window's choice is made.
+  state.history = [{ id: two.pick.fragrance.id, date: two.win.dateISO, slot: two.win.slot }];
+  try {
+    const again = app.computeWeek().flatMap(d => [d.day, d.night]).filter(Boolean).find(p => p.win.dateISO === two.win.dateISO && p.win.slot === two.win.slot);
+    assert.deepEqual(again.ties, []);
+  } finally {
+    state.history = [];
+  }
+});
+
+test('Now and the Week name the same ties for today: Now plans the window after today’s too, unshown', () => {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  Object.assign(state, { demo: { fetched: today, fragrances }, forecast: live, wx: summarize(live), loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], occasionSlot: null, events: [] });
+  app.computeToday();
+  const slots = app.todaySlots();
+  const week = app.computeWeek().flatMap(d => [d.day, d.night]).filter(Boolean);
+  const at = win => week.findIndex(p => p.win.dateISO === win.dateISO && p.win.slot === win.slot);
+  const last = at(slots.at(-1).win);
+  // The window after today's, planned as the Week plans it, and never one of Now's slots.
+  assert.ok(state.after, 'planned');
+  assert.equal(at(state.after.win), last + 1);
+  assert.equal(state.after.pick.fragrance.id, week[last + 1].pick.fragrance.id);
+  assert.deepEqual(slots.map(p => p.pick.fragrance.id), slots.map(p => week[at(p.win)].pick.fragrance.id), 'today’s picks agree');
+  const plan = app.todayPlan();
+  assert.equal(plan.length, slots.length + 1);
+  const ids = ts => ts.map(t => t.entry.fragrance.id);
+  const ties = planTies(plan);
+  assert.deepEqual(slots.map((p, i) => ids(ties[i])), slots.map(p => ids(week[at(p.win)].ties)));
+  // Tonight's ties never offer what the next window is planned to wear.
+  assert.ok(!ties[slots.length - 1].some(t => t.entry.fragrance.id === state.after.pick.fragrance.id));
+});
+
+test('the Occasion card names the bottles that suit it as well, for the occasion, until he’s wearing one', () => {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  Object.assign(state, { demo: { fetched: today, fragrances }, forecast: live, wx: summarize(live), loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], occasionSlot: null });
+  const pane = wear.wear.panes.find(p => p.id === 'occasion');
+  // Some occasion on this fixture's night is a toss-up.
+  const found = OCCASIONS.map(o => {
+    const html = clean(pane.render({}, { dest: 'wear', pane: 'occasion', arg: o.id }), o.id);
+    return { o, html, ranked: state.contexts.occ.ranked, win: state.contexts.occ.win };
+  }).find(x => x.html.includes('class="ties"'));
+  assert.ok(found, 'a toss-up somewhere');
+  const { o, html, ranked, win } = found;
+  const phrase = o.phrase ?? o.label.toLowerCase();
+  assert.match(html, new RegExp(`<p class="ties">.*suits? ${esc(phrase)} just as well\\.</span></p>`, 's'));
+  const pick = html.indexOf('class="pick full"');
+  assert.ok(html.indexOf('class="ties"') > html.indexOf('class="reasons lead"', pick) && html.indexOf('class="ties"') < html.indexOf('class="chips"', pick), 'under the reasons');
+  for (const t of rankedTies(ranked, win)) assert.ok(html.includes(`data-action="open" data-ctx="occ" data-id="${t.entry.fragrance.id}">${esc(t.entry.fragrance.name)}</button>`));
+  state.history = [{ id: ranked[0].fragrance.id, date: win.dateISO, slot: win.slot, occasion: o.id }];
+  try {
+    assert.ok(!pane.render({}, { dest: 'wear', pane: 'occasion', arg: o.id }).includes('class="ties"'), 'he’s chosen');
+  } finally {
+    state.history = [];
+  }
 });
 
 test('the compact band keeps trees and the cabin off the ground under its line of text', () => {
