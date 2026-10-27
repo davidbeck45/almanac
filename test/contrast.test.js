@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { contrast, tiesFor, planTies, rankedTies, tieLine, tieName, gapParts, pickGapLine, TIES_MAX } from '../src/contrast.js';
+import { contrast, tiesFor, planTies, rankedTies, tieLine, tieName, gapParts, pickGapLine, TIES_MAX, TIE_OCCASIONS } from '../src/contrast.js';
 import { heaviness } from '../src/accords.js';
 import { performanceLevel, rank } from '../src/engine.js';
 import { OCCASIONS, occasionById } from '../src/occasions.js';
-import { styleScores, shownOf } from '../src/scent-styles.js';
+import { styleScores, shownOf, STYLES } from '../src/scent-styles.js';
 import { summarize } from '../src/weather.js';
 import { matchPct } from '../src/ui.js';
 import { syntheticForecast } from './fixtures.js';
@@ -26,6 +26,8 @@ test('contrast names how a bottle differs from the pick: fresher, a style the pi
   assert.deepEqual(contrast(named('Terra'), named('Shiyaaka Sky')), ['quieter', 'fresh citrus']);
   // Two vanillas: no style tells them apart, so only how they wear does.
   assert.ok(!contrast(named('Liquid Brun'), named('Rifaaqat')).includes('vanilla'));
+  // Amber Empire's card says Vanilla on a chip, so a tie beside it isn't tagged "vanilla".
+  assert.deepEqual(contrast(named('Amber Empire'), named('Liquid Brun')), ['louder', 'gourmand']);
   // A nudge of his own counts: Jake sits closer than Aristo by the votes, not
   // once he says it projects more on him.
   const jake = named('Jake'), aristo = named('Aristo');
@@ -35,8 +37,11 @@ test('contrast names how a bottle differs from the pick: fresher, a style the pi
 
 test('over every wardrobe pair the tags are honest: two at most, one way round, styles as the cards show them', () => {
   const comparisons = { fresher: 'richer', richer: 'fresher', quieter: 'louder', louder: 'quieter' };
+  // The accords a style is built on: those it counts half or more, and the one it's named for.
+  const built = new Map(STYLES.map(s => [s.label.toLowerCase(), new Set([s.id, ...Object.entries(s.acc ?? {}).filter(([, w]) => w >= 0.5).map(([x]) => x)])]));
   for (const a of fragrances) {
     const aShown = new Set(shownOf(styleScores(a)).map(s => s.label.toLowerCase()));
+    const chips = Object.keys(a.accords ?? {}).slice(0, 3);
     for (const b of fragrances) {
       if (a === b) continue;
       const tags = contrast(a, b);
@@ -54,6 +59,7 @@ test('over every wardrobe pair the tags are honest: two at most, one way round, 
       for (const t of tags.filter(x => !(x in comparisons))) {
         assert.ok(shownOf(styleScores(b)).some(s => s.label.toLowerCase() === t), `${what}: ${t} is on its card`);
         assert.ok(!aShown.has(t), `${what}: ${t} isn't on the pick's`);
+        assert.ok(!chips.some(x => built.get(t.replace(/^leans /, ''))?.has(x)), `${what}: ${t} isn't on the pick's chips`);
       }
       // The same comparison leads both ways round, reversed.
       const back = contrast(b, a);
@@ -116,13 +122,18 @@ test('an event’s ties leave out the other events’ picks and what was worn or
   // Ranked as rankEvent ranks them: no rotation, nothing saved.
   const wed = window(win('2026-10-28'), 'Cedrus Blanc', 'Legacy');
   const thu = window(win('2026-10-29'), 'Liam', 'Legacy');
-  const fri = window(win('2026-10-30', 'nightout'), 'Terra', 'Amber Empire', 'Liquid Brun', 'Cedrus Blanc', 'Aristo');
-  const sat = window(win('2026-10-31', 'date'), 'Amber Empire', 'Terra', 'Rifaaqat');
+  // Formal both, an occasion whose ties are news (TIE_OCCASIONS).
+  const fri = window(win('2026-10-30', 'formal'), 'Terra', 'Amber Empire', 'Liquid Brun', 'Cedrus Blanc', 'Aristo');
+  const sat = window(win('2026-10-31', 'formal'), 'Amber Empire', 'Terra', 'Rifaaqat');
   const history = [{ id: named('Liquid Brun').id, date: '2026-10-27', slot: 'night' }];
   const [, , friTies, satTies] = planTies([wed, thu, fri, sat], { history });
   // Not Saturday's Amber Empire, Tuesday's Liquid Brun, Wednesday's Cedrus Blanc or Thursday's Liam.
   assert.deepEqual(friTies.map(t => t.entry.fragrance.name), ['Aristo']);
   assert.deepEqual(satTies.map(t => t.entry.fragrance.name), ['Rifaaqat'], 'not Friday’s Terra');
+  // A date night or a night out names none: a tie on most of their windows tells him nothing.
+  for (const id of ['date', 'nightout', 'casual']) {
+    assert.deepEqual(planTies([wed, thu, { ...fri, win: win('2026-10-30', id) }, sat], { history })[2], [], id);
+  }
 });
 
 test('the tie line says who suits the window just as well, with their tags, or both tags once', () => {
@@ -144,6 +155,8 @@ test('a list ranked on its own has ties until a wear is logged, and an event’s
   const win = { dateISO: '2026-10-30', slot: 'night', label: 'Friday night' };
   const ranked = [entry('Terra', 0.885), entry('Amber Empire', 0.881), entry('Liquid Brun', 0.879)];
   assert.deepEqual(rankedTies(ranked, win).map(t => t.entry.fragrance.name), ['Amber Empire', 'Liquid Brun']);
+  assert.equal(rankedTies(ranked, win, { occasion: occasionById('formal') }).length, 2, 'formal wear: a tie is news');
+  for (const o of OCCASIONS.filter(x => !TIE_OCCASIONS.has(x.id))) assert.deepEqual(rankedTies(ranked, win, { occasion: o }), [], o.id);
   assert.deepEqual(rankedTies(ranked, win, { history: [{ id: named('Terra').id, date: win.dateISO, slot: 'night' }] }), [], 'he’s chosen');
   assert.equal(rankedTies(ranked, win, { history: [{ id: 'x', date: win.dateISO, slot: 'night', planned: true }] }).length, 2, 'a plan is no wear');
   // Ranked as an event (no rotation): Amber Empire worn two days before isn't offered.

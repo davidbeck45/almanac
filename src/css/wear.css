@@ -443,10 +443,9 @@
 .wk-mark .wk-short { display: none; }
 .wk-pick.event { border-color: color-mix(in srgb, var(--ambient) 40%, var(--border-subtle)); }
 .wk-event { font-weight: 600; }
-/* "or Liam +1": the name gives way before the count does. */
-.wk-tie { color: var(--text-secondary); font-weight: 400; }
+/* "+2 as good", in a row and in the columns alike. */
+.wk-tie { color: var(--text-secondary); font-weight: 400; font-variant-numeric: tabular-nums; }
 .wk-tie svg { color: var(--ambient); }
-.wk-tie .wk-more { flex: none; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
 /* The note under the head says what the clock means. */
 .wk-legend { display: flex; align-items: center; gap: var(--s-1); margin-top: var(--s-1); color: var(--ambient); }
 .wk-legend svg { width: 13px; height: 13px; flex: none; }

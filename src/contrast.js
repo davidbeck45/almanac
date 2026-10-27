@@ -8,7 +8,7 @@
 // Omarchy widget (omarchy/widget.mjs) read it.
 import { heaviness } from './accords.js';
 import { performanceLevel, isDisliked, rotationPenalty, occasionWeights, DAILY_WEIGHTS } from './engine.js';
-import { styleScores, shownOf } from './scent-styles.js';
+import { styleScores, shownOf, STYLES } from './scent-styles.js';
 import { matchPct } from './ui.js';
 
 // A bottle ties the pick within this many points of its displayed match, and
@@ -20,13 +20,33 @@ export const TIES_MAX = 2;
 // +1 projects, your own nudge counted) as "quieter" or "louder".
 const HEAVY_STEP = 0.2;
 const SILLAGE_STEP = 0.3;
+// A list ranked for an occasion names its ties only where they're news: for
+// an occasion whose card would name one on under a third of its windows in
+// every city measured (2023–2025 in Chicago, New York, London and Houston,
+// the card's own slot, ranked as the app ranks it, with a journal that
+// follows the daily picks, two wears a day or one). Formal 7–16%, Office
+// 7–22%, Cozy 10–22%; Casual 13–37%, Night Out 20–46%, Outdoors 13–49%,
+// Date Night 23–64%, where a line on most windows stopped telling him
+// anything.
+export const TIE_OCCASIONS = new Set(['formal', 'office', 'cozy']);
+export const tiesNews = occasion => !occasion || TIE_OCCASIONS.has(occasion.id);
+// What a pick's card shows of it: its first accords as chips (chips in
+// src/ui/components.js), and the accords each style names: those it counts
+// half or more (scent-styles' acc), and the one it's named for (Amber's
+// "amber", which its own table leaves to the resins). A tag never names a
+// style whose accord is on the pick's chips: "vanilla" beside a pick whose
+// card says Vanilla reads as no difference at all.
+const CHIPS_SHOWN = 3;
+const STYLE_ACCORDS = new Map(STYLES.map(s => [s.id, new Set([s.id, ...Object.entries(s.acc ?? {}).filter(([, w]) => w >= 0.5).map(([a]) => a)])]));
 
 /**
  * How `other` differs from `pick` (engine records), in at most two words: a
  * comparison, fresher or richer (heaviness) or quieter or louder (sillage),
  * whichever is further past its step, then a scent style its card shows and
- * the pick's doesn't (shownOf, its label in lower case: "white floral",
- * "leans skin scent"); with no such style, both comparisons. [] when nothing
+ * the pick's doesn't, by its styles or its accord chips (shownOf, its label
+ * in lower case: "white floral", "leans skin scent"; not "vanilla" beside
+ * Amber Empire, whose chips say Vanilla); with no such style, both
+ * comparisons. [] when nothing
  * sets it apart. Never "darker" or "sweeter": no style or measure says so.
  */
 export function contrast(pick, other) {
@@ -37,7 +57,8 @@ export function contrast(pick, other) {
     [louder / SILLAGE_STEP, 'louder', 'quieter'],
   ].filter(([steps]) => Math.abs(steps) >= 1).sort((a, b) => Math.abs(b[0]) - Math.abs(a[0])).map(([steps, more, less]) => (steps > 0 ? more : less));
   const shown = new Set(shownOf(styleScores(pick)).map(s => s.id));
-  const style = shownOf(styleScores(other)).find(s => !shown.has(s.id));
+  const chips = Object.keys(pick.accords ?? {}).slice(0, CHIPS_SHOWN);
+  const style = shownOf(styleScores(other)).find(s => !shown.has(s.id) && !chips.some(a => STYLE_ACCORDS.get(s.id)?.has(a)));
   return style ? [...compared.slice(0, 1), style.label.toLowerCase()] : compared;
 }
 
@@ -71,13 +92,13 @@ export function tiesFor(pick, ranked, { skip = [] } = {}) {
  * carries a rotation penalty). An event's window is ranked with no rotation
  * and nothing saved (rankEvent), so its ties also leave out the other
  * events' picks and any bottle worn or planned within the rotation window
- * before it. A window with a wear logged in `history` has none: the choice
- * is made.
+ * before it, and an event's for an occasion outside TIE_OCCASIONS has none.
+ * A window with a wear logged in `history` has none: the choice is made.
  */
 export function planTies(plan, { history = [] } = {}) {
   const worn = history.filter(h => !h.planned);
   return plan.map((p, i) => {
-    if (worn.some(h => h.date === p.win.dateISO && h.slot === p.win.slot)) return [];
+    if (worn.some(h => h.date === p.win.dateISO && h.slot === p.win.slot) || !tiesNews(p.win.occasion)) return [];
     const skip = [plan[i - 1], plan[i + 1]].map(q => q?.pick?.fragrance.id).filter(id => id != null);
     if (p.win.occasion) {
       for (const q of plan) if (q !== p && q.win.occasion && q.pick) skip.push(q.pick.fragrance.id);
@@ -98,11 +119,12 @@ export const whenOf = win => (/^(Today|Tonight|Tomorrow)\b/.test(win?.label ?? '
  * tiesFor a list ranked on its own (the Occasion card's): none once a wear
  * is logged for the window in `history`, and for a window ranked as an
  * event (`event`: rankEvent, no rotation), none worn or planned within the
- * rotation window before it either, as planTies has it.
+ * rotation window before it either, as planTies has it. None for an
+ * `occasion` outside TIE_OCCASIONS.
  */
-export function rankedTies(ranked, win, { history = [], event = false } = {}) {
+export function rankedTies(ranked, win, { history = [], event = false, occasion = null } = {}) {
   const worn = history.filter(h => !h.planned);
-  if (worn.some(h => h.date === win.dateISO && h.slot === win.slot)) return [];
+  if (worn.some(h => h.date === win.dateISO && h.slot === win.slot) || !tiesNews(occasion)) return [];
   const skip = event ? ranked.filter(r => rotationPenalty(r.fragrance.id, history, win.dateISO, win.slot).penalty > 0).map(r => r.fragrance.id) : [];
   return tiesFor(ranked[0], ranked, { skip });
 }
