@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { contrast, tiesFor, planTies, rankedTies, tieLine, tieName, gapParts, pickGapLine, TIES_MAX } from '../src/contrast.js';
+import { contrast, tiesFor, planTies, rankedTies, tieLine, tieName, gapParts, pickGapLine, TIES_MAX, TIE_OCCASIONS } from '../src/contrast.js';
 import { heaviness } from '../src/accords.js';
 import { performanceLevel, rank } from '../src/engine.js';
 import { OCCASIONS, occasionById } from '../src/occasions.js';
@@ -116,13 +116,18 @@ test('an event’s ties leave out the other events’ picks and what was worn or
   // Ranked as rankEvent ranks them: no rotation, nothing saved.
   const wed = window(win('2026-10-28'), 'Cedrus Blanc', 'Legacy');
   const thu = window(win('2026-10-29'), 'Liam', 'Legacy');
-  const fri = window(win('2026-10-30', 'nightout'), 'Terra', 'Amber Empire', 'Liquid Brun', 'Cedrus Blanc', 'Aristo');
-  const sat = window(win('2026-10-31', 'date'), 'Amber Empire', 'Terra', 'Rifaaqat');
+  // Formal both, the one occasion whose ties are news (TIE_OCCASIONS).
+  const fri = window(win('2026-10-30', 'formal'), 'Terra', 'Amber Empire', 'Liquid Brun', 'Cedrus Blanc', 'Aristo');
+  const sat = window(win('2026-10-31', 'formal'), 'Amber Empire', 'Terra', 'Rifaaqat');
   const history = [{ id: named('Liquid Brun').id, date: '2026-10-27', slot: 'night' }];
   const [, , friTies, satTies] = planTies([wed, thu, fri, sat], { history });
   // Not Saturday's Amber Empire, Tuesday's Liquid Brun, Wednesday's Cedrus Blanc or Thursday's Liam.
   assert.deepEqual(friTies.map(t => t.entry.fragrance.name), ['Aristo']);
   assert.deepEqual(satTies.map(t => t.entry.fragrance.name), ['Rifaaqat'], 'not Friday’s Terra');
+  // A date night or a night out names none: a tie on most of their windows tells him nothing.
+  for (const id of ['date', 'nightout', 'casual']) {
+    assert.deepEqual(planTies([wed, thu, { ...fri, win: win('2026-10-30', id) }, sat], { history })[2], [], id);
+  }
 });
 
 test('the tie line says who suits the window just as well, with their tags, or both tags once', () => {
@@ -144,6 +149,8 @@ test('a list ranked on its own has ties until a wear is logged, and an event’s
   const win = { dateISO: '2026-10-30', slot: 'night', label: 'Friday night' };
   const ranked = [entry('Terra', 0.885), entry('Amber Empire', 0.881), entry('Liquid Brun', 0.879)];
   assert.deepEqual(rankedTies(ranked, win).map(t => t.entry.fragrance.name), ['Amber Empire', 'Liquid Brun']);
+  assert.equal(rankedTies(ranked, win, { occasion: occasionById('formal') }).length, 2, 'formal wear: a tie is news');
+  for (const o of OCCASIONS.filter(x => !TIE_OCCASIONS.has(x.id))) assert.deepEqual(rankedTies(ranked, win, { occasion: o }), [], o.id);
   assert.deepEqual(rankedTies(ranked, win, { history: [{ id: named('Terra').id, date: win.dateISO, slot: 'night' }] }), [], 'he’s chosen');
   assert.equal(rankedTies(ranked, win, { history: [{ id: 'x', date: win.dateISO, slot: 'night', planned: true }] }).length, 2, 'a plan is no wear');
   // Ranked as an event (no rotation): Amber Empire worn two days before isn't offered.

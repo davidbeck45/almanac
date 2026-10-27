@@ -52,7 +52,7 @@ import { fragranticaLibrary, loadPool, fromPool, loadPoolStyles, loadAbout } fro
 import { applySkin } from '../src/skin.js';
 import { packTrip, withEvents, picksFor, tripOccasion } from '../src/pack.js';
 import { sprayGuide } from '../src/spray.js';
-import { tiesFor, planTies, tieName } from '../src/contrast.js';
+import { tiesFor, planTies, tieName, tiesNews } from '../src/contrast.js';
 import { doubles } from '../src/doubles.js';
 import { gapContext, gapReport, buyCheck, checkJSON, cellLabel, ratingText, DEFAULT_CLIMATE, USES, useLabel } from '../src/gaps.js';
 import { fetchClimate } from '../src/climate.js';
@@ -871,8 +871,9 @@ async function main() {
     }
   };
   // Each window's ties: a plan's leave out its neighbours' picks; one
-  // window ranked alone takes its top.
-  const tiesOf = (result, planned) => (planned ? planTies(result, { history }) : result.map(r => tiesFor(r.pick, r.ranked)));
+  // window ranked alone takes its top. None for an occasion whose ties
+  // aren't news (TIE_OCCASIONS: only formal wear's are).
+  const tiesOf = (result, planned) => (!tiesNews(occasion) ? result.map(() => []) : planned ? planTies(result, { history }) : result.map(r => tiesFor(r.pick, r.ranked)));
 
   // One date anywhere: the forecast's windows, or typical weather past them.
   // With --events on it, the date's windows are planned around them.
@@ -922,7 +923,7 @@ async function main() {
     const wanted = slot ?? occasion?.slot ?? null;
     const windows = onWindows(days.flatMap(d => [d.day, d.night].filter(w => w && (!wanted || w.slot === wanted))), 'the week ahead');
     const plan = planWindows(fragrances, windows, { occasion, history, nudge, nowISO: summarize(forecast).todayISO });
-    const ties = new Map(planTies(plan, { history }).map((t, i) => [plan[i], t]));
+    const ties = new Map(planTies(plan, { history }).map((t, i) => [plan[i], tiesNews(occasion) ? t : []]));
     const pickFor = win => plan.find(p => p.win === win);
     const rows = days.map(d => ({ day: d, slots: windows.filter(w => w.dateISO === d.dateISO).map(pickFor) }))
       .filter(r => r.slots.length);
@@ -988,7 +989,7 @@ async function main() {
   }
   // A plan's ties are read over the window after it and the events after
   // today's windows too, which hold their bottles.
-  const ties = events.length || !wanted ? planTies([...result, ...after, ...ahead], { history }).slice(0, result.length) : tiesOf(result, false);
+  const ties = events.length || !wanted ? planTies([...result, ...after, ...ahead], { history }).slice(0, result.length).map(t => (tiesNews(occasion) ? t : [])) : tiesOf(result, false);
 
   if (args.json) {
     const eventJSON = ({ win, pick }) => ({ date: win.dateISO, slot: win.slot, occasion: win.occasion.id, pick: pick.fragrance.name });

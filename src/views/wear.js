@@ -375,10 +375,11 @@ function nowQuestion(pick, worn) {
 // formal wear" in a row, "Formal" in the board's narrow columns) and for a
 // bottle the rotation nudge brought back ("Not worn in 34 days" in a row,
 // "34 days" under the clock in the columns), else for one that has equals
-// (`ties`, planTies'): "or Liam", "or Liam +1" with two in a row, "+2 as
-// good" in the columns, where a name kept four letters; the board's note
-// explains them, the tooltip names them with their tags, and the pick's page
-// leads its shelf with them (shelfOf). An occasion in the board's narrow columns, where
+// (`ties`, planTies'): "+2 as good" in a row and in the columns alike (a
+// name kept four letters in the columns, so the count is the one wording
+// both hold); the board's note explains them, the tooltip and label name
+// them with their tags, and the pick's page leads its shelf with them
+// (shelfOf). An occasion in the board's narrow columns, where
 // "Date Night" and "Night Out" didn't fit beside their glyphs (the cell's
 // tooltip says it whole).
 const COLUMN_LABEL = { date: 'Date', nightout: 'Out' };
@@ -394,7 +395,7 @@ export function weekPick(p, slot, dayName) {
   const spoken = [`${dayName} ${slot === 'day' ? 'daytime' : 'night'}: ${f.name}`, o && `for ${phraseOf(o)}`, p.worn && 'wearing', nudge, equals].filter(Boolean).join(', ');
   const mark = o ? `<small class="wk-mark wk-event">${icon[o.icon] ?? icon.calendar}<span class="wk-long">${esc(`For ${phraseOf(o)}`)}</span><span class="wk-short">${esc(COLUMN_LABEL[o.id] ?? o.label)}</span></small>`
     : nudge ? `<small class="wk-mark wk-nudge">${icon.clock}<span class="wk-long">${esc(nudge)}</span><span class="wk-short">${esc(short)}</span></small>`
-      : ties.length ? `<small class="wk-mark wk-tie">${icon.compare}<span class="wk-long wk-or">or ${esc(names[0])}</span>${names.length > 1 ? `<span class="wk-long wk-more">+${names.length - 1}</span>` : ''}<span class="wk-short">+${names.length} as good</span></small>` : '';
+      : ties.length ? `<small class="wk-mark wk-tie">${icon.compare}<span>+${names.length} as good</span></small>` : '';
   const tip = o ? `For ${phraseOf(o)}` : nudge || (ties.length ? tieLine(ties, p.win) : '');
   return `<button class="wk-pick${p.worn ? ' worn' : ''}${o ? ' event' : ''}" data-action="open" data-ctx="${esc(p.ctx)}" data-id="${esc(f.id)}" aria-label="${esc(spoken)}"${tip ? ` title="${esc(tip)}"` : ''}>
     ${img(f)}
@@ -583,8 +584,9 @@ function occasionPane(app, route) {
   const worn = wornId(win);
   // A nudged pick isn't the best for it (that one leads Also good).
   const kicker = ranked[0].nudged ? 'Due a wear' : `Best for ${phraseOf(occasion)}`;
-  // The bottles that suit it as well: none once he's wearing one.
-  const ties = rankedTies(ranked, win, { history: state.history, event: planned });
+  // The bottles that suit it as well: none once he's wearing one, and only
+  // for an occasion where a tie is news (TIE_OCCASIONS: formal wear).
+  const ties = rankedTies(ranked, win, { history: state.history, event: planned, occasion });
   return `${head}
     <section class="card slot" aria-labelledby="occ-title">
       ${slotHeadHTML(win, ev.here ? nowHour() : -1, { id: 'occ-title', thumb: true, title: occasionHeading(route, ev) })}
