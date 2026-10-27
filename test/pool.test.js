@@ -66,7 +66,7 @@ test('every id the pool names is in r/', () => {
 });
 
 test('the pool stays small and carries its license', () => {
-  // 719 KB in October 2026, over the ~600 aimed for: see CLAUDE.md for what trims it.
+  // 722 KB in October 2026, over the ~600 aimed for: see CLAUDE.md for what trims it.
   const pool = gzKB('pool.json'), notes = gzKB('pool-notes.json');
   assert.ok(pool + notes < 730, `pool ${pool.toFixed(0)} KB + notes ${notes.toFixed(0)} KB gzipped`);
   for (const file of ['pool.json', 'pool-notes.json']) {

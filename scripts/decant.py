@@ -30,8 +30,8 @@ only what it needs:
   y year, g gender (f/m/u), r [rating, votes], a {accord: strength 0-100, as
   the dataset has it}, v [winter, spring, summer, fall, day, night] votes,
   l [longevity 1-5, votes], si [sillage 1-4, votes], no {t/m/b or f: {note:
-  weight 0-100}}, k [winter, spring, summer, fall, night] shares of the
-  bottles voters say it smells like.
+  weight 0-100, min-max scaled votes (note_shares)}}, k [winter, spring,
+  summer, fall, night] shares of the bottles voters say it smells like.
 - i/<xx>.tsv: the search index, split by the first two letters of each word of
   a bottle's name and brand: id, name, brand, year, season votes; most voted
   first.
@@ -71,7 +71,8 @@ only what it needs:
   slugs slug_of() can't derive; `license`.
 - pool-notes.json: `no`, row for row with the pool: each bottle's 8 strongest
   notes as [index into `notes` x 4 + tier (0 top, 1 heart, 2 base, 3 flat),
-  votes in tenths of the top note's], in r/'s order.
+  votes in tenths of the top note's, as note_shares reads them off the whole
+  pyramid (0 when nobody voted)], in r/'s order.
 - x/<id % 512>.json: {id: about}, for bottles with 30+ rating votes: h rating
   histogram [hate, dislike, ok, like, love], pv [value average, votes],
   o [have, had, want], cg [crowd lean, votes], p [all-time, recent
@@ -122,16 +123,15 @@ LIKE_MIN_SEASON, LIKE_MIN_TIME = 100, 30
 BAR_FLOOR, BAR_SLOPE = 30, 0.7
 # Note weights are min-max scaled votes, 100 x (votes - the least-voted note's)
 # / (the top note's - the least's): against our own vote counts that misses by
-# 0.3 a note (485 notes), a power of votes / the top's by 4.4. So the
-# least-voted note weighs 0 whatever its votes; note_votes turns weights back
-# into relative votes with it at NOTE_FLOOR of the top's, the median share of
-# a page's least-voted note on our own pages (22%).
-NOTE_FLOOR = 0.2
-# How src/fragrantica.js reads a weight back, as (votes / top) ^ (1 / 1.61): the
-# power fit, which misses the scaling above. The pool's notes are packed to
-# match it, so they round-trip; changing the reading moves every dataset
-# record's note vector (similarity, layering, the stored pool styles).
-NOTE_WEIGHT_POWER = 1.61
+# 0.3 a note (479 notes), a power of votes / the top's by 4.7. So the
+# least-voted note weighs 0 whatever its votes; note_shares turns weights back
+# into shares of the top note's votes with it at note_floor's share: for a
+# pyramid of n notes, NOTE_FLOOR_SCALE x n ^ -NOTE_FLOOR_POWER (0.32 at 5
+# notes, 0.22 at 8, 0.13 at 15), fitted on the 50 of our own pages whose row
+# has votes (the more notes, the less the last one gets). That misses a note's
+# share by 0.023 (median), a fixed fifth by 0.040. src/fragrantica.js reads
+# r/ rows the same way (noteFloor).
+NOTE_FLOOR_SCALE, NOTE_FLOOR_POWER = 1.18, 0.81
 LICENSE = ("CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/): derived from Le Decanteur's "
            f"Fragrantica dataset (https://www.kaggle.com/datasets/{DATASET}), from Fragrantica members' votes")
 # The suggestion pool: well-voted bottles, plus rising ones (fewer votes, but
@@ -692,10 +692,14 @@ def pool(signals: Signals) -> None:
     body = {"license": LICENSE, "version": int(latest_dump().parent.name[1:]), "count": len(bottles),
             "brands": brands, "accords": accords, "flags": FLAGS, "slugs": slugs, "cols": cols}
     write_json(OUT / "pool.json", body)
-    # Each note as [note index x 4 + tier, votes in tenths of the top note's], in r/'s order.
-    tenths = lambda w: max(round(10 * (w / 100) ** (1 / NOTE_WEIGHT_POWER)), 1) if w else 0
-    write_json(OUT / "pool-notes.json", {"license": LICENSE, "count": len(bottles), "notes": notes,
-                                         "no": [[v for t, n, w in top_notes(r) for v in (note_ix[n] * 4 + t, tenths(w))] for r in bottles]})
+    # Each note as [note index x 4 + tier, votes in tenths of the top note's], in r/'s order:
+    # its share as note_shares reads it off the whole pyramid, not just the 8 kept (0: nobody voted).
+    def packed(r):
+        weights = note_weights(r)
+        floor = note_floor(weights.values()) if any(weights.values()) else None
+        tenths = lambda w: 0 if floor is None else max(round(10 * (floor + (1 - floor) * w / 100)), 1)
+        return [v for t, n, w in top_notes(r) for v in (note_ix[n] * 4 + t, tenths(w))]
+    write_json(OUT / "pool-notes.json", {"license": LICENSE, "count": len(bottles), "notes": notes, "no": [packed(r) for r in bottles]})
     for name in ("pool.json", "pool-notes.json"):
         path = OUT / name
         print(f"data/fragrantica/{name}: {len(bottles)} bottles, {path.stat().st_size / 1024:.0f} KB, {gz_size(path) / 1024:.0f} KB gzip -9")
@@ -810,12 +814,26 @@ def note_weights(r: dict) -> dict[str, float]:
     return {n["name"]: n["weight"] for n in [*sum((tiered.get(k, []) for k in ("top", "middle", "base")), []), *r["notes"]["flat"]]}
 
 
-def note_votes(weights: dict[str, float]) -> dict[str, int]:
-    """Note weights turned back into relative votes, the top note 1000 and the
-    least-voted (weight 0) NOTE_FLOOR of it; none when no note is weighted."""
+def note_floor(weights) -> float:
+    """What a weight of 0 reads as, a share of the top note's votes:
+    NOTE_FLOOR_SCALE x n ^ -NOTE_FLOOR_POWER for n notes. A row with no note at
+    0 (329 in the dataset) was scaled to the top's votes alone, so 0 there."""
+    weights = list(weights)
+    return min(1.0, NOTE_FLOOR_SCALE * len(weights) ** -NOTE_FLOOR_POWER) if 0 in weights else 0.0
+
+
+def note_shares(weights: dict[str, float]) -> dict[str, float]:
+    """Note weights turned back into shares of the top note's votes, the
+    least-voted at note_floor's; none when no note is weighted (nobody voted)."""
     if not any(weights.values()):
         return {}
-    return {n: round(1000 * (NOTE_FLOOR + (1 - NOTE_FLOOR) * w / 100)) for n, w in weights.items()}
+    floor = note_floor(weights.values())
+    return {n: floor + (1 - floor) * w / 100 for n, w in weights.items()}
+
+
+def note_votes(weights: dict[str, float]) -> dict[str, int]:
+    """Note weights as relative votes, the top note 1000 (note_shares)."""
+    return {n: round(1000 * s) for n, s in note_shares(weights).items()}
 
 
 def jsonl_line(r: dict) -> dict:
@@ -849,10 +867,10 @@ def fill_note_votes(line: dict, r: dict) -> bool:
     note. Votes a line has are never touched. True when it filled some."""
     if line.get("noteVotes"):
         return False
-    weights = {normalize(n): w for n, w in note_weights(r).items()}
+    # Read off the row's whole pyramid; a note it lacks (spelled apart) gets no votes.
+    votes = {normalize(n): v for n, v in note_votes(note_weights(r)).items()}
     listed = [n for names in line["notes"].values() for n in names]
-    # Only the notes the row has: one it lacks (spelled apart) gets no votes.
-    votes = note_votes({n: weights[normalize(n)] for n in listed if normalize(n) in weights})
+    votes = {n: votes[normalize(n)] for n in listed if normalize(n) in votes}
     if votes:
         line["noteVotes"] = votes
     return bool(votes)

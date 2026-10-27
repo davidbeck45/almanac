@@ -483,7 +483,8 @@ test('the buy check knows what he likes: more of a style he’s thin on is good,
     if (a !== b) shift[`${a} → ${b}`] = (shift[`${a} → ${b}`] ?? 0) + 1;
   }
   assert.ok(Object.keys(shift).every(k => ['Covered → Good', 'Covered → Risky'].includes(k)) && shift['Covered → Good'] > 10, JSON.stringify(shift));
-  assert.deepEqual(checkJSON(named('You', 'Glossier'), you).taste, { styles: ['powdery', 'skin'], style: 'skin', label: 'Skin scent', owned: 2, thin: true });
+  // Glossier You leads with Skin scent: its ambrette, the least-voted of its four notes, counts.
+  assert.deepEqual(checkJSON(named('You', 'Glossier'), you).taste, { styles: ['skin', 'powdery'], style: 'skin', label: 'Skin scent', owned: 2, thin: true });
 });
 
 test('the buy check reads a bottle the same way whatever form it comes in', () => {
