@@ -3,6 +3,7 @@
 // in the dataset. No DOM here, so views and tests import it in Node; the
 // shell (src/app/shell.js) renders and handles events.
 import { rank, rankEvent, planWindows } from '../engine.js';
+import { planTies } from '../contrast.js';
 import { week } from '../weather.js';
 import { loadLocation } from '../location.js';
 import { loadHistory, wornIn, journalStats, journalCalendar, occasionCounts } from '../history.js';
@@ -192,13 +193,16 @@ export function addToMine(record) {
 // a bottle page reads its entry from there (`#/bottle/<id>?ctx=<key>`). Keys:
 // 'day' and 'night' (Now), 'occ' (Occasion), 'w:<dateISO>:<slot>' (Week).
 // A window planned for an event carries its occasion, so a wear logged from
-// it counts for that use, and `event` (ranked as rankEvent ranks one).
+// it counts for that use, and `event` (ranked as rankEvent ranks one). Now's,
+// the Week's and the Occasion pane's carry their `pick` (a plan's needn't be
+// ranked[0]), which a bottle page measures itself against; a trip's packs
+// from its own bottles and carries none.
 
 const SLOT_ORDER = { day: 0, night: 1 };
 export const byTime = (a, b) => a.dateISO.localeCompare(b.dateISO) || SLOT_ORDER[a.slot] - SLOT_ORDER[b.slot];
 
-export function storeContext(key, win, occasion, ranked, event = Boolean(win.occasion)) {
-  state.contexts[key] = { win, occasion, ranked, event, entries: new Map(ranked.map(r => [r.fragrance.id, r])) };
+export function storeContext(key, win, occasion, ranked, { event = Boolean(win.occasion), pick = null } = {}) {
+  state.contexts[key] = { win, occasion, ranked, event, pick, entries: new Map(ranked.map(r => [r.fragrance.id, r])) };
 }
 
 // Rankings put a bottle left on the shelf a month first when it's within
@@ -210,7 +214,7 @@ export function storeContext(key, win, occasion, ranked, event = Boolean(win.occ
 export function rankContext(key, win, occasion, { nudge = true, event = false } = {}) {
   const ranked = event ? rankEvent(rankedFragrances(), win, occasion)
     : rank(rankedFragrances(), win, win.slot, { occasion, history: state.history, todayISO: win.dateISO, nudge });
-  storeContext(key, win, occasion, ranked, event);
+  storeContext(key, win, occasion, ranked, { event, pick: ranked[0] ?? null });
   return ranked;
 }
 
@@ -244,7 +248,7 @@ export function computeToday() {
   state.ahead = plan.slice(today.length);
   state.today = {};
   for (const p of plan.slice(0, today.length)) {
-    storeContext(p.win.slot, p.win, p.win.occasion ?? null, p.ranked);
+    storeContext(p.win.slot, p.win, p.win.occasion ?? null, p.ranked, { pick: p.pick });
     state.today[p.win.slot] = p;
   }
 }
@@ -267,12 +271,14 @@ export function computeWeek() {
   const days = week(state.forecast);
   const windows = withStoredEvents(days.flatMap(d => [d.day, d.night].filter(Boolean)), state.events);
   const plan = planWindows(rankedFragrances(), windows, { history: state.history, nudge: true, nowISO: todayISO() });
-  const byWindow = new Map(plan.map(p => [`${p.win.dateISO}:${p.win.slot}`, p]));
+  // Each window's toss-ups as Now finds them (src/contrast.js planTies).
+  const ties = planTies(plan, { history: state.history });
+  const byWindow = new Map(plan.map((p, i) => [`${p.win.dateISO}:${p.win.slot}`, { ...p, ties: ties[i] }]));
   const slotPlan = win => {
     if (!win) return null;
     const p = byWindow.get(`${win.dateISO}:${win.slot}`);
     const ctx = `w:${win.dateISO}:${win.slot}`;
-    storeContext(ctx, p.win, p.win.occasion ?? null, p.ranked);
+    storeContext(ctx, p.win, p.win.occasion ?? null, p.ranked, { pick: p.pick });
     return { ...p, ctx, worn: wornIn(state.history, win.dateISO, win.slot)?.id === p.pick.fragrance.id };
   };
   return days.map(d => ({ ...d, day: slotPlan(d.day), night: slotPlan(d.night) }));

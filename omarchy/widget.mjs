@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { planWindows } from '../src/engine.js';
+import { planTies, tieLine } from '../src/contrast.js';
 import { accordColor } from '../src/accords.js';
 import { DEFAULT_HIDDEN } from '../src/hidden.js';
 import { readJournal, isJournalToken, journalFreshness } from '../src/history.js';
@@ -107,19 +108,27 @@ export function widgetBottles(fragrances, hidden, journal = null) {
 
 const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
 
-function brief(p) {
+// A window's pick, and the bottles that suit it as well (planTies': at most
+// two, each with how it differs, src/contrast.js).
+function brief(p, ties = []) {
   if (!p?.pick) return null;
   const f = p.pick.fragrance;
-  return { slot: p.win.slot, label: p.win.label, id: String(f.id), name: f.name, brand: f.brand, tier: p.pick.tier, ...(p.win.occasion && { occasion: p.win.occasion.id }) };
+  return {
+    slot: p.win.slot, label: p.win.label, id: String(f.id), name: f.name, brand: f.brand, tier: p.pick.tier, ...(p.win.occasion && { occasion: p.win.occasion.id }),
+    ties: ties.map(({ entry, tags }) => ({ id: String(entry.fragrance.id), name: entry.fragrance.name, brand: entry.fragrance.brand, tags })),
+  };
 }
 
-function detail(p) {
+// The window to wear now, in full; `tieLine` is the panel's one line on its
+// ties ("Legacy (fresher) suits tonight just as well."), '' with none.
+function detail(p, ties = []) {
   if (!p?.pick) return null;
   const { win, pick, ranked } = p;
   const f = pick.fragrance;
   const runnerUp = ranked.find(r => r !== pick);
   return {
-    ...brief(p),
+    ...brief(p, ties),
+    tieLine: tieLine(ties, win),
     condition: win.condition,
     category: win.category,
     feelsF: Math.round(win.feelsF),
@@ -162,14 +171,17 @@ export function widgetPayload(fragrances, forecast, place, nowMs = Date.now(), j
   // By date and slot: an event's window is a copy with its occasion on.
   const key = win => win && `${win.dateISO}:${win.slot}`;
   const byWindow = new Map(plan.map(p => [key(p.win), p]));
+  // Each window's toss-ups as the app's Now and Week find them.
+  const ties = new Map(planTies(plan, { history }).map((t, i) => [plan[i], t]));
+  const briefOf = win => { const p = byWindow.get(key(win)); return brief(p, ties.get(p)); };
   const freshness = journal && journalFreshness(history, todayISO);
   return {
     place,
     updated: new Date(nowMs).toISOString(),
     journal: freshness || null,
     journalNote: journalNote(freshness),
-    now: detail(plan[0]),
-    next: brief(plan[1]),
+    now: detail(plan[0], ties.get(plan[0])),
+    next: brief(plan[1], ties.get(plan[1])),
     days: days.map(d => ({
       date: d.dateISO,
       name: d.name,
@@ -178,8 +190,8 @@ export function widgetPayload(fragrances, forecast, place, nowMs = Date.now(), j
       condition: d.condition,
       category: d.category,
       rainChance: d.pop,
-      day: brief(byWindow.get(key(d.day))),
-      night: brief(byWindow.get(key(d.night))),
+      day: briefOf(d.day),
+      night: briefOf(d.night),
     })),
   };
 }

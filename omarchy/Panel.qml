@@ -480,11 +480,12 @@ Panel {
             }
           }
 
+          // The bottles that suit the window as well, when there are any; else the runner-up.
           Text {
-            visible: !!(root.pick && root.pick.runnerUp)
+            visible: !!(root.pick && (root.pick.tieLine || root.pick.runnerUp))
             width: parent.width
             textFormat: Text.PlainText
-            text: root.pick && root.pick.runnerUp ? "Runner-up: " + root.pick.runnerUp.name + " · " + root.pick.runnerUp.brand : ""
+            text: !root.pick ? "" : root.pick.tieLine ? root.pick.tieLine : root.pick.runnerUp ? "Runner-up: " + root.pick.runnerUp.name + " · " + root.pick.runnerUp.brand : ""
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall

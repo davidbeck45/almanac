@@ -14,6 +14,7 @@ import { loadWants, saveWants, hasWant, setWant } from '../wishlist.js';
 import { loadSkin, applySkin } from '../skin.js';
 import { isCustomId, shareToken } from '../custom.js';
 import { styleById } from '../scent-styles.js';
+import { pickGapLine } from '../contrast.js';
 import { esc, deg, temp, matchPct, relativeDay, toastName } from '../ui.js';
 import { icon, img, bar, reasonsList, accordColor, wearButton, magDot, messageHTML, shelfHTML } from '../ui/components.js';
 import { askPool } from '../app/pool.js';
@@ -225,7 +226,8 @@ export const linkId = f => (isCustomId(f.id) && !String(f.id).includes('~') && !
 /**
  * What every section gets:
  * { f: the record, entry: its ranked entry for the window (null without a
- *   forecast), solo: ranked on its own (not in the list on screen), ctx and
+ *   forecast), pick: the list's pick for the window (its context's; null
+ *   for a trip's), solo: ranked on its own (not in the list on screen), ctx and
  *   ctxLabel: the list it was opened from, occasion: that list's (or null),
  *   owned: in the collection being ranked, active: and switched on, inMine,
  *   worn, canWear, wears, todayISO, win, alts, partners, comfort, about:
@@ -253,6 +255,7 @@ export function bottleModel(route) {
   return {
     f,
     entry,
+    pick: ctx?.pick ?? null,
     solo,
     win,
     ctx: key,
@@ -415,7 +418,7 @@ const restText = (parts, slot) => restReason(parts, slot) ?? (parts.planned ? 'P
 
 // The least the heat or cold has to take off for Why to say so, in percent.
 const NOTE_MIN = 2;
-function whySection({ entry, solo, win, occasion, todayISO: today }) {
+function whySection({ entry, pick, solo, win, occasion, worn, todayISO: today }) {
   if (!entry) return '';
   const p = entry.parts;
   // The rating bar is mostly your stars once you've rated it (engine
@@ -442,7 +445,10 @@ function whySection({ entry, solo, win, occasion, todayISO: today }) {
   // stands, another bottle takes the window. Said as on today, as the plan says it.
   const saved = p.saved && win ? `<p class="why-note">${esc(savedReason(p.saved, today ?? win.dateISO))}, so the plan picks another bottle here.</p>` : '';
   const title = solo ? `How it would do ${win.slot === 'day' ? 'by day' : 'tonight'}` : 'Why it ranks here';
-  return `<section class="bp-section"><h3>${title} <span class="h3-aside">${matchPct(entry)}% match</span></h3><div class="bars why">${bars}</div>${heavy}${thin}${rotation}${saved}</section>`;
+  // In the list, beside its pick when that's another bottle (src/contrast.js).
+  const gap = !solo && win ? pickGapLine(entry, pick, win, { occasion, worn }) : '';
+  const vs = gap ? `<p class="why-vs">${esc(gap)}</p>` : '';
+  return `<section class="bp-section"><h3>${title} <span class="h3-aside">${matchPct(entry)}% match</span></h3>${vs}<div class="bars why">${bars}</div>${heavy}${thin}${rotation}${saved}</section>`;
 }
 
 // Only the relative words go lower case: "Also good for tonight", "Also good for Saturday night".

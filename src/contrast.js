@@ -2,10 +2,12 @@
 // differs from it in a word or two, so a near tie reads as the free choice it
 // is. On real weather the runner-up sits within a point of the pick's
 // displayed match on half to three quarters of windows, and the weather's own
-// error moves picks by more than that. Pure: Now's card (src/views/wear.js)
-// and the CLI's answers (scripts/recommend.mjs) both read it.
+// error moves picks by more than that. Pure: Now's card, the Week board and
+// the Occasion card (src/views/wear.js), the bottle page's Why
+// (src/views/bottle.js), the CLI's answers (scripts/recommend.mjs) and the
+// Omarchy widget (omarchy/widget.mjs) read it.
 import { heaviness } from './accords.js';
-import { performanceLevel, isDisliked, rotationPenalty } from './engine.js';
+import { performanceLevel, isDisliked, rotationPenalty, occasionWeights, DAILY_WEIGHTS } from './engine.js';
 import { styleScores, shownOf } from './scent-styles.js';
 import { matchPct } from './ui.js';
 
@@ -93,17 +95,107 @@ export const tieName = ({ entry, tags }) => `${entry.fragrance.name}${tags.lengt
 export const whenOf = win => (/^(Today|Tonight|Tomorrow)\b/.test(win?.label ?? '') ? win.label.toLowerCase() : win?.label || 'now');
 
 /**
+ * tiesFor a list ranked on its own (the Occasion card's): none once a wear
+ * is logged for the window in `history`, and for a window ranked as an
+ * event (`event`: rankEvent, no rotation), none worn or planned within the
+ * rotation window before it either, as planTies has it.
+ */
+export function rankedTies(ranked, win, { history = [], event = false } = {}) {
+  const worn = history.filter(h => !h.planned);
+  if (worn.some(h => h.date === win.dateISO && h.slot === win.slot)) return [];
+  const skip = event ? ranked.filter(r => rotationPenalty(r.fragrance.id, history, win.dateISO, win.slot).penalty > 0).map(r => r.fragrance.id) : [];
+  return tiesFor(ranked[0], ranked, { skip });
+}
+
+/**
  * The tie line for a window: "Legacy (fresher) and Aristo (louder) suit
  * today just as well.", or with the same tags on each, "Essence de Blanc and
  * Shiyaaka Sky (both fresh citrus) suit today just as well." '' with no
  * ties. For markup, `name` draws each tie's name and `text` escapes the
- * words around them.
+ * words around them; `when` says what they suit in place of the window
+ * ("formal wear").
  */
-export function tieLine(ties, win, { name = t => t.entry.fragrance.name, text = s => s } = {}) {
+export function tieLine(ties, win, { name = t => t.entry.fragrance.name, text = s => s, when = whenOf(win) } = {}) {
   if (!ties.length) return '';
   const said = ties.map(t => t.tags.join(', '));
   const shared = ties.length > 1 && said[0] && said.every(s => s === said[0]);
   const names = ties.map((t, i) => `${name(t)}${!shared && said[i] ? text(` (${said[i]})`) : ''}`);
   const list = names.length > 1 ? `${names.slice(0, -1).join(text(', '))}${text(' and ')}${names.at(-1)}` : names[0];
-  return `${list}${text(`${shared ? ` (${ties.length > 2 ? 'all' : 'both'} ${said[0]})` : ''} suit${names.length > 1 ? '' : 's'} ${whenOf(win)} just as well.`)}`;
+  return `${list}${text(`${shared ? ` (${ties.length > 2 ? 'all' : 'both'} ${said[0]})` : ''} suit${names.length > 1 ? '' : 's'} ${when} just as well.`)}`;
+}
+
+// ---------- Beside the pick ----------
+// Why a bottle isn't its window's pick, on its page: how far it sits from
+// the pick, and the part of the score that makes most of the gap.
+
+/**
+ * What each part of the score puts between `pick` and `entry` (two entries
+ * from one rank() list), weighted as scoreOf weighs it: the fits, the rating
+ * (quality and his stars' term together), what the heat and the cold take
+ * off for an occasion, and the rotation penalty. They add up to
+ * pick.score - entry.score; positive where the pick does better.
+ */
+export function gapParts(entry, pick, occasion = null) {
+  const W = occasion ? occasionWeights(occasion) : DAILY_WEIGHTS;
+  const a = pick.parts, b = entry.parts;
+  return {
+    season: W.season * (a.season - b.season),
+    time: W.time * (a.time - b.time),
+    weather: W.weather * (a.weather - b.weather),
+    rating: W.quality * (a.quality - b.quality) + (a.personal ?? 0) - (b.personal ?? 0),
+    ...(occasion && {
+      occasion: W.occasion * (a.occasion - b.occasion),
+      heat: W.heat * ((b.heat ?? 0) - (a.heat ?? 0)),
+      cold: W.cold * ((b.cold ?? 0) - (a.cold ?? 0)),
+    }),
+    rotation: (b.rotation ?? 0) - (a.rotation ?? 0),
+  };
+}
+
+// A part in plain words, as the Why bars name them.
+const PART_WORDS = {
+  season: 'the season fit', time: 'the time-of-day fit', weather: 'the weather fit', occasion: 'the occasion fit', heat: 'the heat', cold: 'the cold',
+};
+// The biggest part names the gap alone when it makes this share of it (what the pick does better), else the two biggest.
+const MOSTLY = 0.5;
+
+function gapWords(entry, pick, occasion) {
+  const yours = [entry, pick].some(e => Number.isFinite(e.fragrance.personal?.rating));
+  const words = {
+    ...PART_WORDS,
+    rating: yours ? 'your rating' : 'the rating',
+    rotation: entry.parts.planned ? 'its turn earlier in the plan' : 'a recent wear',
+  };
+  const gaps = Object.entries(gapParts(entry, pick, occasion)).filter(([, g]) => g > 0).sort((x, y) => y[1] - x[1]);
+  const sum = gaps.reduce((t, [, g]) => t + g, 0);
+  const named = gaps[0][1] >= MOSTLY * sum || gaps.length < 2 ? gaps.slice(0, 1) : gaps.slice(0, 2);
+  return named.map(([k]) => words[k]).join(' and ');
+}
+
+/**
+ * One line on the bottle page's Why for a bottle that isn't its window's
+ * pick (`entry` and `pick` from the window's list; `occasion` the list's,
+ * `worn` the id worn in the window): "Suits tonight as well as Cream
+ * Velvet." within TIE_POINTS of its displayed match; "3 points under Cream
+ * Velvet tonight, mostly the season fit." below it; above it (the plan
+ * passed it over), what chose the pick: "2 points over Liam today, but the
+ * plan gives Liam a turn." '' for the pick itself, and for a bottle saved
+ * for an event later on, whose own note says why. Points as matchPct shows
+ * them; never a temperature.
+ */
+export function pickGapLine(entry, pick, win, { occasion = null, worn = null } = {}) {
+  if (!entry || !pick || String(entry.fragrance.id) === String(pick.fragrance.id)) return '';
+  const name = pick.fragrance.name;
+  const what = `${occasion ? `${occasion.phrase ?? occasion.label.toLowerCase()} ` : ''}${whenOf(win)}`;
+  const points = matchPct(pick) - matchPct(entry);
+  if (Math.abs(points) <= TIE_POINTS) return `Suits ${what} as well as ${name}.`;
+  const at = `${occasion ? `for ${what}` : what}`;
+  if (points > 0) return `${points} points under ${name} ${at}, mostly ${gapWords(entry, pick, occasion)}.`;
+  if (entry.parts.saved) return '';
+  const stars = entry.fragrance.personal?.rating;
+  const but = String(worn) === String(pick.fragrance.id) ? `you’re wearing ${name}`
+    : pick.nudged ? `${name} is due a wear`
+      : isDisliked(entry.fragrance) ? `you rate it ${stars}★`
+        : `the plan gives ${name} a turn`;
+  return `${-points} points over ${name} ${at}, but ${but}.`;
 }

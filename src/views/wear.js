@@ -8,7 +8,7 @@ import { renderScene, stagePoint, skyLight } from '../scene.js';
 import { calendarSeason, eventPhrase, PLAN_MARGIN } from '../engine.js';
 import { OCCASIONS, occasionById } from '../occasions.js';
 import { sprayGuide } from '../spray.js';
-import { planTies, tieLine, contrast } from '../contrast.js';
+import { planTies, rankedTies, tieLine, contrast } from '../contrast.js';
 import { setSkin, loadSkin, loadAsked, markAsked, wasAsked } from '../skin.js';
 import { theme } from '../theme.js';
 import { toggleWear, wornIn, journalStats, shiftISO } from '../history.js';
@@ -179,11 +179,12 @@ export function sprayLine({ sprays: [lo, hi], where, unit = 'spray' }) {
 
 // "Legacy (fresher) and Aristo suit today just as well": the bottles that
 // suit the window as well as its pick (src/contrast.js tiesFor), each name
-// opening its page in the window's list.
-export function tiesHTML(ties, win, ctx) {
+// opening its page in the window's list. `when`: what they suit, in place
+// of the window ("formal wear").
+export function tiesHTML(ties, win, ctx, { when } = {}) {
   if (!ties?.length) return '';
   const name = ({ entry }) => `<button class="link-btn" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(entry.fragrance.id)}">${esc(entry.fragrance.name)}</button>`;
-  return `<p class="ties">${icon.compare}<span>${tieLine(ties, win, { name, text: esc })}</span></p>`;
+  return `<p class="ties">${icon.compare}<span>${tieLine(ties, win, { name, text: esc, ...(when && { when }) })}</span></p>`;
 }
 
 // The top pick. On Now the hero shows the bottle, so the card leads with why
@@ -192,8 +193,8 @@ export function tiesHTML(ties, win, ctx) {
 // window) what for, with a way to clear it, then the bottles that suit the
 // window as well (`ties`, in `win`) and Now's question about the pick, when
 // it asks one (`ask`, markup); elsewhere (`full`) it shows the photo and name
-// too.
-export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicker = '', spray = null, event = null, ties = [], win = null, ask = '' } = {}) {
+// too, and the ties as suiting `tieWhen` ("formal wear") just as well.
+export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicker = '', spray = null, event = null, ties = [], win = null, tieWhen, ask = '' } = {}) {
   const f = entry.fragrance;
   const wash = `--accord:${accordColor(Object.keys(f.accords)[0])}`;
   const open = (cls, inner, label = '') => `<button class="${cls}" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(f.id)}"${label ? ` aria-label="${esc(label)}"` : ''}>${inner}</button>`;
@@ -218,6 +219,7 @@ export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicke
       <p class="brand">${esc(f.brand)}</p>
       ${nudgeHTML(nudgeOf(entry))}
       ${reasonsList(reasonsOf(entry, 2), 'lead')}
+      ${tiesHTML(ties, win, ctx, { when: tieWhen })}
       ${chips(f.accords)}
     </div>
     <div class="pick-actions">${canWear ? wearButton(entry, ctx, worn) : ''}${matchBadge(entry)}</div>
@@ -372,20 +374,29 @@ function nowQuestion(pick, worn) {
 // and marks for a logged wear, for a window planned for an occasion ("For
 // formal wear" in a row, "Formal" in the board's narrow columns) and for a
 // bottle the rotation nudge brought back ("Not worn in 34 days" in a row,
-// "34 days" under the clock in the columns; the board's note explains both).
-// An occasion in the board's narrow columns, where "Date Night" and "Night
-// Out" didn't fit beside their glyphs (the cell's tooltip says it whole).
+// "34 days" under the clock in the columns), else for one that has equals
+// (`ties`, planTies'): "or Liam", "or Liam +1" with two in a row, "+2 as
+// good" in the columns, where a name kept four letters; the board's note
+// explains them, the tooltip names them with their tags, and the pick's page
+// lists them on its shelf. An occasion in the board's narrow columns, where
+// "Date Night" and "Night Out" didn't fit beside their glyphs (the cell's
+// tooltip says it whole).
 const COLUMN_LABEL = { date: 'Date', nightout: 'Out' };
-function weekPick(p, slot, dayName) {
+export function weekPick(p, slot, dayName) {
   if (!p) return `<span class="wk-pick empty"><span class="wk-slot">${slotIcon(slot)}</span><span class="wk-none">Done for today</span></span>`;
   const f = p.pick.fragrance;
   const o = p.win?.occasion;
   const nudge = nudgeOf(p.pick);
+  const ties = p.ties ?? [];
   const short = p.pick.parts?.unworn ? 'Unworn' : plural(p.pick.parts?.idle ?? 0, 'day');
-  const spoken = [`${dayName} ${slot === 'day' ? 'daytime' : 'night'}: ${f.name}`, o && `for ${phraseOf(o)}`, p.worn && 'wearing', nudge].filter(Boolean).join(', ');
+  const names = ties.map(t => t.entry.fragrance.name);
+  const equals = names.length ? `${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0]} suit${names.length > 1 ? '' : 's'} it as well` : '';
+  const spoken = [`${dayName} ${slot === 'day' ? 'daytime' : 'night'}: ${f.name}`, o && `for ${phraseOf(o)}`, p.worn && 'wearing', nudge, equals].filter(Boolean).join(', ');
   const mark = o ? `<small class="wk-mark wk-event">${icon[o.icon] ?? icon.calendar}<span class="wk-long">${esc(`For ${phraseOf(o)}`)}</span><span class="wk-short">${esc(COLUMN_LABEL[o.id] ?? o.label)}</span></small>`
-    : nudge ? `<small class="wk-mark wk-nudge">${icon.clock}<span class="wk-long">${esc(nudge)}</span><span class="wk-short">${esc(short)}</span></small>` : '';
-  return `<button class="wk-pick${p.worn ? ' worn' : ''}${o ? ' event' : ''}" data-action="open" data-ctx="${esc(p.ctx)}" data-id="${esc(f.id)}" aria-label="${esc(spoken)}"${o || nudge ? ` title="${esc(o ? `For ${phraseOf(o)}` : nudge)}"` : ''}>
+    : nudge ? `<small class="wk-mark wk-nudge">${icon.clock}<span class="wk-long">${esc(nudge)}</span><span class="wk-short">${esc(short)}</span></small>`
+      : ties.length ? `<small class="wk-mark wk-tie">${icon.compare}<span class="wk-long wk-or">or ${esc(names[0])}</span>${names.length > 1 ? `<span class="wk-long wk-more">+${names.length - 1}</span>` : ''}<span class="wk-short">+${names.length} as good</span></small>` : '';
+  const tip = o ? `For ${phraseOf(o)}` : nudge || (ties.length ? tieLine(ties, p.win) : '');
+  return `<button class="wk-pick${p.worn ? ' worn' : ''}${o ? ' event' : ''}" data-action="open" data-ctx="${esc(p.ctx)}" data-id="${esc(f.id)}" aria-label="${esc(spoken)}"${tip ? ` title="${esc(tip)}"` : ''}>
     ${img(f)}
     <span class="wk-slot">${p.worn ? icon.check : slotIcon(slot)}</span>
     <span class="wk-text"><b>${esc(f.name)}</b>${mark}</span>
@@ -402,6 +413,8 @@ function repeats(days) {
 export function weekHTML(days) {
   const nudged = days.some(d => d.day?.pick.nudged || d.night?.pick.nudged);
   const planned = days.some(d => d.day?.win?.occasion || d.night?.win?.occasion);
+  // Only where the mark shows: an event's says what it's for instead.
+  const tied = days.some(d => [d.day, d.night].some(p => p?.ties?.length && !p.win?.occasion));
   const rows = days.map(d => `
     <li class="wk-day${d.isToday ? ' today' : ''}${d.day?.win?.occasion || d.night?.win?.occasion ? ' event' : ''}">
       <div class="wk-date"><b>${esc(d.isToday ? 'Today' : weekdayShort(d.dateISO))}</b><small>${esc(shortDate(d.dateISO))}</small></div>
@@ -410,8 +423,8 @@ export function weekHTML(days) {
     </li>`).join('');
   const how = repeats(days) ? 'Planned against the forecast.' : 'Planned against the forecast so nothing repeats back to back.';
   return `<section class="card week" aria-labelledby="week-title">
-    ${sectionHead(`${icon.calendar}The week ahead`, `<p>${how} Open a bottle to see why.</p>${planned ? `<p class="wk-legend">${icon.calendar}<span>What you planned gets its best bottle, and the days before leave it be.</span></p>` : ''}${nudged ? `<p class="wk-legend">${icon.clock}<span>A bottle you haven’t worn in a while gets a turn.</span></p>` : ''}`, { id: 'week-title' })}
-    <ol class="wk-list${nudged || planned ? ' marked' : ''}" style="--days:${days.length}">${rows}</ol>
+    ${sectionHead(`${icon.calendar}The week ahead`, `<p>${how} Open a bottle to see why.</p>${planned ? `<p class="wk-legend">${icon.calendar}<span>What you planned gets its best bottle, and the days before leave it be.</span></p>` : ''}${nudged ? `<p class="wk-legend">${icon.clock}<span>A bottle you haven’t worn in a while gets a turn.</span></p>` : ''}${tied ? `<p class="wk-legend">${icon.compare}<span>Bottles that suit a window just as well as its pick.</span></p>` : ''}`, { id: 'week-title' })}
+    <ol class="wk-list${nudged || planned || tied ? ' marked' : ''}" style="--days:${days.length}">${rows}</ol>
   </section>`;
 }
 
@@ -570,10 +583,12 @@ function occasionPane(app, route) {
   const worn = wornId(win);
   // A nudged pick isn't the best for it (that one leads Also good).
   const kicker = ranked[0].nudged ? 'Due a wear' : `Best for ${phraseOf(occasion)}`;
+  // The bottles that suit it as well: none once he's wearing one.
+  const ties = rankedTies(ranked, win, { history: state.history, event: planned });
   return `${head}
     <section class="card slot" aria-labelledby="occ-title">
       ${slotHeadHTML(win, ev.here ? nowHour() : -1, { id: 'occ-title', thumb: true, title: occasionHeading(route, ev) })}
-      ${pickHTML(ranked[0], 'occ', worn, { canWear: canWear(win), full: true, kicker })}
+      ${pickHTML(ranked[0], 'occ', worn, { canWear: canWear(win), full: true, kicker, ties, win, tieWhen: phraseOf(occasion) })}
       ${alsoHTML(ranked, ranked[0], 'occ', worn, `for ${phraseOf(occasion)}`)}
     </section>`;
 }

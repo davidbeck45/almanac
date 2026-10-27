@@ -7,6 +7,7 @@ import { activeBottles, loadJournal, resolvePlace, widgetBottles, widgetPayload 
 import { journalToken } from '../src/history.js';
 import { withStoredEvents } from '../src/events.js';
 import { planWindows } from '../src/engine.js';
+import { planTies, tieLine } from '../src/contrast.js';
 import { week } from '../src/weather.js';
 import { syntheticForecast } from './fixtures.js';
 
@@ -26,6 +27,28 @@ test('the widget leads with the next window and plans the rest of the week', () 
   assert.ok(out.now.reasons.length > 0 && out.now.reasons.length <= 4);
   assert.ok(out.now.accords.every(a => /^#[0-9a-f]{6}$/.test(a.color)));
   assert.ok(out.now.match >= 1 && out.now.match <= 99);
+});
+
+test('every window carries the bottles that suit it as well, as the app’s Now and Week find them, and now says so in a line', () => {
+  const at = Date.parse('2026-09-28T13:00:00Z'); // 09:00 on the 28th
+  const out = widgetPayload(fragrances, syntheticForecast(7), place, at);
+  const bottles = fragrances.map(f => ({ ...f, id: String(f.id) }));
+  const plan = planWindows(bottles, week(syntheticForecast(7), at).flatMap(d => [d.day, d.night].filter(Boolean)), { history: [], nudge: false });
+  const ties = planTies(plan);
+  const windows = out.days.flatMap(d => [d.day, d.night]).filter(Boolean);
+  assert.deepEqual(windows.map(w => w.ties.map(t => t.id)), ties.map(ts => ts.map(t => String(t.entry.fragrance.id))));
+  assert.ok(windows.some(w => w.ties.length), 'the fixture’s week has toss-ups');
+  for (const t of windows.flatMap(w => w.ties)) assert.deepEqual(Object.keys(t), ['id', 'name', 'brand', 'tags']);
+  assert.deepEqual(out.now.ties, windows[0].ties);
+  assert.equal(out.now.tieLine, tieLine(ties[0], plan[0].win));
+  if (out.now.ties.length) assert.match(out.now.tieLine, /^.+ suits? today just as well\.$/);
+  // None once he's wearing it.
+  const token = journalToken([{ id: out.now.id, date: '2026-09-28', slot: 'day', occasion: 'daily' }], [], {}, { todayISO: '2026-09-28' });
+  const worn = widgetPayload(fragrances, syntheticForecast(7), place, at, loadJournal(token));
+  assert.deepEqual([worn.now.ties, worn.now.tieLine], [[], '']);
+  // The panel shows it in place of the runner-up, on one line.
+  const qml = readFileSync(new URL('../omarchy/Panel.qml', import.meta.url), 'utf8');
+  assert.match(qml, /root\.pick\.tieLine \? root\.pick\.tieLine : root\.pick\.runnerUp/);
 });
 
 test('the widget hides the site defaults unless told otherwise', () => {
