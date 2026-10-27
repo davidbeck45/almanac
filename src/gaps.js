@@ -208,7 +208,9 @@ export function fitTable(bottles, { cells, slotBands }) {
   const fit = new Map(), occ = new Map();
   bottles.forEach((b, i) => {
     const q = quality(b), personal = personalPart(b);
-    for (const o of occasions) occ.set(o, occasionPart(occasionRaw(b, o), o));
+    // The night lean (nightLean) moves an occasion's raw fit with the
+    // weather, so those occasions' parts are averaged per window, past the knee.
+    for (const o of occasions) occ.set(o, o.night ? null : occasionPart(occasionRaw(b, o), o));
     const voted = { day: timeFit(b, 'day'), night: timeFit(b, 'night') };
     for (const k of keys) {
       const { wins, slot } = slotBands[k];
@@ -221,11 +223,19 @@ export function fitTable(bottles, { cells, slotBands }) {
         cold += thinInCold(b, w.cond);
       }
       const time = voted[slot] + (1 - voted[slot]) * forgiven / wins.length;
-      fit.set(k, [season / wins.length, time, weather / wins.length, heat / wins.length, cold / wins.length]);
+      const night = new Map();
+      for (const o of occasions) {
+        if (!o.night) continue;
+        let sum = 0;
+        for (const w of wins) sum += occasionPart(occasionRaw(b, o, slot, w.cond), o);
+        night.set(o, sum / wins.length);
+      }
+      fit.set(k, [season / wins.length, time, weather / wins.length, heat / wins.length, cold / wins.length, night]);
     }
     for (let j = 0; j < m; j++) {
-      const c = cells[j], [season, time, weather, heat, cold] = fit.get(c.sb);
-      const parts = { season, time, weather, quality: q, occasion: c.occasion ? occ.get(c.occasion) : null, heat, cold, personal };
+      const c = cells[j], [season, time, weather, heat, cold, night] = fit.get(c.sb);
+      const occasion = c.occasion ? (c.occasion.night ? night.get(c.occasion) : occ.get(c.occasion)) : null;
+      const parts = { season, time, weather, quality: q, occasion, heat, cold, personal };
       out[i * m + j] = scoreOf(parts, c.occasion);
     }
   });

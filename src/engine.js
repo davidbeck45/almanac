@@ -550,10 +550,31 @@ export function accordFit(frag, occasion) {
   return total ? sum / total : 0;
 }
 
-/** The occasion fit before it's put on the scale: the accords' fit, plus performance and Parfumo's votes. */
-export function occasionRaw(frag, occasion) {
+// Voters' night share tells the pool's "good for dates" bottles from the rest
+// better than the accords and performance do (AUC 0.705 against 0.673), so
+// Date Night and Night Out (`night` on the occasion) count a bottle's
+// steadied night share past an even split, on a night slot. It fades out as
+// the weather calls for fresh (targetHeaviness under 0, gone by -NIGHT_FADE):
+// night votes follow richness, which the heat marks down, and on a hot night
+// it only handed the date to rich bottles. It goes in before the scale's
+// knee, so a night-voted bottle the accords placed under the top catches up
+// (CH Men Prive, Hawas Elixir) rather than the top bottles pulling away.
+const NIGHT_FADE = 0.2;
+export function nightLean(frag, occasion, slot, conditions = null) {
+  if (!occasion.night || slot !== 'night') return 0;
+  const on = conditions ? clamp(1 + targetHeaviness(conditions) / NIGHT_FADE, 0, 1) : 1;
+  return on && on * occasion.night * (steadyShares(frag).dayNight.night - 0.5);
+}
+
+/**
+ * The occasion fit before it's put on the scale: the accords' fit, plus
+ * performance and Parfumo's votes, and for a night slot the night lean in
+ * `conditions` (nightLean; in full without them). OCCASION_SCALE is fitted
+ * with no slot, so without it.
+ */
+export function occasionRaw(frag, occasion, slot = null, conditions = null) {
   const perf = performanceFit(frag, occasion);
-  return accordFit(frag, occasion) + perf.longevity + perf.sillage + votedOccasionFit(frag, occasion);
+  return accordFit(frag, occasion) + perf.longevity + perf.sillage + votedOccasionFit(frag, occasion) + nightLean(frag, occasion, slot, conditions);
 }
 
 // The occasion fit as a part, 0..1, on one scale for every collection: about
@@ -883,7 +904,7 @@ export function rank(fragrances, conditions, slot, opts = {}) {
       time: timeFit(frag, slot, conditions),
       weather: weatherFit(frag, conditions),
       quality: quality(frag),
-      occasion: occasion ? occasionPart(occasionRaw(frag, occasion), occasion) : null,
+      occasion: occasion ? occasionPart(occasionRaw(frag, occasion, slot, conditions), occasion) : null,
       heat: occasion ? richInHeat(frag, conditions) : null,
       cold: occasion ? thinInCold(frag, conditions) : null,
       personal: personalPart(frag),

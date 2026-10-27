@@ -374,7 +374,22 @@ test('scoreOf is the score rank() orders by', () => {
     }
   }
   const date = occasionById('date');
-  assert.equal(occasionPart(occasionRaw(fragrances[0], date), date), rank([fragrances[0]], mildFallNight, 'night', { occasion: date })[0].parts.occasion);
+  assert.equal(occasionPart(occasionRaw(fragrances[0], date, 'night', mildFallNight), date), rank([fragrances[0]], mildFallNight, 'night', { occasion: date })[0].parts.occasion);
+});
+
+test('Date Night and Night Out count night votes on a cold night, not on a hot one, and Formal never', () => {
+  // Members call CH Men Prive and Hawas Elixir date and party bottles; the accords alone left them well under the top.
+  const cold = { feelsF: 30, humidity: 60, dewF: 20, category: 'clear', date: JAN, dateISO: '2027-01-15', lat: 41.9 };
+  const hot = { feelsF: 85, humidity: 60, dewF: 70, category: 'clear', date: AUG, dateISO: '2026-08-05', lat: 41.9 };
+  const behind = (ranked, name) => ranked[2].score - ranked.find(s => s.fragrance.name === name).score;
+  for (const id of ['date', 'nightout']) {
+    const on = occasionById(id), off = { ...on, night: 0 };
+    const [lit, plain] = [on, off].map(occasion => rank(fragrances, cold, 'night', { occasion }));
+    for (const name of ['CH Men Prive', 'Hawas Elixir']) assert.ok(behind(lit, name) < behind(plain, name) - 0.005, `${id} ${name}`);
+    const scores = occasion => rank(fragrances, hot, 'night', { occasion }).map(s => [s.fragrance.id, s.score]);
+    assert.deepEqual(scores(on), scores(off), `${id} on a hot night`);
+  }
+  assert.ok(!occasionById('formal').night);
 });
 
 test('formal favors iris and powder', () => {

@@ -3,7 +3,8 @@
 // says how loud and lasting it wants a bottle (sillage, longevity: -1 quiet or
 // fleeting .. +1 loud or lasting, read from both crowds, see src/engine.js;
 // `enough` names a wish for more that stops counting at the engine's
-// MORE_ENOUGH).
+// MORE_ENOUGH). `night` weighs a bottle's night votes into the fit on a night
+// slot, except in heat (nightLean in src/engine.js).
 // `slot` is the default time of day, `phrase` names the occasion in reason
 // text ("Woods & aromatics suit casual wear"), `icon` names a stroke icon in
 // src/ui.js, and `aliases` are names it went by, which typed names still find.
@@ -68,6 +69,7 @@ export const OCCASIONS = [
     phrase: 'a date',
     outside: 0.3,
     performance: { longevity: 0.3 },
+    night: 0.3,
     profile: {
       vanilla: 0.7, amber: 0.6, 'warm spicy': 0.5, leather: 0.5, musky: 0.5, whiskey: 0.5, sweet: 0.4, rose: 0.4,
       powdery: 0.4, lactonic: 0.4, cinnamon: 0.4, 'soft spicy': 0.4, balsamic: 0.4, tuberose: 0.4, tobacco: 0.4,
@@ -88,6 +90,7 @@ export const OCCASIONS = [
     phrase: 'a night out',
     outside: 0.5,
     performance: { sillage: 0.5, longevity: 0.2 },
+    night: 0.3,
     profile: {
       sweet: 0.7, vanilla: 0.6, fruity: 0.5, 'warm spicy': 0.5, cinnamon: 0.5, amber: 0.5, whiskey: 0.4, caramel: 0.4,
       cherry: 0.4, rum: 0.4, tropical: 0.3, leather: 0.3, tobacco: 0.3, honey: 0.3, almond: 0.3, oud: 0.3,

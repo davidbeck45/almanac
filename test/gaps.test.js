@@ -182,9 +182,10 @@ test('David’s gaps name real situations, gaps before room to grow, and his str
     assert.doesNotMatch(g.text, /°|\d+ ?F\b/, 'no temperatures');
     assert.ok(order.includes(g.status));
   }
-  // His date nights in the warm fall just short of the best bottles out there: room to grow, his biggest.
+  // His date nights in the warm fall just short of the best bottles out there: room to grow (second to Office
+  // in the cold since Date Night counts night votes, which his date bottles have).
   assert.ok(gaps.every(g => g.status === 'room'), gaps.map(g => `${g.title} ${g.status}`).join('; '));
-  assert.ok(gaps[0].use === 'date' && gaps[0].bands.includes('warm'), gaps[0].title);
+  assert.ok(gaps.slice(0, 2).some(g => g.use === 'date' && g.bands.includes('warm')), gaps.map(g => g.title).join('; '));
   // Office wants a bottle that lasts the day, and his fresh clones do: a strength from cool days to hot ones.
   // In the cold, on Fragrantica's votes as the pool's are read, nothing of his both keeps close and lasts
   // (Sandalwood & Musk's 11 Parfumo votes had it lasting): room to grow there, not a gap.
@@ -397,10 +398,11 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   assert.equal(zenith.verdict, 'Strong fit');
   assert.match(zenith.reasons[0], /^It would be your best for Date Night on /);
   assert.ok(zenith.fills.every(f => f.matters) && zenith.fills.some(f => f.real));
-  // Shalimar Millésime Tonka's flat votes read as none: a gourmand for mild date nights, not warm ones.
+  // Shalimar Millésime Tonka's flat votes read as none: a gourmand for mild date nights, not warm ones. Since
+  // Date Night counts night votes (nightLean), his night-voted gourmands cover those nights, so it only comes close.
   const tonka = verdict('76063');
-  assert.equal(tonka.verdict, 'Good');
-  assert.deepEqual(tonka.fills.map(f => f.cell.id), ['date:night:mild']);
+  assert.equal(tonka.verdict, 'Covered');
+  assert.match(tonka.reasons[0], /^It would barely beat your .+ for Date Night on mild nights, and nowhere by more\.$/);
   for (const c of [ctx, gapContext({ owned: [], records, byId })]) {
     const fills = buyCheck(byId.get('76063'), c).fills.filter(f => f.matters).map(f => f.cell.id);
     assert.ok(!fills.includes('date:night:warm') || fills.indexOf('date:night:warm') > fills.indexOf('date:night:cool'), fills.join());
