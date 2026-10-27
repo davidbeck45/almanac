@@ -38,10 +38,15 @@ export const OCCASION_WEIGHTS = Object.freeze({ occasion: 0.4, season: 0.3, time
 // (parts.heat, richInHeat). With the occasion's fit at 0.4 and the weather
 // at 0.15, a date's love of vanilla and amber kept four winter bottles in a
 // 90°F night's top 6, all A; daily picks weigh season and weather at 0.7 and
-// need no such help. An occasion spent wholly indoors (`outside: 0`) doesn't
-// pay it; any other pays it whole, since the walk there, the sun and a crowd
-// keep a summer evening warm.
+// need no such help. An occasion spent wholly indoors (`outside: 0`) pays
+// INDOOR_HEAT of it; any other pays it whole, since the walk there, the sun
+// and a crowd keep a summer evening warm.
 const HEAT_WEIGHT = 0.3;
+// A heat wave still reaches a night in: without it, Cream Velvet topped Cozy
+// on 264 of the backtest's 78°F+ nights (115 now), and its hot nights scored
+// at chance against the members' summaries' heat words (AUC 0.52, now 0.58).
+// From 0.25, Cream Velvet leaves a sweltering night in's top 3.
+const INDOOR_HEAT = 0.15;
 // Its mirror, what a thin bottle loses where the weather calls for rich
 // (parts.cold, thinInCold), for the share of the occasion spent outside
 // (`outside` in src/occasions.js), where cold air mutes a fresh bottle: a
@@ -597,8 +602,8 @@ export function occasionPart(raw, occasion) {
 }
 
 /**
- * The weights an occasion's score uses: OCCASION_WEIGHTS, HEAT_WEIGHT (none
- * for an occasion spent wholly indoors) and COLD_WEIGHT for its share of
+ * The weights an occasion's score uses: OCCASION_WEIGHTS, HEAT_WEIGHT
+ * (INDOOR_HEAT of it for one spent wholly indoors) and COLD_WEIGHT for its share of
  * time outside, blended toward DAILY_WEIGHTS for a mild one by how far its
  * fit falls short of MILD_SPAN.
  */
@@ -612,7 +617,7 @@ export function occasionWeights(occasion) {
   const blend = key => t * O[key] + (1 - t) * D[key];
   W = Object.freeze({
     occasion: t * O.occasion, season: blend('season'), time: blend('time'), weather: blend('weather'), quality: blend('quality'),
-    heat: outsideOf(occasion) > 0 ? t * HEAT_WEIGHT : 0,
+    heat: t * HEAT_WEIGHT * (outsideOf(occasion) > 0 ? 1 : INDOOR_HEAT),
     cold: t * COLD_WEIGHT * outsideOf(occasion),
   });
   weightsOf.set(occasion, W);

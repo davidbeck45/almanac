@@ -153,7 +153,9 @@ test('why it ranks here: the rating bar says whose rating it is, and a bottle no
   };
   assert.match(hot(byName('Liquid Brun'), date), /Rich for this heat: \d+% lower for a date\./);
   assert.ok(!hot(byName('Liquid Brun'), null).includes('Rich for this heat'), 'daily picks pay nothing');
-  assert.ok(!hot(byName('Liquid Brun'), occasionById('cozy')).includes('Rich for this heat'), 'nor a night in');
+  // A night in pays a little of it (INDOOR_HEAT), a date all of it.
+  const heatPct = html => Number(html.match(/Rich for this heat: (\d+)% lower/)?.[1] ?? 0);
+  assert.ok(heatPct(hot(byName('Liquid Brun'), occasionById('cozy'))) * 4 < heatPct(hot(byName('Liquid Brun'), date)), 'a night in pays a little');
   assert.ok(!hot(byName('Essence de Blanc'), date).includes('Rich for this heat'), 'nor a fresh bottle');
   // A thin bottle on a freezing day outdoors: what the cold takes off, for the time spent out in it.
   const freezing = { ...wx.day, feelsF: 25, dewF: 17 };

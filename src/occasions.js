@@ -10,8 +10,8 @@
 // `outside` is the share of the time spent outside, 0..1: how much of the
 // cold a thin bottle pays for in the engine (COLD_WEIGHT) and the spray guide
 // adds sprays for (you spray for where you'll be, and a heated room takes the
-// chill off). One spent wholly indoors (0) pays nothing for heat either
-// (HEAT_WEIGHT): the weather outside doesn't decide what suits a night in.
+// chill off). One spent wholly indoors (0) pays a little for heat
+// (INDOOR_HEAT of HEAT_WEIGHT): a heat wave still reaches a night in.
 export const OCCASIONS = [
   {
     id: 'casual',
