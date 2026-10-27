@@ -46,14 +46,22 @@ const HEAT_WEIGHT = 0.3;
 // (parts.cold, thinInCold), for the share of the occasion spent outside
 // (`outside` in src/occasions.js), where cold air mutes a fresh bottle: a
 // heated room takes the chill off. Outdoors' love of citrus and aquatics put
-// Cedrus Blanc, "thin in the cold", first on every cold day of 2023–2025 in
-// Chicago, New York, London and Houston; now Sauvage and Vintage Radio
-// take 94% of them, and the office (out 0.15 of the time) keeps its pick.
-// Scaling the heat by the same share let a warm bottle into Date Night's
-// top 3 on 38% of 78°F+ nights, against 9%.
+// Cedrus Blanc, a cedar-citrus that goes flat in cold air, first on every
+// cold day of 2023–2025 in Chicago, New York, London and Houston; now
+// Sauvage and Vintage Radio take 94% of them, and the office (out 0.15 of
+// the time) keeps its pick. Scaling the heat by the same share let a warm
+// bottle into Date Night's top 3 on 38% of 78°F+ nights, against 9%.
 const COLD_WEIGHT = 0.3;
-// What the cold has to cost a bottle for its reason to say so.
+// What the cold has to cost a bottle for its reason to say so, and how far
+// on the fresh side it has to sit (the weather's own "Thin in the cold"
+// needs -0.2): near neutral (Supremacy, Glorious Oud Royal Blanc) it pays a
+// little but isn't thin, and its winter votes may say the opposite.
 const COLD_REASON = 0.03;
+const THIN_REASON = -0.15;
+// Out this much of the time or more, the reason names the occasion ("Thin
+// for the outdoors in the cold"); less, and it's the weather's own words,
+// since an office or a dinner is spent inside.
+const OUT_REASON = 0.5;
 
 // Rank cutoffs: first 3 are S, next 5 A, next 6 B, rest C. A tier also needs
 // its floor score, so in a small collection on a sweltering day the third
@@ -747,11 +755,15 @@ function reasonsFor(frag, parts, ctx) {
   } else if (conditions.feelsF <= 52) {
     const warm = strongest(frag.accords, a => ACCORDS[a]?.weight >= 0.7);
     // Where the cold costs a thin bottle COLD_REASON or more for an occasion
-    // (parts.cold), the reason says so in the occasion's words, in place of
-    // the weather's own, and as strongly as the two together.
-    const thin = occasion ? W.cold * parts.cold : 0;
+    // (parts.cold), the reason counts the two together, and for one spent
+    // out OUT_REASON of the time or more says so in the occasion's words in
+    // place of the weather's own.
+    const thin = occasion && h <= THIN_REASON ? W.cold * parts.cold : 0;
     if (h >= 0.25) good(warm ? `${warmPhrase(warm)} for the cold` : 'A warm base for the cold', W.weather * 0.8, true);
-    else if (thin >= COLD_REASON) bad(`Thin for ${occasion.phrase ?? occasion.label.toLowerCase()} in the cold`, W.weather * 0.8 + thin, true);
+    else if (thin >= COLD_REASON) {
+      const text = outsideOf(occasion) >= OUT_REASON ? `Thin for ${occasion.phrase ?? occasion.label.toLowerCase()} in the cold` : 'Thin in the cold';
+      bad(text, W.weather * 0.8 + thin, true);
+    }
     else if (h <= -0.2) bad('Thin in the cold', W.weather * 0.8, true);
   }
   if (isWet(conditions.category) && accordShare(frag.accords, RAIN_ACCORDS) > 0.3) {

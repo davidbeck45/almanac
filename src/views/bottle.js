@@ -413,6 +413,8 @@ function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned, inMine,
 // Why a bottle is given a rest, in the words of its reason (src/engine.js).
 const restText = (parts, slot) => restReason(parts, slot) ?? (parts.planned ? 'Picked for a day nearby' : 'Worn recently');
 
+// The least the heat or cold has to take off for Why to say so, in percent.
+const NOTE_MIN = 2;
 function whySection({ entry, solo, win, occasion, todayISO: today }) {
   if (!entry) return '';
   const p = entry.parts;
@@ -429,12 +431,13 @@ function whySection({ entry, solo, win, occasion, todayISO: today }) {
     ? `<p class="why-note">${esc(restText(p, win?.slot))}: ${Math.round(p.rotation * 100)}% lower so others get a turn.</p>`
     : '';
   // What the heat takes off a rich bottle for an occasion (engine richInHeat),
-  // and the cold off a thin one (thinInCold).
+  // and the cold off a thin one (thinInCold), from NOTE_MIN percent: a point
+  // is a mild evening's or the office commute's, not this heat or cold.
   const phrase = occasion ? esc(occasion.phrase ?? occasion.label.toLowerCase()) : '';
   const heat = occasion && p.heat ? Math.round(occasionWeights(occasion).heat * p.heat * 100) : 0;
   const cold = occasion && p.cold ? Math.round(occasionWeights(occasion).cold * p.cold * 100) : 0;
-  const heavy = heat > 0 ? `<p class="why-note">Rich for this heat: ${heat}% lower for ${phrase}.</p>` : '';
-  const thin = cold > 0 ? `<p class="why-note">Thin for this cold: ${cold}% lower for ${phrase}.</p>` : '';
+  const heavy = heat >= NOTE_MIN ? `<p class="why-note">Rich for this heat: ${heat}% lower for ${phrase}.</p>` : '';
+  const thin = cold >= NOTE_MIN ? `<p class="why-note">Thin for this cold: ${cold}% lower for ${phrase}.</p>` : '';
   // Kept for an event later in the plan (planWindows' `saved`): its match
   // stands, another bottle takes the window. Said as on today, as the plan says it.
   const saved = p.saved && win ? `<p class="why-note">${esc(savedReason(p.saved, today ?? win.dateISO))}, so the plan picks another bottle here.</p>` : '';

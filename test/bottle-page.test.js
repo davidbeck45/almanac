@@ -165,6 +165,13 @@ test('why it ranks here: the rating bar says whose rating it is, and a bottle no
   assert.ok(!cold(byName('Cedrus Blanc'), null).includes('Thin for this cold'), 'daily picks pay nothing');
   assert.ok(!cold(byName('Essence de Blanc'), occasionById('cozy')).includes('Thin for this cold'), 'nor a night in');
   assert.ok(!cold(byName('Liquid Brun'), occasionById('outdoors')).includes('Thin for this cold'), 'nor a rich bottle');
+  // A point off isn't worth a line: the office's commute, or a mild day out.
+  assert.ok(!cold(byName('Cedrus Blanc'), occasionById('office')).includes('Thin for this cold'), 'the office');
+  const mild = { ...wx.day, feelsF: 58, dewF: 45 };
+  const mildEntry = rank([byName('Essence de Blanc')], mild, 'day', { occasion: occasionById('outdoors') })[0];
+  assert.ok(mildEntry.parts.cold > 0);
+  const mildHTML = bottlePageHTML(modelOf(byName('Essence de Blanc'), { entry: mildEntry, occasion: occasionById('outdoors'), win: mild }));
+  assert.ok(!mildHTML.includes('Thin for this cold'), 'a mild day');
 });
 
 test('day and night read as whole percents that add up to 100, as Compare shows them', () => {

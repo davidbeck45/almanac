@@ -417,6 +417,17 @@ test('a freezing day outdoors wants a bottle that carries in cold air, not a thi
   assert.ok(texts(ranked.find(r => r.fragrance.name === 'Cedrus Blanc')).includes('Thin for the outdoors in the cold'));
   assert.ok(texts(ranked.find(r => r.fragrance.name === 'Jake')).includes('Thin for the outdoors in the cold'));
   for (const r of ranked) assert.ok(!(texts(r).includes('Thin in the cold') && texts(r).some(t => t.startsWith('Thin for'))), r.fragrance.name);
+  // A bottle near neutral pays a little but isn't called thin (Supremacy, -0.13).
+  const supremacy = ranked.find(r => r.fragrance.name.startsWith('Supremacy'));
+  assert.ok(heaviness(supremacy.fragrance.accords) > -0.15 && supremacy.parts.cold > 0);
+  assert.ok(!texts(supremacy).some(t => t.startsWith('Thin')), texts(supremacy).join(' | '));
+  // An occasion spent mostly inside keeps the weather's words, however much the cold costs:
+  // a date is out 0.3 of the time, a night out half of it.
+  const thinnest = { ...fragrances.find(f => f.name === 'Essence de Blanc'), id: 'thin', accords: { citrus: 100, aquatic: 95, ozonic: 90, fresh: 85, marine: 80 } };
+  const coldText = id => texts(rank([thinnest], freezing, occasionById(id).slot, { occasion: occasionById(id) })[0]).filter(t => t.startsWith('Thin'));
+  assert.deepEqual(coldText('office'), ['Thin in the cold']);
+  assert.deepEqual(coldText('date'), ['Thin in the cold']);
+  assert.deepEqual(coldText('nightout'), ['Thin for a night out in the cold']);
   assert.ok(ranked.every(r => scoreOf(r.parts, outdoors) === r.score));
   // Daily picks keep the weather's own words and pay nothing extra.
   const daily = rank(fragrances, freezing, 'day');
