@@ -75,8 +75,13 @@ const TIERS = ['S', 'A', 'B', 'C'];
 // sit within a few hundredths of each other, so a 3-day memory cycled the
 // same 3 bottles through a month of steady weather; a 10-day tail rotates
 // 9–17. A cold day's top leads by more (a median 0.035), so a winter month
-// wears 8 bottles or more, none more than 12 times in 56 windows.
+// wears 8 bottles or more, none more than 9 times in 56 windows.
 export const ROTATION_PENALTY = Object.freeze([0.2, 0.12, 0.08, 0.06, 0.045, 0.035, 0.025, 0.02, 0.015, 0.01]);
+// In the cold the rich bottles suit both slots, and last night's wear at full
+// weight sent cold days to mid-weight bottles (9.2% of the backtest's cold-day
+// Now picks gave up 0.06 or more to rotation; 6.7% at this weight). At 0.6 and
+// under, Jake starts taking 13 of 56 Houston summer windows.
+export const OTHER_SLOT = 0.65;
 
 const RAIN_ACCORDS = ['green', 'earthy', 'woody', 'aromatic', 'mossy', 'aquatic'];
 
@@ -635,14 +640,17 @@ export function daysBetween(fromISO, toISO) {
 // Penalize recent wears so picks rotate. A wear logged for this same slot
 // today is the user's current choice, not a reason to demote it.
 // Entries marked `planned` are picks from a plan (see planWindows), not wears.
+// A wear in the other slot on an earlier day counts OTHER_SLOT of its
+// penalty; the same day's other slot counts in full.
 export function rotationPenalty(fragId, history, todayISO, slot) {
   let penalty = 0, daysAgo = null, planned = false;
   for (const h of history) {
     if (h.id !== fragId) continue;
     if (h.date === todayISO && h.slot === slot) continue;
     const d = daysBetween(h.date, todayISO);
-    if (d >= 0 && d < ROTATION_PENALTY.length && ROTATION_PENALTY[d] > penalty) {
-      penalty = ROTATION_PENALTY[d];
+    const w = h.slot && slot && h.slot !== slot && d > 0 ? OTHER_SLOT : 1;
+    if (d >= 0 && d < ROTATION_PENALTY.length && ROTATION_PENALTY[d] * w > penalty) {
+      penalty = ROTATION_PENALTY[d] * w;
       daysAgo = d;
       planned = !!h.planned;
     }

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, restReason, savedReason, eventPhrase, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, occasionWeights, seasonFit, timeFit, SEASONS, votedShares, performanceLevel, PLAN_MARGIN } from '../src/engine.js';
+import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, restReason, savedReason, eventPhrase, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, occasionWeights, seasonFit, timeFit, SEASONS, votedShares, performanceLevel, PLAN_MARGIN, OTHER_SLOT } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { heaviness } from '../src/accords.js';
 import { predictedShares } from '../src/custom.js';
@@ -540,6 +540,10 @@ test('the pick you log for a slot is not penalized in that slot', () => {
   const history = [{ id: 1, date: '2026-09-28', slot: 'day' }];
   assert.equal(rotationPenalty(1, history, '2026-09-28', 'day').penalty, 0);
   assert.equal(rotationPenalty(1, history, '2026-09-28', 'night').penalty, 0.2);
+  // An earlier day's other slot counts less; a wear without a slot counts in full.
+  assert.equal(rotationPenalty(1, history, '2026-09-29', 'night').penalty, 0.12 * OTHER_SLOT);
+  assert.equal(rotationPenalty(1, history, '2026-09-29', 'day').penalty, 0.12);
+  assert.equal(rotationPenalty(1, [{ id: 1, date: '2026-09-28' }], '2026-09-29', 'night').penalty, 0.12);
 });
 
 test('summarize splits the forecast into day and night windows in local time', () => {
