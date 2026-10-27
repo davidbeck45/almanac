@@ -25,7 +25,7 @@ export const EXEMPLARS = {
   woody: [12201, 1834, 69, 3956, 2558, 8991],           // Santal 33, Encre Noire, Guerlain Vetiver, Tam Dao, Hinoki, Wonderwood
   spicy: [13857, 613, 2764, 2671, 307, 93],             // Spicebomb, Égoïste, Five O'Clock au Gingembre, Poivre Samarcande, Déclaration, Opium
   fruity: [147, 9828, 10314, 498, 10190, 8069],         // Nina, Aventus, English Pear & Freesia, Be Delicious, Bombshell, Chance Eau Tendre
-  chypre: [207, 371, 113, 7150, 28, 1009],              // Mitsouko, Aromatics Elixir, Aramis, 31 Rue Cambon, Femme Rochas, Paloma Picasso
+  chypre: [207, 371, 113, 7150, 28, 1009, 3467],        // Mitsouko, Aromatics Elixir, Aramis, 31 Rue Cambon, Femme Rochas, Paloma Picasso, Ma Griffe
   boozy: [62615, 71272, 4323, 20541, 74243, 69978],     // Angels' Share, Gentleman Réserve Privée, Straight to Heaven, Jazz Club, Van Py Rhum, Plum in Cognac
 };
 
