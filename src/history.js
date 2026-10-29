@@ -51,7 +51,7 @@ export function toggleWear(id, dateISO, slot, where = null, occasion = null) {
 // ratings and skin nudges (`skin`, src/skin.js's loadSkin()) when there are any.
 export function journalExport(history, loc, hidden, { nowISO = new Date().toISOString(), skin = null } = {}) {
   return {
-    app: 'scentcast-journal',
+    app: 'scentcast-journal', // the app's name until October 2026: old and new exports read alike
     version: 1,
     exported: nowISO,
     location: loc ? { name: loc.name ?? null, lat: round2(loc.lat), lon: round2(loc.lon) } : null,

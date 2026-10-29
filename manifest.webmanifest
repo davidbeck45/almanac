@@ -1,6 +1,6 @@
 {
-  "name": "Scentcast",
-  "short_name": "Scentcast",
+  "name": "Almanac",
+  "short_name": "Almanac",
   "description": "What to wear today from your fragrance collection, based on the weather and the occasion.",
   "start_url": "./",
   "scope": "./",

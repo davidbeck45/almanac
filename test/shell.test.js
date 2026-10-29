@@ -76,7 +76,7 @@ test('the stylesheets take their colors from the tokens, so every theme follows'
 // network answers after `net.delay` ms (or `net.slow[path]`), each file with
 // an ETag of `net.version`, and a 304 when asked with that ETag already;
 // `puts` counts the writes into Cache Storage, `net.sent` the bodies sent.
-function serviceWorker(scope = 'https://example.org/scentcast/') {
+function serviceWorker(scope = 'https://example.org/almanac/') {
   const listeners = {};
   const stores = new Map();
   const puts = [];
@@ -148,17 +148,17 @@ const TEST_SLOW_MS = 200;
 test('the service worker keeps one copy of the app page, and other pages opened in a tab never replace it', async () => {
   const CACHE = sw.match(/const CACHE = '([\w-]+)'/)[1];
   const w = serviceWorker();
-  assert.equal(await w.get('?loc=40.71,-74.01,New%20York&view=week', 'navigate'), '/scentcast/ from the network (v1)');
-  assert.equal(await w.cached(CACHE, './').text(), '/scentcast/ from the network (v1)');
+  assert.equal(await w.get('?loc=40.71,-74.01,New%20York&view=week', 'navigate'), '/almanac/ from the network (v1)');
+  assert.equal(await w.cached(CACHE, './').text(), '/almanac/ from the network (v1)');
 
   for (const page of ['data/collection.json', 'dev/og.html', 'fonts/OFL-Inter.txt']) {
     assert.equal(await w.get(page, 'navigate'), null, `${page} opened in a tab goes straight to the network`);
   }
-  assert.equal(await w.cached(CACHE, './').text(), '/scentcast/ from the network (v1)');
+  assert.equal(await w.cached(CACHE, './').text(), '/almanac/ from the network (v1)');
 
   // A module the page loads is cached under its own URL.
   await w.get('src/main.js');
-  assert.equal(await w.cached(CACHE, 'src/main.js').text(), '/scentcast/src/main.js from the network (v1)');
+  assert.equal(await w.cached(CACHE, 'src/main.js').text(), '/almanac/src/main.js from the network (v1)');
 
   // Errors are never cached.
   w.net.status = 404;
@@ -167,8 +167,8 @@ test('the service worker keeps one copy of the app page, and other pages opened 
 
   // Offline, any visit to the app opens the saved page.
   w.net.online = false;
-  assert.equal(await w.get('index.html?c=1,2&n=Brooke', 'navigate'), '/scentcast/ from the network (v1)');
-  assert.equal(await w.get('?theme=gruvbox', 'navigate'), '/scentcast/ from the network (v1)');
+  assert.equal(await w.get('index.html?c=1,2&n=Brooke', 'navigate'), '/almanac/ from the network (v1)');
+  assert.equal(await w.get('?theme=gruvbox', 'navigate'), '/almanac/ from the network (v1)');
 });
 
 test('the service worker installs by revalidating, not downloading the app again', () => {
@@ -186,20 +186,20 @@ test('a launch on a slow line opens the saved app, one version throughout', asyn
   w.net.version = 'v2';
   w.net.delay = w.wait + 200;
   const start = Date.now();
-  assert.equal(await w.get('', 'navigate', { resultingClientId: 'b' }), '/scentcast/ from the network (v1)');
+  assert.equal(await w.get('', 'navigate', { resultingClientId: 'b' }), '/almanac/ from the network (v1)');
   assert.ok(Date.now() - start < w.wait + 150, 'it didn’t wait for the network');
   w.net.delay = 0;
-  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'b' }), '/scentcast/src/main.js from the network (v1)');
-  assert.equal(await w.get('src/pool-worker.js', 'cors', { clientId: 'b', resultingClientId: 'worker' }), '/scentcast/src/pool-worker.js from the network (v2)', 'a file it never saved comes from the network');
-  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'worker' }), '/scentcast/src/main.js from the network (v1)', 'the worker keeps to the page’s version');
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'b' }), '/almanac/src/main.js from the network (v1)');
+  assert.equal(await w.get('src/pool-worker.js', 'cors', { clientId: 'b', resultingClientId: 'worker' }), '/almanac/src/pool-worker.js from the network (v2)', 'a file it never saved comes from the network');
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'worker' }), '/almanac/src/main.js from the network (v1)', 'the worker keeps to the page’s version');
   await new Promise(r => setTimeout(r, w.wait + 200)); // the late page lands
-  assert.equal(await w.cached(CACHE, './').text(), '/scentcast/ from the network (v1)', 'the late page isn’t saved over the version its files are');
+  assert.equal(await w.cached(CACHE, './').text(), '/almanac/ from the network (v1)', 'the late page isn’t saved over the version its files are');
   // A launch where the network answers in time takes the new version.
-  assert.equal(await w.get('', 'navigate', { resultingClientId: 'c' }), '/scentcast/ from the network (v2)');
-  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'c' }), '/scentcast/src/main.js from the network (v2)');
+  assert.equal(await w.get('', 'navigate', { resultingClientId: 'c' }), '/almanac/ from the network (v2)');
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'c' }), '/almanac/src/main.js from the network (v2)');
   // Offline, at once.
   w.net.online = false;
-  assert.equal(await w.get('', 'navigate', { resultingClientId: 'd' }), '/scentcast/ from the network (v2)');
+  assert.equal(await w.get('', 'navigate', { resultingClientId: 'd' }), '/almanac/ from the network (v2)');
 });
 
 test('the service worker leaves a file it already holds alone', async () => {
@@ -223,13 +223,13 @@ test('a file the worker holds costs a 304, even once the browser’s own cache h
   await w.get('src/main.js');
   const sent = w.net.sent;
   // The fake network has no HTTP cache: only the worker's own ETag makes it a 304.
-  assert.equal(await w.get('', 'navigate', { resultingClientId: 'a' }), '/scentcast/ from the network (v1)');
-  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'a' }), '/scentcast/src/main.js from the network (v1)');
+  assert.equal(await w.get('', 'navigate', { resultingClientId: 'a' }), '/almanac/ from the network (v1)');
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'a' }), '/almanac/src/main.js from the network (v1)');
   assert.equal(w.net.sent, sent, 'nothing downloaded again');
   assert.equal(w.net.notModified, 2);
   // A new version downloads.
   w.net.version = 'v2';
-  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'a' }), '/scentcast/src/main.js from the network (v2)');
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'a' }), '/almanac/src/main.js from the network (v2)');
   assert.equal(w.net.sent, sent + 1);
 });
 
@@ -238,16 +238,16 @@ test('a slow check on an unchanged launch takes the rest of the launch from the 
   await w.get('', 'navigate');
   for (const f of ['src/main.js', 'src/app/shell.js', 'src/engine.js']) await w.get(f);
   await w.get('', 'navigate', { resultingClientId: 'a' });
-  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'a' }), '/scentcast/src/main.js from the network (v1)');
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'a' }), '/almanac/src/main.js from the network (v1)');
   // The shell's check is slow: the saved copy answers at SLOW_MS, and the
   // files after it don't wait on the network at all.
   w.net.slow['src/app/shell.js'] = w.slow * 3;
   let start = Date.now();
-  assert.equal(await w.get('src/app/shell.js', 'cors', { clientId: 'a' }), '/scentcast/src/app/shell.js from the network (v1)');
+  assert.equal(await w.get('src/app/shell.js', 'cors', { clientId: 'a' }), '/almanac/src/app/shell.js from the network (v1)');
   assert.ok(Date.now() - start < w.slow * 2, 'it waited no longer than SLOW_MS');
   w.net.delay = w.slow * 3;
   start = Date.now();
-  assert.equal(await w.get('src/engine.js', 'cors', { clientId: 'a' }), '/scentcast/src/engine.js from the network (v1)');
+  assert.equal(await w.get('src/engine.js', 'cors', { clientId: 'a' }), '/almanac/src/engine.js from the network (v1)');
   assert.ok(Date.now() - start < w.slow / 2, 'the rest came from the cache at once');
   // A page that came in time but slow does the same from the start.
   w.net.slow = {};
@@ -267,14 +267,14 @@ test('a launch that met a new version waits for the network, so versions never m
   w.net.version = 'v2';
   await w.get('', 'navigate', { resultingClientId: 'a' });
   w.net.delay = w.slow * 1.5;
-  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'a' }), '/scentcast/src/main.js from the network (v2)', 'it waited past SLOW_MS');
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'a' }), '/almanac/src/main.js from the network (v2)', 'it waited past SLOW_MS');
   // The page is as saved, but a file comes back new: from there it waits too.
   w.net.delay = 0;
   await w.get('', 'navigate', { resultingClientId: 'b' });
   w.net.version = 'v3';
-  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'b' }), '/scentcast/src/main.js from the network (v3)');
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'b' }), '/almanac/src/main.js from the network (v3)');
   w.net.delay = w.slow * 1.5;
-  assert.equal(await w.get('src/app/shell.js', 'cors', { clientId: 'b' }), '/scentcast/src/app/shell.js from the network (v3)', 'not the saved v2 beside a v3 main.js');
+  assert.equal(await w.get('src/app/shell.js', 'cors', { clientId: 'b' }), '/almanac/src/app/shell.js from the network (v3)', 'not the saved v2 beside a v3 main.js');
 });
 
 test('files in flight together keep to the launch’s one decision, whichever file makes it', async () => {
@@ -293,7 +293,7 @@ test('files in flight together keep to the launch’s one decision, whichever fi
   let w = await launch();
   w.net.slow = { 'src/main.js': w.slow / 4, 'src/app/shell.js': w.slow * 3 };
   assert.deepEqual(await Promise.all([w.get('src/main.js', 'cors', { clientId: 'a' }), w.get('src/app/shell.js', 'cors', { clientId: 'a' })]),
-    ['/scentcast/src/main.js from the network (v2)', '/scentcast/src/app/shell.js from the network (v2)'], 'one version: the new one');
+    ['/almanac/src/main.js from the network (v2)', '/almanac/src/app/shell.js from the network (v2)'], 'one version: the new one');
   // shell.js's check passes SLOW_MS first (the line is slow), then main.js,
   // asked a little later, comes back new: it's the saved copy too, and the
   // late answer isn't saved over it.
@@ -302,8 +302,8 @@ test('files in flight together keep to the launch’s one decision, whichever fi
   const shell = w.get('src/app/shell.js', 'cors', { clientId: 'a' });
   await sleep(w.slow / 2);
   assert.deepEqual(await Promise.all([w.get('src/main.js', 'cors', { clientId: 'a' }), shell]),
-    ['/scentcast/src/main.js from the network (v1)', '/scentcast/src/app/shell.js from the network (v1)'], 'one version: the saved one');
-  assert.equal(await w.cached(CACHE, 'src/main.js').text(), '/scentcast/src/main.js from the network (v1)');
+    ['/almanac/src/main.js from the network (v1)', '/almanac/src/app/shell.js from the network (v1)'], 'one version: the saved one');
+  assert.equal(await w.cached(CACHE, 'src/main.js').text(), '/almanac/src/main.js from the network (v1)');
 });
 
 test('dataset files answer from the cache at once and are checked behind it', async () => {
@@ -311,12 +311,12 @@ test('dataset files answer from the cache at once and are checked behind it', as
   w.net.version = 'v2';
   await w.get('data/fragrantica/pool.json');
   w.net.version = 'v3';
-  assert.equal(await w.get('data/fragrantica/pool.json'), '/scentcast/data/fragrantica/pool.json from the network (v2)', 'the saved copy first');
-  assert.equal(await w.get('data/fragrantica/pool.json'), '/scentcast/data/fragrantica/pool.json from the network (v3)', 'the check behind it saved the new one');
+  assert.equal(await w.get('data/fragrantica/pool.json'), '/almanac/data/fragrantica/pool.json from the network (v2)', 'the saved copy first');
+  assert.equal(await w.get('data/fragrantica/pool.json'), '/almanac/data/fragrantica/pool.json from the network (v3)', 'the check behind it saved the new one');
   w.net.version = 'v4';
   await w.get('data/fragrantica/x/7.json');
   w.net.version = 'v5';
-  assert.equal(await w.get('data/fragrantica/x/7.json'), '/scentcast/data/fragrantica/x/7.json from the network (v4)', 'a shard too');
+  assert.equal(await w.get('data/fragrantica/x/7.json'), '/almanac/data/fragrantica/x/7.json from the network (v4)', 'a shard too');
 });
 
 test('the forecast goes out before the app loads, from a module that imports almost nothing', async () => {
@@ -354,8 +354,8 @@ test('the suggestion pool’s files stay cached offline, however many dataset sh
   for (const path of pool) await w.get(path);
   for (let i = 0; i < max + 20; i++) await w.get(`data/fragrantica/x/${i}.json`);
   w.net.online = false;
-  for (const path of pool) assert.equal(await w.get(path), `/scentcast/${path} from the network (v1)`, `${path} is still there`);
-  assert.equal(await w.get(`data/fragrantica/x/${max + 19}.json`), `/scentcast/data/fragrantica/x/${max + 19}.json from the network (v1)`);
+  for (const path of pool) assert.equal(await w.get(path), `/almanac/${path} from the network (v1)`, `${path} is still there`);
+  assert.equal(await w.get(`data/fragrantica/x/${max + 19}.json`), `/almanac/data/fragrantica/x/${max + 19}.json from the network (v1)`);
   assert.equal(await w.get('data/fragrantica/x/0.json'), '', 'the oldest shards make room');
 });
 

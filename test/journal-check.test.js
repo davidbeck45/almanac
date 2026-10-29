@@ -75,13 +75,13 @@ test('journal-check ranks with the export’s ratings, and for the occasion a we
 });
 
 test('journal-check says what went wrong in a sentence, and skips wears whose weather didn’t load', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'scentcast-'));
+  const dir = mkdtempSync(join(tmpdir(), 'almanac-'));
   const missing = run([join(dir, 'nope.json')]);
   assert.equal(missing.status, 1);
   assert.match(missing.stderr, /^Can't read .*nope\.json\n$/);
   const bad = join(dir, 'bad.json');
   writeFileSync(bad, 'not json');
-  assert.match(run([bad]).stderr, /^.*bad\.json isn't a Scentcast journal export/);
+  assert.match(run([bad]).stderr, /^.*bad\.json isn't an Almanac journal export/);
   // The last week comes from the forecast API; with its quota spent those wears are skipped and counted.
   const file = join(dir, 'journal.json');
   const ids = fragrances.slice(0, 6).map(f => String(f.id));

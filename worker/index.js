@@ -1,4 +1,4 @@
-// Scentcast API: a thin Cloudflare Worker in front of Fragella, which now
+// Almanac API: a thin Cloudflare Worker in front of Fragella, which now
 // only resolves the fg: ids in share links made before search moved to the
 // Fragrantica dataset.
 // - Keeps the Fragella key server-side.

@@ -65,7 +65,7 @@ test('--exclude refuses a term that takes out most of the wardrobe, and an empty
   assert.equal(letter.status, 0, letter.stderr);
   assert.match(letter.stderr, /"a" matches no bottle/);
   // A journal that switched every bottle off leaves nothing to rank, in every mode.
-  const dir = mkdtempSync(join(tmpdir(), 'scentcast-'));
+  const dir = mkdtempSync(join(tmpdir(), 'almanac-'));
   const file = join(dir, 'journal.json');
   writeFileSync(file, JSON.stringify({ app: 'scentcast-journal', history: [], hidden: fragrances.map(f => String(f.id)) }));
   for (const extra of [['--slot', 'night'], ['--week'], ['--json'], ['--date', dayISO(1)], ['--layer', 'all'], ['--mix']]) {
@@ -91,7 +91,7 @@ test('switched-off bottles are left out of picks but still owned for suggestions
 });
 
 test('--journal leaves out the bottles the app switched off and tunes the use shares by its wears', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'scentcast-'));
+  const dir = mkdtempSync(join(tmpdir(), 'almanac-'));
   const file = join(dir, 'journal.json');
   const jake = fragrances.find(f => f.name === 'Jake');
   const formal = Array.from({ length: 30 }, (_, i) => ({ id: String(fragrances[i % 5].id), date: dayISO(-i - 1), slot: 'night', occasion: 'formal' }));
@@ -105,7 +105,7 @@ test('--journal leaves out the bottles the app switched off and tunes the use sh
   assert.equal(missing.status, 1);
   assert.match(missing.stderr, /^Can't read .*nope\.json/);
   writeFileSync(file, '{"app":');
-  assert.match(cli('--loc', '40.7,-74', '--journal', file).stderr, /isn't a Scentcast journal export/);
+  assert.match(cli('--loc', '40.7,-74', '--journal', file).stderr, /isn't an Almanac journal export/);
 });
 
 test('bad arguments stop with a message before any request', () => {
@@ -156,7 +156,7 @@ test('today\'s picks run in time order, plan like the app and keep every bottle 
 test('--journal rotates out what was just worn, and --week --occasion plans its own slot', () => {
   const first = JSON.parse(cli('--loc', '40.7,-74', '--json', '--slot', 'night').stdout).slots[0];
   const worn = fragrances.find(f => f.name === first.pick.name);
-  const dir = mkdtempSync(join(tmpdir(), 'scentcast-'));
+  const dir = mkdtempSync(join(tmpdir(), 'almanac-'));
   const file = join(dir, 'journal.json');
   const yesterday = new Date(Date.parse(`${first.window.date}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
   writeFileSync(file, JSON.stringify({ app: 'scentcast-journal', history: [{ id: String(worn.id), date: yesterday, slot: 'night' }] }));
@@ -336,7 +336,7 @@ test('--spray gives counts for three situations, or the next window at a place',
 test('--journal applies the ratings and skin nudges it carries', () => {
   const first = JSON.parse(cli('--loc', '40.7,-74', '--json', '--slot', 'day').stdout).slots[0];
   const runnerUp = fragrances.find(f => f.name === first.pick.runnerUp);
-  const dir = mkdtempSync(join(tmpdir(), 'scentcast-'));
+  const dir = mkdtempSync(join(tmpdir(), 'almanac-'));
   const file = join(dir, 'journal.json');
   writeFileSync(file, JSON.stringify({ app: 'scentcast-journal', history: [], skin: { [runnerUp.id]: { rating: 5, longevity: 0, sillage: 0 } } }));
   const after = JSON.parse(cli('--loc', '40.7,-74', '--json', '--slot', 'day', '--journal', file).stdout).slots[0];

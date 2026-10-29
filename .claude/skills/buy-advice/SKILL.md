@@ -30,7 +30,7 @@ These change the answer, so settle them before running:
 
 - **Wardrobe.** His is the default; `--demo` only when he asks what a first-time visitor would see.
 - **Switched-off bottles.** Pass the ones he mentions with `--exclude "Name,Name"`.
-- **Journal.** When he sends his export (`scentcast-journal-<date>.json`), add `--journal <file>` to every command.
+- **Journal.** When he sends his export (`almanac-journal-<date>.json`), add `--journal <file>` to every command.
 - **How he wears.** When he names an occasion, or the answer hinges on one, pass `--uses` (to `--check` too): Formal and Date Night settle most of `--gaps`' list. Ask when you can't tell.
 - **Climate.** Pass `--city "<city>"` when he gives a place. `climate` in the JSON (in `--gaps`' text, its first line) names the climate the answer is for; when it isn't his place (Open-Meteo's archive failed, and stderr says "using the default climate"), tell him.
 - **Value.** Keep "Prefer great value" on: he buys clones. `--no-value` when he says money's no object or asks for designer or niche picks.
@@ -94,7 +94,7 @@ Stderr matters: "matches N bottles (…); using the most voted" (confirm the bra
 - The data has no prices. "Value" is voters' value for money (1–5); say so if he asks about price.
 - The suggestion pool doesn't say where a bottle is sold (CLAUDE.md's "Discover"); mention it when he wants something from a US store.
 - Credit Le Decanteur's Fragrantica dataset (CC BY-NC-SA 4.0) once, as the output's last line does.
-- Offer the app for a closer look: `https://davidbeck45.github.io/scentcast/#/bottle/<id>`, `#/compare/<id>,<id>`, `#/discover?styles=skin,clean,intimate` or `#/discover?q=iris%20leather`.
+- Offer the app for a closer look: `https://davidbeck45.github.io/almanac/#/bottle/<id>`, `#/compare/<id>,<id>`, `#/discover?styles=skin,clean,intimate` or `#/discover?q=iris%20leather`.
 
 The shape, from a `--gaps` run (the bottles change as the data does):
 

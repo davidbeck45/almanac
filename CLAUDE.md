@@ -1,6 +1,8 @@
-# Scentcast
+# Almanac
 
 Picks fragrances from David's own Fragrantica wardrobe for the weather, time of day and occasion. Static web app: vanilla ES modules, no build step, no dependencies. The same engine runs in Node for answers in the terminal.
+
+It was called Scentcast until October 2026, when an unrelated paid app of that name turned up (getscentcast.com). Names nobody sees kept it, so saved data, exports and old links still work: localStorage keys (`scentcast.*`, shared by both addresses on the one origin), the journal export's `app: 'scentcast-journal'`, history's `scentcastSheet` and the Worker (`scentcast-api`). The old address, davidbeck45.github.io/scentcast/, is the `davidbeck45/scentcast` repo: a page that forwards every link to the same place here, and a service worker that retires the old one's.
 
 ## Answering "what should I wear…"
 
@@ -116,7 +118,7 @@ Search covers the demo, the catalog, then the dataset (offline, the first two st
 
 When someone sends their Fragrantica profile (they follow the guide at https://claude.ai/code/artifact/25b353d3-857f-4341-89b3-230131f8c484):
 1. Open `https://www.fragrantica.com/@<name>#wardrobe` with Claude in Chrome and run `scripts/fragrantica-wardrobe.js`. It lists the pages on their "Perfumes I Have" shelf; `found` below `expected` means the shelf didn't fully load.
-2. Send them `https://davidbeck45.github.io/scentcast/?c=<id>,<id>&n=<Name>` with their bottles' ids (the number ending each slug); they open it and tap "Save as Mine" (Mine takes the link's name, so their own share links carry it; replacing a Mine that had bottles offers Undo). An id missing from `data/fragrantica/r/` (a bottle newer than the dataset) needs a catalog line, pushed, before the link loads it.
+2. Send them `https://davidbeck45.github.io/almanac/?c=<id>,<id>&n=<Name>` with their bottles' ids (the number ending each slug); they open it and tap "Save as Mine" (Mine takes the link's name, so their own share links carry it; replacing a Mine that had bottles offers Undo). An id missing from `data/fragrantica/r/` (a bottle newer than the dataset) needs a catalog line, pushed, before the link loads it.
 
 `data/catalog.jsonl` (built to `data/catalog.json` by `npm run build:data`) holds bottles outside the wardrobe added for friends and family: bottles newer than the dataset (extractor), and ones whose Parfumo layering votes should pair them (`decant.py add catalog <id>` plus their Parfumo lines). Add any accord the extractor returns that `src/accords.js` lacks, then `npm run build:data`, `npm run fit` and `npm test`. Catalog bottles never show up in the demo.
 
@@ -245,7 +247,7 @@ Every screen asks the suggestion pool through `src/app/pool.js` (its header has 
 - The questions run in one module Worker (`src/pool-worker.js`, a shell around `poolServer`), started on the first ask and shared app-wide: `liked` and `records` (`QUICK`) at once, the rest one at a time in the order asked; where module Workers don't start, the same server runs on the main thread (`inlineWorker`).
 - A newer question on the same `channel` replaces the older one, which resolves `{ stale: true }` (drop it): give each list on screen its own channel (`disc-notes`, `ins-report`) so typing never shows an older answer.
 - A question's clock (`TIMEOUT`, 60 s) runs from when the worker starts it and stops while the pool downloads; one past it fails alone while the questions behind it go to a fresh worker. A file that sends nothing for 30 s (`STALL`) fails as out of reach. `poolStatus()` is idle, loading, ready or error, for skeletons; `warmPool()` starts the load when someone heads for Wardrobe or Discover.
-- The worker keeps each wardrobe's gap and Discover contexts for the last two wardrobes (keyed on the records as they score, so a skin nudge or re-import makes a new one), so the value toggle or switching lists doesn't work them out again. The service worker keeps the pool's three files in a cache of their own (`scentcast-pool`), so the shards bottle pages read can't push them out and leave the gap finder and Discover dark offline.
+- The worker keeps each wardrobe's gap and Discover contexts for the last two wardrobes (keyed on the records as they score, so a skin nudge or re-import makes a new one), so the value toggle or switching lists doesn't work them out again. The service worker keeps the pool's three files in a cache of their own (`almanac-pool`), so the shards bottle pages read can't push them out and leave the gap finder and Discover dark offline.
 - `dev/pool.html` times every question. In desktop Chromium (October 2026) a fresh worker's first answer takes about 0.6 s for a report or a check and 0.3 s for Discover's questions, later ones 2–13 ms, with the main thread never held up.
 
 ## The bottle page
@@ -278,13 +280,13 @@ The Wishlist checks every want at once (`check` with `records`, and the liked st
 
 ## Checking picks against real wears
 
-The wear journal keeps a year of wears, each with roughly where it happened. "Wear this" logs a window dated today. Wardrobe › Worn's tiles, calendar and Most worn read every wear on the device, whichever list was ranked; Gathering dust reads the ranked list's rotation, and both say so when the month's wears reach past that list. Its Export button downloads them (`scentcast-journal-<date>.json`, the device's date), with the device's place, hidden bottles and David's ratings and skin nudges. `node scripts/journal-check.mjs <export.json>` looks up each wear's weather in Open-Meteo's archive (the last five days, which the archive doesn't have yet, from the forecast API's `past_days`), ranks the demo as the app would have (string ids, like the app, so earlier wears count as rotation; the export's own ratings and skin nudges; the occasion a wear was logged for from Occasion; `rankWears`, tested), and reports where the worn bottle landed (average rank against random, top-pick and S/A rates). Wears whose weather didn't load (the forecast API has a daily quota) are skipped and counted. Use it before and after tuning the engine.
+The wear journal keeps a year of wears, each with roughly where it happened. "Wear this" logs a window dated today. Wardrobe › Worn's tiles, calendar and Most worn read every wear on the device, whichever list was ranked; Gathering dust reads the ranked list's rotation, and both say so when the month's wears reach past that list. Its Export button downloads them (`almanac-journal-<date>.json`, the device's date), with the device's place, hidden bottles and David's ratings and skin nudges. `node scripts/journal-check.mjs <export.json>` looks up each wear's weather in Open-Meteo's archive (the last five days, which the archive doesn't have yet, from the forecast API's `past_days`), ranks the demo as the app would have (string ids, like the app, so earlier wears count as rotation; the export's own ratings and skin nudges; the occasion a wear was logged for from Occasion; `rankWears`, tested), and reports where the worn bottle landed (average rank against random, top-pick and S/A rates). Wears whose weather didn't load (the forecast API has a daily quota) are skipped and counted. Use it before and after tuning the engine.
 
 A wear records the use it was logged for (`toggleWear(id, date, slot, where, occasion)`: the occasion's id from the Occasion tab or a trip's event, `'daily'` from Now and the Week; the `wear` action reads it from the list's context), and `occasionCounts(history[, since])` counts wears per use for the gap finder's use shares (`{ daily, office, date, …, untagged }`). Wears logged before uses were recorded count as `untagged`, not daily, so a year of them doesn't swamp the shares. `journalExport(history, loc, hidden, { nowISO, skin })` adds the ratings (`loadSkin()`) when there are any. Exports from before either change read the same way (`parseJournal`).
 
 ## Deploy
 
-GitHub Pages serves `main` at https://davidbeck45.github.io/scentcast/, so pushing to `main` publishes. Commit data refreshes (`data/collection.json`) for the live site to see them.
+GitHub Pages serves `main` at https://davidbeck45.github.io/almanac/, so pushing to `main` publishes. Commit data refreshes (`data/collection.json`) for the live site to see them.
 
 ## Checking the UI
 
@@ -316,6 +318,6 @@ Temperatures are °F throughout the engine and weather code; only `src/ui.js` co
 
 ## Omarchy widget
 
-The repo root doubles as an Omarchy shell plugin (`doeszen.scentcast`): `manifest.json` points at `omarchy/BarWidget.qml`, which loads `omarchy/Panel.qml`. The panel runs `node omarchy/widget.mjs`, which resolves a place (widget setting, else `~/.local/state/omarchy/settings/weather.json`, else wttr.in's IP lookup), fetches the forecast and prints the week plan as JSON (`widgetPayload`, tested in `test/widget.test.js`). Without `--hidden` it drops `DEFAULT_HIDDEN`, like a new device.
+The repo root doubles as an Omarchy shell plugin (`doeszen.almanac`): `manifest.json` points at `omarchy/BarWidget.qml`, which loads `omarchy/Panel.qml`. The panel runs `node omarchy/widget.mjs`, which resolves a place (widget setting, else `~/.local/state/omarchy/settings/weather.json`, else wttr.in's IP lookup), fetches the forecast and prints the week plan as JSON (`widgetPayload`, tested in `test/widget.test.js`). Without `--hidden` it drops `DEFAULT_HIDDEN`, like a new device.
 
-The installed copy in `~/.config/omarchy/plugins/doeszen.scentcast/` is separate from this checkout (the plugin validator refuses symlinks). To try edits, copy the files there (`git ls-files -co --exclude-standard`, which keeps `worker/.dev.vars` out); the shell hot-reloads it. `omarchy-shell doeszen.scentcast open|close|refresh` drives the popup, `omarchy plugin validate .` checks the manifest, and QML errors land in `/run/user/$UID/quickshell/by-pid/<shell pid>/log.log`. Built-in widgets to crib from live in `/usr/share/omarchy/shell/plugins/` (read only).
+The installed copy in `~/.config/omarchy/plugins/doeszen.almanac/` is separate from this checkout (the plugin validator refuses symlinks). To try edits, copy the files there (`git ls-files -co --exclude-standard`, which keeps `worker/.dev.vars` out); the shell hot-reloads it. `omarchy-shell doeszen.almanac open|close|refresh` drives the popup, `omarchy plugin validate .` checks the manifest, and QML errors land in `/run/user/$UID/quickshell/by-pid/<shell pid>/log.log`. Built-in widgets to crib from live in `/usr/share/omarchy/shell/plugins/` (read only).

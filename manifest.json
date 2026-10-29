@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "id": "doeszen.scentcast",
-  "name": "Scentcast",
+  "id": "doeszen.almanac",
+  "name": "Almanac",
   "version": "1.0.0",
   "author": "David Beck",
   "description": "What to wear from my fragrance wardrobe for today's weather, in the Omarchy bar.",
@@ -12,7 +12,7 @@
     "barWidget": "omarchy/BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "Scentcast",
+    "displayName": "Almanac",
     "description": "The fragrance to wear now for the weather and time of day, with why, a runner-up and the week's day and night plan. Needs Node.js.",
     "category": "Info",
     "aliases": [

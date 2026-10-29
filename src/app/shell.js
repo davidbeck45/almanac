@@ -180,7 +180,7 @@ function syncTitle() {
     const { page, pane } = currentPage();
     title = pane.title?.(state.base) ?? page.label;
   }
-  if (title) document.title = `${title} · Scentcast`;
+  if (title) document.title = `${title} · Almanac`;
 }
 
 // The page takes its tint from the sky: --tint-* behind the hero and in the
@@ -207,7 +207,7 @@ function renderNav() {
     return `<li><a class="nav-item" href="${esc(href)}" data-dest="${d.id}"${here === d.id ? ' aria-current="page"' : ''}>${icon[d.icon]}<span>${esc(d.label)}</span></a></li>`;
   }).join('');
   $('#nav').innerHTML = `
-    <a class="wordmark" href="#/wear/now" aria-label="Scentcast, what to wear now">Scentcast</a>
+    <a class="wordmark" href="#/wear/now" aria-label="Almanac, what to wear now">Almanac</a>
     <ul class="nav-items">${items}</ul>
     <div class="nav-foot">
       <button class="nav-loc" data-action="location" aria-label="Change location: ${esc(state.loc?.name ?? 'not set')}">${icon.pin}<span><b>${esc(state.loc?.name ?? 'Set location')}</b>${now ? `<small>${deg(now.tempF)} · ${esc(now.label)}</small>` : ''}</span></button>

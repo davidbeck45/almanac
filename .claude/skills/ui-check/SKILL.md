@@ -1,6 +1,6 @@
 ---
 name: ui-check
-description: Screenshot and inspect the Scentcast app headlessly with dev/shoot.mjs, on saved New York weather so it works any day and offline. Use after changing anything the app draws (src/views, src/ui, src/css, src/app, src/scene.js, src/tokens.css, src/theme.js, index.html), before saying a UI fix works, when asked to look at or screenshot a screen, and when Open-Meteo answers 429 while testing.
+description: Screenshot and inspect the Almanac app headlessly with dev/shoot.mjs, on saved New York weather so it works any day and offline. Use after changing anything the app draws (src/views, src/ui, src/css, src/app, src/scene.js, src/tokens.css, src/theme.js, index.html), before saying a UI fix works, when asked to look at or screenshot a screen, and when Open-Meteo answers 429 while testing.
 ---
 
 # UI check

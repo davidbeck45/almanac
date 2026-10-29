@@ -7,7 +7,7 @@ const H = 220;
 const BASE_W = 400; // layout below is authored at 400 wide, then stretched
 let uid = 0;
 
-// Every color the scene draws, per theme: 'default' is Scentcast's own look,
+// Every color the scene draws, per theme: 'default' is Almanac's own look,
 // 'gruvbox' the same landscape in morhetz's gruvbox (src/theme.js).
 const PALETTES = {
   default: {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // How the engine's picks line up with what was actually worn.
-//   node scripts/journal-check.mjs scentcast-journal-2026-10-03.json [--json]
+//   node scripts/journal-check.mjs almanac-journal-2026-10-03.json [--json]
 //
 // Takes the file from the wear journal's Export button. For each logged wear
 // it looks up that window's weather where it was worn (Open-Meteo's archive,
@@ -136,7 +136,7 @@ async function main() {
   let text, journal = null;
   try { text = readFileSync(file, 'utf8'); } catch { fail(`Can't read ${file}`); }
   try { journal = parseJournal(JSON.parse(text)); } catch {}
-  if (!journal) fail(`${file} isn't a Scentcast journal export (the wear journal's Export button)`);
+  if (!journal) fail(`${file} isn't an Almanac journal export (the wear journal's Export button)`);
   const demo = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url))).fragrances;
 
   // One weather fetch per place, covering its wears.

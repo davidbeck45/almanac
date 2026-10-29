@@ -95,7 +95,7 @@ test('Add bottles keeps the search field as typed through a redraw', () => {
 });
 
 test('a share link that can’t go to the clipboard shows whole, to copy by hand', () => {
-  const url = `https://example.com/scentcast/?c=${Array.from({ length: 24 }, (_, i) => 90000 + i).join(',')}&n=David`;
+  const url = `https://example.com/almanac/?c=${Array.from({ length: 24 }, (_, i) => 90000 + i).join(',')}&n=David`;
   const html = wardrobe.shareSheetHTML({ url, name: 'David' });
   assert.ok(html.includes(`id="share-url" data-action="share-select" value="${url.replace(/&/g, '&amp;')}" readonly`), 'the whole link, in a field');
   assert.match(html, /data-action="share-copy"/);

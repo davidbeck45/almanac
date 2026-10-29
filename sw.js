@@ -17,7 +17,7 @@
 // versions don't mix. Whichever happens first decides, for the files
 // already in flight as well. The cache catches up on a launch where the
 // network answers in time, or when a new sw.js installs.
-const CACHE = 'scentcast-v21';
+const CACHE = 'almanac-v22';
 const NETWORK_WAIT_MS = 2500;
 const SLOW_MS = 1000;
 // Dataset files (data/fragrantica/) load a shard at a time as people search
@@ -25,18 +25,18 @@ const SLOW_MS = 1000;
 // Each Discover answer reads a few about shards (x/), so it holds plenty.
 // They change only with a dataset rebuild: a saved one answers at once, and
 // the worker checks it with the server behind it.
-const DATA_CACHE = 'scentcast-data';
+const DATA_CACHE = 'almanac-data';
 const DATA_MAX = 120;
 // The suggestion pool's three files (data/fragrantica/pool*.json) keep a
 // cache of their own, never trimmed: shards coming and going in the data
 // cache must not push them out, or the gap finder and Discover go dark offline.
-const POOL_CACHE = 'scentcast-pool';
+const POOL_CACHE = 'almanac-pool';
 // Bottle photos from other hosts. They come back opaque (no CORS headers),
 // so the worker can't see whether one failed; a capped cache keeps a bad
 // one from sticking around for good. Chrome counts each opaque response as
 // about 7 MB of quota, so the cap is about the wardrobe's photos (offline),
 // not every photo browsed: the HTTP cache keeps those for weeks anyway.
-const IMAGE_CACHE = 'scentcast-images';
+const IMAGE_CACHE = 'almanac-images';
 const IMAGE_MAX = 30;
 const SHELL = [
   './',

@@ -1,8 +1,8 @@
-# Scentcast
+# Almanac
 
 What to wear from my own fragrance collection, for today's weather, the time of day and the occasion.
 
-Live at **https://davidbeck45.github.io/scentcast/**. It opens on my wardrobe; add your own bottles and it ranks yours instead. Add it to your phone's home screen to use it like an app, with shortcuts to Now, Week and Occasion.
+Live at **https://davidbeck45.github.io/almanac/**. It opens on my wardrobe; add your own bottles and it ranks yours instead. Add it to your phone's home screen to use it like an app, with shortcuts to Now, Week and Occasion.
 
 ## What it does
 
@@ -45,7 +45,7 @@ The same engine runs in Node.js, with no dependencies. Run `node scripts/recomme
 node scripts/recommend.mjs --city "New York" --occasion date
 node scripts/recommend.mjs --city "New York" --week
 node scripts/recommend.mjs --city Miami --date 2026-10-24 --occasion date   # any date: forecast, else typical weather
-node scripts/recommend.mjs --city "New York" --journal scentcast-journal-2026-10-14.json   # rotate out recent wears, nudge in neglected ones
+node scripts/recommend.mjs --city "New York" --journal almanac-journal-2026-10-14.json   # rotate out recent wears, nudge in neglected ones
 node scripts/recommend.mjs --pack --city London --from 2026-12-10 --to 2026-12-19 --events "2026-12-15 night formal"
 node scripts/recommend.mjs --spray "Liquid Brun" --occasion date             # how many sprays, and where
 node scripts/recommend.mjs --layer "Liquid Brun"   # or --layer all
@@ -86,11 +86,11 @@ My wardrobe is `data/collection.jsonl`, a line per bottle from the dataset (`pyt
 The repo is also an [Omarchy](https://omarchy.org) shell plugin (`manifest.json`, `omarchy/`): a bar icon for the bottle to wear now, and a popup with why, a runner-up and the week's day and night plan. It runs the same engine in Node, so it needs Node.js on the PATH.
 
 ```sh
-omarchy plugin add https://github.com/davidbeck45/scentcast.git --enable
-omarchy plugin update doeszen.scentcast   # pull new engine code or collection data
+omarchy plugin add https://github.com/davidbeck45/almanac.git --enable
+omarchy plugin update doeszen.almanac   # pull new engine code or collection data
 ```
 
-Left click opens the popup, middle click refreshes, right click opens the site. Settings go on the widget's entry in `~/.config/omarchy/shell.json` (or `omarchy bar set doeszen.scentcast <key> <value>`):
+Left click opens the popup, middle click refreshes, right click opens the site. Settings go on the widget's entry in `~/.config/omarchy/shell.json` (or `omarchy bar set doeszen.almanac <key> <value>`):
 
 - `location`: a city or `lat,lon`. Empty follows Omarchy's weather location, then the IP address (looked up with wttr.in).
 - `hidden`: comma-separated bottles to leave out. Unset keeps the site's defaults; `""` shows every bottle.

@@ -57,7 +57,7 @@ export function settingsHTML({ loc, units, themeName, stillSky = false, active, 
     ${group('Wear journal', `
       ${row(`<a class="set-link" href="#/wardrobe/worn">${plural(wears, 'wear')} logged</a>`, `<button class="btn tertiary compact" data-action="journal-export" ${wears ? '' : 'disabled'}>${icon.download}Export</button>`, { note: 'Stays on this device' })}
     `)}
-    ${group('About', `<p class="set-credits">${credits}</p><p class="set-credits">Scentcast picks from your own bottles with the weather, time of day and occasion. Everything you add stays on this device.</p>`)}`;
+    ${group('About', `<p class="set-credits">${credits}</p><p class="set-credits">Almanac picks from your own bottles with the weather, time of day and occasion. Everything you add stays on this device.</p>`)}`;
 }
 
 function settingsPage() {

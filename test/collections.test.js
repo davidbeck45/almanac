@@ -75,7 +75,7 @@ test('a fuzzy search hit counts only when its name was typed', () => {
 });
 
 test('share links carry hand-entered bottles alongside catalog ids', () => {
-  globalThis.location = { origin: 'https://example.test', pathname: '/scentcast/' };
+  globalThis.location = { origin: 'https://example.test', pathname: '/almanac/' };
   const mine = customRecord({ name: 'Caramellino', brand: 'Litoralle Aromatica', accords: ['caramel', 'vanilla'] });
   const url = new URL(shareURL([catalog[0], mine], 'Sis'));
   const link = parseShare(url.searchParams);
@@ -85,7 +85,7 @@ test('share links carry hand-entered bottles alongside catalog ids', () => {
 });
 
 test('a link’s name cut inside an emoji still shares', () => {
-  globalThis.location = { origin: 'https://example.test', pathname: '/scentcast/' };
+  globalThis.location = { origin: 'https://example.test', pathname: '/almanac/' };
   const link = parseShare(new URLSearchParams(`c=69541,122015&n=${'A'.repeat(39)}%F0%9F%98%80`));
   assert.equal(link.name, 'A'.repeat(39) + '😀', 'cut by characters, the emoji whole');
   const cut = parseShare(new URLSearchParams(`c=1&n=${'A'.repeat(40)}%F0%9F%98%80`)).name;

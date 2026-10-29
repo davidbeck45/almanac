@@ -1,4 +1,4 @@
-// Color themes. 'default' is Scentcast's own palette; 'gruvbox' is morhetz's
+// Color themes. 'default' is Almanac's own palette; 'gruvbox' is morhetz's
 // gruvbox (dark). CSS tokens switch on <html data-theme>; colors that come
 // from data (accord chips and bars, season bars) go through paint(), and the
 // weather scene has a palette per theme (src/scene.js).

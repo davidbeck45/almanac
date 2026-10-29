@@ -381,7 +381,7 @@ export function customSheetHTML({ name = '', brand = '', accords = [], seasons =
 export function shareSheetHTML({ url, name = '', copied = false }) {
   return sheetFrame('share-title', `
       <h2 id="share-title" class="sheet-title">Share link</h2>
-      <p class="muted lede">Send it to anyone: it opens ${name ? `${esc(name)}’s` : 'these'} bottles in Scentcast, ranked for their weather.</p>
+      <p class="muted lede">Send it to anyone: it opens ${name ? `${esc(name)}’s` : 'these'} bottles in Almanac, ranked for their weather.</p>
       <label class="name-field">Link
         <input type="text" id="share-url" data-action="share-select" value="${esc(url)}" readonly autocomplete="off" spellcheck="false">
       </label>
@@ -598,7 +598,7 @@ async function share(app) {
   try {
     url = shareURL(records, name);
     if (navigator.share) {
-      await navigator.share({ title: 'Scentcast', text: name ? `${name}’s fragrance picks` : 'Fragrance picks', url });
+      await navigator.share({ title: 'Almanac', text: name ? `${name}’s fragrance picks` : 'Fragrance picks', url });
       return;
     }
     await navigator.clipboard.writeText(url);
@@ -820,7 +820,7 @@ export const actions = {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
     // Named by the device's date: an evening export in the Americas is already tomorrow in UTC.
-    a.download = `scentcast-journal-${deviceToday()}.json`;
+    a.download = `almanac-journal-${deviceToday()}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   },

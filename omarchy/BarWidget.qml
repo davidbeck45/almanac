@@ -2,11 +2,11 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 
-// Bar icon for Scentcast. The panel (Panel.qml) owns the data; this is the
+// Bar icon for Almanac. The panel (Panel.qml) owns the data; this is the
 // slot the bar tracks, so it forwards the popout contract to it.
 BarWidget {
   id: root
-  moduleName: "doeszen.scentcast"
+  moduleName: "doeszen.almanac"
 
   readonly property var panel: panelLoader.item
 

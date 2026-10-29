@@ -52,7 +52,7 @@ def get(url: str, path: Path) -> str:
         return path.read_text()
     for _ in range(3):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "scentcast forecast scoring"})
+            req = urllib.request.Request(url, headers={"User-Agent": "almanac forecast scoring"})
             with urllib.request.urlopen(req, timeout=90) as r:
                 text = r.read().decode()
             path.write_text(text)

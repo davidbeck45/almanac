@@ -1,4 +1,4 @@
-// Client for the Scentcast API (worker/), which resolves the Fragella bottles
+// Client for the Almanac API (worker/), which resolves the Fragella bottles
 // in share links made before search moved to the Fragrantica dataset.
 // DEPLOYED is the workers.dev URL printed by `npx wrangler deploy`.
 const DEPLOYED = 'https://scentcast-api.davidbeck45.workers.dev';
@@ -11,7 +11,7 @@ async function call(path) {
   try {
     res = await fetch(API_BASE + path);
   } catch {
-    throw new Error('Can’t reach the Scentcast API. Check your connection.');
+    throw new Error('Can’t reach the Almanac API. Check your connection.');
   }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw Object.assign(new Error(body.message || `Lookup failed (${res.status}).`), { code: body.error });

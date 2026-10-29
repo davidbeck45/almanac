@@ -293,7 +293,7 @@ async function main() {
     let text;
     try { text = readFileSync(args.journal, 'utf8'); } catch { fail(`Can't read ${args.journal}`); }
     try { journal = parseJournal(JSON.parse(text)); } catch {}
-    if (!journal) fail(`${args.journal} isn't a Scentcast journal export (the wear journal's Export button)`);
+    if (!journal) fail(`${args.journal} isn't an Almanac journal export (the wear journal's Export button)`);
     history = journal.history.filter(h => !h.planned);
     wardrobe = applySkin(wardrobe, journal.skin);
     for (const id of journal.hidden) off.add(id);

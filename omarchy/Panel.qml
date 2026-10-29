@@ -4,12 +4,12 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
-// Scentcast popup: what to wear now, why, and the week ahead. The picks come
+// Almanac popup: what to wear now, why, and the week ahead. The picks come
 // from widget.mjs, which runs the site's engine in Node.
 Panel {
   id: root
-  moduleName: "doeszen.scentcast"
-  ipcTarget: "doeszen.scentcast"
+  moduleName: "doeszen.almanac"
+  ipcTarget: "doeszen.almanac"
   manageIpc: false
 
   property var anchorItem: null
@@ -34,9 +34,9 @@ Panel {
   readonly property var pick: report ? report.now : null
   readonly property var days: report ? report.days : []
   readonly property var place: report ? report.place : null
-  readonly property string tooltip: pick ? pick.label + ": " + pick.name + " · " + pick.brand : (error || "Scentcast")
+  readonly property string tooltip: pick ? pick.label + ": " + pick.name + " · " + pick.brand : (error || "Almanac")
 
-  readonly property string siteUrl: "https://davidbeck45.github.io/scentcast/"
+  readonly property string siteUrl: "https://davidbeck45.github.io/almanac/"
   readonly property string scriptPath: decodeURIComponent(String(Qt.resolvedUrl("widget.mjs")).replace(/^file:\/\//, ""))
   readonly property int refreshMinutes: Math.max(5, parseInt(setting("refreshMinutes", 30), 10) || 30)
 
@@ -99,8 +99,8 @@ Panel {
       return
     }
     proc.command = ["bash", "-c",
-      "command -v node >/dev/null || { echo 'Scentcast needs Node.js (mise use -g node)' >&2; exit 127; }; exec node \"$@\"",
-      "scentcast"].concat(args)
+      "command -v node >/dev/null || { echo 'Almanac needs Node.js (mise use -g node)' >&2; exit 127; }; exec node \"$@\"",
+      "almanac"].concat(args)
     proc.running = true
   }
 
@@ -647,7 +647,7 @@ Panel {
 
               PanelActionButton {
                 iconText: "󰏌"  // nf-md-open_in_new
-                tooltipText: "Open Scentcast (Enter)"
+                tooltipText: "Open Almanac (Enter)"
                 foreground: root.foreground
                 fontFamily: root.fontFamily
                 onClicked: root.openSite("today")

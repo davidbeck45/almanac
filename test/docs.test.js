@@ -68,8 +68,8 @@ test('a bottle page you shop from reads in the order CLAUDE.md gives', () => {
 });
 
 test("README's --journal example names the file Export saves", () => {
-  assert.match(read('src/views/wardrobe.js'), /a\.download = `scentcast-journal-\$\{deviceToday\(\)\}\.json`/, 'named by the device’s date, not UTC’s');
-  assert.ok(/--journal scentcast-journal-\d{4}-\d{2}-\d{2}\.json/.test(read('README.md')), 'README.md runs --journal on scentcast-journal-<date>.json');
+  assert.match(read('src/views/wardrobe.js'), /a\.download = `almanac-journal-\$\{deviceToday\(\)\}\.json`/, 'named by the device’s date, not UTC’s');
+  assert.ok(/--journal almanac-journal-\d{4}-\d{2}-\d{2}\.json/.test(read('README.md')), 'README.md runs --journal on almanac-journal-<date>.json');
 });
 
 test('CLAUDE.md lists every bottle-page section at its order slot', () => {

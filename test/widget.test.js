@@ -40,7 +40,7 @@ test('a coordinate setting or Omarchy\'s weather location resolves without a loo
     await assert.rejects(resolvePlace(bad), /^Error: Set a latitude between -90 and 90 and a longitude between -180 and 180\.$/, bad);
   }
 
-  const stateFile = join(mkdtempSync(join(tmpdir(), 'scentcast-')), 'weather.json');
+  const stateFile = join(mkdtempSync(join(tmpdir(), 'almanac-')), 'weather.json');
   writeFileSync(stateFile, JSON.stringify({ name: 'Malibu', latitude: 34.03, longitude: -118.78 }));
   assert.deepEqual(await resolvePlace('', { stateFile }), { name: 'Malibu', lat: 34.03, lon: -118.78 });
 });
