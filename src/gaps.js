@@ -12,7 +12,7 @@
 // point come from real days). Owned bottles are measured against the
 // suggestion pool's scores in the same cell, every bottle read on the
 // pool's evidence (sameFooting).
-import { seasonFit, timeFit, weatherFit, quality, personalPart, occasionRaw, occasionPart, scoreOf, targetSeasonWeights, isDisliked } from './engine.js';
+import { seasonFit, timeFit, timeForgiven, weatherFit, richInHeat, thinInCold, quality, personalPart, occasionRaw, occasionPart, nightLean, scoreOf, targetSeasonWeights, isDisliked } from './engine.js';
 import { occasionById } from './occasions.js';
 import { similarity, sharedTraits } from './similar.js';
 import { styleScores, styleMix, styleById, topOf, shownOf, closeOf } from './scent-styles.js';
@@ -168,14 +168,16 @@ const footed = new WeakMap();
 /**
  * A record as the gap finder scores it, on the pool's evidence: no Parfumo
  * occasion votes (the pool has none, and a lucky vote shouldn't read as
- * coverage) and its MAX_ACCORDS strongest accords. Parfumo's longevity and
- * sillage stay: the pool has Fragrantica's, on the same scale. The same
- * record comes back when nothing changes.
+ * coverage), its MAX_ACCORDS strongest accords, and longevity and sillage
+ * from Fragrantica's votes alone, as the pool's are read. Parfumo's stay
+ * only for a bottle the dataset has no votes for, the one reading there is.
+ * The same record comes back when nothing changes.
  */
 export function sameFooting(record) {
   if (footed.has(record)) return footed.get(record);
   const patch = {};
-  if (record.parfumo?.occasion) {
+  if (record.parfumo && record.performance) patch.parfumo = undefined;
+  else if (record.parfumo?.occasion) {
     const { occasion, occasionVotes, ...parfumo } = record.parfumo;
     patch.parfumo = parfumo;
   }
@@ -193,30 +195,51 @@ const allFooted = records => footedLists.get(records) ?? footedLists.set(records
  * with no recent wears, averaged over the cell's windows, your stars included
  * (`personal`: only owned records carry them, so the pool's table and
  * reference stay the crowd's). The score is linear in the parts, so the
- * season and weather fits are averaged per slot × band and shared by every
- * use, and occasionPart is worked out once per occasion.
+ * season, time and weather fits (and richness in heat, thinness in the cold)
+ * are averaged per slot × band and shared by every use, and occasionRaw is
+ * worked out once per occasion. The time fit's forgiveness moves with the
+ * weather (timeFit adds it to the votes' fit as fit + (1 − fit) × forgiven),
+ * so the votes' fit is worked out once; and on a night slot the night lean
+ * (nightLean) does, so an occasion that has one adds it to the raw fit per
+ * window and averages the parts past the knee (occasionRaw ends by adding
+ * it, so the sum is rank()'s to the bit).
  */
 export function fitTable(bottles, { cells, slotBands }) {
   const m = cells.length, out = new Float32Array(bottles.length * m);
   const keys = [...new Set(cells.map(c => c.sb))];
   const occasions = [...new Set(cells.map(c => c.occasion).filter(Boolean))];
-  const fit = new Map(), occ = new Map();
+  const fit = new Map(), occ = new Map(), raw = new Map();
   bottles.forEach((b, i) => {
     const q = quality(b), personal = personalPart(b);
-    const time = { day: timeFit(b, 'day'), night: timeFit(b, 'night') };
-    for (const o of occasions) occ.set(o, occasionPart(occasionRaw(b, o), o));
+    // The night lean (nightLean) moves an occasion's raw fit with the
+    // weather, so those occasions' parts are averaged per window, past the knee.
+    for (const o of occasions) { const r = occasionRaw(b, o); raw.set(o, r); occ.set(o, occasionPart(r, o)); }
+    const voted = { day: timeFit(b, 'day'), night: timeFit(b, 'night') };
     for (const k of keys) {
-      const { wins } = slotBands[k];
-      let season = 0, weather = 0;
+      const { wins, slot } = slotBands[k];
+      let season = 0, forgiven = 0, weather = 0, heat = 0, cold = 0;
       for (const w of wins) {
         season += seasonFit(b, w.weights);
+        forgiven += timeForgiven(b, slot, w.cond);
         weather += weatherFit(b, w.cond);
+        heat += richInHeat(b, w.cond);
+        cold += thinInCold(b, w.cond);
       }
-      fit.set(k, [season / wins.length, weather / wins.length]);
+      const time = voted[slot] + (1 - voted[slot]) * forgiven / wins.length;
+      const night = new Map();
+      for (const o of occasions) {
+        if (!o.night || slot !== 'night') continue;
+        let sum = 0;
+        const r = raw.get(o);
+        for (const w of wins) sum += occasionPart(r + nightLean(b, o, slot, w.cond), o);
+        night.set(o, sum / wins.length);
+      }
+      fit.set(k, [season / wins.length, time, weather / wins.length, heat / wins.length, cold / wins.length, night]);
     }
     for (let j = 0; j < m; j++) {
-      const c = cells[j], [season, weather] = fit.get(c.sb);
-      const parts = { season, time: time[c.slot], weather, quality: q, occasion: c.occasion ? occ.get(c.occasion) : null, personal };
+      const c = cells[j], [season, time, weather, heat, cold, night] = fit.get(c.sb);
+      const occasion = c.occasion ? (night.get(c.occasion) ?? occ.get(c.occasion)) : null;
+      const parts = { season, time, weather, quality: q, occasion, heat, cold, personal };
       out[i * m + j] = scoreOf(parts, c.occasion);
     }
   });
@@ -625,7 +648,7 @@ const leanMult = (record, ctx) => {
 const PICK_KIN = 0.15;
 // Within SAME_SIM of an owned bottle a bottle smells too much alike, whatever
 // voters say: the buy check calls it redundant, and it's never suggested.
-// (Sauvage EDT and EDP are 0.80 alike, Club de Nuit Intense and Aventus 0.78.)
+// (Sauvage EDT and EDP are 0.82 alike, Club de Nuit Intense and Aventus 0.78.)
 export const SAME_SIM = 0.8;
 
 /**

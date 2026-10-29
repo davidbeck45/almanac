@@ -11,8 +11,12 @@ import { predictedShares } from './custom.js';
 const SHARDS = 512;
 // As scripts/decant.py: words too common to split the index by.
 const STOP = new Set('de la le les des du di el en et by of the and for pour eau parfum parfums perfume perfumes edp edt'.split(' '));
-// Note weights are 100 × (votes / the top note's votes) ^ 1.61; layering reads relative votes.
-const NOTE_WEIGHT_POWER = 1.61;
+// Note weights are min-max scaled votes, 100 × (votes − the least-voted
+// note's) / (the top's − the least's), so the least-voted weighs 0 whatever
+// its votes; noteFloor says what it reads as, as scripts/decant.py's
+// note_floor (fitted there on our own pages' votes).
+const NOTE_FLOOR_SCALE = 1.18;
+const NOTE_FLOOR_POWER = 0.81;
 const GENDER = { f: 'women', m: 'men', u: 'women and men' };
 const NOTE_TIERS = { t: 'top', m: 'mid', b: 'base', f: 'all' };
 const NOTE_TIER_KEYS = ['t', 'm', 'b', 'f'];
@@ -49,6 +53,21 @@ export function noteCase(note) {
   return note.split(/([ -])/).map((w, i) => (i && SMALL_WORDS.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join('');
 }
 
+/**
+ * What a weight of 0 reads as, a share of the top note's votes, for a bottle
+ * whose notes weigh `weights`: 1.18 × n^-0.81 for n notes (0.32 at 5, 0.22 at
+ * 8, 0.13 at 15). A row with no note at 0 was scaled to the top's votes alone.
+ */
+export const noteFloor = weights => (weights.includes(0) ? Math.min(1, NOTE_FLOOR_SCALE * weights.length ** -NOTE_FLOOR_POWER) : 0);
+
+/** A row's note weights (note -> 0..100) as relative votes, the top note 1000; null when nobody voted. */
+export function noteVotesOf(weights) {
+  const all = Object.values(weights);
+  if (!all.some(w => w > 0)) return null;
+  const floor = noteFloor(all);
+  return Object.fromEntries(Object.entries(weights).map(([note, w]) => [note, Math.round(1000 * (floor + (1 - floor) * w / 100))]));
+}
+
 /** One row of data/fragrantica/r/*.json -> engine record (same shape as data/collection.json). */
 export function fromFragrantica(id, row) {
   const accords = Object.fromEntries(Object.entries(row.a).map(([a, s]) => [a, barWidth(s)]));
@@ -83,10 +102,8 @@ export function fromFragrantica(id, row) {
   record.season = n ? Object.fromEntries(SEASONS.map(s => [s, round3(seasonVotes[s] / n)])) : estimate().season;
   const nightShare = day + night ? night / (day + night) : estimate().night;
   record.dayNight = { day: round3(1 - nightShare), night: round3(nightShare) };
-  if (Object.values(weights).some(w => w > 0)) {
-    record.noteVotes = Object.fromEntries(Object.entries(weights).filter(([, w]) => w > 0)
-      .map(([note, w]) => [note, Math.round(1000 * (w / 100) ** (1 / NOTE_WEIGHT_POWER))]));
-  }
+  const votes = noteVotesOf(weights);
+  if (votes) record.noteVotes = votes;
   if (row.l && row.si) {
     record.performance = { longevity: row.l[0], sillage: row.si[0], votes: Math.min(row.l[1], row.si[1]) };
   }
@@ -107,8 +124,9 @@ const pooled = new WeakMap();
  * the bottle's r/ row would (rating, Fragrantica longevity/sillage and the
  * smells-like shares are rounded to 2 decimals, the longevity and sillage
  * vote counts to 2 significant digits). Its signals ride along as
- * `extras` (see scripts/decant.py); its strongest notes too, when
- * pool-notes.json loaded.
+ * `extras` (see scripts/decant.py); its 8 strongest notes too, when
+ * pool-notes.json loaded, with their votes in tenths of the top note's as
+ * the r/ row reads them (noteVotesOf), worked out from its whole pyramid.
  */
 export function fromPool(pool, i) {
   if (!pooled.has(pool)) pooled.set(pool, []);
@@ -127,16 +145,17 @@ export function fromPool(pool, i) {
   if (c.v[i].length) row.v = c.v[i];
   if (c.l[i] && c.si[i]) [row.l, row.si] = [[c.l[i] / 100, c.lv[i]], [c.si[i] / 100, c.lv[i]]];
   if (c.k[i].length) row.k = c.k[i].map(x => x / 100);
-  const notes = pool.noteList?.no[i];
+  const notes = pool.noteList?.no[i], votes = {};
   if (notes?.length) {
     row.no = {};
     for (let j = 0; j < notes.length; j += 2) {
-      const tier = NOTE_TIER_KEYS[notes[j] & 3];
-      // Tenths of the top note's votes, back into the dataset's weight.
-      (row.no[tier] ??= {})[pool.noteList.notes[notes[j] >> 2]] = 100 * (notes[j + 1] / 10) ** NOTE_WEIGHT_POWER;
+      const note = pool.noteList.notes[notes[j] >> 2];
+      (row.no[NOTE_TIER_KEYS[notes[j] & 3]] ??= {})[note] = 0;
+      if (notes[j + 1]) votes[noteCase(note)] = 100 * notes[j + 1]; // 0: nobody voted
     }
   }
   const record = fromFragrantica(id, row);
+  if (Object.keys(votes).length) record.noteVotes = votes;
   record.extras = {
     value: c.val[i] ? c.val[i] / 100 : null,
     safe: c.safe[i],

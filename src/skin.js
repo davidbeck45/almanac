@@ -63,6 +63,39 @@ export function setSkin(id, patch, nowISO = today()) {
   return next;
 }
 
+// What Now has asked about each bottle, once (src/views/wear.js): its stars
+// once it's worn, and how it wore the day after. { id: { stars, skin } },
+// each the date it was answered or waved off; asked never comes back.
+const ASKED_KEY = 'scentcast.asked';
+export const ASKS = ['stars', 'skin'];
+
+export function loadAsked() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(ASKED_KEY));
+    if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
+    const out = {};
+    for (const [id, e] of Object.entries(stored)) {
+      const kept = Object.fromEntries(ASKS.filter(k => typeof e?.[k] === 'string').map(k => [k, e[k]]));
+      if (Object.keys(kept).length) out[String(id)] = kept;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** Whether Now has asked `kind` ('stars' or 'skin') about a bottle. */
+export const wasAsked = (asked, id, kind) => Boolean(asked[String(id)]?.[kind]);
+
+/** Notes that Now asked `kind` about a bottle (answered or waved off) and saves; returns the new map. */
+export function markAsked(id, kind, nowISO = today()) {
+  const asked = loadAsked();
+  const key = String(id);
+  const next = { ...asked, [key]: { ...asked[key], [kind]: nowISO } };
+  try { localStorage.setItem(ASKED_KEY, JSON.stringify(next)); } catch {}
+  return next;
+}
+
 /**
  * Records with your entry attached as `personal` ({ rating, longevity,
  * sillage }); the rest come back as they were. New objects for the ones that

@@ -10,9 +10,9 @@ export const EXEMPLARS = {
   citrus: [9420, 6065, 12192, 3256, 5585, 6327],        // Orange Sanguine, Eau d'Orange Verte, Neroli Portofino, 4711, Lime Basil & Mandarin, Bergamote 22
   aquatic: [410, 507, 721, 913, 153, 25529],            // Acqua di Gio, Cool Water, L'Eau d'Issey PH, Nautica Voyage, Aqva PH, Wood Sage & Sea Salt
   green: [12345, 3820, 1003, 11502, 3865, 4608],        // No 19 EDP, Vent Vert, Eau de Campagne, Jardin sur le Toit, Philosykos, Grey Flannel
-  aromatic: [829, 2069, 10891, 38206, 59064, 258],      // Azzaro PH, Drakkar Noir, Fougère Royale, Brut, Beau de Jour, Eternity for Men
+  aromatic: [829, 2069, 10891, 38206, 59064, 258, 590], // Azzaro PH, Drakkar Noir, Fougère Royale, Brut, Beau de Jour, Eternity for Men, Zino Davidoff
   gourmand: [704, 14982, 12426, 4322, 50384, 64757],    // Angel, La Vie Est Belle, Prada Candy, Love Don't Be Shy, Cloud, Bianco Latte
-  vanilla: [3345, 4346, 56836, 4064, 52616, 48029],     // Spiritueuse Double Vanille, Tihota, Bare Vanilla, Vanille Absolu, Vanilla 28, Vanille Fatale
+  vanilla: [3345, 4346, 56836, 4064, 52616, 48029, 62762], // Spiritueuse Double Vanille, Tihota, Bare Vanilla, Vanille Absolu, Vanilla 28, Vanille Fatale, Eros EDP
   amber: [2760, 40816, 1821, 6968, 42055, 93],          // Ambre Sultan, Grand Soir, Amber Absolute, Ambra Aurea, Noir Ambré, Opium
   oud: [1826, 30352, 1142, 53641, 15231, 8070],         // Oud Wood, Oud Satin Mood, Black Aoud, Oud for Greatness, Oud Ispahan, Rose Oud
   leather: [1849, 50239, 7144, 7913, 15, 228],          // Tuscan Leather, Ombré Leather, Cuir de Russie, Knize Ten, Bandit, Fahrenheit
@@ -25,8 +25,8 @@ export const EXEMPLARS = {
   woody: [12201, 1834, 69, 3956, 2558, 8991],           // Santal 33, Encre Noire, Guerlain Vetiver, Tam Dao, Hinoki, Wonderwood
   spicy: [13857, 613, 2764, 2671, 307, 93],             // Spicebomb, Égoïste, Five O'Clock au Gingembre, Poivre Samarcande, Déclaration, Opium
   fruity: [147, 9828, 10314, 498, 10190, 8069],         // Nina, Aventus, English Pear & Freesia, Be Delicious, Bombshell, Chance Eau Tendre
-  chypre: [207, 371, 113, 7150, 28, 1009],              // Mitsouko, Aromatics Elixir, Aramis, 31 Rue Cambon, Femme Rochas, Paloma Picasso
-  boozy: [62615, 71272, 4323, 20541, 74243, 69978],     // Angels' Share, Gentleman Réserve Privée, Straight to Heaven, Jazz Club, Van Py Rhum, Plum in Cognac
+  chypre: [207, 371, 113, 7150, 28, 1009, 3467, 2965],  // Mitsouko, Aromatics Elixir, Aramis, 31 Rue Cambon, Femme Rochas, Paloma Picasso, Ma Griffe, Gentleman (1974)
+  boozy: [62615, 71272, 4323, 20541, 74243, 69978, 96096], // Angels' Share, Gentleman Réserve Privée, Straight to Heaven, Jazz Club, Van Py Rhum, Plum in Cognac, Old Fashioned
 };
 
 // Picked after tuning and never tuned on.

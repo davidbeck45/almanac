@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { rank, steadyShares, votedShares } from '../src/engine.js';
+import { rank, steadyShares, votedShares, performanceRating } from '../src/engine.js';
 import { loadPool, fromPool } from '../src/fragrantica.js';
 import { allow, genderLean, leanWindow } from '../src/candidates.js';
 import {
@@ -54,10 +54,43 @@ test('a bottle’s fit in a cell is exactly rank()’s score in that weather', (
   assert.ok(worst < 1e-6, `largest difference ${worst}`);
 });
 
-test('owned bottles stand on the pool’s footing: no Parfumo occasion votes, 8 accords', () => {
+test('a cell of several windows is the mean of rank()’s scores, the night lean fading in them too', () => {
+  // Mild and warm nights where the night lean (nightLean) is partly faded, several to a cell.
+  const windows = [
+    ['2025-09-20', 'night', 60, 52], ['2025-09-02', 'night', 68, 60], ['2025-08-28', 'night', 71, 64],
+    ['2025-07-20', 'night', 74, 66], ['2025-08-02', 'night', 80, 70], ['2025-10-01', 'day', 66, 52], ['2025-06-10', 'day', 70, 55],
+  ].map(([dateISO, slot, feelsF, dewF]) => ({ dateISO, slot, feelsF, dewF, lat: 40.7 }));
+  const cc = cellsFor(climateSummary(windows, { perCell: 3 }));
+  const bottles = [...wardrobe.map(sameFooting), ...records.filter((_, i) => i % 211 === 0)];
+  const table = fitTable(bottles, cc);
+  let worst = 0, checked = 0;
+  cc.cells.forEach((cell, j) => {
+    const { wins } = cc.slotBands[cell.sb];
+    if (wins.length < 2) return;
+    const sums = new Map();
+    for (const { cond } of wins) {
+      for (const r of rank(bottles, cond, cell.slot, { occasion: cell.occasion })) sums.set(r.fragrance, (sums.get(r.fragrance) ?? 0) + r.score);
+    }
+    for (const [b, sum] of sums) {
+      worst = Math.max(worst, Math.abs(sum / wins.length - table[bottles.indexOf(b) * cc.cells.length + j]));
+      checked++;
+    }
+  });
+  assert.ok(cc.cells.some(c => c.occasion?.night && c.slot === 'night' && cc.slotBands[c.sb].wins.length === 3), 'a night cell of three windows');
+  assert.ok(checked > 1000);
+  assert.ok(worst < 1e-6, `largest difference ${worst}`);
+});
+
+test('owned bottles stand on the pool’s footing: no Parfumo votes, 8 accords', () => {
   const lb = owned('Liquid Brun'), same = sameFooting(lb);
-  assert.ok(lb.parfumo.occasion && !same.parfumo.occasion && !('occasionVotes' in same.parfumo));
-  assert.equal(same.parfumo.longevity, lb.parfumo.longevity);
+  // Longevity and sillage from Fragrantica's votes alone, as the pool's are read.
+  assert.ok(lb.parfumo.occasion && same.parfumo === undefined);
+  assert.deepEqual(performanceRating(same), performanceRating({ ...lb, parfumo: undefined }));
+  assert.ok(performanceRating(lb).parfumoShare.longevity > 0.9, 'where the engine leans on Parfumo’s');
+  // A bottle the dataset has no votes for keeps Parfumo's ratings, the one reading there is, without the occasion votes.
+  const newer = sameFooting({ ...lb, performance: undefined });
+  assert.ok(!newer.parfumo.occasion && !('occasionVotes' in newer.parfumo));
+  assert.equal(newer.parfumo.longevity, lb.parfumo.longevity);
   assert.ok(Object.keys(lb.accords).length > MAX_ACCORDS);
   const strongest = Object.entries(lb.accords).sort((a, b) => b[1] - a[1]).slice(0, MAX_ACCORDS);
   assert.deepEqual(same.accords, Object.fromEntries(strongest));
@@ -97,7 +130,11 @@ test('flat season votes read as unvoted, so they don’t make an all-rounder', (
   assert.ok(records.every(r => !r.timeVotes || votedShares(r).time || !votedShares(r).season), 'Sauvage EDP’s even day and night stand');
   const picks = [ctx, gapContext({ owned: wardrobe, records, byId, preferValue: false })].flatMap(c => suggest(c, { k: 5 }));
   assert.ok(!picks.some(p => [elyon.id, au.id].includes(p.record.id)));
-  for (const r of [elyon, au]) assert.notEqual(buyCheck(r, ctx).verdict, 'Strong fit', r.name);
+  // Read as their accords predict, they fill only what those say: Elyon's isn't a strong fit, and
+  // Au Hasard, a woody spice, is one only for his mild and warm date nights, not an all-rounder.
+  assert.notEqual(buyCheck(elyon, ctx).verdict, 'Strong fit', elyon.name);
+  const hasard = buyCheck(au, ctx).fills.map(f => f.cell.id);
+  assert.ok(hasard.length && hasard.every(id => id.startsWith('date:night:')), hasard.join());
 });
 
 test('your stars move your own coverage, not the pool reference, and a bottle you dislike covers nothing', () => {
@@ -172,23 +209,29 @@ test('David’s gaps name real situations, gaps before room to grow, and his str
     assert.doesNotMatch(g.text, /°|\d+ ?F\b/, 'no temperatures');
     assert.ok(order.includes(g.status));
   }
-  // His date nights in the warm fall just short of the best bottles out there: room to grow, his biggest.
+  // His date nights in the warm fall just short of the best bottles out there: room to grow (second to Office
+  // in the cold since Date Night counts night votes, which his date bottles have).
   assert.ok(gaps.every(g => g.status === 'room'), gaps.map(g => `${g.title} ${g.status}`).join('; '));
-  assert.ok(gaps[0].use === 'date' && gaps[0].bands.includes('warm'), gaps[0].title);
-  // Office wants a bottle that lasts the day, and his fresh clones do: it's a strength, not a gap.
-  assert.ok(!gaps.some(g => g.use === 'office'), gaps.map(g => g.title).join('; '));
-  assert.ok(report.strengths.some(s => s.use === 'office'), 'the office is a strength');
+  assert.ok(gaps.slice(0, 2).some(g => g.use === 'date' && g.bands.includes('warm')), gaps.map(g => g.title).join('; '));
+  // Office wants a bottle that lasts the day, and his fresh clones do: a strength from cool days to hot ones.
+  // In the cold, on Fragrantica's votes as the pool's are read, nothing of his both keeps close and lasts
+  // (Sandalwood & Musk's 11 Parfumo votes had it lasting): room to grow there, not a gap.
+  const office = gaps.filter(g => g.use === 'office');
+  assert.ok(office.every(g => g.slot === 'day' && g.bands.join() === 'cold' && g.status === 'room'), office.map(g => g.title).join('; '));
+  assert.ok(report.strengths.some(s => s.use === 'office' && s.bands.includes('cool') && s.bands.includes('hot')), 'the office is a strength');
   assert.match(report.overview.text, /^Your wardrobe covers every situation well; here’s where it could go further\./);
-  // Cold days: Cream Velvet leads, Détour Noir and Liam close behind, so it isn't thin.
+  // Cold days: Cream Velvet leads, CH Men Prive and Rifaaqat close behind (the cold forgives their night lean), so it isn't thin.
   const cold = ctx.cov.find(c => c.cell.id === 'daily:day:cold');
   assert.equal(cold.status, 'covered');
-  assert.deepEqual(cold.top.map(t => t.bottle.name), ['Cream Velvet', 'Détour Noir', 'Liam']);
+  assert.deepEqual(cold.top.map(t => t.bottle.name), ['Cream Velvet', 'CH Men Prive', 'Rifaaqat']);
   // A runner-up just under the strong line is depth too: thin needs the next best under the 85th percentile.
   const q = ctx.ref[ctx.cc.cells.indexOf(cold.cell)];
   const statusWith = second => coverage([{ name: 'a' }, { name: 'b' }], Float32Array.of(q[99], second), [cold.cell], [q])[0].status;
   assert.notEqual(statusWith(q[88]), 'thin');
   assert.equal(statusWith(q[60]), 'thin');
-  const date = report.strengths.find(s => s.use === 'date');
+  // The report names four strengths, most strong bottles first; Formal on mild nights (6) now edges out Date
+  // Night in the cold (5 or more), which is still a strength.
+  const date = strengths(ctx.cov, { limit: 8 }).find(s => s.use === 'date');
   assert.ok(date?.bands.includes('cold'), 'date nights in the cold are a strength');
   assert.match(date.text, /^Date Night on cold and cool nights: \d+ or more strong bottles, led by /);
   // A run whose leader changes names both ends.
@@ -233,7 +276,9 @@ test('gap fillers keep near the wardrobe’s own leans', () => {
   assert.ok(past.length <= 1, past.map(p => `${p.record.name} ${genderLean(p.record, byId)}`).join(', '));
   assert.ok(picks.every(p => genderLean(p.record, byId) < hi + 0.15), picks.map(p => `${p.record.name} ${genderLean(p.record, byId)}`).join(', '));
   // David's picks hold.
-  assert.deepEqual(report.picks.map(p => p.name), ['Zenith', 'Infinity For Men']);
+  // Kayaan Classic, an iris that lasts and keeps close, fills Office on cold days as well as Formal on cool
+  // nights, so Encre Noire (Good on its own, below) isn't needed after it.
+  assert.deepEqual(report.picks.map(p => p.name), ['Zenith', 'Kayaan Classic', 'Infinity For Men']);
 });
 
 test('without its fresh bottles, the wardrobe’s top gaps are warm and hot days', () => {
@@ -352,22 +397,25 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   const tobacco = buyCheck(records.find(r => r.name === 'Tobacco Vanille'), ctx);
   assert.equal(tobacco.verdict, 'Covered', 'one point better than Terra fills nothing');
   assert.match(tobacco.reasons[0], /^It would barely beat your Terra for /);
-  // A new direction he doesn't need isn't called a duplicate: he's covered there.
-  const dhi = buyCheck(records.find(r => r.name === 'Encre Noire'), ctx);
-  assert.equal(dhi.verdict, 'Covered');
-  assert.match(dhi.reasons[0], /^It would barely beat your .+, and nowhere by more\.$/);
-  assert.equal(dhi.reasons[1], 'Nothing you own smells like it.');
-  assert.ok(dhi.overlap.sim < 0.5 && !dhi.overlap.link);
-  // Dior Homme Intense lasts the working day, so it edges his best for the office in the cold (by too little to
-  // fill anything: he's covered there); its clone doesn't.
+  // A new direction he doesn't need isn't called a duplicate: he's covered there. Dior Homme Intense projects
+  // as much as Sauvage, so lasting the working day only just edges his best for the office in the cold (by too
+  // little to fill anything), where Encre Noire, a quiet vetiver that lasts, fills it. His best there is Détour
+  // Noir, whose night lean the cold forgives by day.
   const cold = ctx.cc.cells.findIndex(c => c.id === 'office:day:cold'), m = ctx.cc.cells.length;
   const best = Math.max(...wardrobe.map((_, i) => ctx.ownTable[i * m + cold]));
-  const coldFit = name => fitTable([sameFooting(records.find(r => r.name === name))], ctx.cc)[cold];
-  assert.ok(coldFit('Dior Homme Intense 2011') > best && best > coldFit('Dark Door Intense'));
-  const dior = buyCheck(records.find(r => r.name === 'Dior Homme Intense 2011'), ctx);
+  const dhiRow = records.find(r => r.name === 'Dior Homme Intense 2011');
+  const coldFit = r => fitTable([sameFooting(r)], ctx.cc)[cold];
+  assert.ok(coldFit(dhiRow) > best && coldFit(dhiRow) < best + 0.02);
+  const dior = buyCheck(dhiRow, ctx);
   assert.equal(dior.verdict, 'Covered');
-  assert.match(dior.reasons[0], /^It would barely beat your Sandalwood & Musk for Office on cold days/);
-  assert.ok(!buyCheck(records.find(r => r.name === 'Dark Door Intense'), ctx).fills.some(f => f.cell.use === 'office'));
+  assert.match(dior.reasons[0], /^It would barely beat your Détour Noir for Office on cold days, and nowhere by more\.$/);
+  assert.equal(dior.reasons[1], 'Nothing you own smells like it.');
+  assert.ok(dior.overlap.sim < 0.5 && !dior.overlap.link);
+  // Lasting still counts: as weak as its clone Dark Door Intense (3.1 of 5 on Fragrantica), it wouldn't edge him.
+  assert.ok(coldFit({ ...dhiRow, id: 'my:fades', performance: { ...dhiRow.performance, longevity: 3.14 } }) < best);
+  const encre = buyCheck(records.find(r => r.name === 'Encre Noire'), ctx);
+  assert.equal(encre.verdict, 'Good');
+  assert.deepEqual(encre.fills.map(f => f.cell.id), ['office:day:cold']);
   // Risky shows through even when it fills nothing.
   const kouros = buyCheck(records.find(r => r.name === 'Kouros'), ctx);
   assert.equal(kouros.verdict, 'Risky');
@@ -377,10 +425,11 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   assert.equal(zenith.verdict, 'Strong fit');
   assert.match(zenith.reasons[0], /^It would be your best for Date Night on /);
   assert.ok(zenith.fills.every(f => f.matters) && zenith.fills.some(f => f.real));
-  // Shalimar Millésime Tonka's flat votes read as none: a cool-weather gourmand, not one for warm nights.
+  // Shalimar Millésime Tonka's flat votes read as none: a gourmand for mild date nights, not warm ones. Since
+  // Date Night counts night votes (nightLean), his night-voted gourmands cover those nights, so it only comes close.
   const tonka = verdict('76063');
   assert.equal(tonka.verdict, 'Covered');
-  assert.match(tonka.reasons[0], /Date Night on cool nights/);
+  assert.match(tonka.reasons[0], /^It would barely beat your .+ for Date Night on mild nights, and nowhere by more\.$/);
   for (const c of [ctx, gapContext({ owned: [], records, byId })]) {
     const fills = buyCheck(byId.get('76063'), c).fills.filter(f => f.matters).map(f => f.cell.id);
     assert.ok(!fills.includes('date:night:warm') || fills.indexOf('date:night:warm') > fills.indexOf('date:night:cool'), fills.join());
@@ -391,7 +440,7 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   assert.equal(red.risk.level, 'high');
   assert.equal(red.reasons[0], red.risk.reasons[0]);
 
-  for (const c of [althair, sibling, zenith, tonka, red, dhi, kouros]) {
+  for (const c of [althair, sibling, zenith, tonka, red, dior, encre, kouros]) {
     assert.ok(c.reasons.length >= 2 && c.reasons.length <= 3);
     for (const r of c.reasons) assert.doesNotMatch(r, /°|\d+ ?F\b|undefined|null|NaN/);
   }
@@ -463,7 +512,8 @@ test('the buy check knows what he likes: more of a style he’s thin on is good,
     if (a !== b) shift[`${a} → ${b}`] = (shift[`${a} → ${b}`] ?? 0) + 1;
   }
   assert.ok(Object.keys(shift).every(k => ['Covered → Good', 'Covered → Risky'].includes(k)) && shift['Covered → Good'] > 10, JSON.stringify(shift));
-  assert.deepEqual(checkJSON(named('You', 'Glossier'), you).taste, { styles: ['powdery', 'skin'], style: 'skin', label: 'Skin scent', owned: 2, thin: true });
+  // Glossier You leads with Skin scent: its ambrette, the least-voted of its four notes, counts.
+  assert.deepEqual(checkJSON(named('You', 'Glossier'), you).taste, { styles: ['skin', 'powdery'], style: 'skin', label: 'Skin scent', owned: 2, thin: true });
 });
 
 test('the buy check reads a bottle the same way whatever form it comes in', () => {

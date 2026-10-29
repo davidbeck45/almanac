@@ -7,13 +7,14 @@
 // The sections in their own modules are src/views/bottle-*.js; the ones that
 // ask the suggestion pool keep their answers with pooled(), and draw again
 // on their own when an answer lands (redrawSection).
-import { rank, comfortRange, restReason, SEASONS } from '../engine.js';
+import { rank, comfortRange, restReason, savedReason, occasionWeights, SEASONS, performanceRating } from '../engine.js';
 import { layerPicks, pairingKept, warmPairing } from '../layering.js';
 import { setHidden } from '../hidden.js';
 import { loadWants, saveWants, hasWant, setWant } from '../wishlist.js';
 import { loadSkin, applySkin } from '../skin.js';
 import { isCustomId, shareToken } from '../custom.js';
 import { styleById } from '../scent-styles.js';
+import { pickGapLine } from '../contrast.js';
 import { esc, deg, temp, matchPct, relativeDay, toastName } from '../ui.js';
 import { icon, img, bar, reasonsList, accordColor, wearButton, magDot, messageHTML, shelfHTML } from '../ui/components.js';
 import { askPool } from '../app/pool.js';
@@ -225,7 +226,8 @@ export const linkId = f => (isCustomId(f.id) && !String(f.id).includes('~') && !
 /**
  * What every section gets:
  * { f: the record, entry: its ranked entry for the window (null without a
- *   forecast), solo: ranked on its own (not in the list on screen), ctx and
+ *   forecast), pick: the list's pick for the window (its context's; null
+ *   for a trip's), solo: ranked on its own (not in the list on screen), ctx and
  *   ctxLabel: the list it was opened from, occasion: that list's (or null),
  *   owned: in the collection being ranked, active: and switched on, inMine,
  *   worn, canWear, wears, todayISO, win, alts, partners, comfort, about:
@@ -245,13 +247,15 @@ export function bottleModel(route) {
   if (!f) return null;
   const solo = !entry;
   const win = ctx?.win ?? null;
-  if (!entry && win) entry = rank(applySkin([f], loadSkin()), win, win.slot, { occasion: ctx.occasion, history: state.history, todayISO: win.dateISO })[0];
+  // An event's window ranks as the plan ranks it (rankEvent): recent wears don't count there.
+  if (!entry && win) entry = rank(applySkin([f], loadSkin()), win, win.slot, { occasion: ctx.occasion, history: ctx.event ? [] : state.history, todayISO: win.dateISO })[0];
   const owned = inSource(f.id);
   const active = isActive(f.id);
   const others = activeFragrances().filter(o => o.id !== f.id);
   return {
     f,
     entry,
+    pick: ctx?.pick ?? null,
     solo,
     win,
     ctx: key,
@@ -265,7 +269,9 @@ export function bottleModel(route) {
     canWear: Boolean(win) && active && canWear(win),
     wears: wearInfo(f.id),
     todayISO: todayISO(),
-    alts: ctx && !solo ? ctx.ranked.filter(r => r.fragrance.id !== id).slice(0, 4) : [],
+    // The rest of the list's best, led on the pick's own page by the ties
+    // its Week cell names (the context's `ties`), which may rank lower.
+    alts: ctx && !solo ? shelfOf(ctx, id) : [],
     // undefined while a long list's pairings are worked out after the page draws (layeringAfter).
     partners: !others.length ? null : others.length <= LAYER_NOW || pairingKept(others) ? layerPicks(f, others, 3, win ?? undefined) : undefined,
     comfort: comfortRange(f),
@@ -275,6 +281,13 @@ export function bottleModel(route) {
     aboutFailed: state.aboutFailed.has(id),
     arg: id,
   };
+}
+
+// "Also good" on a bottle's page: the context's top 4 after it, the pick's
+// ties first when it's the pick's page.
+export function shelfOf(ctx, id) {
+  const ties = ctx.pick?.fragrance.id === id ? (ctx.ties ?? []) : [];
+  return [...ties, ...ctx.ranked.filter(r => r.fragrance.id !== id && !ties.includes(r))].slice(0, 4);
 }
 
 /** A bottle's about data: the build's (wardrobe, catalog) or loadAbout's; undefined while that loads. */
@@ -331,11 +344,15 @@ function headSection({ f, entry, ctxLabel, solo }) {
     ? '<span class="by-hand">Entered by hand</span>'
     : !f.rating ? 'Unrated'
     : `★ ${f.rating.toFixed(2)} <span>${esc(f.source === 'fragella' ? 'Fragella rating' : `${f.ratingVotes.toLocaleString()} votes`)}</span>`;
-  // Parfumo's 0–10 ratings when we have them, else Fragrantica's votes, else
+  // Parfumo's 0–10 ratings when we have them, with Fragrantica's votes counted
+  // in as the engine reads both (performanceRating; ≈ where most are
+  // Fragrantica's, as Compare marks it), else Fragrantica's votes, else
   // Fragella's words; Lasts and Projects, as compare and On your skin say it.
-  const pf = f.parfumo, fv = f.performance;
+  const pf = f.parfumo, fv = f.performance, p = pf && performanceRating(f);
+  const figure = key => `${p.parfumoShare[key] < 0.5 ? '≈ ' : ''}${p[key].toFixed(1)}`;
+  const parfumo = pf && `<a href="${esc(pf.url)}" target="_blank" rel="noopener" data-focus="bp-parfumo">Parfumo</a>`;
   const performance = pf
-    ? `Lasts ${pf.longevity.toFixed(1)} · Projects ${pf.sillage.toFixed(1)} <span>of 10 on <a href="${esc(pf.url)}" target="_blank" rel="noopener" data-focus="bp-parfumo">Parfumo</a></span>`
+    ? `Lasts ${figure('longevity')} · Projects ${figure('sillage')} <span>of 10 on ${parfumo}${p.parfumoShare.longevity < 1 || p.parfumoShare.sillage < 1 ? ' and Fragrantica' : ''}</span>`
     : fv
     ? `Lasts ${fv.longevity.toFixed(1)} of 5 · Projects ${fv.sillage.toFixed(1)} of 4 <span>on Fragrantica</span>`
     : [f.longevity, f.sillage && `${f.sillage} projection`].filter(Boolean).map(esc).join(' · ');
@@ -408,7 +425,9 @@ function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned, inMine,
 // Why a bottle is given a rest, in the words of its reason (src/engine.js).
 const restText = (parts, slot) => restReason(parts, slot) ?? (parts.planned ? 'Picked for a day nearby' : 'Worn recently');
 
-function whySection({ entry, solo, win }) {
+// The least the heat or cold has to take off for Why to say so, in percent.
+const NOTE_MIN = 2;
+function whySection({ entry, pick, solo, win, occasion, worn, todayISO: today }) {
   if (!entry) return '';
   const p = entry.parts;
   // The rating bar is mostly your stars once you've rated it (engine
@@ -423,8 +442,22 @@ function whySection({ entry, solo, win }) {
   const rotation = p.rotation > 0
     ? `<p class="why-note">${esc(restText(p, win?.slot))}: ${Math.round(p.rotation * 100)}% lower so others get a turn.</p>`
     : '';
+  // What the heat takes off a rich bottle for an occasion (engine richInHeat),
+  // and the cold off a thin one (thinInCold), from NOTE_MIN percent: a point
+  // is a mild evening's or the office commute's, not this heat or cold.
+  const phrase = occasion ? esc(occasion.phrase ?? occasion.label.toLowerCase()) : '';
+  const heat = occasion && p.heat ? Math.round(occasionWeights(occasion).heat * p.heat * 100) : 0;
+  const cold = occasion && p.cold ? Math.round(occasionWeights(occasion).cold * p.cold * 100) : 0;
+  const heavy = heat >= NOTE_MIN ? `<p class="why-note">Rich for this heat: ${heat}% lower for ${phrase}.</p>` : '';
+  const thin = cold >= NOTE_MIN ? `<p class="why-note">Thin for this cold: ${cold}% lower for ${phrase}.</p>` : '';
+  // Kept for an event later in the plan (planWindows' `saved`): its match
+  // stands, another bottle takes the window. Said as on today, as the plan says it.
+  const saved = p.saved && win ? `<p class="why-note">${esc(savedReason(p.saved, today ?? win.dateISO))}, so the plan picks another bottle here.</p>` : '';
   const title = solo ? `How it would do ${win.slot === 'day' ? 'by day' : 'tonight'}` : 'Why it ranks here';
-  return `<section class="bp-section"><h3>${title} <span class="h3-aside">${matchPct(entry)}% match</span></h3><div class="bars why">${bars}</div>${rotation}</section>`;
+  // In the list, beside its pick when that's another bottle (src/contrast.js).
+  const gap = !solo && win ? pickGapLine(entry, pick, win, { occasion, worn }) : '';
+  const vs = gap ? `<p class="why-vs">${esc(gap)}</p>` : '';
+  return `<section class="bp-section"><h3>${title} <span class="h3-aside">${matchPct(entry)}% match</span></h3>${vs}<div class="bars why">${bars}</div>${heavy}${thin}${rotation}${saved}</section>`;
 }
 
 // Only the relative words go lower case: "Also good for tonight", "Also good for Saturday night".

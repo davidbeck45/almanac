@@ -11,8 +11,8 @@
 //   voted note; a listed note nobody voted for counts UNVOTED; a bottle with no
 //   note votes uses its pyramid tier). Evidence = noisy-OR of weight x salience.
 // - sillage (Intimate, and a nudge for Skin scent and Clean), on Parfumo's
-//   0..10 scale via the engine's performanceRating, shrunk toward the middle
-//   when few voted.
+//   0..10 scale via the engine's performanceRating (both crowds, by their
+//   votes), shrunk toward the middle when few voted.
 // base = ACC x accord evidence + NOTE x note evidence (+ style extras), damped
 // by exp(-penalty), the weighted strength of accords that pull away from the
 // style (vanilla and oud aren't "fresh citrus"), then eased toward 1 above 0.8.
@@ -50,9 +50,10 @@ const QUIET_FROM = 7.05, QUIET_SPAN = 0.8;
 const LOUD_FROM = 7.6, LOUD_SPAN = 0.9;
 
 // Clean's soapy-iris facet: an iris accord with neroli (or musk) reads as
-// fine soap (Prada L'Homme). The modern chypre: bergamot over patchouli or
-// labdanum without the moss (31 Rue Cambon).
-const SOAPY_IRIS = 0.5;
+// fine soap (Prada L'Homme, its neroli at 0.57 of its iris's votes). The
+// modern chypre: bergamot over patchouli or labdanum without the moss (31
+// Rue Cambon).
+const SOAPY_IRIS = 0.55;
 const MODERN_CHYPRE = 0.45;
 
 // Note patterns shared by several styles.
@@ -193,8 +194,11 @@ export const STYLES = [
       cacao: 0.3, coffee: 0.3, sweet: 0.15, coconut: 0.4, cherry: 0.5, oud: 0.3, aquatic: 0.15, marine: 0.15, citrus: 0.1,
       'yellow floral': 0.3, powdery: 0.05,
     },
-    // Fougère structure: lavender with coumarin and moss.
-    extra: f => 0.2 * Math.min(f.note(N.lavender) + 0.5 * f.acc('lavender'), 1) * Math.min(1, f.note(N.fougereBase) + 0.3 * f.acc('mossy')),
+    // Fougère structure: lavender with coumarin and moss. A product of
+    // saliences, so the truer note reading (the dataset's votes read as the
+    // min-max scaling they are) cut it most; 0.3, not 0.2, keeps Zino
+    // Davidoff, Capucci and Trumper's Sandalwood barbershop.
+    extra: f => 0.3 * Math.min(f.note(N.lavender) + 0.5 * f.acc('lavender'), 1) * Math.min(1, f.note(N.fougereBase) + 0.3 * f.acc('mossy')),
   },
   {
     id: 'gourmand', label: 'Gourmand', kind: 'scent',
@@ -207,7 +211,9 @@ export const STYLES = [
   {
     id: 'vanilla', label: 'Vanilla', kind: 'scent',
     blurb: 'Vanilla front and center, from boozy-dark to creamy-soft.',
-    ACC: 0.8, NOTE: 0.4,
+    // NOTE 0.42, not 0.4, since the truer note reading: Vanille des Afriques
+    // Intensivo, Eros EDP and Red Tobacco Intense still show it.
+    ACC: 0.8, NOTE: 0.42,
     acc: { vanilla: 1 },
     notes: [[N.vanilla, 1], [/tonka|benzoin/, 0.3], [/heliotrope|coumarin/, 0.15]],
     against: { aquatic: 0.35, marine: 0.35, ozonic: 0.3, green: 0.3, citrus: 0.15, 'fresh spicy': 0.1, herbal: 0.2 },
@@ -331,8 +337,10 @@ export const STYLES = [
     acc: { mossy: 1, earthy: 0.15, patchouli: 0.15 },
     notes: [[N.moss, 1], [/patchouli/, 0.2], [/labdanum|cistus/, 0.15]],
     against: { sweet: 0.15, vanilla: 0.2, caramel: 0.3, tropical: 0.2, aquatic: 0.2, marine: 0.2 },
-    // Chypre structure: citrus top over moss and patchouli or labdanum.
-    extra: f => 0.15 * Math.min(1, f.note(N.oakmoss) + f.acc('mossy'))
+    // Chypre structure: citrus top over moss and patchouli or labdanum, a
+    // product of three saliences that the truer note reading cut most; 0.3,
+    // not 0.15, keeps Ma Griffe, Gentleman (1974) and L'Eau de Chloé chypres.
+    extra: f => 0.3 * Math.min(1, f.note(N.oakmoss) + f.acc('mossy'))
       * Math.min(1, f.note(N.citrus) + f.acc('citrus')) * Math.min(1, f.note(N.chypreBase) + f.acc('patchouli') + 0.5 * f.acc('earthy'))
       // Modern chypre: bergamot over patchouli or labdanum, no moss needed, dry
       // rather than sweet, fruity or vanillic (31 Rue Cambon, not Coco Mademoiselle).
@@ -342,7 +350,9 @@ export const STYLES = [
   {
     id: 'boozy', label: 'Boozy', kind: 'scent',
     blurb: 'Rum, cognac, whiskey and liqueur.',
-    ACC: 0.85, NOTE: 0.65,
+    // NOTE 0.68, not 0.65, since the truer note reading: Old Fashioned,
+    // GNTONIC and Mojito Chypre still show it.
+    ACC: 0.85, NOTE: 0.68,
     acc: { whiskey: 1, rum: 1, alcohol: 0.8, wine: 0.8, vodka: 0.7, Champagne: 0.7 },
     notes: [[N.booze, 1]],
     against: { aquatic: 0.2, marine: 0.2 },
@@ -460,8 +470,9 @@ function features(frag) {
 
   let quiet = null, loud = 0;
   const p = performanceRating(frag);
-  if (p?.sillage != null && p.votes > 0) {
-    const sil = (p.votes * p.sillage + SILLAGE_PRIOR_VOTES * SILLAGE_MID) / (p.votes + SILLAGE_PRIOR_VOTES);
+  if (p?.sillage != null) {
+    const n = p.votes.sillage;
+    const sil = (n * p.sillage + SILLAGE_PRIOR_VOTES * SILLAGE_MID) / (n + SILLAGE_PRIOR_VOTES);
     quiet = clamp((QUIET_FROM - sil) / QUIET_SPAN);
     loud = clamp((sil - LOUD_FROM) / LOUD_SPAN);
   }

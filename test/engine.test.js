@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, restReason, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, seasonFit, SEASONS, votedShares, performanceLevel } from '../src/engine.js';
+import { rank, groupTiers, targetSeasonWeights, calendarSeason, rotationPenalty, restReason, savedReason, eventPhrase, planWindows, comfortRange, dewPointF, targetHeaviness, steadyShares, votedOccasionFit, scoreOf, occasionRaw, occasionPart, occasionWeights, seasonFit, timeFit, SEASONS, votedShares, performanceLevel, PLAN_MARGIN, OTHER_SLOT } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { heaviness } from '../src/accords.js';
 import { predictedShares } from '../src/custom.js';
@@ -76,7 +76,7 @@ test('the calendar eases across month boundaries and fades in the tropics', () =
 test('mugginess follows the dew point, not relative humidity', () => {
   assert.ok(Math.abs(dewPointF(86, 50) - 65) < 1, `${dewPointF(86, 50)}`);
   assert.ok(Math.abs(dewPointF(70, 100) - 70) < 0.1);
-  // 88°F at 55% is oppressive (dew ~70°F); 72°F at 85% is merely damp (~67°F).
+  // 88°F at 55% is oppressive (dew ~70°F); 72°F at 85% is sticky, not oppressive (~67°F).
   assert.ok(targetHeaviness({ feelsF: 88, dewF: 71 }) < targetHeaviness({ feelsF: 88, dewF: 50 }) - 0.2);
   assert.equal(targetHeaviness({ feelsF: 100, dewF: 40 }), targetHeaviness({ feelsF: 100, dewF: 55 }), 'dry heat adds nothing');
   const top = c => rank(fragrances, { ...hotHumidDay, feelsF: 86, ...c }, 'day').slice(0, 5);
@@ -179,11 +179,29 @@ test('cold night: heavy scents on top, fresh ones at the bottom', () => {
   for (const n of FRESH) assert.ok(names(tiers.C).includes(n), `${n} should be C on a cold night`);
 });
 
+test('a cold day forgives a rich bottle its night votes, and stops calling it a night scent', () => {
+  const coldDay = { ...coldNight, feelsF: 10 }, mildDay = { ...mildFallNight, feelsF: 58 };
+  const byName = name => fragrances.find(f => f.name === name);
+  const nightLean = r => r.reasons.some(x => x.text === 'More of a night scent');
+  const prive = byName('CH Men Prive');
+  assert.ok(timeFit(prive, 'day', coldDay) >= timeFit(prive, 'day') + 0.3, 'most of its shortfall goes by day in the cold');
+  assert.ok(timeFit(prive, 'day', mildDay) < timeFit(prive, 'day') + 0.1, 'little of it on a mild day');
+  assert.equal(timeFit(prive, 'day', hotHumidDay), timeFit(prive, 'day'), 'none in the heat');
+  assert.equal(timeFit(prive, 'night', coldNight), timeFit(prive, 'night'), 'nights stay as voted');
+  for (const name of FRESH) assert.equal(timeFit(byName(name), 'day', coldDay), timeFit(byName(name), 'day'), `${name} is no richer for the cold`);
+  // The rich bottles share the cold day's top with Cream Velvet, with no reason against them by day.
+  const cold = rank(fragrances, coldDay, 'day');
+  assert.ok(HEAVY.filter(name => names(cold.slice(0, 6)).includes(name)).length >= 3, names(cold.slice(0, 6)).join(', '));
+  assert.ok(cold.every(r => !nightLean(r)), cold.filter(nightLean).map(r => r.fragrance.name).join(', '));
+  assert.ok(nightLean(rank(fragrances, mildDay, 'day').find(r => r.fragrance === prive)), 'a mild day still says so');
+});
+
 test('comfort range: heavy scents open toward the cold, fresh ones toward the heat', () => {
   const byName = name => comfortRange(fragrances.find(f => f.name === name));
   const amber = byName('Amber Empire');
   assert.equal(amber.lowF, null);
-  assert.ok(amber.highF >= 40 && amber.highF <= 58, `Amber Empire tops out at ${amber.highF}°F`);
+  // Collectors wear rich ambers into cool fall evenings, not only in the frost.
+  assert.ok(amber.highF >= 45 && amber.highF <= 58, `Amber Empire tops out at ${amber.highF}°F`);
   assert.equal(amber.bestF, null, 'no single best for an open range');
   const fresh = byName('Essence de Blanc');
   assert.equal(fresh.highF, null);
@@ -191,6 +209,10 @@ test('comfort range: heavy scents open toward the cold, fresh ones toward the he
   const allRounder = byName('Sauvage');
   assert.ok(allRounder.lowF < 60 && allRounder.highF > 80, JSON.stringify(allRounder));
   assert.ok(allRounder.bestF > allRounder.lowF && allRounder.bestF < allRounder.highF);
+  // A range wide enough for that still closes on both ends for bottles with a best weather, not "any heat".
+  for (const name of ["Supremacy Collector's Edition Pour Homme", 'Sandalwood & Musk', 'Zahri Amara']) {
+    assert.notEqual(byName(name).bestF, null, `${name}: ${JSON.stringify(byName(name))}`);
+  }
   for (const f of fragrances) {
     const { lowF, highF } = comfortRange(f);
     assert.ok(lowF === null || highF === null || lowF < highF, f.name);
@@ -245,12 +267,15 @@ test('office wants moderate projection that lasts the day, not a whisper that fa
   const office = occasionById('office');
   const base = fragrances.find(f => f.name === 'Cedrus Blanc');
   // Parfumo's 0–10: 6.2 sillage and 6.6 longevity read -1, 7.04 sillage -0.3, 7.8 longevity the middle.
-  const at = (sillage, longevity) => occasionRaw({ ...base, parfumo: { sillage, longevity, votes: 1000 } }, office);
+  const at = (sillage, longevity, occasion = office) => occasionRaw({ ...base, parfumo: { sillage, longevity, votes: 1000 }, performance: undefined }, occasion);
   const moderate = at(7.04, 7.8);
   assert.ok(moderate > at(6.2, 6.6) + 0.1, 'a body mist gone by lunch');
   assert.ok(moderate > at(8.6, 7.8), 'a loud one');
   assert.ok(moderate > at(6.2, 7.8) && at(6.2, 7.8) > at(8.6, 7.8), 'quieter than enough earns nothing more, and still beats loud');
   assert.ok(at(7.04, 8.8) > moderate, 'lasting longer helps');
+  // Lasting the working day is enough: past it a beast earns nothing more, where Formal still counts it.
+  assert.equal(at(7.04, 8.8), at(7.04, 9.6));
+  assert.ok(at(7.04, 9.6, occasionById('formal')) > at(7.04, 8.8, occasionById('formal')));
   // The reason still says what it does.
   const reasons = rank([{ ...base, parfumo: { sillage: 6.2, longevity: 6.6, votes: 1000 } }], mildFallNight, 'day', { occasion: office })[0].reasons.map(r => r.text);
   assert.ok(reasons.includes('Stays close to the skin') && reasons.includes('Fades early'), reasons.join(' | '));
@@ -268,6 +293,26 @@ test('office wants moderate projection that lasts the day, not a whisper that fa
       }
     }
   }
+});
+
+test('longevity and sillage read both crowds, each by its votes', () => {
+  const base = { id: 'x', accords: { woody: 100 } };
+  // Fragrantica's 3.0 of 5 and 2.0 of 4 put on Parfumo's scale: about 6.7 and 6.6, both under the middle.
+  const fragrantica = { longevity: 3, sillage: 2, votes: 500 };
+  const level = (parfumo, key) => performanceLevel({ ...base, parfumo, performance: fragrantica }, key);
+  const alone = key => performanceLevel({ ...base, performance: fragrantica }, key);
+  const few = { longevity: 8.4, sillage: 8.2, votes: 11 }, many = { ...few, votes: 5000 };
+  for (const key of ['longevity', 'sillage']) {
+    assert.ok(level(few, key) < 0 && level(few, key) - alone(key) < 0.4, `${key}: 11 Parfumo votes don't outweigh 500 on Fragrantica`);
+    assert.ok(Math.abs(level(many, key) - performanceLevel({ ...base, parfumo: many }, key)) < 0.05, `${key}: 5,000 barely move`);
+  }
+  // Sandalwood & Musk: 11 Parfumo votes said it lasts nearly as long as most; its 23 on Fragrantica, that it fades.
+  const sm = fragrances.find(f => f.name === 'Sandalwood & Musk');
+  assert.ok(performanceLevel(sm, 'longevity') < performanceLevel({ ...sm, performance: undefined }, 'longevity') - 0.2);
+  assert.ok(performanceLevel(sm, 'longevity') < -0.5, `${performanceLevel(sm, 'longevity')}`);
+  // Sauvage's thousands on both agree, and Parfumo's lead.
+  const sauvage = fragrances.find(f => f.name === 'Sauvage');
+  assert.ok(Math.abs(performanceLevel(sauvage, 'sillage') - performanceLevel({ ...sauvage, performance: undefined }, 'sillage')) < 0.02);
 });
 
 test('Parfumo occasion votes nudge a bottle toward what voters wear it for', () => {
@@ -329,12 +374,120 @@ test('scoreOf is the score rank() orders by', () => {
     }
   }
   const date = occasionById('date');
-  assert.equal(occasionPart(occasionRaw(fragrances[0], date), date), rank([fragrances[0]], mildFallNight, 'night', { occasion: date })[0].parts.occasion);
+  assert.equal(occasionPart(occasionRaw(fragrances[0], date, 'night', mildFallNight), date), rank([fragrances[0]], mildFallNight, 'night', { occasion: date })[0].parts.occasion);
+});
+
+test('Date Night and Night Out count night votes on a cold night, not on a hot one, and Formal never', () => {
+  // Members call CH Men Prive and Hawas Elixir date and party bottles; the accords alone left them well under the top.
+  const cold = { feelsF: 30, humidity: 60, dewF: 20, category: 'clear', date: JAN, dateISO: '2027-01-15', lat: 41.9 };
+  const hot = { feelsF: 85, humidity: 60, dewF: 70, category: 'clear', date: AUG, dateISO: '2026-08-05', lat: 41.9 };
+  const behind = (ranked, name) => ranked[2].score - ranked.find(s => s.fragrance.name === name).score;
+  for (const id of ['date', 'nightout']) {
+    const on = occasionById(id), off = { ...on, night: 0 };
+    const [lit, plain] = [on, off].map(occasion => rank(fragrances, cold, 'night', { occasion }));
+    for (const name of ['CH Men Prive', 'Hawas Elixir']) assert.ok(behind(lit, name) < behind(plain, name) - 0.005, `${id} ${name}`);
+    const scores = occasion => rank(fragrances, hot, 'night', { occasion }).map(s => [s.fragrance.id, s.score]);
+    assert.deepEqual(scores(on), scores(off), `${id} on a hot night`);
+  }
+  assert.ok(!occasionById('formal').night);
 });
 
 test('formal favors iris and powder', () => {
   const formal = groupTiers(rank(fragrances, mildFallNight, 'night', { occasion: occasionById('formal') }));
   assert.ok(names(formal.S).includes('Meant To Be Seen'));
+});
+
+test('a sweltering night keeps winter bottles out of a date’s and a night out’s top tiers, not out of a night in', () => {
+  // 90°F at a dew point of 70: the date's love of vanilla and amber once put
+  // Liquid Brun third and five of these A, each "Too rich for sticky heat".
+  const RICH = [...HEAVY, 'Cream Velvet', 'Sticky Fingers'];
+  const sweltering = { feelsF: 90, humidity: 75, dewF: 70, category: 'clear', date: AUG, dateISO: '2026-08-05', lat: 40 };
+  for (const id of ['date', 'nightout']) {
+    const ranked = rank(fragrances, sweltering, 'night', { occasion: occasionById(id) });
+    const top = names(ranked.slice(0, 3));
+    for (const n of top) assert.ok(!RICH.includes(n), `${id}: ${top.join(', ')}`);
+    for (const r of ranked.filter(r => RICH.includes(r.fragrance.name))) assert.ok(r.tier === 'B' || r.tier === 'C', `${id}: ${r.fragrance.name} is ${r.tier}`);
+  }
+  // A night in is spent indoors: Cream Velvet still makes its top 3.
+  assert.ok(names(rank(fragrances, sweltering, 'night', { occasion: occasionById('cozy') }).slice(0, 3)).includes('Cream Velvet'));
+  // Daily picks pay nothing extra: the penalty is an occasion's.
+  const daily = rank(fragrances, sweltering, 'night');
+  assert.ok(daily.every(r => r.parts.heat === null) && daily.every(r => r.score === scoreOf(r.parts)));
+});
+
+test('a freezing day outdoors wants a bottle that carries in cold air, not a thin citrus; a hot one and a night in don’t move', () => {
+  // 25°F in mid-January: Outdoors' love of citrus once put Cedrus Blanc first
+  // on every cold day, over Sauvage by 0.024, "thin in the cold".
+  const outdoors = occasionById('outdoors'), cozy = occasionById('cozy');
+  const freezing = { feelsF: 25, humidity: 60, dewF: 17, category: 'clear', date: JAN, dateISO: '2027-01-15', lat: 41.9 };
+  const ranked = rank(fragrances, freezing, 'day', { occasion: outdoors });
+  const top = ranked[0].fragrance;
+  assert.ok(!FRESH.includes(top.name) && heaviness(top.accords) >= -0.15, `${top.name}: ${names(ranked.slice(0, 5)).join(', ')}`);
+  // What carries in cold air: fresh spice and aromatics over woods (Sauvage,
+  // Vintage Radio's lavender woods), or a little warmth (Détour Noir) and more.
+  const CARRIES = ['Sauvage', 'Vintage Radio', 'Détour Noir', ...HEAVY];
+  assert.ok(names(ranked.slice(0, 3)).some(n => CARRIES.includes(n)), names(ranked.slice(0, 3)).join(', '));
+  // A thin bottle says why, in the occasion's words and in place of the weather's, never both.
+  const texts = r => r.reasons.map(x => x.text);
+  assert.ok(texts(ranked.find(r => r.fragrance.name === 'Cedrus Blanc')).includes('Thin for the outdoors in the cold'));
+  assert.ok(texts(ranked.find(r => r.fragrance.name === 'Jake')).includes('Thin for the outdoors in the cold'));
+  for (const r of ranked) assert.ok(!(texts(r).includes('Thin in the cold') && texts(r).some(t => t.startsWith('Thin for'))), r.fragrance.name);
+  // A bottle near neutral pays a little but isn't called thin (Supremacy, -0.13).
+  const supremacy = ranked.find(r => r.fragrance.name.startsWith('Supremacy'));
+  assert.ok(heaviness(supremacy.fragrance.accords) > -0.15 && supremacy.parts.cold > 0);
+  assert.ok(!texts(supremacy).some(t => t.startsWith('Thin')), texts(supremacy).join(' | '));
+  // An occasion spent mostly inside keeps the weather's words, however much the cold costs:
+  // a date is out 0.3 of the time, a night out half of it.
+  const thinnest = { ...fragrances.find(f => f.name === 'Essence de Blanc'), id: 'thin', accords: { citrus: 100, aquatic: 95, ozonic: 90, fresh: 85, marine: 80 } };
+  const coldText = id => texts(rank([thinnest], freezing, occasionById(id).slot, { occasion: occasionById(id) })[0]).filter(t => t.startsWith('Thin'));
+  assert.deepEqual(coldText('office'), ['Thin in the cold']);
+  assert.deepEqual(coldText('date'), ['Thin in the cold']);
+  assert.deepEqual(coldText('nightout'), ['Thin for a night out in the cold']);
+  assert.ok(ranked.every(r => scoreOf(r.parts, outdoors) === r.score));
+  // Daily picks keep the weather's own words and pay nothing extra.
+  const daily = rank(fragrances, freezing, 'day');
+  assert.ok(daily.every(r => r.parts.cold === null) && texts(daily.find(r => r.fragrance.name === 'Jake')).includes('Thin in the cold'));
+  // A hot day costs no bottle anything for the cold: the fresh ones still lead.
+  const hot = rank(fragrances, { ...hotHumidDay, dateISO: '2026-08-05' }, 'day', { occasion: outdoors });
+  assert.ok(hot.every(r => r.parts.cold === 0));
+  for (const n of names(hot.slice(0, 3))) assert.ok(FRESH.includes(n), names(hot.slice(0, 3)).join(', '));
+  // A night in is spent indoors: the cold costs nothing there, and nothing says it does.
+  const cold = { ...freezing, feelsF: 20 };
+  const night = rank(fragrances, cold, 'night', { occasion: cozy });
+  assert.equal(occasionWeights(cozy).cold, 0);
+  assert.ok(night.every(r => !texts(r).some(t => t.startsWith('Thin for'))));
+  assert.deepEqual(names(night.slice(0, 2)).sort(), ['Amber Empire', 'Cream Velvet']);
+  // The office, out a little of the time, pays for that share: its cold-day best stays the same.
+  const office = occasionById('office');
+  assert.ok(Math.abs(occasionWeights(office).cold - office.outside * occasionWeights(outdoors).cold) < 1e-12);
+  assert.equal(rank(fragrances, freezing, 'day', { occasion: office })[0].fragrance.name, 'Meant To Be Seen');
+});
+
+test('casual reads like daily picks with a tilt: winter bottles on a cold day, nothing fresh', () => {
+  const casual = occasionById('casual');
+  const cold = { feelsF: 20, humidity: 60, dewF: 12, category: 'clear', date: JAN, dateISO: '2027-01-15', lat: 40 };
+  for (const slot of ['day', 'night']) {
+    const daily = names(rank(fragrances, cold, slot).slice(0, 3)), top = names(rank(fragrances, cold, slot, { occasion: casual }).slice(0, 5));
+    assert.ok(daily.includes(top[0]), `${slot}: ${top[0]} leads Casual, the day's best are ${daily.join(', ')}`);
+    for (const n of top) assert.ok(!FRESH.includes(n), `${slot}: ${top.join(', ')}`);
+  }
+  // Its mild profile once read on a 0..1 stretch like Formal's and outweighed
+  // the weather: a near-fresh woody led every cold day and Cream Velvet sat
+  // 21st. Now its pick is nearly always one daily picks would offer too.
+  let within = 0, n = 0;
+  for (const month of ['01', '04', '07', '10']) {
+    for (const feelsF of [5, 20, 35, 50, 65, 80, 95]) {
+      for (const slot of ['day', 'night']) {
+        const dateISO = `2026-${month}-15`;
+        const c = { feelsF, humidity: 60, dewF: Math.min(feelsF - 8, 72), category: 'clear', date: new Date(`${dateISO}T12:00:00`), dateISO, lat: 40 };
+        const daily = rank(fragrances, c, slot), pick = rank(fragrances, c, slot, { occasion: casual })[0];
+        const best = daily[0].score, as = daily.find(r => r.fragrance.id === pick.fragrance.id).score;
+        n++;
+        if (best - as <= PLAN_MARGIN) within++;
+      }
+    }
+  }
+  assert.ok(within >= 0.9 * n, `${within} of ${n} within PLAN_MARGIN of the day's best`);
 });
 
 test('wearing something yesterday pushes it down today', () => {
@@ -347,24 +500,46 @@ test('wearing something yesterday pushes it down today', () => {
   assert.ok(moved.reasons.some(r => r.text === 'Worn yesterday'));
 });
 
-test('a month of steady weather rotates through the wardrobe', () => {
-  // Wear every Today pick for 28 days at 62°F by day and 54°F at night.
+// Wear every Today pick for 28 days of steady weather from the 1st of a
+// month (Date.UTC's year and month), [feelsF, dewF] by day and at night.
+// -> how often each bottle was worn, in all and by day.
+function wearMonth(year, month, [dayF, dayDew], [nightF, nightDew]) {
   let history = [];
-  const worn = new Map();
+  const worn = new Map(), byDay = new Map();
+  const add = (map, name) => map.set(name, (map.get(name) ?? 0) + 1);
   for (let i = 0; i < 28; i++) {
-    const dateISO = new Date(Date.UTC(2026, 9, 1 + i)).toISOString().slice(0, 10);
+    const dateISO = new Date(Date.UTC(year, month, 1 + i)).toISOString().slice(0, 10);
     const date = new Date(`${dateISO}T12:00:00`);
     const windows = [
-      { ...mildFallNight, feelsF: 62, dewF: 50, date, dateISO, slot: 'day' },
-      { ...mildFallNight, feelsF: 54, dewF: 46, date, dateISO, slot: 'night' },
+      { ...mildFallNight, feelsF: dayF, dewF: dayDew, date, dateISO, slot: 'day' },
+      { ...mildFallNight, feelsF: nightF, dewF: nightDew, date, dateISO, slot: 'night' },
     ];
     for (const { win, pick } of planWindows(fragrances, windows, { history })) {
       history = [{ id: pick.fragrance.id, date: dateISO, slot: win.slot }, ...history];
-      worn.set(pick.fragrance.name, (worn.get(pick.fragrance.name) ?? 0) + 1);
+      add(worn, pick.fragrance.name);
+      if (win.slot === 'day') add(byDay, pick.fragrance.name);
     }
   }
+  return { worn, byDay };
+}
+
+test('a month of steady weather rotates through the wardrobe', () => {
+  // October at 62°F by day and 54°F at night.
+  const { worn } = wearMonth(2026, 9, [62, 50], [54, 46]);
   assert.ok(worn.size >= 12, `only ${worn.size} bottles in 56 wears: ${[...worn].join(', ')}`);
   assert.ok(Math.max(...worn.values()) <= 10, 'no bottle takes over');
+});
+
+test('a winter month shares its days among the rich bottles', () => {
+  // Voters call most rich bottles night scents, which a cold day forgives:
+  // held against them, Cream Velvet (voted half by day) took 14 of 56 wears.
+  for (const [day, night] of [[[22, 14], [15, 7]], [[35, 27], [28, 20]]]) {
+    const { worn, byDay } = wearMonth(2027, 0, day, night);
+    const list = [...worn].map(([name, n]) => `${name} ${n}`).join(', ');
+    assert.ok(Math.max(...worn.values()) <= 11, `no bottle takes over at ${day[0]}°F: ${list}`);
+    assert.ok(!FRESH.some(name => worn.has(name)), `nothing fresh at ${day[0]}°F: ${list}`);
+    if (day[0] < 30) assert.ok(HEAVY.filter(name => byDay.has(name)).length >= 3, `rich bottles take cold days: ${[...byDay.keys()].join(', ')}`);
+  }
 });
 
 test('a wear lingers in the ranking for ten days, fading', () => {
@@ -380,6 +555,15 @@ test('the pick you log for a slot is not penalized in that slot', () => {
   const history = [{ id: 1, date: '2026-09-28', slot: 'day' }];
   assert.equal(rotationPenalty(1, history, '2026-09-28', 'day').penalty, 0);
   assert.equal(rotationPenalty(1, history, '2026-09-28', 'night').penalty, 0.2);
+  // An earlier day's other slot counts less; a wear without a slot counts in full.
+  assert.equal(rotationPenalty(1, history, '2026-09-29', 'night').penalty, 0.12 * OTHER_SLOT);
+  assert.equal(rotationPenalty(1, history, '2026-09-29', 'day').penalty, 0.12);
+  assert.equal(rotationPenalty(1, [{ id: 1, date: '2026-09-28' }], '2026-09-29', 'night').penalty, 0.12);
+  // Worn last night and by day two days back: the older wear weighs more, but the reason names last night's.
+  const both = rotationPenalty(1, [{ id: 1, date: '2027-01-14', slot: 'night' }, { id: 1, date: '2027-01-13', slot: 'day' }], '2027-01-15', 'day');
+  assert.equal(both.penalty, 0.08);
+  assert.equal(both.daysAgo, 1);
+  assert.equal(restReason(both, 'day'), 'Worn yesterday');
 });
 
 test('summarize splits the forecast into day and night windows in local time', () => {
@@ -494,4 +678,88 @@ test('a logged wear stays the pick for its window', () => {
   const last = rank(fragrances, win, 'night').at(-1).fragrance;
   const [p] = planWindows(fragrances, [win], { history: [{ id: last.id, date: dateISO, slot: 'night' }] });
   assert.equal(p.pick.fragrance.id, last.id);
+});
+
+// A week of mild fall weather, Thursday Oct 1 to Wednesday Oct 7, with a
+// formal Saturday night (Oct 3) when `formal` is set.
+function eventWeek(events = {}) {
+  const windows = [];
+  for (let i = 0; i < 7; i++) {
+    const dateISO = `2026-10-${String(i + 1).padStart(2, '0')}`;
+    const date = new Date(`${dateISO}T12:00:00`);
+    for (const slot of ['day', 'night']) {
+      const occasion = events[`${dateISO} ${slot}`];
+      windows.push({ ...mildFallNight, ...(slot === 'day' && { feelsF: 66 }), date, dateISO, slot, ...(occasion && { occasion: occasionById(occasion) }) });
+    }
+  }
+  return windows;
+}
+
+test('an event takes the occasion’s best, and the plan around it barely moves', () => {
+  const plain = planWindows(fragrances, eventWeek());
+  const windows = eventWeek({ '2026-10-03 night': 'formal' });
+  const at = windows.findIndex(w => w.occasion);
+  const plan = planWindows(fragrances, windows);
+  const best = rank(fragrances, windows[at], 'night', { occasion: occasionById('formal'), todayISO: '2026-10-03' })[0];
+  assert.equal(plan[at].pick.fragrance.id, best.fragrance.id, 'rank()’s formal top');
+  assert.equal(plan[at].pick.score, best.score, 'scored as rank() scores it');
+  assert.ok(plan[at].pick.score > plain[at].pick.score + 0.02, `the event gains: ${plan[at].pick.score} against ${plain[at].pick.score}`);
+  // Elsewhere the plan stays as good as it was, and every pick within reach of its window's top.
+  const others = plan.map((p, i) => i).filter(i => i !== at);
+  const drift = others.reduce((sum, i) => sum + plan[i].pick.score - plain[i].pick.score, 0) / others.length;
+  assert.ok(Math.abs(drift) <= 0.005, `the other windows moved ${drift.toFixed(4)} a window`);
+  for (const i of others) assert.ok(plan[i].ranked[0].score - plan[i].pick.score <= PLAN_MARGIN);
+  // Its bottle sits out the windows before it, saying why as on the plan's
+  // first day, and counts as planned after it.
+  const id = best.fragrance.id;
+  for (const p of plan.slice(0, at)) {
+    assert.notEqual(p.pick.fragrance.id, id, `${p.win.dateISO} ${p.win.slot}`);
+    const entry = p.ranked.find(r => r.fragrance.id === id);
+    assert.ok(entry.reasons.some(r => r.text === 'Saved for formal wear on Saturday night'), entry.reasons.map(r => r.text).join('; '));
+  }
+  // Planned from the Friday, every window says it from there, Saturday's day included.
+  const fromFriday = planWindows(fragrances, windows.slice(2), { nowISO: '2026-10-02' });
+  for (const p of fromFriday.slice(0, at - 2)) assert.ok(p.ranked.find(r => r.fragrance.id === id).reasons.some(r => r.text === 'Saved for formal wear tomorrow night'), `${p.win.dateISO} ${p.win.slot}`);
+  // On the event's own day it's saved, not already picked: it keeps its score and says so once.
+  const sameDay = plan[at - 1].ranked.find(r => r.fragrance.id === id);
+  const alone = rank(fragrances, windows[at - 1], 'day', { todayISO: '2026-10-03' }).find(r => r.fragrance.id === id);
+  assert.equal(sameDay.parts.rotation, 0);
+  assert.equal(sameDay.score, alone.score);
+  assert.deepEqual(sameDay.reasons.filter(r => /^(Saved|Already|Picked)/.test(r.text)).map(r => r.text), ['Saved for formal wear on Saturday night']);
+  assert.ok(plan[at + 1].ranked.find(r => r.fragrance.id === id).reasons.some(r => r.text === 'Picked the day before'));
+  assert.ok(plan.slice(at + 1).every(p => !p.ranked.some(r => r.parts.saved)), 'nothing saved once it’s past');
+  // Without an event nothing is saved.
+  assert.ok(plain.every(p => p.ranked.every(r => !r.parts.saved)));
+});
+
+test('an event wants the best bottle: wears before it don’t count there, its own logged wear does', () => {
+  const windows = eventWeek({ '2026-10-03 night': 'formal' });
+  const at = windows.findIndex(w => w.occasion);
+  const best = planWindows(fragrances, windows)[at].pick.fragrance;
+  // Worn the night before: the day after still rotates it out; the event keeps it.
+  const history = [{ id: best.id, date: '2026-10-02', slot: 'night' }];
+  const plan = planWindows(fragrances, windows, { history, nudge: true });
+  assert.equal(plan[at].pick.fragrance.id, best.id);
+  assert.equal(plan[at].pick.parts.rotation, 0);
+  assert.ok(!plan[at].ranked.some(r => r.nudged), 'never nudged');
+  const other = fragrances.find(f => f.id !== best.id && f.name === 'Amber Empire');
+  const logged = planWindows(fragrances, windows, { history: [{ id: other.id, date: '2026-10-03', slot: 'night' }] });
+  assert.equal(logged[at].pick.fragrance.id, other.id, 'what he wore stays the pick');
+  // A pick that's worn anyway, with nothing new close, doesn't say it's saved.
+  const one = [best];
+  const lone = planWindows(one, windows);
+  assert.ok(lone.every(p => p.pick.fragrance.id === best.id && !p.pick.reasons.some(r => /^Saved/.test(r.text))));
+  // Two events can share their best bottle.
+  const two = planWindows(fragrances, eventWeek({ '2026-10-02 night': 'formal', '2026-10-03 night': 'formal' }));
+  assert.equal(two[3].pick.fragrance.id, best.id);
+  assert.equal(two[5].pick.fragrance.id, best.id);
+});
+
+test('a saved bottle is said in plain words, no temperature', () => {
+  const formal = occasionById('formal'), date = occasionById('date'), office = occasionById('office');
+  assert.equal(savedReason({ dateISO: '2026-10-03', slot: 'night', occasion: date }, '2026-10-03'), 'Saved for a date tonight');
+  assert.equal(savedReason({ dateISO: '2026-10-04', slot: 'day', occasion: office }, '2026-10-03'), 'Saved for the office tomorrow');
+  assert.equal(savedReason({ dateISO: '2026-10-03', slot: 'night', occasion: formal }, '2026-09-29'), 'Saved for formal wear on Saturday night');
+  assert.equal(eventPhrase({ dateISO: '2026-10-05', slot: 'day', occasion: office }, '2026-10-01'), 'the office on Monday');
+  assert.equal(eventPhrase({ dateISO: '2026-12-12', slot: 'night', occasion: formal }, '2026-10-01'), 'formal wear on the night of Dec 12');
 });

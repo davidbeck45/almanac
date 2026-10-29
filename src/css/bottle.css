@@ -78,6 +78,8 @@
   font-weight: 600;
 }
 .h3-aside { color: var(--ambient); font-size: var(--fs-footnote); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* Beside the window's pick: "3 points under Cream Velvet tonight, mostly the season fit." */
+.why-vs { margin: calc(-1 * var(--s-1)) 0 var(--s-3); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .why-note { margin-top: var(--s-2); color: var(--negative); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .two-col { display: grid; gap: var(--s-6); }
 @media (min-width: 480px) { .two-col { grid-template-columns: 1.25fr 1fr; } }

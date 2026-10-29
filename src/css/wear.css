@@ -251,6 +251,43 @@
 .nudge svg { width: 14px; height: 14px; flex: none; }
 .pick.full .nudge { margin-top: calc(-1 * var(--s-1)); }
 .next-window .nudge { align-self: flex-start; margin: 0; }
+/* A window planned for an occasion: what for, in the occasion's glyph, in
+   the same quiet pill (it's why this bottle, not one more reason it fits),
+   and on Now a link that takes the plan off. */
+.pick-event { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-3); margin: 0 0 var(--s-3); }
+.event-tag { display: inline-flex; align-items: center; gap: var(--s-1); padding: var(--s-0) var(--s-2) var(--s-0) var(--s-1); border-radius: var(--r-pill); background: color-mix(in srgb, var(--ambient) 12%, transparent); color: var(--ambient); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
+.event-tag svg { width: 14px; height: 14px; flex: none; }
+.pick-event .link-btn { font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.next-window .pick-event { margin: 0; }
+/* Toss-ups: the bottles that suit the window as well as the pick, under
+   its reasons, each name a link to its page. */
+.ties { display: flex; align-items: flex-start; gap: var(--s-2); margin: calc(-1 * var(--s-1)) 0 var(--s-3); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.ties svg { width: 16px; height: 16px; flex: none; margin-top: 1px; color: var(--ambient); }
+.ties .link-btn { color: var(--text-primary); font-weight: 500; }
+/* Now's one question: its stars under Wear this once he's wearing it (the
+   bottle page's star buttons), how yesterday's wore under today's picks. */
+.ask { display: grid; gap: var(--s-2); }
+.ask-stars { margin-top: var(--s-3); padding-top: var(--s-2); border-top: 1px solid var(--border-subtle); }
+.ask-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--s-3); }
+.ask-row.stacked { display: grid; gap: var(--s-1); }
+.ask-title, .ask-label { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.ask-title { font-weight: 600; }
+.ask-title b { color: var(--text-primary); font-family: var(--display); font-style: italic; font-weight: 600; }
+/* The label goes above the stars when the three don't fit (a phone's card),
+   and Not now under them, to the right, when even the two don't (a phone
+   under about 375px). */
+.ask-pick { display: flex; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; align-items: center; gap: 0 var(--s-3); }
+.ask-skip { margin-left: auto; font-size: var(--fs-footnote); white-space: nowrap; }
+.ask-said { padding: var(--s-2) var(--s-3); border-radius: var(--r-control); background: color-mix(in srgb, var(--ambient) 12%, transparent); color: var(--text-primary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
+.ask-skin { gap: var(--s-3); margin-top: var(--s-3); padding: var(--s-4); border-radius: var(--r-inset); border: 1px solid var(--border-subtle); background: var(--fill-faint); }
+.ask-head { display: flex; align-items: center; gap: var(--s-3); }
+.ask-head img { width: 32px; height: auto; flex: none; filter: var(--drop-bottle); }
+.ask-head .ask-title { font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 500; color: var(--text-primary); }
+/* Footnote-sized answers, each as wide as its words, so "Lasted longer"
+   keeps to one line on a phone. */
+.ask-skin .seg { min-width: 0; }
+.ask-skin .seg.wide > button { flex: 1 1 auto; font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.ask-actions { display: flex; justify-content: flex-end; margin: calc(-1 * var(--s-2)) calc(-1 * var(--s-2)) calc(-1 * var(--s-2)) 0; }
 /* How much to spray: one line that opens the bottle page's spray section. */
 .spray-hint {
   position: relative;
@@ -398,10 +435,17 @@
 .wk-pick.worn .wk-slot { color: var(--positive); }
 .wk-text { display: grid; min-width: 0; }
 .wk-text b { overflow: hidden; font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.wk-nudge { display: flex; align-items: center; gap: var(--s-1); overflow: hidden; color: var(--ambient); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 500; white-space: nowrap; }
-.wk-nudge svg { width: 11px; height: 11px; flex: none; }
-.wk-nudge span { overflow: hidden; text-overflow: ellipsis; }
-.wk-nudge .wk-short { display: none; }
+/* Under the name, one mark at most: what a planned window is for, else the
+   nudge's idle days. */
+.wk-mark { display: flex; align-items: center; gap: var(--s-1); overflow: hidden; color: var(--ambient); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 500; white-space: nowrap; }
+.wk-mark svg { width: 11px; height: 11px; flex: none; }
+.wk-mark span { overflow: hidden; text-overflow: ellipsis; }
+.wk-mark .wk-short { display: none; }
+.wk-pick.event { border-color: color-mix(in srgb, var(--ambient) 40%, var(--border-subtle)); }
+.wk-event { font-weight: 600; }
+/* "+2 as good", in a row and in the columns alike. */
+.wk-tie { color: var(--text-secondary); font-weight: 400; font-variant-numeric: tabular-nums; }
+.wk-tie svg { color: var(--ambient); }
 /* The note under the head says what the clock means. */
 .wk-legend { display: flex; align-items: center; gap: var(--s-1); margin-top: var(--s-1); color: var(--ambient); }
 .wk-legend svg { width: 13px; height: 13px; flex: none; }
@@ -446,12 +490,13 @@
   .wk-pick img { width: 40px; height: 48px; }
   .wk-text { justify-items: center; max-width: 100%; }
   .wk-text b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; min-height: calc(2 * var(--lh-footnote)); }
-  /* The nudge in the column's words: the clock and "34 days", on a line
-     every cell keeps while one has it, so the days' cells stay in rows. */
-  .wk-list.nudged .wk-text { align-content: start; min-height: calc(2 * var(--lh-footnote) + var(--lh-caption)); }
-  .wk-nudge { justify-content: center; max-width: 100%; }
-  .wk-nudge .wk-long { display: none; }
-  .wk-nudge .wk-short { display: inline; }
+  /* The marks in the column's words ("Formal"; the clock and "34 days"),
+     on a line every cell keeps while one has it, so the days' cells stay in
+     rows. */
+  .wk-list.marked .wk-text { align-content: start; min-height: calc(2 * var(--lh-footnote) + var(--lh-caption)); }
+  .wk-mark { justify-content: center; max-width: 100%; }
+  .wk-mark .wk-long { display: none; }
+  .wk-mark .wk-short { display: inline; }
   .wk-pick.empty { grid-template-columns: 1fr; min-height: 104px; place-content: center; }
 }
 
@@ -516,8 +561,15 @@
   .occ-when-controls .occ-slots { display: flex; width: 100%; margin-left: 0; }
   .occ-when-controls .occ-slots > * { flex: 1; }
 }
+/* Planning the window shown: a button, or the plan and Clear. */
+.occ-plan { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-3); margin: 0; }
+.occ-plan.on { gap: var(--s-1) var(--s-2); color: var(--ambient); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
+.occ-plan.on svg { width: 16px; height: 16px; flex: none; }
+.occ-plan .link-btn { margin-left: var(--s-1); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 500; }
+.occ-plan-note { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 @container page (min-width: 700px) {
   .occ-when { grid-template-columns: auto 1fr; align-items: center; column-gap: var(--s-4); }
+  .occ-plan { grid-column: 2; }
 }
 
 /* Date and place pills: the date in words (a button, for keyboards) with a

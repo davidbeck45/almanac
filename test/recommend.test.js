@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findOccasion, matchBottles, parseEvents, weatherFailure } from '../scripts/recommend.mjs';
+import { journalExport, journalToken, shiftISO } from '../src/history.js';
 
 const script = fileURLToPath(new URL('../scripts/recommend.mjs', import.meta.url));
 const mock = fileURLToPath(new URL('./mock-fetch.mjs', import.meta.url));
@@ -169,6 +170,48 @@ test('--journal rotates out what was just worn, and --week --occasion plans its 
   assert.ok(slots.length >= 6 && slots.every(s => s === 'night'), slots.join(','));
 });
 
+test('--journal takes the app’s Copy for Claude as it takes an export, and a plan without either says so', () => {
+  const bare = cli('--loc', '40.7,-74', '--json', '--slot', 'night');
+  const first = JSON.parse(bare.stdout);
+  assert.equal(first.journal, false);
+  assert.match(cli('--loc', '40.7,-74').stdout, /\n\nNot counting what you've worn lately: send the app's Copy for Claude \(Wardrobe › Worn\) to fix that\.\n$/);
+  assert.match(cli('--loc', '40.7,-74', '--week').stdout, /Not counting what you've worn lately/);
+  const night = first.slots[0];
+  const worn = fragrances.find(f => f.name === night.pick.name);
+  const runnerUp = fragrances.find(f => f.name === night.pick.runnerUp);
+  const jake = fragrances.find(f => f.name === 'Jake');
+  const today = night.window.date;
+  const yesterday = shiftISO(today, -1);
+  const history = [{ id: String(worn.id), date: yesterday, slot: 'night', occasion: 'daily' }];
+  const skin = { [runnerUp.id]: { rating: 5, longevity: 0, sillage: 0 } };
+  const token = journalToken(history, [String(jake.id)], skin, { todayISO: today });
+
+  const run = cli('--loc', '40.7,-74', '--json', '--slot', 'night', '--journal', token);
+  assert.equal(run.status, 0, run.stderr);
+  const out = JSON.parse(run.stdout);
+  assert.deepEqual([out.journal.newest, out.journal.recent], [yesterday, 1]);
+  const after = out.slots[0];
+  assert.notEqual(after.pick.name, worn.name);
+  assert.ok(after.ranked.find(r => r.name === worn.name).reasons.includes('- Worn yesterday'));
+  assert.ok(after.ranked.find(r => r.name === runnerUp.name).reasons.includes('+ You rate it 5★'));
+  assert.ok(!after.ranked.some(r => r.name === 'Jake'), 'switched off in the app');
+  // The same as the export it stands for, and a file can hold the token too.
+  const dir = mkdtempSync(join(tmpdir(), 'almanac-'));
+  const file = join(dir, 'journal.json'), held = join(dir, 'token.txt');
+  writeFileSync(file, JSON.stringify(journalExport(history, null, [String(jake.id)], { skin })));
+  writeFileSync(held, `${token}\n`);
+  assert.deepEqual(JSON.parse(cli('--loc', '40.7,-74', '--json', '--slot', 'night', '--journal', file).stdout).slots, out.slots);
+  assert.deepEqual(JSON.parse(cli('--loc', '40.7,-74', '--json', '--slot', 'night', '--journal', held).stdout).slots, out.slots);
+  assert.doesNotMatch(cli('--loc', '40.7,-74', '--journal', token).stdout, /Not counting|Newest wear/, 'a current journal goes without saying');
+
+  // Days old, it says what it may be missing; cut short, it says so plainly.
+  const old = journalToken([{ id: String(worn.id), date: shiftISO(today, -4), slot: 'night' }], [], {}, { todayISO: shiftISO(today, -3) });
+  assert.match(cli('--loc', '40.7,-74', '--journal', old).stdout, /\nNewest wear in the journal: \w{3}, \w{3} \d+, \d+ days ago; anything worn since isn't counted\.\n$/);
+  const cut = cli('--loc', '40.7,-74', '--journal', token.slice(0, -5));
+  assert.equal(cut.status, 1);
+  assert.equal(cut.stderr, 'This Copy for Claude is cut short or garbled: copy it again from Wardrobe › Worn and paste it whole.\n');
+});
+
 test('an ambiguous name says which bottle it took', () => {
   const run = cli('--ideal', 'blanc', '--json');
   assert.equal(run.status, 0, run.stderr);
@@ -214,6 +257,96 @@ test('--events reads a date, an optional slot and an occasion', () => {
   assert.deepEqual([parseEvents('2026-10-15 date night')[0].slot, parseEvents('2026-10-15 office day')[0].occasion.id], ['night', 'office']);
   assert.throws(() => parseEvents('2026-10-17 night formal; 2026-10-17 date'), /two events on the night of 2026-10-17/);
   assert.equal(parseEvents('2026-10-17 night formal; 2026-10-17 office').length, 2, 'a day and a night');
+});
+
+test('--week, --date and today\'s picks plan around --events: each takes the occasion\'s best and says so', async () => {
+  const night = dayISO(2);
+  const [week, best, today, onDate, weekToday] = await Promise.all([
+    run('--loc', '40.7,-74', '--week', '--events', `${night} night formal`, '--json'),
+    run('--loc', '40.7,-74', '--date', night, '--slot', 'night', '--occasion', 'formal', '--json'),
+    run('--loc', '40.7,-74', '--events', `${night} night formal`, '--json'),
+    run('--loc', '40.7,-74', '--date', night, '--events', `${night} formal night`, '--json'),
+    run('--loc', '40.7,-74', '--week', '--json'),
+  ]);
+  for (const r of [week, best, today, onDate, weekToday]) assert.equal(r.status, 0, r.stderr);
+  const top = JSON.parse(best.stdout).slots[0].pick;
+  const planned = JSON.parse(week.stdout).days.find(d => d.date === night).picks.find(p => p.slot === 'night');
+  assert.equal(planned.name, top.name, 'the --date --occasion top');
+  assert.equal(planned.occasion, 'formal');
+  assert.equal(planned.score, top.score);
+  assert.ok(planned.reasons.some(r => /formal wear/.test(r)), planned.reasons.join('; '));
+  assert.ok(JSON.parse(weekToday.stdout).days.flatMap(d => d.picks).every(p => !p.occasion), 'no event, no occasion');
+  // Today's picks hold the event's bottle back as the week does, and name the event ahead.
+  const now = JSON.parse(today.stdout);
+  // Today's next two windows (tonight and tomorrow's daytime, once today's is over) are the week's first two.
+  const weekNow = JSON.parse(week.stdout).days.flatMap(d => d.picks).slice(0, now.slots.length);
+  assert.deepEqual(now.slots.map(s => s.pick.name), weekNow.map(p => p.name), 'today agrees with the week');
+  assert.ok(now.slots.every(s => s.pick.name !== top.name));
+  assert.deepEqual(now.events, [{ date: night, slot: 'night', occasion: 'formal', pick: top.name }]);
+  // --date plans its day around it.
+  const date = JSON.parse(onDate.stdout);
+  assert.deepEqual(date.slots.map(s => [s.slot, s.pick.occasion ?? null]), [['day', null], ['night', 'formal']]);
+  assert.equal(date.slots[1].pick.name, top.name);
+  const text = cli('--loc', '40.7,-74', '--week', '--events', `${night} night formal`);
+  assert.match(text.stdout, new RegExp(`night .+${top.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\(.+\\) for formal wear: `));
+  // Tonight by the place's clock (tomorrow night once tonight is over there), not this machine's.
+  const tonight = JSON.parse(cli('--loc', '40.7,-74', '--json').stdout).slots.find(s => s.slot === 'night').window.date;
+  const now2 = cli('--loc', '40.7,-74', '--events', `${tonight} night date; ${night} night formal`);
+  assert.match(now2.stdout, /\n(Tonight|Tomorrow night), for a date: /);
+  assert.match(now2.stdout, /\nFor formal wear (tomorrow night|on \w+day night): /);
+});
+
+test('the days and nights planned in the app come with the journal and plan like --events, left out quietly where they don\'t fit', async () => {
+  // Dates by the place's clock, as the CLI plans them.
+  const days = JSON.parse(cli('--loc', '40.7,-74', '--week', '--json').stdout).days.map(d => d.date);
+  const [night, office] = [days[2], days[3]];
+  const events = [{ dateISO: night, slot: 'night', occasion: 'formal' }, { dateISO: office, slot: 'day', occasion: 'office' }, { dateISO: dayISO(-5), slot: 'night', occasion: 'date' }, { dateISO: dayISO(40), slot: 'night', occasion: 'date' }];
+  const token = journalToken([], [], {}, { todayISO: dayISO(0), events });
+  const [stored, typed, nights, over, today] = await Promise.all([
+    run('--loc', '40.7,-74', '--week', '--journal', token, '--json'),
+    run('--loc', '40.7,-74', '--week', '--events', `${night} night formal; ${office} day office`, '--json'),
+    run('--loc', '40.7,-74', '--week', '--slot', 'night', '--journal', token, '--json'),
+    run('--loc', '40.7,-74', '--week', '--journal', token, '--events', `${night} night date`, '--json'),
+    run('--loc', '40.7,-74', '--journal', token, '--json'),
+  ]);
+  for (const r of [stored, typed, nights, over, today]) assert.equal(r.status, 0, r.stderr);
+  const picks = r => JSON.parse(r.stdout).days.flatMap(d => d.picks.map(p => [d.date, p.slot, p.name, p.occasion ?? null]));
+  assert.deepEqual(picks(stored), picks(typed), 'as if typed; the past date and the one past the week drop out');
+  assert.deepEqual(picks(nights).filter(p => p[3]).map(p => p.slice(0, 2).concat(p[3])), [[night, 'night', 'formal']], 'the office day isn’t a night');
+  assert.equal(picks(over).find(p => p[0] === night && p[1] === 'night')[3], 'date', '--events wins on its window');
+  assert.ok(JSON.parse(today.stdout).events.some(e => e.date === night && e.occasion === 'formal'), 'today’s picks name it ahead');
+});
+
+test('--events stops on a window the plan doesn\'t cover, and on a mode that doesn\'t plan', () => {
+  for (const [args, message] of [
+    [['--loc', '40.7,-74', '--week', '--events', `${dayISO(9)} night formal`], /^--events: \S+ is outside the week ahead \(/],
+    [['--loc', '40.7,-74', '--events', `${dayISO(9)} night formal`], /is outside the week ahead/],
+    [['--loc', '40.7,-74', '--week', '--slot', 'day', '--events', `${dayISO(2)} night formal`], /^--events: the Formal on \S+ is at night, and --slot day plans days only/],
+    [['--loc', '40.7,-74', '--week', '--occasion', 'date', '--events', `${dayISO(2)} office`], /--occasion date plans nights only/],
+    [['--loc', '40.7,-74', '--date', dayISO(2), '--events', `${dayISO(3)} night formal`], /isn't the --date/],
+    [['--loc', '40.7,-74', '--week', '--events', `${dayISO(-3)} night formal`], /has passed/],
+    [['--loc', '40.7,-74', '--week', '--events', 'saturday formal'], /doesn't start with a date/],
+    [['--ideal', 'Terra', '--events', `${dayISO(2)} night formal`], /^--events goes with a plan \(today's picks, --week, --date or --pack\), not --ideal/],
+    [['--gaps', '--events', `${dayISO(2)} night formal`], /not --gaps/],
+  ]) {
+    const r = cli(...args);
+    assert.equal(r.status, 1, args.join(' '));
+    assert.match(r.stderr, message);
+    assert.doesNotMatch(r.stderr, /at .*\.mjs:\d+/, 'no stack trace');
+  }
+});
+
+test('an event tonight, once tonight is over at the place, says it’s over, not out of reach', () => {
+  // A time zone where it's 23:00 or later: the plan starts tomorrow there.
+  const hour = new Date().getUTCHours();
+  const offset = ((23 - hour + 36) % 24) - 12;
+  const placeToday = new Date(Date.now() + offset * 3_600_000).toISOString().slice(0, 10);
+  const late = (...args) => spawnSync(process.execPath, ['--import', mock, script, ...args], { encoding: 'utf8', env: { ...process.env, MOCK_UTC_OFFSET: String(offset) } });
+  for (const args of [['--loc', '40.7,-74'], ['--loc', '40.7,-74', '--week']]) {
+    const r = late(...args, '--events', `${placeToday} night date`);
+    assert.equal(r.status, 1, args.join(' '));
+    assert.match(r.stderr, new RegExp(`^--events: the night of ${placeToday} is over\\n$`));
+  }
 });
 
 test('--pack plans a trip: few bottles, every window, events on their night', () => {
@@ -350,4 +483,39 @@ test('--doubles names pairs that wear as one, or the closest pair', () => {
   assert.deepEqual(out.doubles, [], 'nothing in David’s wardrobe doubles another');
   assert.ok(out.closest.alike > 50 && out.closest.alike < 85, `closest ${out.closest.a} and ${out.closest.b}`);
   assert.match(cli('--doubles').stdout, /^No doubles in \d+ bottles: every one smells its own way\.\nClosest pair: .+ and .+, \d+% alike \(/);
+});
+
+test('a pick names the bottles that suit its window just as well, each with how it differs, never one worn lately', async () => {
+  const [single, text, plan, week, date] = await Promise.all([
+    run('--loc', '40.7,-74', '--json', '--slot', 'night'),
+    run('--loc', '40.7,-74', '--slot', 'night'),
+    run('--loc', '40.7,-74', '--json'),
+    run('--loc', '40.7,-74', '--json', '--week'),
+    run('--loc', '40.7,-74', '--json', '--date', dayISO(2), '--slot', 'day'),
+  ]);
+  const night = JSON.parse(single.stdout).slots[0];
+  assert.ok(night.pick.ties.length, 'the synthetic night is a toss-up');
+  for (const t of night.pick.ties) {
+    assert.notEqual(t.name, night.pick.name);
+    assert.ok(Math.abs(t.score - night.pick.score) < 0.02, `${t.name} within a point of the match`);
+    assert.ok(Array.isArray(t.tags) && t.tags.length <= 2 && t.brand);
+  }
+  // The text offers them on the pick's line: "…, or Liam (fresher, vanilla)".
+  const first = night.pick.ties[0];
+  assert.ok(text.stdout.includes(`), or ${first.name}${first.tags.length ? ` (${first.tags.join(', ')})` : ''}`), text.stdout);
+  // A plan's picks carry them too, never the next window's pick.
+  const slots = JSON.parse(plan.stdout).slots;
+  for (const [i, s] of slots.entries()) {
+    assert.ok(Array.isArray(s.pick.ties));
+    for (const other of slots.filter((_, j) => j !== i)) assert.ok(!s.pick.ties.some(t => t.name === other.pick.name), `${s.slot} doesn’t offer ${other.pick.name}`);
+  }
+  assert.ok(JSON.parse(week.stdout).days.every(d => d.picks.every(p => Array.isArray(p.ties))));
+  assert.ok(Array.isArray(JSON.parse(date.stdout).slots[0].pick.ties));
+  // Worn last night, it isn't offered tonight.
+  const worn = fragrances.find(f => f.name === first.name);
+  const dir = mkdtempSync(join(tmpdir(), 'almanac-'));
+  const file = join(dir, 'journal.json');
+  writeFileSync(file, JSON.stringify({ app: 'scentcast-journal', history: [{ id: String(worn.id), date: new Date(Date.parse(`${night.window.date}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10), slot: 'night' }] }));
+  const after = JSON.parse(cli('--loc', '40.7,-74', '--json', '--slot', 'night', '--journal', file).stdout).slots[0];
+  assert.ok(!after.pick.ties.some(t => t.name === worn.name));
 });

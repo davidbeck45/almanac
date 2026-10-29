@@ -7,15 +7,15 @@ Live at **https://davidbeck45.github.io/almanac/**. It opens on my wardrobe; add
 ## What it does
 
 **Wear**
-- **Now**: the local weather drawn as a sky, with the best bottle for daytime or tonight standing on the hill and the rest of your bottles on a shelf by how well they fit. Each pick has a match score, the reasons behind it and how much to spray ("2 sprays · neck, chest"). A bottle you haven't worn in a month comes back when it's nearly as good a fit.
+- **Now**: the local weather drawn as a sky, with the best bottle for daytime or tonight standing on the hill and the rest of your bottles on a shelf by how well they fit. Each pick has a match score, the reasons behind it and how much to spray ("2 sprays · neck, chest"). When others suit the moment just as well it names them and how they differ ("Legacy (fresher) suits today just as well"), here, on the Week and for an occasion, and a bottle's page says how far it sits from the pick and why ("3 points under Cream Velvet tonight, mostly the season fit"). A bottle you haven't worn in a month comes back when it's nearly as good a fit. Once you're wearing a bottle you haven't rated, it asks for your stars, and the next day how it wore.
 - **Week**: a day and night pick for each of the next 7 days, rotating so the same bottle rarely comes up twice in a row.
-- **Occasion**: Casual, Office, Date Night, Night Out, Formal, Outdoors or Cozy, for today or any date up to a year out, here or in another city.
+- **Occasion**: Casual, Office, Date Night, Night Out, Formal, Outdoors or Cozy, for today or any date up to a year out, here or in another city. "Plan it" sets a day or night at home aside for the occasion (a date tonight, a wedding on Saturday): Now and the Week give it the occasion's best bottle, leave that bottle be the days before, and a wear logged then counts for the occasion.
 - **Trip**: the fewest bottles to pack (two to four) for a city and dates, which to wear each day and night, a dressier pick for a formal dinner or a date, and a packing list to copy or share. Past the forecast's ten days it plans on typical weather for the dates, and says so.
 
 **Wardrobe**
 - **Owned**: your bottles, each switched in or out of rotation. Add them by search, paste a list, or enter one no database has by its accords. Share the list as a link.
 - **Wishlist**: bottles you want, each with a verdict on how it would fit your shelf (Strong fit, Good, Covered, Risky or Redundant) and what it would fill. "I bought it" moves it into your collection.
-- **Worn**: the wear journal. "Wear this" logs today's pick so the next picks rotate; a calendar, your most-worn bottles and the ones gathering dust. Export saves it as a file.
+- **Worn**: the wear journal. "Wear this" logs today's pick so the next picks rotate; a calendar, your most-worn bottles and the ones gathering dust. Export saves it as a file; Copy for Claude copies a short version (the last ten days' wears, your stars and switched-off bottles, no places) to paste to Claude or the Omarchy widget, so their picks skip what you just wore.
 - **Insights**: what your wardrobe still needs. A map of every occasion against your climate's weather, by day and by night, filled as far as your bottles cover it; where it's thin, and the bottles that would fill it, with a cheaper twin and blind-buy risk. Then your style mix, more of the styles you like (skin scent, clean, intimate…), a safe first bottle for each style you don't own, and any bottles you own that smell alike. Tell it how often you dress for each occasion, and whether to stick to great value.
 
 **Discover**: search 137,000 Fragrantica perfumes by name or by notes ("iris leather", "smoky vanilla"), get more of the styles you love or more like bottles you pick, and filter by season, time of day, lean, longevity, projection, value and blind-buy safety. Each pick says why: the bottle you own it's closest to, what voters say it smells like, a cheaper twin. Add it to your wishlist or your collection in a tap.
@@ -24,11 +24,11 @@ Live at **https://davidbeck45.github.io/almanac/**. It opens on my wardrobe; add
 
 **Settings**: your place, °F or °C, two themes, a still sky, which list is ranked, and the journal export.
 
-Picks come from Fragrantica's community votes (seasons, day or night, and those of the bottles voters say it smells like), each bottle's main accords against the temperature and how sticky the air is, the occasion's accord profile, and for some occasions how long it lasts and how far it projects, by Parfumo's votes.
+Picks come from Fragrantica's community votes (seasons, day or night, and those of the bottles voters say it smells like), each bottle's main accords against the temperature and how sticky the air is, the occasion's accord profile, and for some occasions how long it lasts and how far it projects, by Parfumo's and Fragrantica's votes, each counted by how many there are.
 
 ## Privacy
 
-There's no account and no tracking. What you add stays in your browser's storage on this device: your bottles, wishlist, wear journal, ratings, settings and recent places. The journal leaves only when you export it.
+There's no account and no tracking. What you add stays in your browser's storage on this device: your bottles, wishlist, wear journal, ratings, planned occasions, settings and recent places. The journal leaves only when you export it or copy it for Claude.
 
 The app is static files on GitHub Pages. Beyond them it talks to:
 - **Open-Meteo**, for the weather: the coordinates of the places you ask about (your device's location rounded to about 100 m, or a city you picked) for their forecast, and with a date for a trip or an occasion past the forecast, for typical weather; your place to half a degree for Insights' climate; and the city names you search.
@@ -44,8 +44,10 @@ The same engine runs in Node.js, with no dependencies. Run `node scripts/recomme
 ```sh
 node scripts/recommend.mjs --city "New York" --occasion date
 node scripts/recommend.mjs --city "New York" --week
+node scripts/recommend.mjs --city "New York" --week --events "2026-10-31 night formal; 2026-10-29 date night"   # planned around them
 node scripts/recommend.mjs --city Miami --date 2026-10-24 --occasion date   # any date: forecast, else typical weather
 node scripts/recommend.mjs --city "New York" --journal almanac-journal-2026-10-14.json   # rotate out recent wears, nudge in neglected ones
+node scripts/recommend.mjs --city "New York" --journal scj1.eyJ0Ijoi…   # the same from Worn's Copy for Claude
 node scripts/recommend.mjs --pack --city London --from 2026-12-10 --to 2026-12-19 --events "2026-12-15 night formal"
 node scripts/recommend.mjs --spray "Liquid Brun" --occasion date             # how many sprays, and where
 node scripts/recommend.mjs --layer "Liquid Brun"   # or --layer all
@@ -65,6 +67,7 @@ node scripts/recommend.mjs --dupes "Aventus"       # its original, cheaper alter
 ```sh
 npm run dev      # http://127.0.0.1:5173 (Python's http.server; there's no build step)
 npm test
+node scripts/backtest.mjs   # three years of real weather through the engine, for tuning (CLAUDE.md has the figures)
 MOCK=1 node worker/dev.mjs   # the old Fragella lookup on :8787, from saved responses
 ```
 
@@ -75,7 +78,8 @@ Pushing to `main` publishes the site.
 ## Data and credits
 
 - **Fragrance data**: [Fragrantica](https://www.fragrantica.com), through [Le Decanteur's Kaggle dataset](https://www.kaggle.com/datasets/ledecanteur/fragrantica-perfumes), licensed [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). `data/fragrantica/`, `data/extras.jsonl` and the values derived from it carry the same license: credit Le Decanteur, no commercial use, share alike (see `data/fragrantica/README.md`). The pros and cons are Fragrantica's AI summary of its members' reviews.
-- **Longevity, sillage, occasion and layering votes**: [Parfumo](https://www.parfumo.com).
+- **Longevity and sillage**: [Parfumo](https://www.parfumo.com)'s ratings and Fragrantica's votes (the dataset's), each counted by how many there are.
+- **Occasion and layering votes**: [Parfumo](https://www.parfumo.com).
 - **Weather**: [Open-Meteo](https://open-meteo.com) (forecast, historical weather and city search), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 - **Fonts**: Fraunces and Inter, self-hosted under the SIL Open Font License (`fonts/`).
 
@@ -94,5 +98,6 @@ Left click opens the popup, middle click refreshes, right click opens the site. 
 
 - `location`: a city or `lat,lon`. Empty follows Omarchy's weather location, then the IP address (looked up with wttr.in).
 - `hidden`: comma-separated bottles to leave out. Unset keeps the site's defaults; `""` shows every bottle.
+- `journal`: the app's Copy for Claude (Wardrobe › Worn), or the path to a file holding it or a journal export, so the plan skips what you just wore and applies your stars and switched-off bottles. A pasted copy goes stale; a file is read again on every refresh. Empty plans without your wears, and the popup's status line says so.
 - `units`: `auto`, `F` or `C`.
 - `refreshMinutes`: default 30.

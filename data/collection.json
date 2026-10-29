@@ -1,6 +1,6 @@
 {
   "source": "fragrantica.com/@doeszen wardrobe (Have)",
-  "fetched": "2026-10-14",
+  "fetched": "2026-10-26",
   "fragrances": [
     {
       "id": 98689,
@@ -6065,8 +6065,8 @@
       },
       "original": {
         "id": 46165,
-        "name": "One Umbrella for Two Floraïku",
-        "brand": "Floraiku",
+        "name": "One Umbrella for Two",
+        "brand": "Floraïku",
         "url": "https://www.fragrantica.com/perfume/Floraiku/One-Umbrella-for-Two-46165.html",
         "thumb": "https://fimgs.net/mdimg/perfume-thumbs/dark-m.46165.2x.webp",
         "rating": 3.98,
@@ -6622,6 +6622,12 @@
         "base": [
           "Cedarwood"
         ]
+      },
+      "noteVotes": {
+        "Aldehydes": 1000,
+        "Bergamot": 384,
+        "Orange": 415,
+        "Cedarwood": 692
       },
       "original": {
         "id": 109989,

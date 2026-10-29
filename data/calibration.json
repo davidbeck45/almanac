@@ -1,6 +1,6 @@
 {
   "source": "fragrantica.com, well-voted bottles for fitting the engine",
-  "fetched": "2026-10-14",
+  "fetched": "2026-10-26",
   "fragrances": [
     {
       "id": 62615,
@@ -64,6 +64,17 @@
           "Sandalwood",
           "Candied Almond"
         ]
+      },
+      "noteVotes": {
+        "Cognac": 1000,
+        "Cinnamon": 992,
+        "Tonka Bean": 600,
+        "Oak": 495,
+        "Hedione": 199,
+        "Vanilla": 736,
+        "Praline": 696,
+        "Sandalwood": 447,
+        "Candied Almond": 287
       },
       "like": {
         "season": {
@@ -158,6 +169,29 @@
           "Amber"
         ]
       },
+      "noteVotes": {
+        "Lemon": 1000,
+        "Green Notes": 820,
+        "Bergamot": 685,
+        "Mandarin Orange": 334,
+        "Pineapple": 262,
+        "Cardamom": 190,
+        "Papaya": 145,
+        "Lily-of-the-Valley": 370,
+        "Jasmine": 316,
+        "Violet": 217,
+        "Rose": 154,
+        "Nutmeg": 136,
+        "Freesia": 118,
+        "Orris Root": 100,
+        "Green Accord": 820,
+        "Musk": 496,
+        "Cedar": 325,
+        "Green Tea": 262,
+        "Sandalwood": 217,
+        "Oakmoss": 199,
+        "Amber": 100
+      },
       "like": {
         "season": {
           "winter": 0.062,
@@ -250,6 +284,28 @@
           "Cedar"
         ]
       },
+      "noteVotes": {
+        "Almond": 740,
+        "Coffee": 552,
+        "Bergamot": 248,
+        "Lemon": 140,
+        "Tuberose": 776,
+        "Jasmine Sambac": 713,
+        "Orange Blossom": 265,
+        "Bulgarian Rose": 140,
+        "Orris": 104,
+        "Tonka Bean": 1000,
+        "Cacao": 893,
+        "Vanilla": 785,
+        "Praline": 543,
+        "Sandalwood": 274,
+        "Musk": 265,
+        "Amber": 257,
+        "Cashmere Wood": 212,
+        "Patchouli": 185,
+        "Cinnamon": 176,
+        "Cedar": 113
+      },
       "like": {
         "season": {
           "winter": 0.318,
@@ -340,6 +396,26 @@
           "Labdanum"
         ]
       },
+      "noteVotes": {
+        "Grapefruit": 1000,
+        "Lemon": 699,
+        "Mint": 388,
+        "Bergamot": 371,
+        "Pink Pepper": 300,
+        "Aldehydes": 264,
+        "Coriander": 114,
+        "Ginger": 477,
+        "Jasmine": 176,
+        "Nutmeg": 176,
+        "Melon": 158,
+        "Incense": 778,
+        "Amber": 672,
+        "Cedar": 459,
+        "Sandalwood": 371,
+        "Amberwood": 273,
+        "Patchouli": 247,
+        "Labdanum": 176
+      },
       "like": {
         "season": {
           "winter": 0.177,
@@ -419,6 +495,16 @@
           "Virginia Cedar",
           "Amber"
         ]
+      },
+      "noteVotes": {
+        "Quince": 1000,
+        "Grapefruit": 766,
+        "Hyacinth": 649,
+        "Jasmine": 531,
+        "Musk": 524,
+        "Iris": 445,
+        "Virginia Cedar": 289,
+        "Amber": 219
       },
       "like": {
         "season": {
@@ -506,6 +592,22 @@
           "Vetiver"
         ]
       },
+      "noteVotes": {
+        "Aldehydes": 1000,
+        "Ylang-Ylang": 621,
+        "Neroli": 286,
+        "Bergamot": 234,
+        "Peach": 139,
+        "Iris": 509,
+        "Jasmine": 397,
+        "Rose": 329,
+        "Lily-of-the-Valley": 217,
+        "Sandalwood": 423,
+        "Oakmoss": 260,
+        "Vanilla": 242,
+        "Patchouli": 208,
+        "Vetiver": 199
+      },
       "like": {
         "season": {
           "winter": 0.279,
@@ -591,6 +693,22 @@
           "Tonka Bean",
           "Opoponax"
         ]
+      },
+      "noteVotes": {
+        "Orange": 785,
+        "Mandarin Orange": 535,
+        "Bergamot": 518,
+        "Orange Blossom": 458,
+        "Turkish Rose": 699,
+        "Jasmine": 397,
+        "Mimosa": 260,
+        "Ylang-Ylang": 242,
+        "Patchouli": 1000,
+        "White Musk": 346,
+        "Vanilla": 303,
+        "Vetiver": 277,
+        "Tonka Bean": 242,
+        "Opoponax": 139
       },
       "like": {
         "season": {
@@ -685,6 +803,29 @@
           "Musk"
         ]
       },
+      "noteVotes": {
+        "Chamomile": 820,
+        "Aldehydes": 685,
+        "Clary Sage": 460,
+        "Coriander": 415,
+        "Geranium": 379,
+        "Lemon Verbena": 271,
+        "Brazilian Rosewood": 235,
+        "Bergamot": 181,
+        "Carnation": 415,
+        "Rose": 388,
+        "Ylang-Ylang": 253,
+        "Orris Root": 235,
+        "Jasmine": 163,
+        "Tuberose": 127,
+        "Orange Blossom": 100,
+        "Oakmoss": 1000,
+        "Patchouli": 811,
+        "Incense": 550,
+        "Vetiver": 487,
+        "Sandalwood": 289,
+        "Musk": 226
+      },
       "like": {
         "season": {
           "winter": 0.231,
@@ -770,6 +911,21 @@
           "Ambroxan"
         ]
       },
+      "noteVotes": {
+        "Bergamot": 565,
+        "Black Currant": 463,
+        "Apple": 369,
+        "Lemon": 190,
+        "Pink Pepper": 148,
+        "Pineapple": 1000,
+        "Patchouli": 293,
+        "Moroccan Jasmine": 199,
+        "Birch": 778,
+        "Musk": 523,
+        "Oak Moss": 429,
+        "Cedarwood": 173,
+        "Ambroxan": 165
+      },
       "like": {
         "season": {
           "winter": 0.148,
@@ -849,6 +1005,16 @@
           "Sandalwood",
           "Galbanum"
         ]
+      },
+      "noteVotes": {
+        "Bergamot": 656,
+        "Mandarin Orange": 438,
+        "Green Tea": 1000,
+        "Black Currant": 711,
+        "Musk": 742,
+        "Petitgrain": 360,
+        "Sandalwood": 352,
+        "Galbanum": 219
       },
       "like": {
         "season": {
@@ -935,6 +1101,24 @@
           "Ambergris"
         ]
       },
+      "noteVotes": {
+        "Sea water": 1000,
+        "Lavender": 667,
+        "Mint": 580,
+        "Green Notes": 545,
+        "Rosemary": 335,
+        "Calone": 300,
+        "Coriander": 186,
+        "Sandalwood": 239,
+        "Neroli": 221,
+        "Geranium": 195,
+        "Jasmine": 195,
+        "Musk": 291,
+        "Oakmoss": 256,
+        "Cedar": 221,
+        "Tobacco": 204,
+        "Ambergris": 125
+      },
       "like": {
         "season": {
           "winter": 0.082,
@@ -1016,6 +1200,18 @@
           "Tahitian Vetiver",
           "Patchouli"
         ]
+      },
+      "noteVotes": {
+        "Lavender": 485,
+        "Bergamot": 199,
+        "Sage": 183,
+        "Iris": 1000,
+        "Cacao": 681,
+        "Amber": 346,
+        "Cardamom": 248,
+        "Leather": 469,
+        "Tahitian Vetiver": 289,
+        "Patchouli": 248
       },
       "like": {
         "season": {
@@ -1111,6 +1307,29 @@
           "Tonka Bean"
         ]
       },
+      "noteVotes": {
+        "Nutmeg Flower": 406,
+        "Lavender": 307,
+        "Cedar": 289,
+        "Mandarin Orange": 208,
+        "Chamomile": 190,
+        "Bergamot": 145,
+        "Hawthorn": 136,
+        "Lemon": 109,
+        "Violet Leaf": 766,
+        "Nutmeg": 406,
+        "Sandalwood": 217,
+        "Carnation": 154,
+        "Honeysuckle": 127,
+        "Jasmine": 118,
+        "Lily-of-the-Valley": 100,
+        "Leather": 1000,
+        "Vetiver": 334,
+        "Musk": 262,
+        "Amber": 199,
+        "Patchouli": 172,
+        "Tonka Bean": 145
+      },
       "like": {
         "season": {
           "winter": 0.206,
@@ -1195,6 +1414,21 @@
           "Sandalwood",
           "Musk"
         ]
+      },
+      "noteVotes": {
+        "Coconut": 548,
+        "Plum": 284,
+        "Apricot": 207,
+        "Brazilian Rosewood": 284,
+        "Jasmine": 276,
+        "Tuberose": 259,
+        "Caraway": 250,
+        "Rose": 165,
+        "Lily-of-the-Valley": 148,
+        "Vanilla": 1000,
+        "Almond": 915,
+        "Sandalwood": 438,
+        "Musk": 293
       },
       "like": {
         "season": {
@@ -1286,6 +1520,26 @@
           "Blackberry"
         ]
       },
+      "noteVotes": {
+        "Pear": 716,
+        "Melon": 574,
+        "Magnolia": 548,
+        "Peach": 406,
+        "Mandarin Orange": 184,
+        "Bergamot": 184,
+        "Jasmine": 1000,
+        "Lily-of-the-Valley": 574,
+        "Tuberose": 450,
+        "Freesia": 362,
+        "Rose": 309,
+        "Orchid": 202,
+        "Violet": 176,
+        "Plum": 167,
+        "Musk": 317,
+        "Vanilla": 193,
+        "Cedar": 122,
+        "Blackberry": 114
+      },
       "like": {
         "season": {
           "winter": 0.143,
@@ -1361,6 +1615,15 @@
           "Woody Notes",
           "Cedar"
         ]
+      },
+      "noteVotes": {
+        "Fig Leaf": 1000,
+        "Fig": 781,
+        "Green Notes": 698,
+        "Coconut": 554,
+        "Fig Tree": 531,
+        "Woody Notes": 312,
+        "Cedar": 244
       },
       "like": {
         "season": {
@@ -1441,6 +1704,17 @@
           "Musk",
           "Amber"
         ]
+      },
+      "noteVotes": {
+        "Sicilian Lemon": 1000,
+        "Apple": 575,
+        "Cedar": 511,
+        "Bellflower": 263,
+        "Bamboo": 375,
+        "Jasmine": 287,
+        "White Rose": 199,
+        "Musk": 375,
+        "Amber": 207
       },
       "like": {
         "season": {
@@ -1536,6 +1810,32 @@
           "Amber"
         ]
       },
+      "noteVotes": {
+        "Lime": 745,
+        "Lemon": 618,
+        "Bergamot": 499,
+        "Jasmine": 372,
+        "Orange": 354,
+        "Mandarin Orange": 308,
+        "Neroli": 226,
+        "Sea Notes": 1000,
+        "Calone": 272,
+        "Rosemary": 199,
+        "Peach": 172,
+        "Freesia": 163,
+        "Hiacynth": 154,
+        "Violet": 145,
+        "Cyclamen": 145,
+        "Coriander": 135,
+        "Rose": 135,
+        "Nutmeg": 126,
+        "Mignonette": 90,
+        "White Musk": 308,
+        "Cedar": 254,
+        "Oakmoss": 190,
+        "Patchouli": 163,
+        "Amber": 135
+      },
       "like": {
         "season": {
           "winter": 0.064,
@@ -1620,6 +1920,21 @@
           "Leather",
           "Sandalwood"
         ]
+      },
+      "noteVotes": {
+        "Almond": 795,
+        "Spices": 403,
+        "Lavender": 242,
+        "Bergamot": 190,
+        "Rosemary": 156,
+        "Thyme": 148,
+        "Cherry": 1000,
+        "Vanilla": 642,
+        "Incense": 412,
+        "Bulgarian Rose": 267,
+        "Tonka Bean": 523,
+        "Leather": 514,
+        "Sandalwood": 327
       },
       "like": {
         "season": {
@@ -1706,6 +2021,20 @@
           "Cinnamon",
           "Amber"
         ]
+      },
+      "noteVotes": {
+        "Bergamot": 250,
+        "Rose": 200,
+        "Jasmine": 166,
+        "Citruses": 158,
+        "Peach": 629,
+        "Ylang-Ylang": 225,
+        "Lilac": 200,
+        "Oakmoss": 1000,
+        "Spices": 697,
+        "Vetiver": 452,
+        "Cinnamon": 343,
+        "Amber": 233
       },
       "like": {
         "season": {
@@ -1797,6 +2126,26 @@
           "Musk"
         ]
       },
+      "noteVotes": {
+        "Citruses": 566,
+        "Bergamot": 486,
+        "Lemon": 344,
+        "Cedar": 220,
+        "Mandarin Orange": 140,
+        "Iris": 424,
+        "Patchouli": 282,
+        "Vetiver": 176,
+        "Jasmine": 122,
+        "Rose": 114,
+        "Incense": 1000,
+        "Vanilla": 1000,
+        "Leather": 858,
+        "Opoponax": 512,
+        "Civet": 397,
+        "Sandalwood": 371,
+        "Tonka Bean": 300,
+        "Musk": 229
+      },
       "like": {
         "season": {
           "winter": 0.337,
@@ -1814,8 +2163,8 @@
     },
     {
       "id": 17,
-      "name": "Terre d'Hermès Hermès",
-      "brand": "Hermes",
+      "name": "Terre d'Hermès",
+      "brand": "Hermès",
       "year": 2006,
       "gender": "men",
       "url": "https://www.fragrantica.com/perfume/Hermes/Terre-d-Hermes-17.html",
@@ -1874,6 +2223,17 @@
           "Benzoin"
         ]
       },
+      "noteVotes": {
+        "Orange": 1000,
+        "Grapefruit": 648,
+        "Pepper": 696,
+        "Pelargonium": 287,
+        "Flint": 199,
+        "Vetiver": 952,
+        "Cedar": 608,
+        "Patchouli": 383,
+        "Benzoin": 351
+      },
       "like": {
         "season": {
           "winter": 0.148,
@@ -1891,8 +2251,8 @@
     },
     {
       "id": 18,
-      "name": "Un Jardin Sur Le Nil Hermès",
-      "brand": "Hermes",
+      "name": "Un Jardin Sur Le Nil",
+      "brand": "Hermès",
       "year": 2005,
       "gender": "women and men",
       "url": "https://www.fragrantica.com/perfume/Hermes/Un-Jardin-sur-le-Nil-18.html",
@@ -1959,6 +2319,22 @@
           "Labdanum",
           "Cinnamon"
         ]
+      },
+      "noteVotes": {
+        "Grapefruit": 1000,
+        "Green Mango": 707,
+        "Tomato": 664,
+        "Carrot": 552,
+        "Lotus": 656,
+        "Bulrush": 613,
+        "Orange": 475,
+        "Hiacynth": 311,
+        "Peony": 303,
+        "Musk": 320,
+        "Iris": 286,
+        "Incense": 251,
+        "Labdanum": 199,
+        "Cinnamon": 139
       },
       "like": {
         "season": {
@@ -2045,6 +2421,21 @@
           "Cedar"
         ]
       },
+      "noteVotes": {
+        "Lavender": 881,
+        "Mint": 710,
+        "Cardamom": 250,
+        "Bergamot": 207,
+        "Artemisia": 156,
+        "Cinnamon": 446,
+        "Orange Blossom": 250,
+        "Caraway": 148,
+        "Vanilla": 1000,
+        "Tonka Bean": 420,
+        "Amber": 276,
+        "Sandalwood": 259,
+        "Cedar": 182
+      },
       "like": {
         "season": {
           "winter": 0.278,
@@ -2117,6 +2508,13 @@
           "Seaweed"
         ]
       },
+      "noteVotes": {
+        "Sea Salt": 1000,
+        "Sage": 871,
+        "Grapefruit": 667,
+        "Ambrette (Musk Mallow)": 551,
+        "Seaweed": 320
+      },
       "like": {
         "season": {
           "winter": 0.067,
@@ -2188,6 +2586,12 @@
           "Musk"
         ]
       },
+      "noteVotes": {
+        "Cypress": 815,
+        "Vetiver": 1000,
+        "Cashmere Wood": 513,
+        "Musk": 384
+      },
       "like": {
         "season": {
           "winter": 0.213,
@@ -2205,8 +2609,8 @@
     },
     {
       "id": 14982,
-      "name": "La Vie Est Belle Lancôme",
-      "brand": "Lancome",
+      "name": "La Vie Est Belle",
+      "brand": "Lancôme",
       "year": 2012,
       "gender": "women",
       "url": "https://www.fragrantica.com/perfume/Lancome/La-Vie-Est-Belle-14982.html",
@@ -2268,6 +2672,17 @@
           "Patchouli",
           "Tonka Bean"
         ]
+      },
+      "noteVotes": {
+        "Black Currant": 487,
+        "Pear": 351,
+        "Iris": 391,
+        "Jasmine": 231,
+        "Orange Blossom": 199,
+        "Praline": 1000,
+        "Vanilla": 896,
+        "Patchouli": 632,
+        "Tonka Bean": 399
       },
       "like": {
         "season": {
@@ -2339,6 +2754,16 @@
           "Iris",
           "Amber"
         ]
+      },
+      "noteVotes": {
+        "Sandalwood": 1000,
+        "Leather": 820,
+        "Papyrus": 750,
+        "Virginia Cedar": 750,
+        "Cardamom": 633,
+        "Violet": 625,
+        "Iris": 609,
+        "Amber": 219
       },
       "like": {
         "season": {
@@ -2421,6 +2846,18 @@
           "Oakmoss"
         ]
       },
+      "noteVotes": {
+        "Saffron": 902,
+        "Jasmine": 469,
+        "Amberwood": 1000,
+        "Ambergris": 665,
+        "Hedione": 183,
+        "Fir Resin": 640,
+        "Cedar": 575,
+        "Sugar": 338,
+        "Ambroxan": 256,
+        "Oakmoss": 191
+      },
       "like": {
         "season": {
           "winter": 0.297,
@@ -2501,6 +2938,17 @@
           "Benzoin",
           "Cedar"
         ]
+      },
+      "noteVotes": {
+        "Bergamot": 327,
+        "Lemon": 287,
+        "Pink Pepper": 255,
+        "Ylang-Ylang": 1000,
+        "Coconut Milk": 928,
+        "Heliotrope": 495,
+        "Musk": 624,
+        "Benzoin": 271,
+        "Cedar": 199
       },
       "like": {
         "season": {
@@ -2583,6 +3031,17 @@
           "Cashmeran"
         ]
       },
+      "noteVotes": {
+        "Cloves": 640,
+        "Pink Pepper": 423,
+        "Orange Blossom": 199,
+        "Chestnut": 936,
+        "Guaiac Wood": 832,
+        "Juniper": 391,
+        "Vanilla": 1000,
+        "Peru Balsam": 543,
+        "Cashmeran": 439
+      },
       "like": {
         "season": {
           "winter": 0.437,
@@ -2664,6 +3123,17 @@
           "Styrax"
         ]
       },
+      "noteVotes": {
+        "Pink Pepper": 439,
+        "Neroli": 255,
+        "Lemon": 199,
+        "Rum": 936,
+        "Java vetiver oil": 415,
+        "Clary Sage": 311,
+        "Tobacco Leaf": 1000,
+        "Vanilla Bean": 784,
+        "Styrax": 367
+      },
       "like": {
         "season": {
           "winter": 0.378,
@@ -2744,6 +3214,17 @@
           "Ambrette (Musk Mallow)",
           "Indonesian Patchouli Leaf"
         ]
+      },
+      "noteVotes": {
+        "Aldehydes": 888,
+        "Lily-of-the-Valley": 680,
+        "Pear": 367,
+        "Rose": 728,
+        "Iris": 423,
+        "Orange Blossom": 271,
+        "White Musk": 1000,
+        "Ambrette (Musk Mallow)": 311,
+        "Indonesian Patchouli Leaf": 199
       },
       "like": {
         "season": {
@@ -2838,6 +3319,28 @@
           "Musk"
         ]
       },
+      "noteVotes": {
+        "Lavender": 301,
+        "Mint": 283,
+        "Fruity and Spicy Notes": 248,
+        "Coriander": 203,
+        "Green Notes": 140,
+        "Bergamot": 131,
+        "Caramel": 1000,
+        "Patchouli": 731,
+        "Honey": 552,
+        "Milk": 454,
+        "Cedar": 203,
+        "Jasmine": 140,
+        "Lily-of-the-Valley": 104,
+        "Coffee": 794,
+        "Vanilla": 579,
+        "Tonka Bean": 373,
+        "Benzoin": 274,
+        "Amber": 239,
+        "Sandalwood": 239,
+        "Musk": 212
+      },
       "like": {
         "season": {
           "winter": 0.428,
@@ -2907,6 +3410,11 @@
         "base": [
           "Amber"
         ]
+      },
+      "noteVotes": {
+        "Jasmine Sambac": 1000,
+        "Cashmeran": 485,
+        "Amber": 768
       },
       "like": {
         "season": {
@@ -3008,6 +3516,35 @@
           "Sandalwood"
         ]
       },
+      "noteVotes": {
+        "Cotton Candy": 504,
+        "Coconut": 256,
+        "Cassis": 210,
+        "Melon": 164,
+        "Jasmine": 155,
+        "Bergamot": 155,
+        "Pineapple": 155,
+        "Mandarin Orange": 109,
+        "Honey": 633,
+        "Red Berries": 210,
+        "Blackberry": 183,
+        "Plum": 183,
+        "Apricot": 155,
+        "Peach": 155,
+        "Nutmeg": 146,
+        "Caraway": 146,
+        "Orchid": 128,
+        "Rose": 91,
+        "Lily-of-the-Valley": 82,
+        "Patchouli": 1000,
+        "Chocolate": 697,
+        "Caramel": 605,
+        "Vanilla": 532,
+        "Tonka Bean": 339,
+        "Amber": 275,
+        "Musk": 256,
+        "Sandalwood": 128
+      },
       "like": {
         "season": {
           "winter": 0.401,
@@ -3091,6 +3628,19 @@
           "Vetiver"
         ]
       },
+      "noteVotes": {
+        "African Orange Flower": 302,
+        "Neroli": 277,
+        "Orange": 177,
+        "Mandarin Orange": 169,
+        "Iris": 1000,
+        "Galbanum": 261,
+        "Mastic or Lentisque": 244,
+        "Virginia Cedar": 418,
+        "Incense": 410,
+        "Benzoin": 294,
+        "Vetiver": 269
+      },
       "like": {
         "season": {
           "winter": 0.141,
@@ -3168,6 +3718,18 @@
           "Oakmoss",
           "Amber"
         ]
+      },
+      "noteVotes": {
+        "Grapefruit": 567,
+        "Orange Blossom": 289,
+        "Sage": 256,
+        "Nutmeg": 256,
+        "Orris Root": 232,
+        "Pimento": 199,
+        "Vetiver": 1000,
+        "Woodsy Notes": 518,
+        "Oakmoss": 338,
+        "Amber": 183
       },
       "like": {
         "season": {
@@ -3258,6 +3820,25 @@
           "Vetiver"
         ]
       },
+      "noteVotes": {
+        "Bitter Almond": 744,
+        "Black Cherry": 480,
+        "Cherry Liqueur": 366,
+        "Sour Cherry": 1000,
+        "Plum": 251,
+        "Turkish Rose": 154,
+        "Jasmine Sambac": 119,
+        "Vanilla": 418,
+        "Tonka Bean": 392,
+        "Cinnamon": 269,
+        "Peru Balsam": 242,
+        "Sandalwood": 225,
+        "Benzoin": 216,
+        "Cloves": 181,
+        "Cedar": 163,
+        "Patchouli": 137,
+        "Vetiver": 128
+      },
       "like": {
         "season": {
           "winter": 0.329,
@@ -3339,6 +3920,22 @@
           "Angelica"
         ]
       },
+      "noteVotes": {
+        "Bergamot": 819,
+        "Mandarin Orange": 518,
+        "Lemon": 458,
+        "Bitter Orange": 389,
+        "Lavender": 286,
+        "Rosemary": 225,
+        "Myrtle": 182,
+        "African Orange Flower": 1000,
+        "Neroli": 845,
+        "Jasmine": 303,
+        "Pitosporum": 139,
+        "Amber": 234,
+        "Ambrette (Musk Mallow)": 174,
+        "Angelica": 165
+      },
       "like": {
         "season": {
           "winter": 0.049,
@@ -3417,6 +4014,14 @@
           "Patchouli"
         ]
       },
+      "noteVotes": {
+        "Cardamom": 356,
+        "Leather": 1000,
+        "Jasmine Sambac": 428,
+        "Amber": 385,
+        "Moss": 291,
+        "Patchouli": 276
+      },
       "like": {
         "season": {
           "winter": 0.378,
@@ -3493,6 +4098,17 @@
           "Tonka Bean",
           "Amber"
         ]
+      },
+      "noteVotes": {
+        "Agarwood (Oud)": 1000,
+        "Brazilian Rosewood": 712,
+        "Cardamom": 543,
+        "Sandalwood": 519,
+        "Sichuan Pepper": 295,
+        "Vanilla": 279,
+        "Vetiver": 247,
+        "Tonka Bean": 231,
+        "Amber": 199
       },
       "like": {
         "season": {
@@ -3577,6 +4193,19 @@
           "Benzoin"
         ]
       },
+      "noteVotes": {
+        "Pistachio": 418,
+        "Bergamot": 385,
+        "Cardamom": 294,
+        "Pink Pepper": 169,
+        "Tuberose": 734,
+        "Ylang-Ylang": 676,
+        "Jasmine": 502,
+        "Coconut": 1000,
+        "Amber": 294,
+        "Tonka Bean": 277,
+        "Benzoin": 252
+      },
       "like": {
         "season": {
           "winter": 0.044,
@@ -3654,6 +4283,16 @@
           "Dried Fruits",
           "Woody Notes"
         ]
+      },
+      "noteVotes": {
+        "Tobacco Leaf": 1000,
+        "Spicy Notes": 586,
+        "Vanilla": 984,
+        "Cacao": 367,
+        "Tonka Bean": 352,
+        "Tobacco Blossom": 250,
+        "Dried Fruits": 531,
+        "Woody Notes": 219
       },
       "like": {
         "season": {
@@ -3733,6 +4372,17 @@
           "Woody Notes",
           "Amber"
         ]
+      },
+      "noteVotes": {
+        "Raspberry": 608,
+        "Saffron": 383,
+        "Thyme": 271,
+        "Olibanum": 279,
+        "Jasmine": 199,
+        "Leather": 1000,
+        "Suede": 624,
+        "Woody Notes": 351,
+        "Amber": 279
       },
       "like": {
         "season": {
@@ -3817,6 +4467,19 @@
           "Oakmoss"
         ]
       },
+      "noteVotes": {
+        "Mint": 917,
+        "Green Apple": 676,
+        "Lemon": 543,
+        "Tonka Bean": 643,
+        "Ambroxan": 352,
+        "Geranium": 211,
+        "Madagascar Vanilla": 1000,
+        "Virginian Cedar": 310,
+        "Atlas Cedar": 310,
+        "Vetiver": 202,
+        "Oakmoss": 169
+      },
       "like": {
         "season": {
           "winter": 0.249,
@@ -3900,6 +4563,19 @@
           "Vanilla"
         ]
       },
+      "noteVotes": {
+        "Tea": 593,
+        "Bergamot": 269,
+        "Osmanthus": 194,
+        "Orchid": 742,
+        "Jasmine": 394,
+        "Rose": 360,
+        "Freesia": 261,
+        "African Orange Flower": 236,
+        "Patchouli": 1000,
+        "Musk": 410,
+        "Vanilla": 169
+      },
       "like": {
         "season": {
           "winter": 0.284,
@@ -3970,6 +4646,14 @@
           "Bourbon Whiskey",
           "Saffron"
         ]
+      },
+      "noteVotes": {
+        "Vanilla": 1000,
+        "Tobacco": 855,
+        "Cinnamon": 515,
+        "Cumin": 349,
+        "Bourbon Whiskey": 334,
+        "Saffron": 276
       },
       "like": {
         "season": {
@@ -4053,6 +4737,19 @@
           "Cashmere Wood",
           "Cedar"
         ]
+      },
+      "noteVotes": {
+        "Pear": 435,
+        "Pink Pepper": 294,
+        "Orange Blossom": 294,
+        "Coffee": 817,
+        "Jasmine": 385,
+        "Bitter Almond": 285,
+        "Licorice": 236,
+        "Vanilla": 1000,
+        "Patchouli": 310,
+        "Cashmere Wood": 194,
+        "Cedar": 169
       },
       "like": {
         "season": {
@@ -4147,6 +4844,29 @@
           "Vanilla"
         ]
       },
+      "noteVotes": {
+        "Aldehydes": 478,
+        "Coriander": 253,
+        "Clary Sage": 235,
+        "Artemisia": 226,
+        "Bergamot": 181,
+        "Patchouli": 316,
+        "Carnation": 271,
+        "Vetiver": 208,
+        "Jasmine": 208,
+        "Geranium": 199,
+        "Orris Root": 199,
+        "Cinnamon": 163,
+        "Lavender": 100,
+        "Civet": 1000,
+        "Musk": 559,
+        "Leather": 532,
+        "Honey": 523,
+        "Oakmoss": 433,
+        "Amber": 163,
+        "Tonka Bean": 127,
+        "Vanilla": 109
+      },
       "like": {
         "season": {
           "winter": 0.206,
@@ -4220,6 +4940,14 @@
           "Vetiver",
           "Caraway"
         ]
+      },
+      "noteVotes": {
+        "Cardamom": 1000,
+        "Lavender": 703,
+        "Virginia Cedar": 421,
+        "Bergamot": 356,
+        "Vetiver": 305,
+        "Caraway": 276
       },
       "like": {
         "season": {
@@ -4303,6 +5031,18 @@
           "Cedar",
           "Ambergris"
         ]
+      },
+      "noteVotes": {
+        "Lavender": 1000,
+        "Mandarin Orange": 485,
+        "Black Currant": 199,
+        "Petitgrain": 183,
+        "Orange Blossom": 853,
+        "Jasmine": 559,
+        "Madagascar Vanilla": 722,
+        "Musk": 363,
+        "Cedar": 207,
+        "Ambergris": 191
       },
       "like": {
         "season": {

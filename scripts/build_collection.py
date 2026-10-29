@@ -19,11 +19,13 @@
   catalog bottles: the other bottles there that Parfumo voters layer it with,
   [{id, consensus, via}], best first. A dupe stands in for its original on
   either side of a pair, with `via` naming the two Parfumo bottles voted on.
-- data/fragrantica/ (from scripts/decant.py): each bottle's line there adds
-  `like`, the season and night shares of the bottles voters say it smells
-  like (the engine leans few votes toward them), and `performance`,
-  Fragrantica's longevity (1-5) and sillage (1-4) vote averages, which the
-  engine reads when Parfumo lacks the bottle.
+- data/fragrantica/ (from scripts/decant.py): each bottle's line there gives
+  its name and brand as Fragrantica spells them (a page's h1 runs the two
+  together, and its slug drops the brand's accents), and adds `like`, the
+  season and night shares of the bottles voters say it smells like (the
+  engine leans few votes toward them), and `performance`, Fragrantica's
+  longevity (1-5) and sillage (1-4) vote averages, which the engine reads
+  when Parfumo lacks the bottle.
 - data/extras.jsonl (from `scripts/decant.py extras`): the dataset's about
   data for each bottle in the wardrobe, catalog and originals, as `about`
   (value for money, owners, crowd gender, popularity, perfumers, line,
@@ -42,6 +44,7 @@ removing lines.
 """
 import json
 import re
+import unicodedata
 from datetime import date
 from pathlib import Path
 
@@ -60,12 +63,18 @@ LIBRARY_SHARDS = 512  # as scripts/decant.py
 
 
 def split_name_brand(h1: str, brand_slug: str) -> tuple[str, str]:
+    """A page's h1 ("Terre d'Hermès Hermès for men") as name and brand, for a
+    bottle the dataset lacks (build() takes the dataset's spelling otherwise)."""
     name_brand = re.sub(r" for (women and men|men|women)$", "", h1)
-    # The slug drops punctuation ("d-Annam" for "d'Annam"), so match word by word.
+    # The slug drops punctuation ("d-Annam" for "d'Annam") and accents
+    # ("Floraiku" for "Floraïku"), so match word by word on the h1 without its
+    # accents, each letter kept at its place in the h1.
+    letters = [(i, c) for i, ch in enumerate(name_brand) for c in unicodedata.normalize("NFD", ch) if not unicodedata.combining(c)]
     words = [re.escape(w) for w in brand_slug.split("-") if w]
-    m = re.search(r"\s(" + r"[\W_]*".join(words) + r")$", name_brand, re.I)
+    m = re.search(r"\s(" + r"[\W_]*".join(words) + r")$", "".join(c for _, c in letters), re.I)
     if m:
-        return name_brand[: m.start()].strip(), m.group(1)
+        start = letters[m.start(1)][0]
+        return name_brand[:start].strip(), name_brand[start:]
     return name_brand, brand_slug.replace("-", " ")
 
 
@@ -88,9 +97,15 @@ def note_case(note: str) -> str:
     return "".join(w if i and w in SMALL_WORDS else w[:1].upper() + w[1:] for i, w in enumerate(parts))
 
 
-def build(raw: dict) -> dict:
-    brand_slug, rest = raw["slug"].split("/")
-    pid = int(rest.rsplit("-", 1)[1])
+def line_id(raw: dict) -> int:
+    return int(raw["slug"].rsplit("-", 1)[1])
+
+
+def build(raw: dict, row: dict | None = None) -> dict:
+    """A bottle record from its jsonl line, named as its row in
+    data/fragrantica/r/ names it when the dataset has it."""
+    brand_slug = raw["slug"].split("/")[0]
+    pid = line_id(raw)
     if raw.get("source") == "decant":
         name, brand, year, gender = raw["name"], raw["brand"], raw["year"], raw["gender"]
     else:
@@ -98,6 +113,8 @@ def build(raw: dict) -> dict:
         gender = m.group(1) if m else None
         year = int(m.group(2)) if m and m.group(2) else None
         name, brand = split_name_brand(raw["h1"], brand_slug)
+    if row:
+        name, brand = row["n"], row["b"]
 
     wear = raw["wear"]
     season_total = sum(wear[s] for s in SEASONS) or 1
@@ -123,16 +140,16 @@ def build(raw: dict) -> dict:
     }
 
 
-def read(stem: str) -> list[dict]:
+def lines_of(stem: str) -> list[dict]:
     src = ROOT / f"data/{stem}.jsonl"
     lines = src.read_text().splitlines() if src.exists() else []
-    return [build(json.loads(line)) for line in lines if line.strip()]
+    return [json.loads(line) for line in lines if line.strip()]
 
 
-def originals_by_dupe() -> dict[int, dict]:
-    """Dupe id -> summary of its original, from data/dupes.json and data/originals.jsonl."""
+def originals_by_dupe(originals: list[dict]) -> dict[int, dict]:
+    """Dupe id -> summary of its original, from data/dupes.json and the built originals."""
     pairs = json.loads((ROOT / "data/dupes.json").read_text())
-    by_id = {f["id"]: f for f in read("originals")}
+    by_id = {f["id"]: f for f in originals}
     slug_id = lambda slug: int(slug.rsplit("-", 1)[1])
     out = {}
     for dupe, original in pairs:
@@ -256,11 +273,12 @@ def write(stem: str, source: str, rows: list[dict], originals: dict[int, dict], 
 
 
 def main() -> None:
-    originals, parfumo = originals_by_dupe(), parfumo_rows()
-    rows = {stem: read(stem) for stem, _ in FILES}
+    lines = {stem: lines_of(stem) for stem, _ in FILES}
+    library = library_rows({line_id(raw) for stem_lines in lines.values() for raw in stem_lines})
+    rows = {stem: [build(raw, library.get(line_id(raw))) for raw in stem_lines] for stem, stem_lines in lines.items()}
+    originals, parfumo = originals_by_dupe(rows["originals"]), parfumo_rows()
     # Pairs reach across the wardrobe and the catalog: a visitor's list can mix them.
     layered = layered_with(rows["collection"] + rows["catalog"], originals, parfumo)
-    library = library_rows({f["id"] for stem_rows in rows.values() for f in stem_rows})
     extras = extras_rows()
     # A dupe's sheet compares it with its original (the app never loads
     # originals.json): the original's signals and performance, and its other

@@ -4,24 +4,26 @@
 // bottle actually performs: concentration doesn't decide sillage. Starts
 // from BASE and moves by
 // - sillage and longevity (the engine's performanceLevel: Parfumo's ratings
-//   or the dataset's votes, with your own skin nudges),
+//   and the dataset's votes, with your own skin nudges),
 // - the strength the name claims (Extrait, Elixir, EDT, Cologne…), half as
 //   much when voters have rated its performance,
 // - the weather: heat and sticky air carry scent (fewer, lower on the body),
 //   and take more off a rich, heavy bottle, which turns cloying, than off a
-//   fresh one, which burns off; cold mutes it (more, and on fabric, which
-//   holds it),
+//   fresh one, which burns off; cold mutes it, for the time spent out in it
+//   (more, and on fabric, which holds it, where the coat stays on),
 // - the occasion: the office quiet, a date close, a night out louder.
 // Text never names a temperature.
 import { performanceLevel, performanceRating, isSticky } from './engine.js';
 import { heaviness } from './accords.js';
+import { occasionById } from './occasions.js';
 import { wearsClose } from './scent-styles.js';
 
 const BASE = 3;
 const SPRAYS = [1, 6];
 const SILLAGE_STEP = 1.5; // sprays per sillage level (-1..1)
 const LONGEVITY_STEP = { fades: 0.6, lasts: 0.3 };
-// Votes on performance that make the name's claim count half.
+// Votes on performance that make the name's claim count half (both crowds',
+// in Parfumo votes, the fewer of longevity's and sillage's).
 const RATED_VOTES = 50;
 // Feels-like (°F) where heat starts taking sprays off and where it takes HEAT_STEP;
 // where cold starts adding them and where it adds COLD_STEP.
@@ -74,7 +76,12 @@ function strengthOf(record) {
 const OIL = /\b(?:perfume|fragrance|parfum|attar|concentrated|body) oil\b|\b(?:oil|attar)$/i;
 export const isOil = record => OIL.test(String(record?.name ?? ''));
 
-// By occasion id: sprays added, the most it should take, and why.
+// By occasion id: sprays added, the most it should take, and why. The cold
+// step counts for the occasion's share of time outside (`outside` in
+// src/occasions.js, 1 when it doesn't say, as the engine reads it): you
+// spray for where you'll be, and a heated room takes the chill off. The heat
+// and sticky steps stay whole: the walk there, the sun and a crowd keep a
+// summer evening warm.
 const OCCASIONS = {
   office: { shift: -1, max: 2, why: 'The office wants it quiet' },
   date: { shift: -0.5, max: 4, why: 'A date wants it close' },
@@ -83,6 +90,9 @@ const OCCASIONS = {
   nightout: { shift: 1, why: 'A night out can take more' },
   outdoors: { shift: 0.5, why: 'Open air thins it out' },
 };
+// Out this little of the time, the coat comes off (or goes to the
+// cloakroom), so nothing goes on a collar or scarf.
+const COAT_OFF = 0.5;
 
 // Where it goes, most important first: as many spots as sprays.
 const SPOTS = {
@@ -141,7 +151,8 @@ export function sprayGuide(record, conditions, occasion = null, skin = null) {
 
   const strength = strengthOf(frag);
   if (strength) {
-    const rated = (performanceRating(frag)?.votes ?? 0) >= RATED_VOTES;
+    const votes = performanceRating(frag)?.votes;
+    const rated = Math.min(votes?.longevity ?? 0, votes?.sillage ?? 0) >= RATED_VOTES;
     add(strength.sprays * (rated ? 0.5 : 1), strength.why, `it’s ${strength.why.charAt(0).toLowerCase()}${strength.why.slice(1)}`);
   }
 
@@ -153,8 +164,11 @@ export function sprayGuide(record, conditions, occasion = null, skin = null) {
   const rich = h >= RICH;
   if (sticky) add(-(HEAT_STEP * heat + STICKY_STEP) * load, rich ? 'Sticky heat makes rich notes cloying' : 'Sticky air carries it');
   else if (heat > 0) add(-HEAT_STEP * heat * load, rich ? 'Heat makes rich notes cloying' : 'Heat makes it bloom');
+  // Cold counts for the time spent out in it. Under 0.25 of a spray (the
+  // office's commute) it moves the count without a word, as any small term does.
   const cold = clamp((feels - COLD[0]) / (COLD[1] - COLD[0]), 0, 1);
-  if (cold > 0) add(COLD_STEP * cold, 'Cold air mutes it');
+  const outside = occasionById(key)?.outside ?? 1;
+  if (cold * outside > 0) add(COLD_STEP * cold * outside, 'Cold air mutes it');
 
   if (occ.shift) add(occ.shift, occ.why);
 
@@ -169,7 +183,7 @@ export function sprayGuide(record, conditions, occasion = null, skin = null) {
   const spots = key === 'office' ? SPOTS.office
     : (heat >= 0.5 || sticky) && !(h <= FRESH && sillage < MILD_REASON) ? SPOTS.heat
     : key === 'date' ? SPOTS.date
-    : cold >= 0.5 ? SPOTS.cold
+    : cold >= 0.5 && outside > COAT_OFF ? SPOTS.cold
     : SPOTS[key] ?? SPOTS.any;
   const where = spots.slice(0, Math.max(1, Math.min(hi, spots.length)));
   const under = spots === SPOTS.office || spots === SPOTS.heat ? ', under your shirt' : '';

@@ -27,7 +27,7 @@ export function creditsHTML({ fetched = null, scraped = false, fragella = false 
     scraped ? `Fragrantica, synced ${syncedOn(fetched)}, and ${dataset}` : `Fragrantica via ${dataset}`,
     fragella && '<a href="https://api.fragella.com" target="_blank" rel="noopener">Fragella</a>',
   ].filter(Boolean).join(' · ');
-  return `<span>Fragrance data: ${sources}</span><span>Longevity, sillage, occasion and layering votes from <a href="https://www.parfumo.com" target="_blank" rel="noopener">Parfumo</a></span><span>Forecast by <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a></span>`;
+  return `<span>Fragrance data: ${sources}</span><span>Longevity and sillage from Parfumo’s ratings and Fragrantica’s votes; occasion and layering votes from <a href="https://www.parfumo.com" target="_blank" rel="noopener">Parfumo</a></span><span>Forecast by <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a></span>`;
 }
 
 const group = (title, rows) => `<section class="set-group" aria-labelledby="set-${title.toLowerCase().replace(/\W+/g, '-')}">

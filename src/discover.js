@@ -90,7 +90,7 @@ export const FILTERS = Object.freeze({
   seasons: null, // ['winter', …]: suits any of them
   slot: null, // 'day' | 'night'
   lean: null, // a LEAN_WINDOWS key; else the wardrobe's window (allowContext)
-  minLongevity: null, // Parfumo's 0–10 (performanceRating), as the detail sheet shows
+  minLongevity: null, // on Parfumo's 0–10 scale, both crowds read together (performanceRating), as Compare shows
   minSillage: null,
   minValue: null, // 1–5
   minSafe: null, // blind-buy safety percentile, 0–100
@@ -599,24 +599,36 @@ function bandLists(ctx, scored, k, final, shares) {
 // come first: each list's best counts SPREAD less for every pick its group
 // has had (chosen styles take turns) and LEAN_SPREAD less for every pick its
 // lean band is ahead of `shares` (more for every one behind). The rest follow,
-// best first. No bottle twice: a twin of a pick joins its `alike`.
+// best first. No bottle twice: a twin of a pick joins its `alike`, and of
+// twins in two lean bands the one whose band is further behind its share
+// leads (Narciso Rodriguez For Him Intense for a mostly masculine wardrobe,
+// not If You Musk), whatever their scores, as long as it clears LEAN_FLOOR
+// of its list's best.
 function mergeTurns(ctx, lists, k, shares) {
   const groups = Math.max(0, ...lists.map(l => l.group)) + 1, top = Array(groups).fill(0);
   for (const l of lists) top[l.group] = Math.max(top[l.group], l.picks[0]?.score ?? 0);
   const band = p => bandOf(genderLean(p.record, ctx.byId));
   const strong = (l, p) => p.score >= LEAN_FLOOR * top[l.group] && (!l.fits || l.fits(p));
   const out = [], taken = new Set(), turns = Array(groups).fill(0), inBand = [0, 0, 0];
+  const behind = p => shares[band(p)] * (out.length + 1) - inBand[band(p)];
   while (out.length < k) {
     let next = null, nextScore = -Infinity;
+    const heads = [];
     for (const l of lists) {
       const free = l.picks.filter(p => !taken.has(p.id));
       const head = free.find(p => strong(l, p)) ?? free[0];
       if (!head) continue;
+      heads.push({ l, head });
       const lean = shares ? LEAN_SPREAD ** (inBand[band(head)] - shares[band(head)] * out.length) : 1;
       const score = strong(l, head) ? 1 + head.score * SPREAD ** turns[l.group] * lean : head.score / (1 + head.score);
       if (score > nextScore) [next, nextScore] = [{ l, head }, score];
     }
     if (!next) break;
+    if (shares) {
+      for (const h of heads) {
+        if (behind(h.head) > behind(next.head) && strong(h.l, h.head) && twins(h.head.record, next.head.record)) next = h;
+      }
+    }
     const { l, head: pick } = next;
     const alike = (pick.alike ?? []).filter(r => !taken.has(r.id));
     const twin = out.find(p => twins(p.record, pick.record));

@@ -4,7 +4,7 @@
 // voters smell each). Likeness is a cosine on each, mostly accords. Pure (no
 // DOM, no fetch), so a module Worker can run it over the whole pool.
 //
-// Checks on the pool: Liquid Brun and Althaïr (its original) 0.92,
+// Checks on the pool: Liquid Brun and Althaïr (its original) 0.91,
 // Club de Nuit Intense Man and Aventus 0.78, Atlantis Extrait and Liquid Brun
 // 0.12. Similarity misses some voted dupes (Supremacy Collector's Edition and
 // Absolu Aventus 0.31), which the "smells like" links in src/candidates.js

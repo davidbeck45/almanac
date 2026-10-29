@@ -7,7 +7,8 @@ import { heaviness } from '../src/accords.js';
 import { DEFAULT_HIDDEN } from '../src/hidden.js';
 
 const load = f => JSON.parse(readFileSync(new URL(`../data/${f}.json`, import.meta.url))).fragrances;
-const demo = load('collection').filter(f => !DEFAULT_HIDDEN.includes(String(f.id)));
+const wardrobe = load('collection');
+const demo = wardrobe.filter(f => !DEFAULT_HIDDEN.includes(String(f.id)));
 const catalog = load('catalog');
 
 function bottle(id, accords, notes) {
@@ -41,7 +42,17 @@ test('notes map to accord families, specific names first', () => {
   assert.equal(noteFamily('Peppermint'), 'herbal');
   assert.equal(noteFamily('Salted Egg Yolk'), 'savory');
   assert.equal(noteFamily('Sea Salt'), 'aquatic');
-  const unmapped = [...demo, ...catalog].flatMap(f => Object.values(f.notes).flat()).filter(n => !noteFamily(n));
+  // Rules for notes the others miss come last, so they take nothing from them.
+  assert.equal(noteFamily('Orchid'), 'floral');
+  assert.equal(noteFamily('Vanilla Orchid'), 'vanilla');
+  assert.equal(noteFamily('Smoke'), 'balsamic');
+  assert.equal(noteFamily('Birch Smoke'), 'leather');
+  assert.equal(noteFamily('Myrhh'), noteFamily('Myrrh'));
+  assert.equal(noteFamily('Coumarin'), 'vanilla');
+  assert.equal(noteFamily('Fruity Notes'), 'fruity');
+  assert.equal(noteFamily('Grapefruit'), 'citrus');
+  // The wardrobe's hidden bottles, and the originals dupes lean on, count too.
+  const unmapped = [...wardrobe, ...catalog, ...load('originals')].flatMap(f => Object.values(f.notes).flat().filter(n => !noteFamily(n)).map(n => `${n} (${f.name})`));
   assert.deepEqual(unmapped, [], 'every note in the data has a family');
 });
 
@@ -52,6 +63,13 @@ test('notes between families count toward each, the main one most', () => {
   assert.ok(main > other && Math.abs(main + other - 1) < 1e-9);
   assert.deepEqual(noteFamilies('Bergamot'), [['citrus', 1]]);
   assert.deepEqual(noteFamilies('Unobtainium'), []);
+  // Names that only look like another family: icing is sweet, a snowdrop a
+  // flower, fior di latte milk without cocoa, and dragonfruit's spelling.
+  const families = name => noteFamilies(name).map(([f]) => f);
+  for (const [name, want] of [['Frosting', ['sweet']], ['Frosting [Glacé]', ['sweet']], ['Snowdrops', ['floral', 'green']], ['Fior di Latte', ['lactonic']],
+    ['Dragonfruit', ['tropical']], ['Dragon fruit', ['tropical']], ['Snow', ['fresh', 'ozonic']], ['Ice', ['fresh', 'ozonic']], ['Caffè Latte', ['cacao', 'lactonic']]]) {
+    assert.deepEqual(families(name), want, name);
+  }
   // The labdanum in a resin bottle bridges to an amber one.
   const resin = bottle('resin', { balsamic: 100 }, { base: ['Labdanum'] });
   assert.ok(layerProfile(resin).profile.amber > 0);

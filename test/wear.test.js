@@ -5,7 +5,8 @@ import { packTrip, withEvents } from '../src/pack.js';
 import { rank, PLAN_MARGIN } from '../src/engine.js';
 import { OCCASIONS, occasionById } from '../src/occasions.js';
 import { sprayGuide } from '../src/spray.js';
-import { setSkin } from '../src/skin.js';
+import { setSkin, loadSkin, loadAsked, markAsked } from '../src/skin.js';
+import { planTies, rankedTies, whenOf, TIE_OCCASIONS } from '../src/contrast.js';
 import { summarize, week } from '../src/weather.js';
 import { renderScene } from '../src/scene.js';
 import { shiftISO } from '../src/history.js';
@@ -16,6 +17,7 @@ import { placeSheetHTML, datePillHTML } from '../src/views/wear/pickers.js';
 import { wxIconFor } from '../src/ui/components.js';
 import { esc } from '../src/ui.js';
 import * as app from '../src/app/state.js';
+import { bottleModel } from '../src/views/bottle.js';
 import { syntheticForecast } from './fixtures.js';
 
 // A stand-in for the browser's localStorage, fresh for each test.
@@ -291,6 +293,110 @@ test('the week board promises no repeats only when there are none, and says rain
   const wet = wear.weekHTML(varied.map((d, n) => ({ ...d, pop: n === 1 ? 87 : 10 })));
   assert.match(wet, /<span class="wk-pop">87%<span class="visually-hidden"> chance of<\/span> rain<\/span>/);
   assert.equal((wet.match(/% rain|chance of/g) ?? []).length, 1, 'only on the rainy day');
+});
+
+test('the Week counts a window’s equals under its pick, “+2 as good” in a row and the columns alike, and names them in its tooltip and label', () => {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  Object.assign(state, { demo: { fetched: today, fragrances }, forecast: live, wx: summarize(live), loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], occasionSlot: null });
+  const days = app.computeWeek();
+  const slots = days.flatMap(d => [d.day, d.night]).filter(Boolean);
+  // The plan's own ties, as Now finds them.
+  const windows = slots.map(p => ({ win: p.win, ranked: p.ranked, pick: p.pick }));
+  assert.deepEqual(slots.map(p => p.ties.map(t => t.entry.fragrance.id)), planTies(windows).map(ts => ts.map(t => t.entry.fragrance.id)));
+  const one = slots.find(p => p.ties.length === 1), two = slots.find(p => p.ties.length === 2);
+  assert.ok(one && two, 'the fixture’s week has both');
+  // The board can't link them, so the pick's page leads its shelf with them, wherever they rank;
+  // another bottle's page keeps the list's order.
+  const shelf = (id, ctx) => bottleModel({ dest: 'bottle', arg: id, query: { ctx } }).alts.map(r => r.fragrance.id);
+  for (const p of [one, two]) {
+    const names = p.ties.map(t => t.entry.fragrance.id);
+    assert.deepEqual(shelf(p.pick.fragrance.id, p.ctx).slice(0, names.length), names);
+    assert.equal(new Set(shelf(p.pick.fragrance.id, p.ctx)).size, 4);
+  }
+  const other = two.ranked.find(r => r !== two.pick && !two.ties.some(t => t.entry === r));
+  assert.deepEqual(shelf(other.fragrance.id, two.ctx), two.ranked.filter(r => r !== other).slice(0, 4).map(r => r.fragrance.id));
+  const cell = p => clean(wear.weekPick(p, p.win.slot, 'Friday'), 'week pick');
+  const [first, second] = two.ties.map(t => t.entry.fragrance.name);
+  // One wording for both layouts: a name kept four letters in the columns.
+  assert.match(cell(two), /<small class="wk-mark wk-tie">.*<span>\+2 as good<\/span><\/small>/s);
+  assert.match(cell(one), /<small class="wk-mark wk-tie">.*<span>\+1 as good<\/span><\/small>/s);
+  assert.ok(!/wk-long|wk-short/.test(cell(two).match(/<small class="wk-mark wk-tie">.*<\/small>/s)[0]), 'no wording for one layout only');
+  assert.ok(cell(two).includes(`aria-label="${esc(`Friday ${two.win.slot === 'day' ? 'daytime' : 'night'}: ${two.pick.fragrance.name}, ${first} and ${second} suit it as well`)}"`));
+  assert.match(cell(two), / title="[^"]+ suit [^"]+ just as well\."/, 'the tooltip has their tags');
+  // An event's mark says what it's for instead; a worn window has none.
+  assert.ok(!cell({ ...two, win: { ...two.win, occasion: occasionById('formal') } }).includes('wk-tie'));
+  assert.ok(!cell({ ...two, ties: [] }).includes('wk-tie'));
+  // The note under the head says what "or" means, only when one shows.
+  const board = clean(wear.weekHTML(days), 'week');
+  assert.match(board, /<p class="wk-legend">.*<span>Bottles that suit a window just as well as its pick\.<\/span><\/p>/s);
+  assert.match(board, /class="wk-list marked"/);
+  assert.ok(!wear.weekHTML(days.map(d => ({ ...d, day: d.day && { ...d.day, ties: [] }, night: d.night && { ...d.night, ties: [] } }))).includes('as well as its pick'));
+  // Worn: that window's choice is made.
+  state.history = [{ id: two.pick.fragrance.id, date: two.win.dateISO, slot: two.win.slot }];
+  try {
+    const again = app.computeWeek().flatMap(d => [d.day, d.night]).filter(Boolean).find(p => p.win.dateISO === two.win.dateISO && p.win.slot === two.win.slot);
+    assert.deepEqual(again.ties, []);
+  } finally {
+    state.history = [];
+  }
+});
+
+test('Now and the Week name the same ties for today: Now plans the window after today’s too, unshown', () => {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  Object.assign(state, { demo: { fetched: today, fragrances }, forecast: live, wx: summarize(live), loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], occasionSlot: null, events: [] });
+  app.computeToday();
+  const slots = app.todaySlots();
+  const week = app.computeWeek().flatMap(d => [d.day, d.night]).filter(Boolean);
+  const at = win => week.findIndex(p => p.win.dateISO === win.dateISO && p.win.slot === win.slot);
+  const last = at(slots.at(-1).win);
+  // The window after today's, planned as the Week plans it, and never one of Now's slots.
+  assert.ok(state.after, 'planned');
+  assert.equal(at(state.after.win), last + 1);
+  assert.equal(state.after.pick.fragrance.id, week[last + 1].pick.fragrance.id);
+  assert.deepEqual(slots.map(p => p.pick.fragrance.id), slots.map(p => week[at(p.win)].pick.fragrance.id), 'today’s picks agree');
+  const plan = app.todayPlan();
+  assert.equal(plan.length, slots.length + 1);
+  const ids = ts => ts.map(t => t.entry.fragrance.id);
+  const ties = planTies(plan);
+  assert.deepEqual(slots.map((p, i) => ids(ties[i])), slots.map(p => ids(week[at(p.win)].ties)));
+  // Tonight's ties never offer what the next window is planned to wear.
+  assert.ok(!ties[slots.length - 1].some(t => t.entry.fragrance.id === state.after.pick.fragrance.id));
+});
+
+test('the Occasion card names the bottles that suit formal wear, the office or a night in as well, until he’s wearing one, and no other occasion’s', () => {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  const base = { forecast: live, wx: summarize(live), loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], occasionSlot: null };
+  const pane = wear.wear.panes.find(p => p.id === 'occasion');
+  // Each occasion's pick with a twin of it beside it: a toss-up every time,
+  // named only where a tie is news (TIE_OCCASIONS: formal wear, the office, a night in).
+  const tossUp = o => {
+    Object.assign(state, { ...base, demo: { fetched: today, fragrances } });
+    pane.render({}, { dest: 'wear', pane: 'occasion', arg: o.id });
+    const f = state.contexts.occ.ranked[0].fragrance;
+    Object.assign(state, { demo: { fetched: today, fragrances: [...fragrances, { ...f, id: `${f.id}-twin`, name: `${f.name} Twin` }] } });
+    const html = clean(pane.render({}, { dest: 'wear', pane: 'occasion', arg: o.id }), o.id);
+    return { o, html, ranked: state.contexts.occ.ranked, win: state.contexts.occ.win };
+  };
+  for (const o of OCCASIONS.filter(x => !TIE_OCCASIONS.has(x.id))) assert.ok(!tossUp(o).html.includes('class="ties"'), o.id);
+  for (const id of ['office', 'cozy']) assert.ok(tossUp(occasionById(id)).html.includes('class="ties"'), `${id} names its twin`);
+  const found = tossUp(occasionById('formal'));
+  assert.ok(found.html.includes('class="ties"'), 'formal wear names its twin');
+  const { o, html, ranked, win } = found;
+  const phrase = o.phrase ?? o.label.toLowerCase();
+  assert.match(html, new RegExp(`<p class="ties">.*suits? ${esc(phrase)} just as well\\.</span></p>`, 's'));
+  const pick = html.indexOf('class="pick full"');
+  assert.ok(html.indexOf('class="ties"') > html.indexOf('class="reasons lead"', pick) && html.indexOf('class="ties"') < html.indexOf('class="chips"', pick), 'under the reasons');
+  assert.ok(rankedTies(ranked, win).some(t => t.entry.fragrance.id.endsWith('-twin')));
+  for (const t of rankedTies(ranked, win)) assert.ok(html.includes(`data-action="open" data-ctx="occ" data-id="${t.entry.fragrance.id}">${esc(t.entry.fragrance.name)}</button>`));
+  state.history = [{ id: ranked[0].fragrance.id, date: win.dateISO, slot: win.slot, occasion: o.id }];
+  try {
+    assert.ok(!pane.render({}, { dest: 'wear', pane: 'occasion', arg: o.id }).includes('class="ties"'), 'he’s chosen');
+  } finally {
+    Object.assign(state, { history: [], demo: { fetched: today, fragrances } });
+  }
 });
 
 test('the compact band keeps trees and the cabin off the ground under its line of text', () => {
@@ -594,4 +700,258 @@ test('in forced colors the chosen occasion tile keeps a ring of its own', () => 
   const css = readFileSync(new URL('../src/css/wear.css', import.meta.url), 'utf8');
   const forced = [...css.matchAll(/@media \(forced-colors: active\) \{([\s\S]*?)\n\}/g)].map(m => m[1]).join('');
   assert.match(forced, /\.occ\[aria-checked='true'\] \{ outline: 2px solid Highlight/);
+});
+
+test('a night planned for a date: Now and the Week plan around it, say what for, and log the wear for it', () => {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  const wx = summarize(live);
+  const today = wx.todayISO;
+  Object.assign(state, { demo: { fetched: today, fragrances }, forecast: live, wx, loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], occasionSlot: null, slot: null, route: { dest: 'wear', pane: 'now' } });
+  const date = occasionById('date'), formal = occasionById('formal');
+  // Tonight a date, and a formal night later in the week.
+  const later = week(live).find(d => d.dateISO === shiftISO(today, 3)).night;
+  app.setEvent(wx.night.dateISO, 'night', 'date');
+  app.setEvent(later.dateISO, 'night', 'formal');
+  assert.deepEqual(JSON.parse(store.get('scentcast.events')).map(e => e.occasion), ['date', 'formal'], 'kept on the device');
+  try {
+    app.computeToday();
+    const night = state.today.night;
+    assert.equal(night.win.occasion.id, 'date');
+    assert.equal(night.pick.fragrance.id, rank(app.rankedFragrances(), wx.night, 'night', { occasion: date })[0].fragrance.id, 'the best for a date');
+    assert.equal(state.contexts.night.occasion, date, 'its context carries the occasion');
+    // The Week agrees about today, and keeps the formal night's best for it.
+    const days = app.computeWeek();
+    const first = days.flatMap(d => [d.day, d.night]).filter(Boolean).slice(0, app.todaySlots().length);
+    assert.deepEqual(app.todaySlots().map(p => p.pick.fragrance.id), first.map(p => p.pick.fragrance.id));
+    const sat = days.find(d => d.dateISO === later.dateISO).night;
+    assert.equal(sat.pick.fragrance.id, rank(app.rankedFragrances(), later, 'night', { occasion: formal, todayISO: later.dateISO })[0].fragrance.id);
+    assert.ok(days.filter(d => d.dateISO < later.dateISO).every(d => [d.day, d.night].every(p => !p || p.pick.fragrance.id !== sat.pick.fragrance.id)), 'not worn the days before');
+    // Now reads tonight's ties with the formal night's plan, so they never offer its bottle.
+    const plan = app.todayPlan();
+    assert.equal(plan.at(-1).win.occasion.id, 'formal');
+    assert.equal(plan.at(-1).pick.fragrance.id, sat.pick.fragrance.id);
+    assert.ok(!planTies(plan)[plan.indexOf(night)].some(t => t.entry.fragrance.id === sat.pick.fragrance.id));
+    // Now's card says what tonight is for, with a way to clear it; the Week marks the planned nights.
+    state.slot = 'night';
+    const now = wear.wear.panes.find(p => p.id === 'now').render({}, state.route);
+    assert.match(now, /<span class="event-tag">.*<span>For a date<\/span><\/span><button class="link-btn" data-action="event-clear" data-date="[\d-]+" data-slot="night">Clear<span class="visually-hidden">: (Tonight|Tomorrow night) isn’t for a date<\/span><\/button>/s);
+    const board = wear.weekHTML(days);
+    assert.equal((board.match(/class="wk-mark wk-event"/g) ?? []).length, 2);
+    assert.match(board, /aria-label="[^"]+ night: [^"]+, for formal wear"/);
+    assert.match(board, /What you planned gets its best bottle/);
+    // A wear logged from tonight's card counts for a date.
+    const ui = { keepingFocus() {}, render() {} };
+    wear.actions.wear({ dataset: { ctx: 'night', id: night.pick.fragrance.id } }, ui);
+    assert.equal(state.history.find(h => h.date === wx.night.dateISO && h.slot === 'night').occasion, 'date');
+    // Its stars on Now say where it stands for the date, as the bottle page does.
+    wear.forgetAsked();
+    wear.actions['ask-rate']({ dataset: { id: night.pick.fragrance.id, value: '5' }, getAttribute: () => 'false' }, { keepingFocus(el, scope, fn) { fn(); }, render() { app.computeToday(); } }, { detail: 1 });
+    assert.match(wear.wear.panes.find(p => p.id === 'now').render({}, state.route), /<p class="ask-said">Rated 5★\. (Still|Now) \d+\w+ for date night (tonight|tomorrow night)[.,]/);
+    wear.forgetAsked();
+    setSkin(night.pick.fragrance.id, { rating: null });
+    // Clear: tonight is everyday again.
+    wear.actions['event-clear']({ dataset: { date: wx.night.dateISO, slot: 'night' } }, { render() { app.computeToday(); }, showToast() {} });
+    assert.equal(app.eventAt(wx.night), null);
+    assert.ok(!state.today.night.win.occasion);
+  } finally {
+    app.setEvent(wx.night.dateISO, 'night', null);
+    app.setEvent(later.dateISO, 'night', null);
+    state.history = [];
+    state.slot = null;
+  }
+});
+
+test('the Occasion pane plans the window shown, at home only, and ranks a planned one as the plan does', () => {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  const wx = summarize(live);
+  const today = wx.todayISO;
+  Object.assign(state, { demo: { fetched: today, fragrances }, forecast: live, wx, loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', occasionSlot: null });
+  const formal = occasionById('formal');
+  const pane = wear.wear.panes.find(p => p.id === 'occasion');
+  const route = { dest: 'wear', pane: 'occasion', arg: 'formal' };
+  when.when.dateISO = shiftISO(today, 3);
+  const win = when.eventWindow('night').win;
+  // Wore its best two days before: unplanned, that counts against it there.
+  const best = rank(app.rankedFragrances(), win, 'night', { occasion: formal, todayISO: win.dateISO })[0].fragrance;
+  state.history = [{ id: best.id, date: shiftISO(today, 1), slot: 'night' }];
+  try {
+    const before = pane.render({}, route);
+    assert.match(before, /<button class="btn secondary compact" data-action="occ-plan" data-date="[\d-]+" data-slot="night" data-occasion="formal">.*Plan it for \w+ night<\/span><\/button>/s);
+    assert.ok(state.contexts.occ.ranked.find(r => r.fragrance.id === best.id).parts.rotation > 0);
+    // Planned: the best for it, as Now and the Week will have it.
+    const ui = { keepingFocus(el, scope, render) { render(); }, render() {}, showToast() {} };
+    when.actions['occ-plan']({ dataset: { date: win.dateISO, slot: 'night', occasion: 'formal' } }, ui);
+    assert.equal(app.eventAt(win).occasion, 'formal');
+    const after = pane.render({}, route);
+    assert.match(after, /<p class="occ-plan on">.*Planned for \w+ night<\/span><button class="link-btn" data-action="occ-plan"[^>]*>Clear/s);
+    assert.equal(state.contexts.occ.ranked[0].fragrance.id, best.id);
+    assert.ok(state.contexts.occ.event);
+    assert.equal(app.computeWeek().find(d => d.dateISO === win.dateISO).night.pick.fragrance.id, best.id, 'the Week agrees');
+    // On the same night another occasion says it's taken; planning it takes its place.
+    const date = pane.render({}, { ...route, arg: 'date' });
+    assert.match(date, /is planned for formal wear<\/span>/);
+    assert.match(date, /Plan it for \w+ night/);
+    // Elsewhere there's no plan to make: Now and the Week are for home.
+    when.when.place = { name: 'Chicago', lat: 41.9, lon: -87.6 };
+    assert.ok(!when.whenBarHTML({ ...when.when, home: state.loc, today, slot: 'night', wx, plan: null }).includes('occ-plan'));
+    when.when.place = null;
+    when.actions['occ-plan']({ dataset: { date: win.dateISO, slot: 'night', occasion: 'formal' } }, ui);
+    assert.equal(app.eventAt(win), null, 'the same control clears it');
+  } finally {
+    when.when.dateISO = null;
+    when.when.place = null;
+    state.history = [];
+    for (const e of [...state.events]) app.setEvent(e.dateISO, e.slot, null);
+  }
+});
+
+// Now on a forecast that starts today, David's wardrobe, nothing worn: the
+// pane as the shell draws it (computeToday, then the pane).
+function nowOnToday(history = []) {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  Object.assign(state, { demo: { fetched: today, fragrances }, forecast: live, wx: summarize(live), loc: { name: 'Here', lat: 40, lon: -74 }, shared: null, active: 'demo', slot: null, history });
+  const pane = wear.wear.panes.find(p => p.id === 'now');
+  const draw = () => {
+    app.computeToday();
+    return clean(pane.render({}, { dest: 'wear', pane: 'now' }), 'Now');
+  };
+  return { state, draw };
+}
+
+test('Now says which bottles suit the window just as well, and how each differs, until he’s wearing one', () => {
+  const { state, draw } = nowOnToday();
+  let html = draw();
+  const slots = app.todaySlots(), now = app.nowSlot();
+  const ties = planTies(slots)[slots.indexOf(now)];
+  assert.ok(ties.length, 'the fixture’s window is a toss-up');
+  assert.match(html, /<p class="ties">/);
+  for (const t of ties) {
+    assert.ok(html.includes(`data-action="open" data-ctx="${now.win.slot}" data-id="${t.entry.fragrance.id}">${esc(t.entry.fragrance.name)}</button>`), `${t.entry.fragrance.name} opens its page`);
+  }
+  assert.ok(html.includes(` ${whenOf(now.win)} just as well.`), 'today, tonight, or tomorrow once tonight is over');
+  assert.ok(html.indexOf('class="ties"') > html.indexOf('class="reasons lead"') && html.indexOf('class="ties"') < html.indexOf('class="chips"'), 'one line under the reasons');
+  // The Also good shelf tags the bottles within reach of the pick in a word,
+  // above it or below.
+  const tagged = html => [...html.matchAll(/data-id="([^"]+)" aria-label="[^"]*">(?:(?!<\/button>)[\s\S])*<span class="shelf-tag">/g)].map(m => m[1]);
+  const within = (ids, slot) => ids.every(id => Math.abs(slot.ranked.find(r => r.fragrance.id === id).score - slot.pick.score) <= PLAN_MARGIN);
+  assert.ok(tagged(html).length && within(tagged(html), now), 'only bottles within reach of the pick');
+  // Wearing the pick: the choice is made. Wearing one far down the list,
+  // the bottles well above it go untagged too.
+  state.history = [{ id: now.pick.fragrance.id, date: now.win.dateISO, slot: now.win.slot, occasion: 'daily' }];
+  html = draw();
+  assert.ok(!html.includes('class="ties"'));
+  state.history = [{ id: now.ranked.at(-1).fragrance.id, date: now.win.dateISO, slot: now.win.slot, occasion: 'daily' }];
+  html = draw();
+  assert.ok(within(tagged(html), app.nowSlot()));
+  assert.ok(!tagged(html).includes(now.ranked[0].fragrance.id));
+  // Every bottle within a point worn lately: nothing to offer.
+  state.history = ties.map((t, i) => ({ id: t.entry.fragrance.id, date: shiftISO(now.win.dateISO, -1 - i), slot: 'day' }));
+  html = draw();
+  const after = planTies(app.todaySlots())[app.todaySlots().indexOf(app.nowSlot())];
+  assert.ok(!after.some(t => ties.some(u => u.entry.fragrance.id === t.entry.fragrance.id)), 'what he wore lately isn’t offered');
+  assert.equal(html.includes('class="ties"'), after.length > 0);
+});
+
+test('Now asks what it needs once each: stars for the unrated bottle he’s wearing, then how yesterday’s wore', () => {
+  wear.forgetAsked();
+  const { state, draw } = nowOnToday();
+  state.base = { dest: 'wear', pane: 'now' };
+  let html = draw();
+  const now = app.nowSlot(), pick = now.pick.fragrance.id;
+  const day = shiftISO(app.state.wx.todayISO, -1);
+  const worn = fragrances.find(f => f.id !== pick && f.id !== evil.id);
+  assert.ok(!html.includes('class="ask'), 'nothing worn, nothing asked');
+
+  // Worn yesterday: how it wore, under today's picks.
+  const yesterday = { id: worn.id, date: day, slot: 'night', occasion: 'daily' };
+  state.history = [yesterday];
+  html = draw();
+  assert.ok(html.includes(`How did <b>${esc(worn.name)}</b> wear yesterday?`));
+  assert.ok(html.indexOf('ask-skin') > html.indexOf('class="now-picks"') && html.indexOf('ask-skin') < html.indexOf('class="also"'));
+  assert.match(html, /data-action="ask-lasts" data-value="1" data-id="[^"]+" aria-pressed="false"><span>Lasted longer/);
+  assert.ok(!/aria-pressed="true"/.test(html.slice(html.indexOf('ask-skin'))), 'no answer chosen for him');
+
+  // Wearing today's pick, unrated: its stars, in the pick card, alone.
+  state.history = [{ id: pick, date: now.win.dateISO, slot: now.win.slot, occasion: 'daily' }, yesterday];
+  html = draw();
+  assert.match(html, /<div class="ask ask-stars">/);
+  assert.ok(html.indexOf('ask-stars') > html.indexOf('data-action="wear"') && html.indexOf('ask-stars') < html.indexOf('class="next-window"'), 'beside Wear this');
+  assert.ok(!html.includes('ask-skin'), 'one question at a time');
+  assert.equal((html.match(/data-action="ask-rate"/g) ?? []).length, 5);
+
+  // Rating it saves the stars, and they stay this visit, saying where it moved.
+  const ui = { keepingFocus(el, scope, fn) { fn(); }, render() { app.computeToday(); } };
+  wear.actions['ask-rate']({ dataset: { id: pick, value: '5' }, getAttribute: () => 'false' }, ui, { detail: 1 });
+  assert.equal(loadSkin()[pick].rating, 5);
+  assert.ok(loadAsked()[pick].stars);
+  html = draw();
+  assert.match(html, /<p class="ask-said">Rated 5★\. (Still|Now) \d+(st|nd|rd|th) for (today|tonight|tomorrow)[.,]/);
+  assert.match(html, /data-action="ask-rate" data-value="5" data-id="[^"]+" aria-label="5 stars"/);
+  assert.match(html, /aria-checked="true" tabindex="0" data-action="ask-rate" data-value="5"/);
+  assert.ok(!html.includes('ask-skin'), 'still one at a time');
+  // The bottle page beside it rates it again: the stars follow, and the line about 5★ goes.
+  setSkin(pick, { rating: 2 });
+  html = draw();
+  assert.match(html, /aria-checked="true" tabindex="0" data-action="ask-rate" data-value="2"/);
+  assert.ok(!html.includes('class="ask-said"') && !html.includes('data-action="ask-skip"'));
+  setSkin(pick, { rating: 5 });
+
+  // The next visit: rated, so not asked again, even once the stars are cleared; yesterday's turn.
+  state.base = { dest: 'wear', pane: 'now' };
+  setSkin(pick, { rating: null });
+  html = draw();
+  assert.ok(!html.includes('data-action="ask-rate"'), 'asked once');
+  assert.ok(html.includes('ask-skin'));
+
+  // An answer saves at once and holds the question for the other, then Done.
+  wear.actions['ask-lasts']({ dataset: { id: worn.id, value: '1' } }, ui);
+  assert.equal(loadSkin()[worn.id].longevity, 1);
+  assert.ok(loadAsked()[worn.id].skin, 'asked from the first answer');
+  html = draw();
+  assert.ok(html.includes('Saved: it lasts longer on you.'));
+  assert.match(html, /data-action="ask-lasts" data-value="1" data-id="[^"]+" aria-pressed="true"/);
+  assert.match(html, /data-action="ask-skip" data-kind="skin" data-id="[^"]+">Done</);
+  // Changed on the bottle page meanwhile: the answer follows, and the saved line goes.
+  setSkin(worn.id, { longevity: -1 });
+  html = draw();
+  assert.match(html, /data-action="ask-lasts" data-value="-1" data-id="[^"]+" aria-pressed="true"/);
+  assert.ok(!html.includes('Saved: it lasts longer'));
+  setSkin(worn.id, { longevity: 1 });
+  assert.ok(draw().includes('Saved: it lasts longer on you.'), 'back as it was said');
+  wear.actions['ask-projects']({ dataset: { id: worn.id, value: '-1' } }, ui);
+  assert.ok(draw().includes('Saved: it lasts longer and sits closer on you.'));
+  wear.actions['ask-skip']({ dataset: { id: worn.id, kind: 'skin' }, isConnected: false }, ui);
+  html = draw();
+  assert.ok(!html.includes('class="ask'), 'Done puts it away');
+  state.base = { dest: 'wear', pane: 'now' };
+  assert.ok(!draw().includes('class="ask'), 'and it never comes back');
+  wear.forgetAsked();
+});
+
+test('Not now waves a question off for good; a bottle with his own nudges isn’t asked how it wore', () => {
+  wear.forgetAsked();
+  const a = { ...fragrances[1] }, b = { ...fragrances[2] }, c = { ...fragrances[3], personal: { rating: 4, longevity: 1, sillage: 0 } };
+  assert.deepEqual(wear.askFor({ worn: a, yesterday: [b], asked: {} }), { kind: 'stars', f: a });
+  assert.deepEqual(wear.askFor({ worn: { ...a, personal: { rating: 4, longevity: 0, sillage: 0 } }, yesterday: [b], asked: {} }), { kind: 'skin', f: b }, 'rated already: how yesterday’s wore');
+  assert.deepEqual(wear.askFor({ worn: null, yesterday: [c, b], asked: {} }), { kind: 'skin', f: b }, 'his own nudge says it already');
+  assert.equal(wear.askFor({ worn: a, yesterday: [b], asked: { [a.id]: { stars: '2026-10-01' }, [b.id]: { skin: '2026-10-01' } } }), null);
+  assert.deepEqual(wear.askFor({ worn: a, yesterday: [], asked: { [a.id]: { skin: '2026-10-01' } } }), { kind: 'stars', f: a }, 'asked how it wore isn’t asked for stars');
+
+  const { state, draw } = nowOnToday();
+  state.base = { dest: 'wear', pane: 'now' };
+  app.computeToday();
+  const now = app.nowSlot(), pick = now.pick.fragrance.id;
+  state.history = [{ id: pick, date: now.win.dateISO, slot: now.win.slot, occasion: 'daily' }];
+  assert.ok(draw().includes('data-action="ask-skip" data-kind="stars"'));
+  wear.actions['ask-skip']({ dataset: { id: pick, kind: 'stars' }, isConnected: false }, { render() {} });
+  assert.ok(!draw().includes('class="ask'));
+  assert.ok(!loadSkin()[pick], 'nothing saved');
+  // Stored asks read back whole; anything else in the key is dropped.
+  markAsked('x', 'skin', '2026-10-02');
+  localStorage.setItem('scentcast.asked', JSON.stringify({ ...JSON.parse(localStorage.getItem('scentcast.asked')), y: { stars: 3 }, z: 'no' }));
+  assert.deepEqual(loadAsked().x, { skin: '2026-10-02' });
+  assert.ok(!('y' in loadAsked()) && !('z' in loadAsked()));
 });

@@ -8,7 +8,7 @@ import { SEASONS } from '../engine.js';
 import { setHidden } from '../hidden.js';
 import { saveMine, shareURL, localMatches, nameMatches, importLines, MAX_IMPORT_LINES } from '../collections.js';
 import { customRecord, MAX_CUSTOM_ACCORDS } from '../custom.js';
-import { clearHistory, journalExport } from '../history.js';
+import { clearHistory, journalExport, journalToken } from '../history.js';
 import { loadSkin } from '../skin.js';
 import { esc, plural, shortDate, relativeDay, accordLabel, toastName } from '../ui.js';
 import {
@@ -177,9 +177,10 @@ export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confir
     <section><h3>Gathering dust</h3>${list ? `<p class="muted small journal-scope">From ${esc(list)}: in rotation, not worn in 30 days.</p>` : ''}${dustList}</section>
     <div class="action-row end">
       <button class="btn secondary" data-action="journal-export">${icon.download}Export</button>
+      <button class="btn secondary" data-action="journal-claude">${icon.paste}Copy for Claude</button>
       <button class="btn ${confirmClear ? 'secondary danger' : 'tertiary'}" data-action="journal-clear">${icon.remove}${confirmClear ? 'Press again to clear' : 'Clear history'}</button>
     </div>
-    <p class="muted small">Logged with “Wear this”. History stays on this device; Export saves it as a file.</p>
+    <p class="muted small">Logged with “Wear this”. History stays on this device; Export saves it as a file, and Copy for Claude copies your last ten days, stars and switched-off bottles (no places) for Claude’s picks.</p>
   </section>`;
 }
 
@@ -376,20 +377,24 @@ export function customSheetHTML({ name = '', brand = '', accords = [], seasons =
 
 /**
  * A share link to copy by hand, where neither the share sheet nor the
- * clipboard took it: the whole link in a field, selected, and Copy.
+ * clipboard took it: the whole link in a field, selected, and Copy. With
+ * `claude`, the wear journal's Copy for Claude token the same way.
  */
-export function shareSheetHTML({ url, name = '', copied = false }) {
+export function shareSheetHTML({ url, name = '', copied = false, claude = false }) {
+  const words = claude
+    ? { title: 'Copy for Claude', lede: 'Paste it to Claude so its picks know what you’ve worn: your last ten days of wears, your stars and the bottles you switched off. No places.', field: 'For Claude', copy: 'Copy', done: 'Copied' }
+    : { title: 'Share link', lede: `Send it to anyone: it opens ${name ? `${esc(name)}’s` : 'these'} bottles in Almanac, ranked for their weather.`, field: 'Link', copy: 'Copy link', done: 'Link copied' };
   return sheetFrame('share-title', `
-      <h2 id="share-title" class="sheet-title">Share link</h2>
-      <p class="muted lede">Send it to anyone: it opens ${name ? `${esc(name)}’s` : 'these'} bottles in Almanac, ranked for their weather.</p>
-      <label class="name-field">Link
+      <h2 id="share-title" class="sheet-title">${words.title}</h2>
+      <p class="muted lede">${words.lede}</p>
+      <label class="name-field">${words.field}
         <input type="text" id="share-url" data-action="share-select" value="${esc(url)}" readonly autocomplete="off" spellcheck="false">
       </label>
-      ${liveHTML('share-live', copied === true ? 'Link copied' : copied || '')}
+      ${liveHTML('share-live', copied === true ? words.done : copied || '')}
       ${typeof copied === 'string' ? `<p class="muted small">${esc(copied)}</p>` : ''}
       <div class="sheet-bar">
         <button class="btn secondary" data-action="close-sheet">Done</button>
-        <button class="btn primary${copied === true ? ' on' : ''}" data-action="share-copy">${copied === true ? `${icon.check}<span>Copied</span>` : `${icon.paste}<span>Copy link</span>`}</button>
+        <button class="btn primary${copied === true ? ' on' : ''}" data-action="share-copy">${copied === true ? `${icon.check}<span>Copied</span>` : `${icon.paste}<span>${words.copy}</span>`}</button>
       </div>`);
 }
 
@@ -630,7 +635,7 @@ async function copyShare(el, app) {
     if (had && el.isConnected) el.focus({ preventScroll: true });
   }
   if (state.sheet !== s) return;
-  app.keepingFocus(el, '#sheet', () => app.updateSheet({ copied: copied || 'Couldn’t copy from here. The link is selected: copy it yourself.' }));
+  app.keepingFocus(el, '#sheet', () => app.updateSheet({ copied: copied || `Couldn’t copy from here. ${s.claude ? 'It’s' : 'The link is'} selected: copy it yourself.` }));
   if (!copied) document.getElementById('share-url')?.select();
   speak(document.getElementById('sheet'));
 }
@@ -814,15 +819,29 @@ export const actions = {
     app.closeShared();
     app.render();
   },
-  // With your own ratings and skin nudges (src/skin.js), for journal-check.
+  // With your own ratings and skin nudges (src/skin.js) and the plans made at home (src/events.js), for journal-check.
   'journal-export'() {
-    const data = journalExport(state.history, state.loc, hiddenIn(true), { skin: loadSkin() });
+    const data = journalExport(state.history, state.loc, hiddenIn(true), { skin: loadSkin(), events: state.events });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
     // Named by the device's date: an evening export in the Americas is already tomorrow in UTC.
     a.download = `almanac-journal-${deviceToday()}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  },
+  // The last ten days, stars, switched-off bottles and planned days and
+  // nights as a short token (journalToken) for Claude's picks and the
+  // Omarchy widget: the clipboard, else the share sheet's field, selected,
+  // to copy by hand.
+  async 'journal-claude'(el, app) {
+    const token = journalToken(state.history, hiddenIn(true), loadSkin(), { todayISO: deviceToday(), events: state.events });
+    try {
+      await navigator.clipboard.writeText(token);
+      app.showToast('<span>Copied. Paste it to Claude so its picks know what you’ve worn.</span>');
+    } catch {
+      app.openSheet({ kind: 'share-link', url: token, claude: true });
+      document.getElementById('share-url')?.select();
+    }
   },
   'journal-clear'(el, app) {
     if (state.armed !== 'journal-clear') {

@@ -126,9 +126,14 @@ test('the headline reads plainly, and the thin spots name what fills them', () =
   assert.equal(tail, 'Here’s where it’s thin.');
   assert.deepEqual(insights.headline({ ...report, overview: { strongShare: 0.81 }, gaps: [] }),
     { lead: 'You have a strong pick for 81% of what you wear.', tail: 'Nothing’s thin. Here’s where you’re strongest.' });
+  // Five spots show whole; his six fold to the biggest four.
+  const five = insights.thinHTML({ ...report, gaps: report.gaps.slice(0, 5) });
+  assert.equal((five.match(/class="thin-row"/g) ?? []).length, 5, 'five spots show whole');
+  assert.ok(!five.includes('ins-thin-all'));
   const html = insights.thinHTML(report);
-  assert.equal((html.match(/class="thin-row"/g) ?? []).length, report.gaps.length, 'five spots show whole');
-  assert.ok(!html.includes('ins-thin-all'));
+  assert.equal(report.gaps.length, 6, report.gaps.map(g => g.title).join('; '));
+  assert.match(html, /6 situations could use a better bottle\. The biggest four:/);
+  assert.match(html, /Show 2 more/);
   // The target is the top bottles' mean, which a suggestion can beat: never worded as a ceiling.
   assert.match(html, /Top bottles here average \d+%\./);
   assert.doesNotMatch(html, /best out there reach/);
@@ -146,7 +151,11 @@ test('the headline reads plainly, and the thin spots name what fills them', () =
   const zenith = report.picks.find(p => p.name === 'Zenith');
   if (zenith) assert.ok(html.includes(`data-id="${zenith.id}">Zenith</button>`), 'Zenith fills a thin spot');
   assert.ok(!/match;\s*$|NaN%/.test(html));
-  assert.match(insights.strongHTML(report), /Plenty for Date Night on cold/);
+  // Each strength shows as a row, led by its best bottle (Formal on mild nights edges Date Night in the cold off the four).
+  const strong = insights.strongHTML(report);
+  assert.equal((strong.match(/class="strong-row"/g) ?? []).length, report.strengths.length);
+  for (const s of report.strengths) assert.ok(strong.includes(`Plenty for ${esc(s.title)}`), s.title);
+  assert.match(strong, /Plenty for Formal on mild nights<\/b><span>Meant To Be Seen and \d+ more/);
 });
 
 test('a suggestion card shows its fills against your best, its facts and its actions', () => {

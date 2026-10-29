@@ -1,6 +1,6 @@
 {
   "source": "fragrantica.com, the originals that dupes in data/ are inspired by",
-  "fetched": "2026-10-14",
+  "fetched": "2026-10-26",
   "fragrances": [
     {
       "id": 97924,
@@ -536,6 +536,13 @@
           "White Musk",
           "Cedarwood"
         ]
+      },
+      "noteVotes": {
+        "Aldehydes": 1000,
+        "Bergamot": 320,
+        "Orange Blossom": 613,
+        "White Musk": 973,
+        "Cedarwood": 477
       },
       "parfumo": {
         "url": "https://www.parfumo.com/Perfumes/Carolina_Herrera/cedar-chic",
@@ -1443,8 +1450,8 @@
     },
     {
       "id": 46165,
-      "name": "One Umbrella for Two Floraïku",
-      "brand": "Floraiku",
+      "name": "One Umbrella for Two",
+      "brand": "Floraïku",
       "year": 2017,
       "gender": "women and men",
       "url": "https://www.fragrantica.com/perfume/Floraiku/One-Umbrella-for-Two-46165.html",

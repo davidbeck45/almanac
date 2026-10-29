@@ -30,9 +30,43 @@ const CALENDAR_BOOST = 1.35;
 // out between these latitudes, toward the equator.
 const TROPICS = [15, 25];
 
-// How much each part counts toward a score (scoreOf).
+// How much each part counts toward a score (scoreOf). An occasion's own
+// weights are occasionWeights(): these, unless its fit is mild (MILD_SPAN).
 export const DAILY_WEIGHTS = Object.freeze({ season: 0.5, time: 0.25, weather: 0.2, quality: 0.05 });
 export const OCCASION_WEIGHTS = Object.freeze({ occasion: 0.4, season: 0.3, time: 0.1, weather: 0.15, quality: 0.05 });
+// What a rich bottle loses for an occasion in weather that calls for fresh
+// (parts.heat, richInHeat). With the occasion's fit at 0.4 and the weather
+// at 0.15, a date's love of vanilla and amber kept four winter bottles in a
+// 90°F night's top 6, all A; daily picks weigh season and weather at 0.7 and
+// need no such help. An occasion spent wholly indoors (`outside: 0`) pays
+// INDOOR_HEAT of it; any other pays it whole, since the walk there, the sun
+// and a crowd keep a summer evening warm.
+const HEAT_WEIGHT = 0.3;
+// A heat wave still reaches a night in: without it, Cream Velvet topped Cozy
+// on 264 of the backtest's 78°F+ nights (115 now), and its hot nights scored
+// at chance against the members' summaries' heat words (AUC 0.52, now 0.58).
+// From 0.25, Cream Velvet leaves a sweltering night in's top 3.
+const INDOOR_HEAT = 0.15;
+// Its mirror, what a thin bottle loses where the weather calls for rich
+// (parts.cold, thinInCold), for the share of the occasion spent outside
+// (`outside` in src/occasions.js), where cold air mutes a fresh bottle: a
+// heated room takes the chill off. Outdoors' love of citrus and aquatics put
+// Cedrus Blanc, a cedar-citrus that goes flat in cold air, first on every
+// cold day of 2023–2025 in Chicago, New York, London and Houston; now
+// Sauvage and Vintage Radio take 94% of them, and the office (out 0.15 of
+// the time) keeps its pick. Scaling the heat by the same share let a warm
+// bottle into Date Night's top 3 on 38% of 78°F+ nights, against 9%.
+const COLD_WEIGHT = 0.3;
+// What the cold has to cost a bottle for its reason to say so, and how far
+// on the fresh side it has to sit (the weather's own "Thin in the cold"
+// needs -0.2): near neutral (Supremacy, Glorious Oud Royal Blanc) it pays a
+// little but isn't thin, and its winter votes may say the opposite.
+const COLD_REASON = 0.03;
+const THIN_REASON = -0.15;
+// Out this much of the time or more, the reason names the occasion ("Thin
+// for the outdoors in the cold"); less, and it's the weather's own words,
+// since an office or a dinner is spent inside.
+const OUT_REASON = 0.5;
 
 // Rank cutoffs: first 3 are S, next 5 A, next 6 B, rest C. A tier also needs
 // its floor score, so in a small collection on a sweltering day the third
@@ -42,10 +76,18 @@ const TIER_SIZES = [['S', 3], ['A', 5], ['B', 6]];
 const TIER_FLOORS = { S: 0.75, A: 0.6, B: 0, C: -Infinity };
 const TIERS = ['S', 'A', 'B', 'C'];
 
-// Worn today, yesterday, 2 days ago … 9 days ago. Top scores sit within a few
-// hundredths of each other, so a 3-day memory cycled the same 3 bottles
-// through a month of steady weather; a 10-day tail rotates 9–17.
+// Worn today, yesterday, 2 days ago … 9 days ago. In mild weather top scores
+// sit within a few hundredths of each other, so a 3-day memory cycled the
+// same 3 bottles through a month of steady weather; a 10-day tail rotates
+// 9–17. A cold day's top leads by more (a median 0.035), so a winter month
+// wears 8 bottles or more, none more than 9 times in 56 windows.
 export const ROTATION_PENALTY = Object.freeze([0.2, 0.12, 0.08, 0.06, 0.045, 0.035, 0.025, 0.02, 0.015, 0.01]);
+// In the cold the rich bottles suit both slots, and last night's wear at full
+// weight sent cold days to mid-weight bottles (9.2% of the backtest's cold-day
+// Now picks gave up 0.06 or more to rotation; 6.7% at this weight). Around 0.6
+// Jake takes 12 to 13 of 56 Houston summer windows (the count moves by one
+// with each pick's knock-on through the rotation).
+export const OTHER_SLOT = 0.65;
 
 const RAIN_ACCORDS = ['green', 'earthy', 'woody', 'aromatic', 'mossy', 'aquatic'];
 
@@ -161,8 +203,9 @@ export function votedShares(frag) {
 // counts as PRIOR_VOTES votes, about how far well-voted bottles stray from it
 // out of sample (scripts/fit-profiles.mjs).
 // A dupe's original (`original`, from data/dupes.json) predicts its split
-// better: across the wardrobe's 18 dupes it strays about as far as 120 votes
-// would, for seasons and day/night alike. Both count toward the prior.
+// better: across the wardrobe's 19 dupes it strays about as far as 120 votes
+// would, for seasons and day/night alike (133 and 137 when measured again
+// in October 2026). Both count toward the prior.
 // Flat votes (flatVotes) count as none, so the prediction (and an original)
 // decides. Fragella and hand-entered bottles are estimates already and pass
 // through.
@@ -209,11 +252,34 @@ export function seasonFit(frag, weights) {
   return 0.5 * relative + 0.5 * clamp(lift / 1.6, 0, 1);
 }
 
-export function timeFit(frag, slot) {
+// Voters call rich bottles night scents (the night share tracks accord
+// heaviness, r 0.74 over the pool), and the weather part reads that richness
+// already, so on a cold day the votes marked down the very bottles the cold
+// calls for: Cream Velvet, the one rich bottle voted half by day, topped
+// every cold day and was worn 16 days of 28 in a Chicago winter. By day the
+// time fit forgives up to TIME_FORGIVE of a bottle's shortfall, in step with
+// how much richness the weather calls for (targetHeaviness, up to 1) and how
+// rich the bottle is (fully from RICH_BY_DAY). Nights stay as voted:
+// forgiving a fresh bottle's day lean on a hot night only handed hot nights
+// to one fresh bottle.
+const TIME_FORGIVE = 0.6;
+const RICH_BY_DAY = 0.4;
+
+// The share of a bottle's time-of-day shortfall the weather forgives, 0..TIME_FORGIVE.
+export function timeForgiven(frag, slot, conditions) {
+  if (slot !== 'day' || !conditions) return 0;
+  const want = targetHeaviness(conditions);
+  if (want <= 0) return 0;
+  return TIME_FORGIVE * Math.min(want, 1) * clamp(heaviness(frag.accords) / RICH_BY_DAY, 0, 1);
+}
+
+// The votes' fit for the slot, its shortfall partly forgiven in `conditions` (timeForgiven).
+export function timeFit(frag, slot, conditions = null) {
   const { dayNight } = steadyShares(frag);
   const peak = Math.max(dayNight.day, dayNight.night) || 1;
   const lift = dayNight[slot] / 0.5;
-  return 0.5 * (dayNight[slot] / peak) + 0.5 * clamp(lift / 1.3, 0, 1);
+  const fit = 0.5 * (dayNight[slot] / peak) + 0.5 * clamp(lift / 1.3, 0, 1);
+  return fit + (1 - fit) * timeForgiven(frag, slot, conditions);
 }
 
 // Dew point (°F): src/wmo.js has it, so the forecast needn't load the engine.
@@ -249,15 +315,41 @@ export function weatherFit(frag, conditions) {
   return clamp(fit + rain, 0, 1);
 }
 
+/**
+ * How rich a bottle is for the heat (parts.heat), 0..1: how far the bottle
+ * sits on the rich side of neutral, times the square of how far the weather
+ * calls for fresh (targetHeaviness under 0), so a warm evening costs it a
+ * little and a sweltering one a lot. Fresh and neutral bottles read 0 in any
+ * weather, so it reorders only the rich ones, and only where it's warm.
+ */
+export function richInHeat(frag, conditions) {
+  const fresh = clamp(-targetHeaviness(conditions), 0, 1);
+  return fresh * fresh * clamp(heaviness(frag.accords), 0, 1);
+}
+
+/**
+ * How thin a bottle is for the cold (parts.cold), 0..1: richInHeat's mirror,
+ * how far the bottle sits on the fresh side of neutral times the square of
+ * how far the weather calls for rich (targetHeaviness over 0), so a cool day
+ * costs it little and a freezing one a lot. Neutral and rich bottles read 0,
+ * so it reorders only the fresh ones, and only where it's cold.
+ */
+export function thinInCold(frag, conditions) {
+  const rich = clamp(targetHeaviness(conditions), 0, 1);
+  return rich * rich * clamp(-heaviness(frag.accords), 0, 1);
+}
+
 // Feels-like range a bottle suits on its own: its season and weather fit,
 // weighted as in daily picks, scanned in 1°F steps, whatever the time of year
 // (the calendar would otherwise move a cold-weather bottle's range by 26°F
 // between April and October). The range runs out from the peak to where the
 // fit falls COMFORT_DROP below it; lowF / highF are null when it runs off the
 // scan (nothing is too cold for a winter scent). bestF, the middle of the
-// peak, is only given for a range closed on both ends.
+// peak, is only given for a range closed on both ends. At a 0.1 drop rich
+// bottles topped out in the low 40s, though collectors wear them into the
+// 50s; 0.15 opened most two-sided ranges (Supremacy read as best in any heat).
 const COMFORT_SCAN = [0, 105];
-const COMFORT_DROP = 0.1;
+const COMFORT_DROP = 0.12;
 
 export function comfortRange(frag, { dewF = 55 } = {}) {
   const W = DAILY_WEIGHTS;
@@ -289,14 +381,18 @@ export function comfortRange(frag, { dewF = 55 } = {}) {
 const PERSONAL_RATING_WEIGHT = 0.8;
 const PERSONAL_SHIFT = 0.5;
 // What your stars add to a score on top of quality(), which is only 5% of it
-// (with quality's own change, about -0.13, -0.08, -0.02, 0 and +0.03): a
+// (with quality's own change, about -0.14, -0.08, -0.02, 0 and +0.03): a
 // bottle you rate 1★ or 2★ drops out of the top 3 unless it's clearly the
-// only fit (it led the 4th by about 0.13 or 0.08; in David's wardrobe the
+// only fit (it led the 4th by about 0.14 or 0.08; in David's wardrobe the
 // lead is under 0.05 half the time and over 0.09 a tenth), and a 5★ one wins
 // near ties (half the time it sits second to fourth) without taking every
-// window. 4★ is what most bottles you keep would get, so it moves a bottle
-// only through quality(). By stars, 1 to 5.
-const PERSONAL_PICK = [-0.1, -0.06, -0.01, 0, 0.02];
+// window. 1★ was -0.1 until the heat penalty (HEAT_WEIGHT) let a fresh bottle
+// lead a small wardrobe's hot night out by 0.142 (a third of David's: Supremacy
+// over Legacy), more than a 1★ took off; at -0.11 it never stays the pick
+// there, and one leading the 4th by 0.15 still shows in the top 3.
+// 4★ is what most bottles you keep would get, so it moves a bottle only
+// through quality(). By stars, 1 to 5.
+const PERSONAL_PICK = [-0.11, -0.06, -0.01, 0, 0.02];
 // Ratings at or below this mean you'd rather not wear it: no nudges, no packing.
 export const DISLIKED = 2;
 
@@ -325,17 +421,23 @@ export function quality(frag) {
   return PERSONAL_RATING_WEIGHT * clamp((mine - 1) / 4, 0, 1) + (1 - PERSONAL_RATING_WEIGHT) * crowd;
 }
 
-// Parfumo's longevity and sillage ratings (0–10 averages, `parfumo` from
-// data/parfumo.jsonl) as -1 (fades fast, stays close) .. +1 (lasts, projects)
-// around the middle of the bottles in data/. A bottle Parfumo lacks reads
-// Fragrantica's votes instead (`performance`: longevity 1–5, sillage 1–4),
-// put on Parfumo's scale by a line fitted on the 53 bottles both rate
-// (r 0.91 and 0.88). A rating from few votes leans toward the middle, and a
-// bottle without one sits there.
+// Longevity and sillage as -1 (fades fast, stays close) .. +1 (lasts,
+// projects) around the middle of the bottles in data/, read from both
+// crowds (performanceRating): Parfumo's ratings (0–10 averages, `parfumo`
+// from data/parfumo.jsonl) and Fragrantica's votes (`performance`: longevity
+// 1–5, sillage 1–4), put on Parfumo's scale by a line fitted on the 53
+// bottles both rate (r 0.91 and 0.88). A rating from few votes leans toward
+// the middle, and a bottle without one sits there.
 const PERFORMANCE_MID = { longevity: 7.8, sillage: 7.4 };
 const PERFORMANCE_SPAN = 1.2;
 const PERFORMANCE_PRIOR_VOTES = 10;
 const FRAGRANTICA_TO_PARFUMO = { longevity: [1.17, 1.839], sillage: [2.53, 2.047] };
+// What Fragrantica's reading is worth at most, in Parfumo votes: on bottles
+// well voted on both, the line misses Parfumo's own by 0.18 (longevity) and
+// 0.27 (sillage), as about 100 and 50 Parfumo votes would (an upper bound:
+// the line was fitted on those bottles). Its votes count as
+// 1 / (1/votes + 1/worth), so a few still count about one for one.
+const FRAGRANTICA_WORTH = { longevity: 100, sillage: 50 };
 // How much an occasion's wish for longevity or sillage counts against its accords.
 const PERFORMANCE_WEIGHT = 0.4;
 // What a nudge of your own reads as, up and down.
@@ -346,13 +448,33 @@ const PERSONAL_PERFORMANCE = {
 // The share of an occasion's fit that earns a reason ("Stays close to the skin").
 const PERFORMANCE_REASON = 0.1;
 
-// { longevity, sillage, votes } on Parfumo's 0–10 scale, or null.
+/**
+ * What both crowds say of a bottle's longevity and sillage, on Parfumo's
+ * 0–10 scale: { longevity, sillage, votes, parfumoShare }, or null when
+ * neither rates it. Each is Parfumo's average and Fragrantica's scaled one
+ * weighted by votes, so a few Parfumo votes don't outweigh hundreds on
+ * Fragrantica (Sandalwood & Musk: 11 against 23, both under the middle).
+ * `votes` is each one's count in Parfumo votes ({ longevity, sillage }), and
+ * `parfumoShare` the part of it that's Parfumo's own (0 for Fragrantica's
+ * alone, 1 for Parfumo's). A bottle only one site rates reads that site on
+ * its own votes. Every reader takes it from here (levels, spray counts,
+ * styles, filters, Compare), so they stand on the same evidence.
+ */
 export function performanceRating(frag) {
-  if (frag.parfumo) return frag.parfumo;
-  const p = frag.performance;
-  if (!p) return null;
-  const scale = key => FRAGRANTICA_TO_PARFUMO[key][0] + FRAGRANTICA_TO_PARFUMO[key][1] * p[key];
-  return { longevity: scale('longevity'), sillage: scale('sillage'), votes: p.votes };
+  const pf = frag.parfumo?.votes > 0 ? frag.parfumo : null, fv = frag.performance?.votes > 0 ? frag.performance : null;
+  if (!pf && !fv) return null;
+  const out = { votes: {}, parfumoShare: {} };
+  for (const key of ['longevity', 'sillage']) {
+    const [a, b] = FRAGRANTICA_TO_PARFUMO[key];
+    const p = pf?.[key] != null, f = fv?.[key] != null;
+    const vP = p ? pf.votes : 0;
+    const vF = !f ? 0 : p ? 1 / (1 / fv.votes + 1 / FRAGRANTICA_WORTH[key]) : fv.votes;
+    const votes = vP + vF;
+    out[key] = votes ? ((p ? vP * pf[key] : 0) + (f ? vF * (a + b * fv[key]) : 0)) / votes : null;
+    out.votes[key] = votes;
+    out.parfumoShare[key] = votes ? vP / votes : 0;
+  }
+  return out;
 }
 
 // A nudge of your own ("lasts longer on me") shifts the level from there.
@@ -360,7 +482,8 @@ export function performanceLevel(frag, key) {
   const p = performanceRating(frag);
   let level = 0;
   if (p && p[key] != null) {
-    const steady = (p.votes * p[key] + PERFORMANCE_PRIOR_VOTES * PERFORMANCE_MID[key]) / (p.votes + PERFORMANCE_PRIOR_VOTES);
+    const n = p.votes[key];
+    const steady = (n * p[key] + PERFORMANCE_PRIOR_VOTES * PERFORMANCE_MID[key]) / (n + PERFORMANCE_PRIOR_VOTES);
     level = clamp((steady - PERFORMANCE_MID[key]) / PERFORMANCE_SPAN, -1, 1);
   }
   const mine = frag.personal?.[key];
@@ -373,18 +496,32 @@ export function performanceLevel(frag, key) {
 // down, a body mist that's gone by lunch was the best office pick.
 const LESS_ENOUGH = -0.3;
 const LESS_BACK = 0.5;
-const wished = (wish, level) => (wish < 0 && level < LESS_ENOUGH ? LESS_ENOUGH + LESS_BACK * (LESS_ENOUGH - level) : level);
+// A wish for more can have its enough too, where the occasion names it
+// (`performance.enough`): lasting the working day is all the office asks,
+// so its longevity counts only up to MORE_ENOUGH (about Parfumo's 8 of 10).
+// Counted all the way up, a beast earned back for lasting what it lost for
+// projecting (every one of David's bottles past it projects too), and the
+// fit agreed less with members' "too loud for the office" than the accords
+// alone. Formal and Date Night count theirs all the way: members call
+// bottles that last formal and date-worthy more often, past it too.
+const MORE_ENOUGH = 0.2;
+const wished = (wish, level, enough) => {
+  if (wish < 0 && level < LESS_ENOUGH) return LESS_ENOUGH + LESS_BACK * (LESS_ENOUGH - level);
+  if (wish > 0 && enough && level > MORE_ENOUGH) return MORE_ENOUGH;
+  return level;
+};
 
 // What longevity and sillage add to a bottle's fit for the occasion: its
 // wish for each (`performance`, -1 quiet or fleeting .. +1 loud or lasting)
-// times the bottle's level, a wish for less only down to LESS_ENOUGH.
-// `plain` reads the level as it is, for what reasons say ("Stays close to
-// the skin" is still true of a whisper).
+// times the bottle's level, a wish for less only down to LESS_ENOUGH, one
+// for more the occasion calls enough only up to MORE_ENOUGH. `plain` reads
+// the level as it is, for what reasons say ("Stays close to the skin" is
+// still true of a whisper).
 export function performanceFit(frag, occasion, { plain = false } = {}) {
   const wish = occasion.performance ?? {};
   const part = key => {
     const w = wish[key] ?? 0, level = performanceLevel(frag, key);
-    return PERFORMANCE_WEIGHT * w * (plain ? level : wished(w, level));
+    return PERFORMANCE_WEIGHT * w * (plain ? level : wished(w, level, wish.enough?.includes(key)));
   };
   return { longevity: part('longevity'), sillage: part('sillage') };
 }
@@ -424,10 +561,31 @@ export function accordFit(frag, occasion) {
   return total ? sum / total : 0;
 }
 
-/** The occasion fit before it's put on the scale: the accords' fit, plus performance and Parfumo's votes. */
-export function occasionRaw(frag, occasion) {
+// Voters' night share tells the pool's "good for dates" bottles from the rest
+// better than the accords and performance do (AUC 0.705 against 0.673), so
+// Date Night and Night Out (`night` on the occasion) count a bottle's
+// steadied night share past an even split, on a night slot. It fades out as
+// the weather calls for fresh (targetHeaviness under 0, gone by -NIGHT_FADE):
+// night votes follow richness, which the heat marks down, and on a hot night
+// it only handed the date to rich bottles. It goes in before the scale's
+// knee, so a night-voted bottle the accords placed under the top catches up
+// (CH Men Prive, Hawas Elixir) rather than the top bottles pulling away.
+const NIGHT_FADE = 0.2;
+export function nightLean(frag, occasion, slot, conditions = null) {
+  if (!occasion.night || slot !== 'night') return 0;
+  const on = conditions ? clamp(1 + targetHeaviness(conditions) / NIGHT_FADE, 0, 1) : 1;
+  return on && on * occasion.night * (steadyShares(frag).dayNight.night - 0.5);
+}
+
+/**
+ * The occasion fit before it's put on the scale: the accords' fit, plus
+ * performance and Parfumo's votes, and for a night slot the night lean in
+ * `conditions` (nightLean; in full without them). OCCASION_SCALE is fitted
+ * with no slot, so without it.
+ */
+export function occasionRaw(frag, occasion, slot = null, conditions = null) {
   const perf = performanceFit(frag, occasion);
-  return accordFit(frag, occasion) + perf.longevity + perf.sillage + votedOccasionFit(frag, occasion);
+  return accordFit(frag, occasion) + perf.longevity + perf.sillage + votedOccasionFit(frag, occasion) + nightLean(frag, occasion, slot, conditions);
 }
 
 // The occasion fit as a part, 0..1, on one scale for every collection: about
@@ -443,24 +601,62 @@ export function occasionRaw(frag, occasion) {
 // them as perfect date-night fits.
 const FALLBACK_SCALE = [-0.3, 0.5];
 const OCCASION_KNEE = 0.1;
+// Profiles share one unit (-1..1 an accord), so how far an occasion's fit
+// spreads over the dataset says how much it cares: Formal's, Date Night's and
+// the rest span 0.6 to 0.94 (Office's widest, its quiet wish widening it),
+// Casual's, which only leans (woods and aromatics
+// a little up, gourmands and leather a little down), 0.28. Stretched to 0..1
+// like the others, that lean outweighed the weather: a near-fresh woody
+// topped every Casual day of a Chicago January, and Cream Velvet, the daily
+// pick at -15°F, ranked 21st. So a fit that spans less than MILD_SPAN reads
+// on a scale MILD_SPAN wide around its middle, and its weights lean toward
+// the daily picks' by the same share (occasionWeights): Casual reads as
+// daily picks with a tilt toward easy-going bottles.
+const MILD_SPAN = 0.6;
+const scaleOf = occasion => OCCASION_SCALE[occasion.id] ?? FALLBACK_SCALE;
 export function occasionPart(raw, occasion) {
-  const [lo, hi] = OCCASION_SCALE[occasion.id] ?? FALLBACK_SCALE;
-  const x = (raw - lo) / (hi - lo), k = OCCASION_KNEE;
+  const [lo, hi] = scaleOf(occasion);
+  const span = Math.max(hi - lo, MILD_SPAN);
+  const x = (raw - (lo + hi - span) / 2) / span, k = OCCASION_KNEE;
   if (x > 1 - k) return 1 - k * Math.exp((1 - k - x) / k);
   if (x < k) return k * Math.exp((x - k) / k);
   return x;
 }
 
 /**
- * A bottle's score from its parts (rank's `parts`): the weighted fits, plus
- * your stars' term (`personal`, when there is one), less the rotation
- * penalty. Shared with anything that scores bottles the way rank() does (the
- * gap finder), so the two can't drift apart.
+ * The weights an occasion's score uses: OCCASION_WEIGHTS, HEAT_WEIGHT
+ * (INDOOR_HEAT of it for one spent wholly indoors) and COLD_WEIGHT for its share of
+ * time outside, blended toward DAILY_WEIGHTS for a mild one by how far its
+ * fit falls short of MILD_SPAN.
+ */
+const weightsOf = new WeakMap();
+const outsideOf = occasion => occasion.outside ?? 1;
+export function occasionWeights(occasion) {
+  let W = weightsOf.get(occasion);
+  if (W) return W;
+  const [lo, hi] = scaleOf(occasion);
+  const t = Math.min(1, (hi - lo) / MILD_SPAN), O = OCCASION_WEIGHTS, D = DAILY_WEIGHTS;
+  const blend = key => t * O[key] + (1 - t) * D[key];
+  W = Object.freeze({
+    occasion: t * O.occasion, season: blend('season'), time: blend('time'), weather: blend('weather'), quality: blend('quality'),
+    heat: t * HEAT_WEIGHT * (outsideOf(occasion) > 0 ? 1 : INDOOR_HEAT),
+    cold: t * COLD_WEIGHT * outsideOf(occasion),
+  });
+  weightsOf.set(occasion, W);
+  return W;
+}
+
+/**
+ * A bottle's score from its parts (rank's `parts`): the weighted fits (for
+ * an occasion, less what richness in heat and thinness in the cold cost
+ * it), plus your stars' term (`personal`, when there is one), less the
+ * rotation penalty. Shared with anything that scores bottles the way rank()
+ * does (the gap finder), so the two can't drift apart.
  */
 export function scoreOf(parts, occasion = null) {
-  const W = occasion ? OCCASION_WEIGHTS : DAILY_WEIGHTS;
+  const W = occasion ? occasionWeights(occasion) : DAILY_WEIGHTS;
   let score = W.season * parts.season + W.time * parts.time + W.weather * parts.weather + W.quality * parts.quality;
-  if (occasion) score += W.occasion * parts.occasion;
+  if (occasion) score += W.occasion * parts.occasion - W.heat * (parts.heat ?? 0) - W.cold * (parts.cold ?? 0);
   return score + (parts.personal ?? 0) - (parts.rotation ?? 0);
 }
 
@@ -471,15 +667,22 @@ export function daysBetween(fromISO, toISO) {
 // Penalize recent wears so picks rotate. A wear logged for this same slot
 // today is the user's current choice, not a reason to demote it.
 // Entries marked `planned` are picks from a plan (see planWindows), not wears.
+// A wear in the other slot on an earlier day counts OTHER_SLOT of its
+// penalty; the same day's other slot counts in full.
+// The penalty is the heaviest wear's; the reason (daysAgo, planned) names the
+// latest one, so last night's wear never reads as one two days back.
 export function rotationPenalty(fragId, history, todayISO, slot) {
-  let penalty = 0, daysAgo = null, planned = false;
+  let penalty = 0, daysAgo = null, planned = false, latest = 0;
   for (const h of history) {
     if (h.id !== fragId) continue;
     if (h.date === todayISO && h.slot === slot) continue;
     const d = daysBetween(h.date, todayISO);
-    if (d >= 0 && d < ROTATION_PENALTY.length && ROTATION_PENALTY[d] > penalty) {
-      penalty = ROTATION_PENALTY[d];
+    if (d < 0 || d >= ROTATION_PENALTY.length) continue;
+    const p = ROTATION_PENALTY[d] * (h.slot && slot && h.slot !== slot && d > 0 ? OTHER_SLOT : 1);
+    penalty = Math.max(penalty, p);
+    if (daysAgo === null || d < daysAgo || (d === daysAgo && p > latest)) {
       daysAgo = d;
+      latest = p;
       planned = !!h.planned;
     }
   }
@@ -504,8 +707,10 @@ const NUDGE_EVERY = 3;
 // Moves the best neglected bottle within reach to the front (`nudged`, with
 // its idle days as `parts.idle`, and `parts.unworn` when the journal has no
 // wear of it), unless the top pick is one already. Wears and plans before
-// this window count; the journal starts at its first logged wear.
-function nudgeIdle(scored, history, todayISO, slot) {
+// this window count; the journal starts at its first logged wear. A bottle
+// saved for an event later in the plan (`saved`) is never the one nudged,
+// nor the top that a nudge is measured from.
+function nudgeIdle(scored, history, todayISO, slot, saved) {
   let start = null;
   const last = new Map();
   for (const h of history) {
@@ -519,12 +724,15 @@ function nudgeIdle(scored, history, todayISO, slot) {
     return last.get(f.id) ?? (added > start ? added : start);
   };
   const idle = s => daysBetween(since(s.fragrance), todayISO);
-  const [top] = scored;
+  // A bottle saved for an event isn't worn before it, so the top it's held to is the first one free.
+  const t = scored.findIndex(s => !saved?.has(s.fragrance.id));
+  if (t < 0) return;
+  const top = scored[t];
   if (idle(top) >= NUDGE_AFTER) return;
   // Tiers fall in rank order, so the first bottle out of the top's tier ends the search.
-  for (let i = 1; i < scored.length && top.score - scored[i].score <= PLAN_MARGIN && scored[i].tier === top.tier; i++) {
+  for (let i = t + 1; i < scored.length && top.score - scored[i].score <= PLAN_MARGIN && scored[i].tier === top.tier; i++) {
     const days = idle(scored[i]);
-    if (days < NUDGE_AFTER || isDisliked(scored[i].fragrance)) continue;
+    if (days < NUDGE_AFTER || isDisliked(scored[i].fragrance) || saved?.has(scored[i].fragrance.id)) continue;
     const [pick] = scored.splice(i, 1);
     pick.nudged = true;
     pick.parts.idle = days;
@@ -548,7 +756,7 @@ function strongest(accords, keep) {
 // time-of-day votes, which read the same on every well-placed bottle.
 function reasonsFor(frag, parts, ctx) {
   const { conditions, slot, weights, occasion } = ctx;
-  const W = occasion ? OCCASION_WEIGHTS : DAILY_WEIGHTS;
+  const W = occasion ? occasionWeights(occasion) : DAILY_WEIGHTS;
   const out = [];
   const good = (text, strength, specific = false) => out.push({ text, tone: 'good', strength, specific });
   const bad = (text, strength, specific = false) => out.push({ text, tone: 'bad', strength, specific });
@@ -565,22 +773,36 @@ function reasonsFor(frag, parts, ctx) {
   else if (comfort >= 0.85) good(`Fits ${nowSeason} weather`, W.season * 0.5);
   else if (comfort < 0.55) bad(voted ? `Voted for ${fragSeason}, not ${nowSeason}` : `Better in ${fragSeason} than ${nowSeason}`, W.season * (1 - comfort));
 
-  // As for seasons: "a favorite" only when voters said so.
+  // As for seasons: "a favorite" only when voters said so. A rich bottle's
+  // night lean goes unsaid on a day cold enough that timeForgiven lets off
+  // more than half of what it can: the score has stopped holding it against
+  // the bottle.
   const share = dayNight[slot], timeVoted = votedShares(frag).time;
   if (share >= 0.62) {
     good(slot === 'night' ? (timeVoted ? 'Built for nighttime' : 'A night scent') : (timeVoted ? 'Daytime favorite' : 'A daytime scent'), W.time * share);
   }
-  else if (share <= 0.38) bad(slot === 'night' ? 'Better in daylight' : 'More of a night scent', W.time * (1 - share));
+  else if (share <= 0.38 && timeForgiven(frag, slot, conditions) <= TIME_FORGIVE / 2) {
+    bad(slot === 'night' ? 'Better in daylight' : 'More of a night scent', W.time * (1 - share));
+  }
 
   const h = heaviness(frag.accords);
   const sticky = isSticky(conditions);
   if (conditions.feelsF >= 78) {
     const cool = strongest(frag.accords, a => a in COOLING);
     if (h <= -0.1) good(cool ? `${COOLING[cool]} the heat` : 'Light enough for the heat', W.weather * 0.8, true);
-    else if (h >= 0.25) bad(sticky ? 'Too rich for sticky heat' : 'Heavy for this heat', W.weather, true);
+    else if (h >= 0.25) bad(sticky ? 'Too rich for sticky heat' : 'Heavy for this heat', W.weather + (occasion ? W.heat * parts.heat : 0), true);
   } else if (conditions.feelsF <= 52) {
     const warm = strongest(frag.accords, a => ACCORDS[a]?.weight >= 0.7);
+    // Where the cold costs a thin bottle COLD_REASON or more for an occasion
+    // (parts.cold), the reason counts the two together, and for one spent
+    // out OUT_REASON of the time or more says so in the occasion's words in
+    // place of the weather's own.
+    const thin = occasion && h <= THIN_REASON ? W.cold * parts.cold : 0;
     if (h >= 0.25) good(warm ? `${warmPhrase(warm)} for the cold` : 'A warm base for the cold', W.weather * 0.8, true);
+    else if (thin >= COLD_REASON) {
+      const text = outsideOf(occasion) >= OUT_REASON ? `Thin for ${occasion.phrase ?? occasion.label.toLowerCase()} in the cold` : 'Thin in the cold';
+      bad(text, W.weather * 0.8 + thin, true);
+    }
     else if (h <= -0.2) bad('Thin in the cold', W.weather * 0.8, true);
   }
   if (isWet(conditions.category) && accordShare(frag.accords, RAIN_ACCORDS) > 0.3) {
@@ -638,9 +860,34 @@ function reasonsFor(frag, parts, ctx) {
 
   const rest = restReason(parts, ctx.slot);
   if (rest) bad(rest, parts.rotation, true);
+  if (parts.saved) bad(savedReason(parts.saved, ctx.nowISO), SAVED_STRENGTH, true);
 
   return out.sort((a, b) => b.specific - a.specific || b.strength - a.strength);
 }
+
+// A bottle saved for an event leads its catches: it's why another bottle
+// takes the window.
+const SAVED_STRENGTH = 0.1;
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTH_DAY = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+
+/**
+ * An event ({ dateISO, slot, occasion }) as said on the date `fromISO`: "a
+ * date tonight", "the office tomorrow", "formal wear on Saturday night".
+ */
+export function eventPhrase({ dateISO, slot, occasion }, fromISO) {
+  const night = slot === 'night';
+  const days = daysBetween(fromISO, dateISO);
+  const at = new Date(`${dateISO}T12:00:00Z`);
+  const when = days <= 0 ? (night ? 'tonight' : 'today')
+    : days === 1 ? (night ? 'tomorrow night' : 'tomorrow')
+      : days < 7 ? `on ${WEEKDAYS[at.getUTCDay()]}${night ? ' night' : ''}`
+        : `on ${night ? 'the night of ' : ''}${MONTH_DAY.format(at)}`;
+  return `${occasion.phrase ?? occasion.label.toLowerCase()} ${when}`;
+}
+
+/** Why a plan leaves a bottle be for an event later on (planWindows' `saved`): "Saved for a date tonight". */
+export const savedReason = (event, fromISO) => `Saved for ${eventPhrase(event, fromISO)}`;
 
 /**
  * Why a recent wear or a plan's pick sets a bottle back in a window of
@@ -658,24 +905,31 @@ export function restReason({ daysAgo: d, planned }, slot) {
  * conditions: { feelsF, humidity, dewF?, category, date: Date, lat }
  * slot: 'day' | 'night'
  * opts: { occasion?, history?: [{id, date: 'YYYY-MM-DD'}], todayISO? (default: the window's dateISO),
- *   nudge?: put a neglected bottle within reach first (see NUDGE_AFTER) }
+ *   nudge?: put a neglected bottle within reach first (see NUDGE_AFTER),
+ *   saved?: Map(id -> event { dateISO, slot, occasion }) of bottles a plan
+ *   keeps for an event later on: they keep their score, say so
+ *   (`parts.saved`, savedReason) and are never nudged,
+ *   nowISO?: the date that note is said on, the plan's today (default todayISO) }
  */
 export function rank(fragrances, conditions, slot, opts = {}) {
-  const { occasion = null, history = [], todayISO = conditions.dateISO ?? localISO(new Date()), nudge = false } = opts;
+  const { occasion = null, history = [], todayISO = conditions.dateISO ?? localISO(new Date()), nudge = false, saved = null, nowISO = todayISO } = opts;
   const weights = targetSeasonWeights(conditions.feelsF, conditions.date, conditions.lat);
 
   const scored = fragrances.map(frag => {
     const { penalty, daysAgo, planned } = rotationPenalty(frag.id, history, todayISO, slot);
     const parts = {
       season: seasonFit(frag, weights),
-      time: timeFit(frag, slot),
+      time: timeFit(frag, slot, conditions),
       weather: weatherFit(frag, conditions),
       quality: quality(frag),
-      occasion: occasion ? occasionPart(occasionRaw(frag, occasion), occasion) : null,
+      occasion: occasion ? occasionPart(occasionRaw(frag, occasion, slot, conditions), occasion) : null,
+      heat: occasion ? richInHeat(frag, conditions) : null,
+      cold: occasion ? thinInCold(frag, conditions) : null,
       personal: personalPart(frag),
       rotation: penalty,
       daysAgo,
       planned,
+      ...(saved?.has(frag.id) && { saved: saved.get(frag.id) }),
     };
     return { fragrance: frag, score: scoreOf(parts, occasion), parts };
   });
@@ -690,38 +944,81 @@ export function rank(fragrances, conditions, slot, opts = {}) {
   for (const s of scored) {
     while (s.score < TIER_FLOORS[s.tier]) s.tier = TIERS[TIERS.indexOf(s.tier) + 1];
   }
-  if (nudge) nudgeIdle(scored, history, todayISO, slot);
+  if (nudge) nudgeIdle(scored, history, todayISO, slot, saved);
 
-  const ctx = { conditions, slot, weights, occasion };
+  const ctx = { conditions, slot, weights, occasion, todayISO, nowISO };
   for (const s of scored) s.reasons = reasonsFor(s.fragrance, s.parts, ctx);
   return scored;
+}
+
+/**
+ * An event's window (`win.occasion`: Saturday night's wedding) ranked as
+ * planWindows plans it: for its occasion, with no rotation and no nudge. A
+ * wedding wants the best bottle, so neither a wear in the days before nor
+ * the plan around it sets one back there (the Occasion pane ranks a planned
+ * window the same way).
+ */
+export function rankEvent(fragrances, win, occasion = win.occasion) {
+  return rank(fragrances, win, win.slot, { occasion, todayISO: win.dateISO });
 }
 
 /**
  * Plan a run of windows in time order (e.g. the week ahead, day then night).
  * Each planned pick counts as worn for the windows after it, and a bottle not
  * yet in the plan wins over a repeat when it scores within PLAN_MARGIN.
- * A wear already logged for a window is kept as that window's pick. A window
- * can carry its own occasion (`win.occasion`, a formal dinner on a trip's
- * third night) over opts.occasion. With opts.nudge, a neglected bottle takes
- * a slot at most once every NUDGE_EVERY days. A bottle you rate DISLIKED or
- * lower is planned only where it ranks first with no new bottle within
- * PLAN_MARGIN.
+ * A wear already logged for a window is kept as that window's pick. With
+ * opts.nudge, a neglected bottle takes a slot at most once every
+ * NUDGE_EVERY days. A bottle you rate DISLIKED or lower is planned only where
+ * it ranks first with no new bottle within PLAN_MARGIN. opts.occasion goes
+ * on every window.
+ * A window with its own occasion is an event (`win.occasion`, a date on
+ * Friday night), planned first: it takes its top as rankEvent ranks it (its
+ * logged wear, when it has one), and the plan around it treats that bottle
+ * as already in the plan for the windows before it ("Saved for a date on
+ * Friday night", `parts.saved`, keeping its score: on the day before a
+ * night event too), so a new bottle within PLAN_MARGIN takes them (with
+ * nothing that close it can still be worn), and as planned for the windows
+ * after it. Events never nudge, and without one nothing changes.
+ * Two events can share their best bottle. The note is said as on
+ * opts.nowISO, the plan's today (default: its first window's date), so
+ * tomorrow's day window on Now says "Saved for a date tomorrow night".
  * Returns [{ win, ranked, pick }].
  */
 export function planWindows(fragrances, windows, opts = {}) {
-  const { occasion = null, history = [], nudge = false } = opts;
+  const { occasion = null, history = [], nudge = false, nowISO = windows[0]?.dateISO } = opts;
+  const loggedIn = win => history.find(h => h.date === win.dateISO && h.slot === win.slot);
+  // Each event's pick, fixed before the windows around it are planned.
+  const events = windows.flatMap((win, i) => {
+    if (!win.occasion) return [];
+    const ranked = rankEvent(fragrances, win);
+    const logged = loggedIn(win);
+    const pick = (logged && ranked.find(r => r.fragrance.id === logged.id)) ?? ranked[0] ?? null;
+    return [{ i, win, ranked, pick, logged }];
+  });
+  // An event's pick counts as planned for the windows after it, not for the
+  // day before a night event, where it's saved and keeps its score.
+  const eventPlans = events.filter(e => e.pick && !e.logged).map(e => ({ i: e.i, entry: { id: e.pick.fragrance.id, date: e.win.dateISO, slot: e.win.slot, planned: true } }));
   let planned = [...history];
   const used = new Set();
   let nudgedOn = null;
-  return windows.map(win => {
-    const logged = history.find(h => h.date === win.dateISO && h.slot === win.slot);
+  return windows.map((win, i) => {
+    const event = events.find(e => e.i === i);
+    if (event) {
+      if (event.pick) used.add(event.pick.fragrance.id);
+      return { win, ranked: event.ranked, pick: event.pick };
+    }
+    // Bottles kept for the events still to come, each for the nearest.
+    const saved = new Map();
+    for (const e of events) if (e.i > i && e.pick && !saved.has(e.pick.fragrance.id)) saved.set(e.pick.fragrance.id, { dateISO: e.win.dateISO, slot: e.win.slot, occasion: e.win.occasion });
+    const logged = loggedIn(win);
     const canNudge = nudge && !logged && (nudgedOn === null || daysBetween(nudgedOn, win.dateISO) >= NUDGE_EVERY);
-    let ranked = rank(fragrances, win, win.slot, { occasion: win.occasion ?? occasion, history: planned, todayISO: win.dateISO, nudge: canNudge });
+    const asked = { occasion, todayISO: win.dateISO, nowISO, nudge: canNudge, ...(saved.size && { saved }) };
+    const known = [...planned, ...eventPlans.filter(e => e.i < i).map(e => e.entry)];
+    let ranked = rank(fragrances, win, win.slot, { ...asked, history: known });
     // A nudged bottle leads the list, and is new to the plan. A bottle you
     // rate DISLIKED or lower never counts as the fresh one, so it's planned
     // only where it ranks first and nothing new to the plan comes close.
-    const fresh = ranked.find(r => !used.has(r.fragrance.id) && !isDisliked(r.fragrance));
+    const fresh = ranked.find(r => !used.has(r.fragrance.id) && !saved.has(r.fragrance.id) && !isDisliked(r.fragrance));
     let pick = logged && ranked.find(r => r.fragrance.id === logged.id);
     if (!pick) pick = fresh && ranked[0].score - fresh.score <= PLAN_MARGIN ? fresh : ranked[0];
     // A repeat of the plan that tops the list anyway (the only bottle, or
@@ -729,8 +1026,14 @@ export function planWindows(fragrances, windows, opts = {}) {
     // nothing, so it neither lowers it nor leads its reasons.
     if (pick && !logged && pick === ranked[0] && pick.parts.planned) {
       const id = pick.fragrance.id;
-      ranked = rank(fragrances, win, win.slot, { occasion: win.occasion ?? occasion, history: planned.filter(h => !(h.planned && h.id === id)), todayISO: win.dateISO, nudge: canNudge });
+      ranked = rank(fragrances, win, win.slot, { ...asked, history: known.filter(h => !(h.planned && h.id === id)) });
       pick = ranked.find(r => r.fragrance.id === id);
+    }
+    // Likewise a bottle saved for an event that's worn anyway doesn't say it's saved.
+    if (pick?.parts.saved) {
+      const text = savedReason(pick.parts.saved, nowISO);
+      pick.reasons = pick.reasons.filter(r => r.text !== text);
+      delete pick.parts.saved;
     }
     if (pick?.nudged) nudgedOn = win.dateISO;
     if (pick) {

@@ -166,22 +166,25 @@ function seasonsCell(f) {
     <p class="cmp-daynight"><span>Day ${100 - night}%</span><span class="cmp-split" aria-hidden="true"><span style="width:${100 - night}%"></span></span><span>Night ${night}%</span></p>`;
 }
 
-// Parfumo's 0–10 ratings, or (≈) an estimate on that scale from
-// Fragrantica's votes (engine performanceRating) for a bottle Parfumo lacks.
-const estimated = f => !f.parfumo && Boolean(f.performance);
+// On Parfumo's 0–10 scale, as the engine reads both crowds
+// (performanceRating): Parfumo's ratings with Fragrantica's votes counted
+// in, or (≈) an estimate where most of the votes are Fragrantica's, put on
+// that scale (all of them for a bottle Parfumo lacks).
+const estimated = (f, key) => (performanceRating(f)?.parfumoShare[key] ?? 1) < 0.5;
+const estimateWords = (f, key) => (performanceRating(f).parfumoShare[key] ? 'estimated mostly from Fragrantica votes' : 'estimated from Fragrantica votes');
 
 function performanceCell(f, key) {
   const p = performanceRating(f);
   if (p?.[key] == null) return '<span class="muted">No votes</span>';
-  const guess = estimated(f);
-  return `<span class="cmp-num"${guess ? ' title="Estimated from Fragrantica votes"' : ''}>${guess ? '≈ ' : ''}${p[key].toFixed(1)}<small> of 10</small>${guess ? '<span class="visually-hidden">, estimated from Fragrantica votes</span>' : ''}</span>${meter(p[key] / 10)}`;
+  const guess = estimated(f, key) && estimateWords(f, key);
+  return `<span class="cmp-num"${guess ? ` title="${cap(guess)}"` : ''}>${guess ? '≈ ' : ''}${p[key].toFixed(1)}<small> of 10</small>${guess ? `<span class="visually-hidden">, ${guess}</span>` : ''}</span>${meter(p[key] / 10)}`;
 }
 
 // The value a performance row's lead is judged by: an estimate only
-// against other estimates, never against Parfumo's own ratings.
+// against other estimates, never against a figure that rests on Parfumo's.
 const performanceShown = (bottles, key) => {
-  const rated = bottles.some(b => b.f?.parfumo);
-  return shownAs(1, f => (rated && estimated(f) ? null : performanceRating(f)?.[key]));
+  const rated = bottles.some(b => b.f && performanceRating(b.f)?.[key] != null && !estimated(b.f, key));
+  return shownAs(1, f => (rated && estimated(f, key) ? null : performanceRating(f)?.[key]));
 };
 
 const valueOf = (f, about) => signalsOf(f).value ?? about?.value?.avg ?? null;
@@ -385,7 +388,7 @@ export function compareHTML(m) {
     ${heads}
     ${relations}
     <div class="cmp-table">${stripHTML(bottles)}${rows}</div>
-    <p class="bp-credit">Ratings, votes and value from Fragrantica members, via Le Decanteur’s dataset. How long they last and how far they project from Parfumo${ready.some(b => estimated(b.f)) ? ', or estimated (≈) from Fragrantica votes where Parfumo lacks the bottle' : ''}.</p>
+    <p class="bp-credit">Ratings, votes and value from Fragrantica members, via Le Decanteur’s dataset. How long they last and how far they project from Parfumo’s ratings and Fragrantica’s votes, each counted by how many there are${ready.some(b => estimated(b.f, 'longevity') || estimated(b.f, 'sillage')) ? ', estimated (≈) where most are Fragrantica’s' : ''}.</p>
   </div>`;
 }
 

@@ -26,7 +26,7 @@ import {
 import {
   registerSheets, renderSheet, openSheet, updateSheet, closeSheet, sheetPopped, sheetEntry, replacePageURL, refocus, refocusNear, inSight,
   keepingFocus, showToast, hideToast, settleToast, watchToast, morph, canMorph, visible, reducedMotion, SHEET_OUT_MS,
-  watchTabBar, showTabBar,
+  watchTabBar, showTabBar, statusNode, announce,
 } from './sheets.js';
 import * as wearView from '../views/wear.js';
 import * as wardrobeView from '../views/wardrobe.js';
@@ -77,7 +77,7 @@ const app = {
   render, renderPage, renderBottle, retryBottle,
   navigate, openBottle, closeBottle,
   openSheet, updateSheet, closeSheet, renderSheet,
-  showToast, hideToast, keepingFocus, refocus, inSight,
+  showToast, hideToast, keepingFocus, refocus, inSight, announce,
   refreshWeather, setLocation, setActive, addToMine, own, closeShared,
 };
 
@@ -880,6 +880,7 @@ export async function boot({ early: asked = null } = {}) {
     history.replaceState(null, '', url);
   }
   listen();
+  statusNode(); // there before anything is said in it
   const first = parseRoute(location.hash || HOME, PANES);
   go(routeHash(first), { replace: true });
   renderTint();

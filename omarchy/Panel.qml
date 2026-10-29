@@ -41,13 +41,16 @@ Panel {
   readonly property int refreshMinutes: Math.max(5, parseInt(setting("refreshMinutes", 30), 10) || 30)
 
   // No `hidden` setting means the site's defaults, like a device that never
-  // opened Manage; an empty one hides nothing.
+  // opened Manage; an empty one hides nothing. `journal` is the app's Copy
+  // for Claude or a journal file, so the plan skips what was just worn.
   readonly property var args: {
     var out = [root.scriptPath]
     var location = String(setting("location", "")).trim()
     if (location) out.push("--location", location)
     var hidden = setting("hidden", null)
     if (hidden !== null) out.push("--hidden", Array.isArray(hidden) ? hidden.join(",") : String(hidden))
+    var journal = String(setting("journal", "")).trim()
+    if (journal) out.push("--journal", journal)
     return out
   }
   readonly property string argsKey: JSON.stringify(args)
@@ -90,7 +93,8 @@ Panel {
     var where = place ? place.name : ""
     if (proc.running) return where + " · updating…"
     if (error) return where + " · " + error
-    return where + " · " + Qt.formatTime(new Date(report.updated), "HH:mm")
+    var line = where + " · " + Qt.formatTime(new Date(report.updated), "HH:mm")
+    return report.journalNote ? line + " · " + report.journalNote : line
   }
 
   function refresh() {
@@ -476,11 +480,12 @@ Panel {
             }
           }
 
+          // The bottles that suit the window as well, when there are any; else the runner-up.
           Text {
-            visible: !!(root.pick && root.pick.runnerUp)
+            visible: !!(root.pick && (root.pick.tieLine || root.pick.runnerUp))
             width: parent.width
             textFormat: Text.PlainText
-            text: root.pick && root.pick.runnerUp ? "Runner-up: " + root.pick.runnerUp.name + " · " + root.pick.runnerUp.brand : ""
+            text: !root.pick ? "" : root.pick.tieLine ? root.pick.tieLine : root.pick.runnerUp ? "Runner-up: " + root.pick.runnerUp.name + " · " + root.pick.runnerUp.brand : ""
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall

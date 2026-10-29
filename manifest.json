@@ -25,6 +25,7 @@
     "defaultSection": "center",
     "defaults": {
       "location": "",
+      "journal": "",
       "units": "auto",
       "refreshMinutes": 30
     },
@@ -41,6 +42,13 @@
         "type": "string",
         "label": "Switched-off bottles",
         "description": "Comma-separated names to leave out, like Manage in the app. Unset keeps the site's defaults; empty shows every bottle."
+      },
+      {
+        "key": "journal",
+        "type": "string",
+        "label": "Wear journal",
+        "defaultValue": "",
+        "description": "The app's Copy for Claude (Wardrobe › Worn), or the path to a file holding it or a journal export, so the plan skips what you just wore and applies your stars. A pasted copy goes stale; a file is read again on every refresh. Empty plans without your wears."
       },
       {
         "key": "units",

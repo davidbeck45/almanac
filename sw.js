@@ -17,7 +17,7 @@
 // versions don't mix. Whichever happens first decides, for the files
 // already in flight as well. The cache catches up on a launch where the
 // network answers in time, or when a new sw.js installs.
-const CACHE = 'almanac-v22';
+const CACHE = 'almanac-v24';
 const NETWORK_WAIT_MS = 2500;
 const SLOW_MS = 1000;
 // Dataset files (data/fragrantica/) load a shard at a time as people search
@@ -87,10 +87,12 @@ const SHELL = [
   'src/candidates.js',
   'src/climate.js',
   'src/collections.js',
+  'src/contrast.js',
   'src/custom.js',
   'src/discover.js',
   'src/doubles.js',
   'src/engine.js',
+  'src/events.js',
   'src/fragella.js',
   'src/fragrantica.js',
   'src/gaps.js',

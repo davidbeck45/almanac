@@ -5,52 +5,30 @@
 // it was opened from ("Now 3rd for tonight, was 1st"), or what it did to the
 // spray guide's count ("Now 1 spray, was 1–2", or that it's unchanged).
 import { setSkin } from '../skin.js';
-import { esc } from '../ui.js';
-import { icon, segHTML } from '../ui/components.js';
+import { esc, moveText, listLabel } from '../ui.js';
+import { segHTML, starsHTML } from '../ui/components.js';
 import { addSection, bottleModel } from './bottle.js';
 import { guideFor, sprayCount } from './bottle-spray.js';
 import { state, nowSlot, findRecord } from '../app/state.js';
 
-const STARS = [1, 2, 3, 4, 5];
+// Where a save moved the bottle, in src/ui.js since Now's "Rate it" says it too.
+export { ordinal, moveText, listLabel } from '../ui.js';
+
 const LASTS = [[-1, 'Shorter'], [0, 'As expected'], [1, 'Longer']];
 const PROJECTS = [[-1, 'Less'], [0, 'As expected'], [1, 'More']];
-
-export const ordinal = n => {
-  const tens = n % 100, ones = n % 10;
-  const suffix = tens >= 11 && tens <= 13 ? 'th' : ones === 1 ? 'st' : ones === 2 ? 'nd' : ones === 3 ? 'rd' : 'th';
-  return `${n}${suffix}`;
-};
-
-/**
- * Where a bottle moved in a list: "Now 3rd for tonight, was 1st." (places
- * 1-based, null when it isn't in the list). `label` names the list.
- */
-export function moveText(before, after, label) {
-  if (!after) return '';
-  if (!before || before === after) return `Still ${ordinal(after)} ${label}.`;
-  return `Now ${ordinal(after)} ${label}, was ${ordinal(before)}.`;
-}
-
-// "for tonight", "for date night tonight", "for Friday night".
-export function listLabel(win, occasion) {
-  if (!win) return '';
-  const when = /^(Today|Tonight|Tomorrow)\b/.test(win.label) ? win.label.toLowerCase() : `on ${win.label}`;
-  return occasion ? `for ${occasion.label.toLowerCase()} ${when}` : `for ${when.replace(/^on /, '')}`;
-}
 
 /** The section for a bottle's model; `change`: the last save's moveText for it, or ''. */
 export function skinHTML(m, change = '') {
   if (!m.owned && !m.inMine) return '';
   const id = esc(m.f.id);
   const rating = m.skin?.rating ?? null;
-  const stars = STARS.map(n => `<button type="button" class="skin-star${rating && n <= rating ? ' lit' : ''}" role="radio" aria-checked="${n === rating}" tabindex="${n === (rating ?? 1) ? 0 : -1}" data-action="bp-skin-rate" data-value="${n}" aria-label="${n} star${n === 1 ? '' : 's'}">${icon.star}</button>`).join('');
   const seg = (items, now, action, label) => segHTML(items.map(([value, text]) => ({ value, label: text, on: value === now })), { action, label, cls: 'wide' });
   return `<section class="bp-section" aria-labelledby="skin-title">
     <h3 id="skin-title" tabindex="-1">On your skin</h3>
     <div class="skin-box">
       <div class="skin-row">
         <span class="skin-label" id="skin-stars-label">Your rating</span>
-        <div class="skin-stars" role="radiogroup" aria-labelledby="skin-stars-label">${stars}</div>
+        ${starsHTML(rating, { action: 'bp-skin-rate', labelledby: 'skin-stars-label' })}
         ${rating ? `<button class="link-btn skin-clear" data-action="bp-skin-clear" data-id="${id}">Clear</button>` : ''}
       </div>
       <div class="skin-row stacked"><span class="skin-label">How long it lasts on you</span>${seg(LASTS, m.skin?.longevity ?? 0, 'bp-skin-lasts', 'How long it lasts on you')}</div>
@@ -62,30 +40,10 @@ export function skinHTML(m, change = '') {
 }
 
 // The last save's line, by bottle; it goes when the page shows another bottle.
-const changes = new Map();
-
-// What a save changed, said to screen readers: the line under the stars is
+// Screen readers hear it from app.announce (src/app/sheets.js): the line is
 // drawn anew with the page, and a live region that arrives holding its text
-// isn't heard, so it's also written into one that outlasts the page's
-// renders (#bp-status, at the end of the body: made when the section first
-// draws, cleared, then filled on the next frame).
-function statusNode() {
-  let el = document.getElementById('bp-status');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'bp-status';
-    el.className = 'visually-hidden';
-    el.setAttribute('role', 'status');
-    el.setAttribute('aria-live', 'polite');
-    document.body.append(el);
-  }
-  return el;
-}
-function announce(text) {
-  const el = statusNode();
-  el.textContent = '';
-  if (text) requestAnimationFrame(() => { el.textContent = text; });
-}
+// isn't heard.
+const changes = new Map();
 let shown = null;
 function changeFor(id) {
   if (id !== shown) {
@@ -135,14 +93,13 @@ function save(el, app, patch) {
   changes.set(id, said);
   app.keepingFocus(el, '#bottle', app.renderBottle);
   if (!el.isConnected && !document.activeElement?.closest?.('#bottle')) document.querySelector('#skin-title')?.focus({ preventScroll: true });
-  announce(said);
+  app.announce(said);
 }
 
 addSection({
   id: 'skin',
   order: 260,
   render: m => skinHTML(m, changeFor(m.f.id)),
-  after: m => { if (m.owned || m.inMine) statusNode(); },
   actions: {
     // The same star tapped again takes the rating off. Keys (Space, Enter,
     // arrows, Home, End) only ever choose, as on a native radio: Clear clears.

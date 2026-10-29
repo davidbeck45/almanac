@@ -375,6 +375,8 @@
   hyphens: auto;
   overflow-wrap: break-word;
 }
+/* A word on how it differs from the pick beside it ("fresher"). */
+.shelf-tag { max-width: 100%; color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); text-align: center; overflow-wrap: break-word; }
 .shelf-slot:is([data-tier='B'], [data-tier='C']) img { opacity: 0.5; }
 .shelf-slot:is([data-tier='B'], [data-tier='C']) .shelf-name { color: var(--text-tertiary); }
 .shelf-item.worn .shelf-name { color: var(--positive); }

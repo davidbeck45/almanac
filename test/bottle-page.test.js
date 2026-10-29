@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { SECTIONS, bottlePageHTML, pooled, sectionsFor, linkId, likedStyleIds, likedTaste } from '../src/views/bottle.js';
+import { SECTIONS, bottlePageHTML, bottleModel, pooled, sectionsFor, linkId, likedStyleIds, likedTaste, shelfOf } from '../src/views/bottle.js';
 import { state, computeToday, nowSlot, keepBottles } from '../src/app/state.js';
 import '../src/views/sections.js';
 import { buyCheckHTML, checkable, fillGroups } from '../src/views/bottle-check.js';
@@ -145,6 +145,64 @@ test('why it ranks here: the rating bar says whose rating it is, and a bottle no
   assert.ok(!/rotation/i.test(rest));
   const planned = rank([f], wx.night, 'night', { history: [{ id: f.id, date: wx.night.dateISO, slot: 'day', planned: true }], todayISO: wx.night.dateISO })[0];
   assert.match(bottlePageHTML(modelOf(f, { entry: planned })), /Already picked for daytime: \d+% lower so others get a turn\./);
+  // A rich bottle on a sweltering date night: what the heat takes off, for that occasion only.
+  const date = occasionById('date'), sweltering = { ...wx.night, feelsF: 90, dewF: 70 };
+  const hot = (rec, occasion) => {
+    const html = bottlePageHTML(modelOf(rec, { entry: rank([rec], sweltering, 'night', { occasion })[0], occasion, win: sweltering }));
+    return html.slice(html.indexOf('data-section="why"'), html.indexOf('data-section="alts"'));
+  };
+  assert.match(hot(byName('Liquid Brun'), date), /Rich for this heat: \d+% lower for a date\./);
+  assert.ok(!hot(byName('Liquid Brun'), null).includes('Rich for this heat'), 'daily picks pay nothing');
+  // A night in pays a little of it (INDOOR_HEAT), a date all of it.
+  const heatPct = html => Number(html.match(/Rich for this heat: (\d+)% lower/)?.[1] ?? 0);
+  assert.ok(heatPct(hot(byName('Liquid Brun'), occasionById('cozy'))) * 4 < heatPct(hot(byName('Liquid Brun'), date)), 'a night in pays a little');
+  assert.ok(!hot(byName('Essence de Blanc'), date).includes('Rich for this heat'), 'nor a fresh bottle');
+  // A thin bottle on a freezing day outdoors: what the cold takes off, for the time spent out in it.
+  const freezing = { ...wx.day, feelsF: 25, dewF: 17 };
+  const cold = (rec, occasion) => {
+    const html = bottlePageHTML(modelOf(rec, { entry: rank([rec], freezing, 'day', { occasion })[0], occasion, win: freezing }));
+    return html.slice(html.indexOf('data-section="why"'), html.indexOf('data-section="alts"'));
+  };
+  assert.match(cold(byName('Cedrus Blanc'), occasionById('outdoors')), /Thin for this cold: \d+% lower for the outdoors\./);
+  assert.ok(!cold(byName('Cedrus Blanc'), null).includes('Thin for this cold'), 'daily picks pay nothing');
+  assert.ok(!cold(byName('Essence de Blanc'), occasionById('cozy')).includes('Thin for this cold'), 'nor a night in');
+  assert.ok(!cold(byName('Liquid Brun'), occasionById('outdoors')).includes('Thin for this cold'), 'nor a rich bottle');
+  // A point off isn't worth a line: the office's commute, or a mild day out.
+  assert.ok(!cold(byName('Cedrus Blanc'), occasionById('office')).includes('Thin for this cold'), 'the office');
+  const mild = { ...wx.day, feelsF: 58, dewF: 45 };
+  const mildEntry = rank([byName('Essence de Blanc')], mild, 'day', { occasion: occasionById('outdoors') })[0];
+  assert.ok(mildEntry.parts.cold > 0);
+  const mildHTML = bottlePageHTML(modelOf(byName('Essence de Blanc'), { entry: mildEntry, occasion: occasionById('outdoors'), win: mild }));
+  assert.ok(!mildHTML.includes('Thin for this cold'), 'a mild day');
+});
+
+test('why it ranks here: beside the list’s pick when that’s another bottle, in points as the badges show them', () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)) };
+  const why = html => html.slice(html.indexOf('data-section="why"'), html.indexOf('data-section="alts"'));
+  try {
+    Object.assign(state, { demo: { fragrances }, active: 'demo', shared: null, wx, history: [] });
+    computeToday();
+    const { win, ranked: list, pick } = state.today.night;
+    assert.equal(state.contexts.night.pick, pick, 'the context keeps the plan’s pick');
+    const page = id => bottlePageHTML(bottleModel({ dest: 'bottle', arg: id, query: { ctx: 'night' } }));
+    assert.ok(!why(page(pick.fragrance.id)).includes('why-vs'), 'not on the pick’s own page');
+    const under = list.find(r => matchPct(pick) - matchPct(r) >= 2);
+    const line = why(page(under.fragrance.id)).match(/<p class="why-vs">([^<]+)<\/p>/)?.[1];
+    assert.equal(line, esc(`${matchPct(pick) - matchPct(under)} points under ${pick.fragrance.name} ${win.label.toLowerCase()}, mostly ${line.split(', mostly ')[1].slice(0, -1)}.`));
+    assert.ok(why(page(under.fragrance.id)).indexOf('why-vs') < why(page(under.fragrance.id)).indexOf('class="bars why"'), 'it leads');
+    const tie = list.find(r => r !== pick && Math.abs(matchPct(pick) - matchPct(r)) <= 1);
+    if (tie) assert.match(why(page(tie.fragrance.id)), new RegExp(`<p class="why-vs">Suits ${win.label.toLowerCase()} as well as ${esc(pick.fragrance.name)}\\.</p>`));
+    // Ranked on its own (out of the list), it has no pick to stand beside.
+    assert.ok(!why(bottlePageHTML(modelOf(byName('Liquid Brun'), { solo: true, pick }))).includes('why-vs'));
+    // Nor a list that keeps none (a trip's).
+    assert.ok(!why(bottlePageHTML(modelOf(under.fragrance, { entry: under, pick: null }))).includes('why-vs'));
+    // The name is escaped.
+    assert.ok(why(bottlePageHTML(modelOf(under.fragrance, { entry: under, pick: { ...pick, fragrance: { ...pick.fragrance, id: 'x', name: EVIL } } }))).includes(esc(EVIL)));
+  } finally {
+    delete globalThis.localStorage;
+    Object.assign(state, { demo: null, wx: null, today: null, contexts: {} });
+  }
 });
 
 test('day and night read as whole percents that add up to 100, as Compare shows them', () => {
@@ -677,12 +735,17 @@ test('compare marks one leader by the value it shows, and calls lasting and loud
   assert.match(lasts, /≈ 8\.6<small> of 10<\/small><span class="visually-hidden">, estimated from Fragrantica votes/);
   assert.match(lasts, />8\.4<small> of 10/, 'Parfumo’s own rating stands as it is');
   assert.ok(!lasts.includes('cmp-cell lead'), 'an estimate doesn’t outlast a real rating');
-  assert.match(mixed, /estimated \(≈\) from Fragrantica votes where Parfumo lacks the bottle/);
-  assert.ok(!page(rated, byName('Sauvage')).includes('≈'), 'all on Parfumo: no estimates, none credited');
+  assert.match(mixed, /from Parfumo’s ratings and Fragrantica’s votes, each counted by how many there are, estimated \(≈\) where most are Fragrantica’s\./);
+  assert.ok(!page(rated, byName('Sauvage')).includes('≈'), 'mostly Parfumo’s: no estimates, none credited');
   const guesses = page(guess, { ...byName('Jake'), parfumo: undefined });
   assert.match(guesses, /cmp-lead-tag">Longest</, 'estimates lead each other');
+  // Sandalwood & Musk's 11 Parfumo votes count, but its 23 on Fragrantica count more: marked as an estimate too.
+  const few = page(rated, byName('Sandalwood & Musk'));
+  assert.match(few, /title="Estimated mostly from Fragrantica votes">≈ 6\.8<small> of 10<\/small><span class="visually-hidden">, estimated mostly from Fragrantica votes/);
   // The bottle page says it with the same words.
-  assert.match(bottlePageHTML(modelOf(rated)), /Lasts 8\.4 · Projects \d\.\d <span>of 10 on/);
+  assert.match(bottlePageHTML(modelOf(rated)), /Lasts 8\.4 · Projects \d\.\d <span>of 10 on <a [^>]*>Parfumo<\/a> and Fragrantica<\/span>/);
+  assert.match(bottlePageHTML(modelOf(byName('Sandalwood & Musk'))), /Lasts ≈ 6\.8 · Projects ≈ 6\.7 <span>of 10 on/);
+  assert.match(bottlePageHTML(modelOf({ ...rated, performance: undefined })), /Lasts 8\.4 · Projects 8\.1 <span>of 10 on <a [^>]*>Parfumo<\/a><\/span>/, 'Parfumo’s alone');
   assert.match(bottlePageHTML(modelOf(guess)), /Lasts 4\.0 of 5 · Projects 2\.9 of 4 <span>on Fragrantica/);
 });
 
@@ -834,4 +897,14 @@ test('the buy check reads the liked styles as Insights does: none liked is none,
     state.likedStyles = before;
     state.active = active;
   }
+});
+
+test('the pick’s page leads its shelf with the ties its Week cell names, however low they rank', () => {
+  const ranked = Array.from({ length: 9 }, (_, i) => ({ fragrance: { id: String(i), name: `B${i}` } }));
+  // A plan's pick needn't be ranked[0]; its ties sit 7th and 9th.
+  const ctx = { ranked, pick: ranked[2], ties: [ranked[6], ranked[8]] };
+  const ids = list => list.map(r => r.fragrance.id);
+  assert.deepEqual(ids(shelfOf(ctx, '2')), ['6', '8', '0', '1']);
+  assert.deepEqual(ids(shelfOf(ctx, '0')), ['1', '2', '3', '4'], 'another bottle’s page keeps the order');
+  assert.deepEqual(ids(shelfOf({ ranked, pick: ranked[0] }, '0')), ['1', '2', '3', '4'], 'a context without ties');
 });

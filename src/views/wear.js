@@ -5,20 +5,22 @@
 // Occasion pane's "When and where?" in wear/when.js, and the place and date
 // pickers both use in wear/pickers.js. Styles: src/css/wear.css.
 import { renderScene, stagePoint, skyLight } from '../scene.js';
-import { calendarSeason } from '../engine.js';
+import { calendarSeason, eventPhrase, PLAN_MARGIN } from '../engine.js';
 import { OCCASIONS, occasionById } from '../occasions.js';
 import { sprayGuide } from '../spray.js';
+import { planTies, rankedTies, tieLine, contrast } from '../contrast.js';
+import { setSkin, loadSkin, loadAsked, markAsked, wasAsked } from '../skin.js';
 import { theme } from '../theme.js';
 import { toggleWear, wornIn, journalStats, shiftISO } from '../history.js';
 import { routeHash } from '../app/router.js';
-import { esc, temp, deg, plural, shortDate, weekdayShort, windowRange, feelWords, displayReasons } from '../ui.js';
+import { esc, temp, deg, plural, shortDate, weekdayShort, windowRange, feelWords, displayReasons, moveText, listLabel } from '../ui.js';
 import {
   icon, img, slotIcon, wxIcon, wxIconFor, messageHTML, skeletonHTML, reasonsList, chips, matchBadge, shelfHTML,
-  wearButton, segHTML, sharedBannerHTML, accordColor, sectionHead,
+  wearButton, segHTML, starsHTML, sharedBannerHTML, accordColor, sectionHead,
 } from '../ui/components.js';
 import {
-  state, savePrefs, activeFragrances, sourceRecords, nowSlot, todaySlots, computeWeek, rankContext, canWear, wornId,
-  nowHour, findRecord,
+  state, savePrefs, activeFragrances, sourceRecords, rankedFragrances, nowSlot, todaySlots, todayPlan, computeToday, computeWeek,
+  rankContext, canWear, wornId, nowHour, findRecord, eventAt, setEvent,
 } from '../app/state.js';
 import * as trip from './wear/trip.js';
 import * as when from './wear/when.js';
@@ -152,6 +154,16 @@ export function nudgeOf(entry) {
   return entry.parts.unworn ? 'Not worn yet' : `Not worn in ${entry.parts.idle} days`;
 }
 const nudgeHTML = text => (text ? `<p class="nudge">${icon.clock}<span>${esc(text)}</span></p>` : '');
+// A window planned for an occasion (src/events.js) says what for, in the
+// occasion's own glyph: "For a date". With `clear`, the window it's on, a
+// link takes the plan off it.
+export function eventTagHTML(win, { clear = false } = {}) {
+  const o = win?.occasion;
+  if (!o) return '';
+  const what = phraseOf(o);
+  const off = clear ? `<button class="link-btn" data-action="event-clear" data-date="${esc(win.dateISO)}" data-slot="${esc(win.slot)}">Clear<span class="visually-hidden">: ${esc(win.label)} isn’t for ${esc(what)}</span></button>` : '';
+  return `<p class="pick-event"><span class="event-tag">${icon[o.icon] ?? icon.calendar}<span>For ${esc(what)}</span></span>${off}</p>`;
+}
 // The reasons a card shows, less the nudge's (it has its own line).
 function reasonsOf(entry, n) {
   const nudge = nudgeOf(entry);
@@ -165,10 +177,24 @@ export function sprayLine({ sprays: [lo, hi], where, unit = 'spray' }) {
   return `${count} · ${where.map(w => SPOT_WORDS[w] ?? w).join(', ')}`;
 }
 
+// "Legacy (fresher) and Aristo suit today just as well": the bottles that
+// suit the window as well as its pick (src/contrast.js tiesFor), each name
+// opening its page in the window's list. `when`: what they suit, in place
+// of the window ("formal wear").
+export function tiesHTML(ties, win, ctx, { when } = {}) {
+  if (!ties?.length) return '';
+  const name = ({ entry }) => `<button class="link-btn" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(entry.fragrance.id)}">${esc(entry.fragrance.name)}</button>`;
+  return `<p class="ties">${icon.compare}<span>${tieLine(ties, win, { name, text: esc, ...(when && { when }) })}</span></p>`;
+}
+
 // The top pick. On Now the hero shows the bottle, so the card leads with why
 // and how much to spray (`spray`: sprayGuide's answer; it opens the bottle
-// page's spray section); elsewhere (`full`) it shows the photo and name too.
-export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicker = '', spray = null } = {}) {
+// page's spray section), for a window planned for an occasion (`event`, the
+// window) what for, with a way to clear it, then the bottles that suit the
+// window as well (`ties`, in `win`) and Now's question about the pick, when
+// it asks one (`ask`, markup); elsewhere (`full`) it shows the photo and name
+// too, and the ties as suiting `tieWhen` ("formal wear") just as well.
+export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicker = '', spray = null, event = null, ties = [], win = null, tieWhen, ask = '' } = {}) {
   const f = entry.fragrance;
   const wash = `--accord:${accordColor(Object.keys(f.accords)[0])}`;
   const open = (cls, inner, label = '') => `<button class="${cls}" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(f.id)}"${label ? ` aria-label="${esc(label)}"` : ''}>${inner}</button>`;
@@ -176,10 +202,13 @@ export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicke
     const hint = spray ? `<button class="spray-hint" data-action="spray-open" data-ctx="${esc(ctx)}" data-id="${esc(f.id)}" aria-label="${esc(`How to spray ${f.name}: ${sprayLine(spray)}`)}">${icon.spray}<span>${esc(sprayLine(spray))}</span>${icon.chevron}</button>` : '';
     return `<div class="pick" style="${wash}">
       <div class="pick-top">${matchBadge(entry)}${open('btn tertiary compact', `Details${icon.chevron}`, `Details for ${f.name}`)}</div>
+      ${eventTagHTML(event, { clear: true })}
       ${nudgeHTML(nudgeOf(entry))}
       ${reasonsList(reasonsOf(entry, 3), 'lead')}
+      ${tiesHTML(ties, win, ctx)}
       ${chips(f.accords)}
       ${canWear || hint ? `<div class="pick-actions">${hint}${canWear ? wearButton(entry, ctx, worn) : ''}</div>` : ''}
+      ${ask}
     </div>`;
   }
   return `<div class="pick full" style="${wash}">
@@ -190,6 +219,7 @@ export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicke
       <p class="brand">${esc(f.brand)}</p>
       ${nudgeHTML(nudgeOf(entry))}
       ${reasonsList(reasonsOf(entry, 2), 'lead')}
+      ${tiesHTML(ties, win, ctx, { when: tieWhen })}
       ${chips(f.accords)}
     </div>
     <div class="pick-actions">${canWear ? wearButton(entry, ctx, worn) : ''}${matchBadge(entry)}</div>
@@ -214,38 +244,163 @@ export function nextWindowHTML({ win, pick }, worn, hour) {
         ${matchBadge(pick)}
       </div>
     </div>
+    ${eventTagHTML(win)}
     ${nudgeHTML(nudgeOf(pick))}
     ${reasonsList(reasonsOf(pick, 2), 'compact')}
     <button class="btn tertiary compact next-more" data-action="slot" data-value="${esc(win.slot)}">${esc(`All picks for ${win.label.toLowerCase()}`)}${icon.chevron}</button>
   </aside>`;
 }
 
-// The rest of a window's ranking on the magnitude shelf.
-function alsoHTML(ranked, pick, ctx, worn, label) {
+// The rest of a window's ranking on the magnitude shelf. With `tags`, a
+// bottle within PLAN_MARGIN of the pick says in a word how it differs from
+// it (src/contrast.js: "fresher", "white floral", "louder").
+function alsoHTML(ranked, pick, ctx, worn, label, { tags = false } = {}) {
   const rest = ranked.filter(r => r !== pick);
   if (!rest.length) return '';
+  const tagOf = tags ? r => (Math.abs(pick.score - r.score) <= PLAN_MARGIN ? contrast(pick.fragrance, r.fragrance)[0] ?? null : null) : null;
   return `<div class="also">
     <h3 class="also-title">Also good ${esc(label)}</h3>
-    ${shelfHTML(rest, ctx, { wornId: worn })}
+    ${shelfHTML(rest, ctx, { wornId: worn, tagOf })}
   </div>`;
+}
+
+// ---------- Asking once ----------
+// Stars are the strongest say he has in picks (a 5★ wins the near ties most
+// days are), but rating meant opening the bottle's page. So Now asks: its
+// stars once he's wearing a bottle that has none, and how it wore the day
+// after (nobody knows by the morning whether it lasted). Each once per
+// bottle, answered or waved off (src/skin.js loadAsked), one at a time.
+
+/**
+ * The one question Now asks, or null: { kind: 'stars', f } for `worn`, the
+ * record he's wearing in the window shown, while it has no stars; else
+ * { kind: 'skin', f } for the first of `yesterday` (records worn yesterday,
+ * the night's first) with neither nudge of his own yet. `asked`: loadAsked().
+ */
+export function askFor({ worn = null, yesterday = [], asked = {} }) {
+  if (worn && !Number.isFinite(worn.personal?.rating) && !wasAsked(asked, worn.id, 'stars')) return { kind: 'stars', f: worn };
+  const f = yesterday.find(r => !r.personal?.longevity && !r.personal?.sillage && !wasAsked(asked, r.id, 'skin'));
+  return f ? { kind: 'skin', f } : null;
+}
+
+// How it wore, in the words of the day after: the bottle page's nudges
+// (src/views/bottle-skin.js), none chosen until he answers.
+const LASTED = [[-1, 'Faded early'], [0, 'As expected'], [1, 'Lasted longer']];
+const PROJECTED = [[-1, 'Less'], [0, 'As expected'], [1, 'More']];
+const answerSeg = (items, now, opts) => segHTML(items.map(([value, label]) => ({ value, label, on: value === now })), { ...opts, cls: 'wide' });
+
+// What the last answer did, under the question ("Rated 5★. Now 1st for
+// today, was 3rd."); screen readers hear it from app.announce.
+const saidHTML = said => (said ? `<p class="ask-said">${esc(said)}</p>` : '');
+
+/**
+ * Its stars, in the pick card under Wear this: five of them (the bottle
+ * page's), and Not now; once rated (`rating`), the stars stay for this
+ * visit with what the rating did (`said`), so arrows can still move it.
+ */
+export function askStarsHTML(f, { rating = null, said = '' } = {}) {
+  return `<div class="ask ask-stars">
+    <div class="ask-row">
+      <p class="ask-title" id="ask-title">${rating ? 'Your rating' : 'Rate it'}<span class="visually-hidden">: ${esc(f.name)}</span></p>
+      <div class="ask-pick">
+        ${starsHTML(rating, { action: 'ask-rate', labelledby: 'ask-title', id: f.id })}
+        ${said || rating ? '' : `<button class="link-btn ask-skip" data-action="ask-skip" data-kind="stars" data-id="${esc(f.id)}">Not now</button>`}
+      </div>
+    </div>
+    ${saidHTML(said)}
+  </div>`;
+}
+
+/**
+ * How yesterday's bottle wore on him, under today's picks: how long it
+ * lasted and how far it projected against the crowd's votes (the bottle
+ * page's nudges). Nothing chosen until he answers (`answers`, this visit's);
+ * then what was saved (`said`), and Done for Not now.
+ */
+export function askSkinHTML(f, { answers = {}, said = '' } = {}) {
+  const id = f.id;
+  const answered = 'longevity' in answers || 'sillage' in answers;
+  return `<div class="ask ask-skin" role="group" aria-labelledby="ask-title">
+    <div class="ask-head">${img(f)}<p class="ask-title" id="ask-title">How did <b>${esc(f.name)}</b> wear yesterday?</p></div>
+    <div class="ask-row stacked"><span class="ask-label">It lasted</span>${answerSeg(LASTED, answers.longevity, { action: 'ask-lasts', label: 'How long it lasted', id })}</div>
+    <div class="ask-row stacked"><span class="ask-label">It projected</span>${answerSeg(PROJECTED, answers.sillage, { action: 'ask-projects', label: 'How far it projected', id })}</div>
+    ${saidHTML(said)}
+    <div class="ask-actions"><button class="btn tertiary compact" data-action="ask-skip" data-kind="skin" data-id="${esc(id)}">${answered ? 'Done' : 'Not now'}</button></div>
+  </div>`;
+}
+
+// The question answered on this visit to Now (a visit is state.base: the
+// next starts afresh), so it stays put while he answers: its kind, bottle,
+// the answers so far (the stars as `rating`) and what the last one did. The
+// bottle page can change the same bottle meanwhile (it docks beside Now from
+// 1100px), so what's pressed reads the saved ratings, and `said` shows only
+// while they're still what it was written for.
+let held = null; // { kind, id, base, rating?, answers?, said }
+const heldNow = () => (held && held.base === state.base ? held : null);
+const sameAnswers = (a, b) => Object.keys(a).every(k => a[k] === b[k]);
+
+/** Forget the question held on screen (tests; a new visit does it itself). */
+export function forgetAsked() {
+  held = null;
+}
+
+// Now's question as markup: { inPick } for the pick's stars, { below } for
+// how yesterday's bottle wore. One at a time; one being answered holds its
+// place.
+function nowQuestion(pick, worn) {
+  const records = rankedFragrances();
+  const byId = id => records.find(f => f.id === id) ?? null;
+  const wearing = worn && pick.fragrance.id === worn ? pick.fragrance : null;
+  const h = heldNow();
+  if (h?.kind === 'stars' && wearing?.id === h.id) {
+    const rating = wearing.personal?.rating ?? null;
+    return { inPick: askStarsHTML(wearing, { rating, said: rating === h.rating ? h.said : '' }), below: '' };
+  }
+  if (h?.kind === 'skin' && byId(h.id)) {
+    const saved = loadSkin()[h.id] ?? {};
+    const answers = Object.fromEntries(Object.keys(h.answers).map(k => [k, saved[k] ?? 0]));
+    return { inPick: '', below: askSkinHTML(byId(h.id), { answers, said: sameAnswers(h.answers, answers) ? h.said : '' }) };
+  }
+  const day = shiftISO(state.wx.todayISO, -1);
+  const yesterday = [...new Set(['night', 'day'].map(slot => wornIn(state.history, day, slot)?.id).filter(Boolean))].map(byId).filter(Boolean);
+  const ask = askFor({ worn: wearing, yesterday, asked: loadAsked() });
+  if (ask?.kind === 'stars') return { inPick: askStarsHTML(ask.f), below: '' };
+  return { inPick: '', below: ask ? askSkinHTML(ask.f) : '' };
 }
 
 // ---------- Week ----------
 
 // A window's pick: the bottle with its time of day as a badge on the photo,
-// and marks for a logged wear and for a bottle the rotation nudge brought
-// back ("Not worn in 34 days" in a row, "34 days" under the clock in the
-// board's narrow columns, which the board's note explains).
-function weekPick(p, slot, dayName) {
+// and marks for a logged wear, for a window planned for an occasion ("For
+// formal wear" in a row, "Formal" in the board's narrow columns) and for a
+// bottle the rotation nudge brought back ("Not worn in 34 days" in a row,
+// "34 days" under the clock in the columns), else for one that has equals
+// (`ties`, planTies'): "+2 as good" in a row and in the columns alike (a
+// name kept four letters in the columns, so the count is the one wording
+// both hold); the board's note explains them, the tooltip and label name
+// them with their tags, and the pick's page leads its shelf with them
+// (shelfOf). An occasion in the board's narrow columns, where
+// "Date Night" and "Night Out" didn't fit beside their glyphs (the cell's
+// tooltip says it whole).
+const COLUMN_LABEL = { date: 'Date', nightout: 'Out' };
+export function weekPick(p, slot, dayName) {
   if (!p) return `<span class="wk-pick empty"><span class="wk-slot">${slotIcon(slot)}</span><span class="wk-none">Done for today</span></span>`;
   const f = p.pick.fragrance;
+  const o = p.win?.occasion;
   const nudge = nudgeOf(p.pick);
+  const ties = p.ties ?? [];
   const short = p.pick.parts?.unworn ? 'Unworn' : plural(p.pick.parts?.idle ?? 0, 'day');
-  const spoken = [`${dayName} ${slot === 'day' ? 'daytime' : 'night'}: ${f.name}`, p.worn && 'wearing', nudge].filter(Boolean).join(', ');
-  return `<button class="wk-pick${p.worn ? ' worn' : ''}" data-action="open" data-ctx="${esc(p.ctx)}" data-id="${esc(f.id)}" aria-label="${esc(spoken)}"${nudge ? ` title="${esc(nudge)}"` : ''}>
+  const names = ties.map(t => t.entry.fragrance.name);
+  const equals = names.length ? `${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0]} suit${names.length > 1 ? '' : 's'} it as well` : '';
+  const spoken = [`${dayName} ${slot === 'day' ? 'daytime' : 'night'}: ${f.name}`, o && `for ${phraseOf(o)}`, p.worn && 'wearing', nudge, equals].filter(Boolean).join(', ');
+  const mark = o ? `<small class="wk-mark wk-event">${icon[o.icon] ?? icon.calendar}<span class="wk-long">${esc(`For ${phraseOf(o)}`)}</span><span class="wk-short">${esc(COLUMN_LABEL[o.id] ?? o.label)}</span></small>`
+    : nudge ? `<small class="wk-mark wk-nudge">${icon.clock}<span class="wk-long">${esc(nudge)}</span><span class="wk-short">${esc(short)}</span></small>`
+      : ties.length ? `<small class="wk-mark wk-tie">${icon.compare}<span>+${names.length} as good</span></small>` : '';
+  const tip = o ? `For ${phraseOf(o)}` : nudge || (ties.length ? tieLine(ties, p.win) : '');
+  return `<button class="wk-pick${p.worn ? ' worn' : ''}${o ? ' event' : ''}" data-action="open" data-ctx="${esc(p.ctx)}" data-id="${esc(f.id)}" aria-label="${esc(spoken)}"${tip ? ` title="${esc(tip)}"` : ''}>
     ${img(f)}
     <span class="wk-slot">${p.worn ? icon.check : slotIcon(slot)}</span>
-    <span class="wk-text"><b>${esc(f.name)}</b>${nudge ? `<small class="wk-nudge">${icon.clock}<span class="wk-long">${esc(nudge)}</span><span class="wk-short">${esc(short)}</span></small>` : ''}</span>
+    <span class="wk-text"><b>${esc(f.name)}</b>${mark}</span>
   </button>`;
 }
 
@@ -258,16 +413,19 @@ function repeats(days) {
 
 export function weekHTML(days) {
   const nudged = days.some(d => d.day?.pick.nudged || d.night?.pick.nudged);
+  const planned = days.some(d => d.day?.win?.occasion || d.night?.win?.occasion);
+  // Only where the mark shows: an event's says what it's for instead.
+  const tied = days.some(d => [d.day, d.night].some(p => p?.ties?.length && !p.win?.occasion));
   const rows = days.map(d => `
-    <li class="wk-day${d.isToday ? ' today' : ''}">
+    <li class="wk-day${d.isToday ? ' today' : ''}${d.day?.win?.occasion || d.night?.win?.occasion ? ' event' : ''}">
       <div class="wk-date"><b>${esc(d.isToday ? 'Today' : weekdayShort(d.dateISO))}</b><small>${esc(shortDate(d.dateISO))}</small></div>
       <div class="wk-wx">${wxIcon(d.category, d.condition)}<span class="wk-temps"><b>${deg(d.hiF)}</b><small>${deg(d.loF)}</small></span>${d.pop >= 30 ? `<span class="wk-pop">${d.pop}%<span class="visually-hidden"> chance of</span> rain</span>` : '<span class="wk-pop" aria-hidden="true">&nbsp;</span>'}</div>
       <div class="wk-picks">${weekPick(d.day, 'day', d.name)}${weekPick(d.night, 'night', d.name)}</div>
     </li>`).join('');
   const how = repeats(days) ? 'Planned against the forecast.' : 'Planned against the forecast so nothing repeats back to back.';
   return `<section class="card week" aria-labelledby="week-title">
-    ${sectionHead(`${icon.calendar}The week ahead`, `<p>${how} Open a bottle to see why.</p>${nudged ? `<p class="wk-legend">${icon.clock}<span>A bottle you haven’t worn in a while gets a turn.</span></p>` : ''}`, { id: 'week-title' })}
-    <ol class="wk-list${nudged ? ' nudged' : ''}" style="--days:${days.length}">${rows}</ol>
+    ${sectionHead(`${icon.calendar}The week ahead`, `<p>${how} Open a bottle to see why.</p>${planned ? `<p class="wk-legend">${icon.calendar}<span>What you planned gets its best bottle, and the days before leave it be.</span></p>` : ''}${nudged ? `<p class="wk-legend">${icon.clock}<span>A bottle you haven’t worn in a while gets a turn.</span></p>` : ''}${tied ? `<p class="wk-legend">${icon.compare}<span>Bottles that suit a window just as well as its pick.</span></p>` : ''}`, { id: 'week-title' })}
+    <ol class="wk-list${nudged || planned || tied ? ' marked' : ''}" style="--days:${days.length}">${rows}</ol>
   </section>`;
 }
 
@@ -367,15 +525,21 @@ function nowPane() {
   if (!nowSlot()) return skeletonHTML(1);
   const { win, ranked, pick } = nowSlot();
   const worn = wornId(win);
-  const other = todaySlots().find(p => p.win.slot !== win.slot);
+  const slots = todaySlots();
+  const other = slots.find(p => p.win.slot !== win.slot);
+  // Ties as the CLI finds them for the same plan, the week's later events
+  // with it: none once he's wearing one.
+  const ties = planTies(todayPlan(), { history: state.history })[slots.findIndex(p => p.win === win)] ?? [];
+  const ask = nowQuestion(pick, worn);
   return `${banner()}
     <section class="card slot" aria-labelledby="slot-title">
       ${slotHeadHTML(win, nowHour(), { id: 'slot-title' })}
       <div class="now-picks">
-        ${pickHTML(pick, win.slot, worn, { canWear: canWear(win), spray: sprayGuide(pick.fragrance, win) })}
+        ${pickHTML(pick, win.slot, worn, { canWear: canWear(win), spray: sprayGuide(pick.fragrance, win, win.occasion ?? null), event: win, ties, win, ask: ask.inPick })}
         ${other ? nextWindowHTML(other, wornId(other.win), nowHour()) : ''}
       </div>
-      ${alsoHTML(ranked, pick, win.slot, worn, win.slot === 'day' ? 'by day' : 'tonight')}
+      ${ask.below}
+      ${alsoHTML(ranked, pick, win.slot, worn, win.slot === 'day' ? 'by day' : 'tonight', { tags: true })}
     </section>
     ${journalTeaser()}`;
 }
@@ -401,7 +565,9 @@ function occasionPane(app, route) {
   if (blocked) return occasionPickerHTML(occasion.id) + blocked;
   const slot = state.occasionSlot ?? occasion.slot;
   const ev = when.eventWindow(slot, app);
-  const bar = when.whenBarHTML({ ...when.when, home: state.loc, today: state.wx.todayISO, slot: ev.win?.slot ?? slot, wx: state.wx });
+  // At home, the window shown can be planned for the occasion (src/events.js).
+  const plan = ev.win && !when.when.place ? { occasion, win: ev.win, event: eventAt(ev.win) } : null;
+  const bar = when.whenBarHTML({ ...when.when, home: state.loc, today: state.wx.todayISO, slot: ev.win?.slot ?? slot, wx: state.wx, plan });
   const head = `${banner()}${occasionPickerHTML(occasion.id)}${bar}`;
   if (ev.status === 'loading') return head + skeletonHTML(1);
   if (ev.status === 'error') {
@@ -412,14 +578,19 @@ function occasionPane(app, route) {
   const { win } = ev;
   // The rotation nudge only for today here: on another date the journal
   // can't say what will have been worn by then, and a wedding wants the best.
-  const ranked = rankContext('occ', win, occasion, { nudge: Boolean(ev.here) });
+  // A window here planned for this occasion ranks as the plan ranks it (the best for it).
+  const planned = !when.when.place && eventAt(win)?.occasion === occasion.id;
+  const ranked = rankContext('occ', win, occasion, { nudge: Boolean(ev.here), event: planned });
   const worn = wornId(win);
   // A nudged pick isn't the best for it (that one leads Also good).
   const kicker = ranked[0].nudged ? 'Due a wear' : `Best for ${phraseOf(occasion)}`;
+  // The bottles that suit it as well: none once he's wearing one, and only
+  // for an occasion where a tie is news (TIE_OCCASIONS: formal wear).
+  const ties = rankedTies(ranked, win, { history: state.history, event: planned, occasion });
   return `${head}
     <section class="card slot" aria-labelledby="occ-title">
       ${slotHeadHTML(win, ev.here ? nowHour() : -1, { id: 'occ-title', thumb: true, title: occasionHeading(route, ev) })}
-      ${pickHTML(ranked[0], 'occ', worn, { canWear: canWear(win), full: true, kicker })}
+      ${pickHTML(ranked[0], 'occ', worn, { canWear: canWear(win), full: true, kicker, ties, win, tieWhen: phraseOf(occasion) })}
       ${alsoHTML(ranked, ranked[0], 'occ', worn, `for ${phraseOf(occasion)}`)}
     </section>`;
 }
@@ -503,6 +674,27 @@ function showSpraySection(tries = 0) {
   head.focus({ preventScroll: true });
 }
 
+// What a nudge of his own says once saved: "Saved: it lasts longer and
+// sits closer on you."
+const LASTS_WORDS = { 1: 'lasts longer', [-1]: 'fades faster' };
+const PROJECTS_WORDS = { 1: 'projects more', [-1]: 'sits closer' };
+export function skinSaid({ longevity = 0, sillage = 0 }) {
+  const words = [LASTS_WORDS[longevity], PROJECTS_WORDS[sillage]].filter(Boolean);
+  return words.length ? `Saved: it ${words.join(' and ')} on you.` : 'Saved: it wears as voters say.';
+}
+
+function answerSkin(el, app, key) {
+  const { id } = el.dataset;
+  const value = Number(el.dataset.value);
+  setSkin(id, { [key]: value });
+  markAsked(id, 'skin');
+  const h = heldNow()?.kind === 'skin' && held.id === id ? held : null;
+  const answers = { ...h?.answers, [key]: value };
+  held = { kind: 'skin', id, base: state.base, answers, said: skinSaid(answers) };
+  app.keepingFocus(el, '#app', app.render);
+  app.announce?.(held.said);
+}
+
 export const actions = {
   ...trip.actions,
   ...when.actions,
@@ -522,6 +714,58 @@ export const actions = {
   'spray-open'(el, app) {
     app.openBottle(el.dataset.id, el.dataset.ctx, document.querySelector('.hero-pick'));
     setTimeout(() => showSpraySection(), 120);
+  },
+  // Now's "For a date · Clear": the window back to everyday picks. Focus
+  // goes on to the card's Details.
+  'event-clear'(el, app) {
+    const { date: dateISO, slot } = el.dataset;
+    const win = todaySlots().find(p => p.win.dateISO === dateISO && p.win.slot === slot)?.win;
+    if (!eventAt({ dateISO, slot })) return;
+    setEvent(dateISO, slot, null);
+    app.render();
+    globalThis.document?.querySelector('.now-picks .pick-top [data-action="open"]')?.focus({ preventScroll: true });
+    if (win) app.showToast(`<span>${esc(`${win.label} is back to everyday picks.`)}</span>`);
+  },
+  // Now's "Rate it": the stars save as the bottle page's do and stay for
+  // this visit, saying where the bottle moved in the window's list. The same
+  // star tapped again takes the rating off; keys only ever choose.
+  'ask-rate'(el, app, event) {
+    const id = el.dataset.id;
+    const ctx = state.contexts[nowSlot()?.win.slot];
+    if (!ctx) return;
+    const again = el.getAttribute('aria-checked') === 'true';
+    if (again && !(event?.detail > 0)) return;
+    const stars = again ? null : Number(el.dataset.value);
+    const placeOf = () => { const i = state.contexts[ctx.win.slot]?.ranked.findIndex(r => r.fragrance.id === id) ?? -1; return i >= 0 ? i + 1 : null; };
+    const before = placeOf();
+    setSkin(id, { rating: stars });
+    markAsked(id, 'stars');
+    computeToday();
+    const moved = moveText(before, placeOf(), listLabel(ctx.win, ctx.occasion));
+    held = { kind: 'stars', id, base: state.base, rating: stars, said: `${stars ? `Rated ${stars}★.` : 'Rating cleared.'} ${moved}`.trim() };
+    app.keepingFocus(el, '#app', app.render);
+    app.announce?.(held.said);
+  },
+  // How yesterday's bottle wore: each answer saves at once (asked from the
+  // first), and the question stays for the other until Done.
+  'ask-lasts'(el, app) {
+    answerSkin(el, app, 'longevity');
+  },
+  'ask-projects'(el, app) {
+    answerSkin(el, app, 'sillage');
+  },
+  // Not now (or Done): never asked again about this bottle. Focus goes on to
+  // what follows the question: Wear this after the stars, the shelf after
+  // how yesterday's wore.
+  'ask-skip'(el, app) {
+    const { id, kind } = el.dataset;
+    markAsked(id, kind);
+    held = null;
+    const seen = app.inSight?.(el) ?? false;
+    app.render();
+    if (!globalThis.document || el.isConnected) return;
+    const next = document.querySelector(kind === 'stars' ? '#app .pick .wear-btn' : '#app .also .shelf-item') ?? document.querySelector('#app .pick .wear-btn');
+    if (next) app.refocus(next, '#app', { reveal: seen });
   },
   // Now's Day/Night toggle in the hero.
   slot(el, app) {

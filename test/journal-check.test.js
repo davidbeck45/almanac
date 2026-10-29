@@ -5,8 +5,8 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { rankWears } from '../scripts/journal-check.mjs';
-import { parseJournal } from '../src/history.js';
+import { rankWears, wearChoices, thermostat, fitOffset, FIT_MIN_WEARS } from '../scripts/journal-check.mjs';
+import { parseJournal, shiftISO } from '../src/history.js';
 import { rank } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 
@@ -109,4 +109,60 @@ test('journal-check says what went wrong in a sentence, and skips wears whose we
   assert.equal(odd.status, 0, odd.stderr);
   assert.equal(odd.stderr, '');
   assert.match(odd.stdout, /^No wears to check/);
+});
+
+// A year of someone choosing as if it felt `delta` °F warmer than it does,
+// with a little noise (Gumbel, at the scale of the top pick's usual lead),
+// earlier wears as rotation, as the app's journal would log them.
+function feltAs(delta, { days = 40, seed = 7 } = {}) {
+  let x = seed;
+  const rnd = () => ((x = (x * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+  const noise = () => -0.012 * Math.log(-Math.log(rnd() + 1e-12));
+  const bottles = fragrances.map(f => ({ ...f, id: String(f.id) }));
+  const windows = new Map(), history = [];
+  for (let i = 0; i < days; i++) {
+    const day = Math.round((i * 365) / days), date = shiftISO('2025-01-01', day);
+    for (const slot of ['day', 'night']) {
+      const feelsF = 58 - 24 * Math.cos((2 * Math.PI * (day - 15)) / 365) - (slot === 'night' ? 9 : 0) + (rnd() - 0.5) * 14;
+      const win = { slot, dateISO: date, date: new Date(`${date}T12:00:00`), lat: 40, category: 'clear', condition: 'Clear', feelsF, humidity: 60, dewF: Math.min(feelsF - 4, 40 + (feelsF - 50) * 0.6) };
+      windows.set(`${date} ${slot}`, win);
+      const ranked = rank(bottles, { ...win, feelsF: feelsF + delta }, slot, { history, todayISO: date });
+      const worn = ranked.map(r => [r.score + noise(), r.fragrance.id]).sort((a, b) => b[0] - a[0])[0][1];
+      history.unshift({ id: worn, date, slot });
+    }
+  }
+  const journal = parseJournal({ app: 'scentcast-journal', location: { lat: 40.71, lon: -74.01 }, history });
+  return wearChoices(journal, fragrances, h => windows.get(`${h.date} ${h.slot}`)).choices;
+}
+
+test('--fit finds how much warmer or colder someone chooses than the weather says', () => {
+  for (const delta of [6, -8, 0]) {
+    const fit = thermostat(feltAs(delta));
+    assert.equal(fit.all.n, 80);
+    assert.ok(Math.abs(fit.all.offset - delta) <= 2, `${delta}°F read as ${fit.all.offset}`);
+    assert.ok(fit.all.low <= delta + 1 && fit.all.high >= delta - 1, `${delta}°F outside ${fit.all.low}..${fit.all.high}`);
+    for (const part of ['day', 'night', 'overrides']) assert.ok(Math.abs(fit[part].offset - delta) <= 4, `${part}: ${delta}°F read as ${fit[part].offset}`);
+    assert.deepEqual([fit.day.n, fit.night.n], [40, 40]);
+    assert.ok(fit.overrides.n < fit.all.n && fit.overrides.n >= FIT_MIN_WEARS, 'wears that weren’t the top pick, apart');
+  }
+  // A handful of wears says nothing.
+  assert.deepEqual(fitOffset(feltAs(6, { days: 4 })), { n: 8 });
+});
+
+test('journal-check --fit reports the thermostat after the wears', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'almanac-'));
+  const file = join(dir, 'journal.json');
+  const ids = fragrances.map(f => String(f.id));
+  writeFileSync(file, JSON.stringify({
+    app: 'scentcast-journal',
+    location: { lat: 40.71, lon: -74.01 },
+    history: Array.from({ length: 24 }, (_, i) => ({ id: ids[(i * 7) % ids.length], date: dayISO(-60 + 2 * i), slot: i % 2 ? 'night' : 'day' })),
+  }));
+  const text = run([file, '--fit']);
+  assert.equal(text.status, 0, text.stderr);
+  assert.match(text.stdout, /\nThermostat: the feels-like offset that best explains what you wore\n  every wear +(?:[+-]?\d+°F \(about [+-]?\d+(?: or lower)? to [+-]?\d+(?: or higher)?\)|can't tell: any offset explains them about as well), 24 wears\n  by day +.+\n  by night +.+\n  not the top pick +.+\n  .+\.\n$/);
+  const out = JSON.parse(run([file, '--fit', '--json']).stdout);
+  assert.deepEqual(Object.keys(out.fit), ['all', 'day', 'night', 'overrides']);
+  assert.equal(out.fit.all.n, 24);
+  assert.ok(!('fit' in JSON.parse(run([file, '--json']).stdout)), 'only when asked');
 });

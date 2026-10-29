@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { fromFragrantica, fragranticaLibrary, loadPool, fromPool, brandCase, noteCase } from '../src/fragrantica.js';
+import { fromFragrantica, fragranticaLibrary, loadPool, fromPool, brandCase, noteCase, noteFloor, noteVotesOf } from '../src/fragrantica.js';
 import { performanceRating, steadyShares } from '../src/engine.js';
 import { DATASET_VERSION } from '../src/profiles.js';
 import { nameMatches } from '../src/collections.js';
@@ -69,6 +69,41 @@ test('notes written in lowercase read in title case, in records and the built wa
   assert.deepEqual(wardrobe.flatMap(lower), [], 'npm run build:data writes them so');
 });
 
+test('note votes filled from the dataset keep its least-voted note, at the share a pyramid that size gives it', () => {
+  // The dataset's weights are min-max scaled, so that note weighs 0 though
+  // people voted for it (decant.py note_votes): Cedrus Blanc's Bergamot, at
+  // 0.38 of the top's for its 4 notes.
+  const lines = stem => readFileSync(new URL(`../data/${stem}.jsonl`, import.meta.url), 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l));
+  const filled = [...lines('calibration'), ...lines('collection').filter(l => /Cedrus-Blanc/.test(l.slug)), ...lines('originals').filter(l => /Cedar-Chic/.test(l.slug))];
+  assert.equal(filled.length, 54);
+  for (const l of filled) {
+    const listed = Object.values(l.notes).flat();
+    assert.deepEqual(listed.filter(n => !(n in (l.noteVotes ?? {}))), [], l.slug);
+    const votes = Object.values(l.noteVotes);
+    assert.deepEqual([Math.max(...votes), Math.min(...votes)], [1000, Math.round(1000 * noteFloor(Array(votes.length).fill(0)))], l.slug);
+  }
+  assert.equal(filled.find(l => /Cedrus-Blanc/.test(l.slug)).noteVotes.Bergamot, 384);
+});
+
+test('records read note weights as min-max scaled votes, the least-voted at its pyramid’s share', async () => {
+  // Fitted on our own pages' votes: about a third of the top's at 5 notes, a fifth at 8, an eighth at 15.
+  assert.deepEqual([5, 8, 15].map(n => Math.round(100 * noteFloor(Array(n).fill(0)))), [32, 22, 13]);
+  assert.equal(noteFloor([100, 57, 14]), 0, 'a row with no note at 0 was scaled to the top alone');
+  assert.deepEqual(noteVotesOf({ Pear: 100, Musk: 73, Meringue: 0 }), { Pear: 1000, Musk: 861, Meringue: 485 });
+  assert.equal(noteVotesOf({ Citruses: 0, 'Woodsy Notes': 0 }), null, 'nobody voted');
+  // The pool keeps 8 notes, each read off the whole pyramid: within a tenth of the r/ record's.
+  const pool = await loadPool(async path => {
+    const file = new URL(path, dir);
+    return existsSync(file) ? readFileSync(file, 'utf8') : null;
+  });
+  const ids = ['31861', '9828', '33519', '46885'];
+  const records = await library.records(ids);
+  for (const id of ids) {
+    const full = records.get(id).noteVotes, kept = fromPool(pool, pool.index.get(id)).noteVotes;
+    for (const [note, v] of Object.entries(kept)) assert.ok(Math.abs(v - full[note]) <= 50, `${id} ${note}: ${v} vs ${full[note]}`);
+  }
+});
+
 test('brands written in capitals read in title case, as the build writes them; short acronyms stay', async () => {
   assert.deepEqual(['MAISON ASRAR', 'PARIS CORNER', 'ALREHAB PERFUMES', 'D’ORSAY', 'BDK Parfums', 'YSL', 'ZARA', 'Lattafa'].map(brandCase),
     ['Maison Asrar', 'Paris Corner', 'Alrehab Perfumes', 'D’Orsay', 'BDK Parfums', 'YSL', 'ZARA', 'Lattafa']);
@@ -85,6 +120,21 @@ test('brands written in capitals read in title case, as the build writes them; s
   assert.ok(choco.url.includes('/perfume/'), 'its page link keeps Fragrantica’s slug');
   assert.ok((await library.search('choco musk alrehab')).some(h => h.brand === 'Alrehab Perfumes'));
   assert.ok(wardrobe.every(f => f.brand === brandCase(f.brand)));
+});
+
+test('the build names every bottle the dataset has as the dataset does, accented brands too', async () => {
+  // A page's h1 runs the name and brand together, and its slug drops accents
+  // ("Floraiku" for "Floraïku"), so the build takes the dataset's spelling.
+  const built = ['collection', 'catalog', 'originals', 'calibration']
+    .flatMap(stem => JSON.parse(readFileSync(new URL(`../data/${stem}.json`, import.meta.url))).fragrances);
+  const inspired = built.filter(f => f.original).map(f => f.original);
+  const records = await library.records([...built, ...inspired].map(f => String(f.id)));
+  const misnamed = [...built, ...inspired].filter(f => records.has(String(f.id)))
+    .filter(f => f.name !== records.get(String(f.id)).name || f.brand !== records.get(String(f.id)).brand)
+    .map(f => `${f.name} (${f.brand}): the dataset has ${records.get(String(f.id)).name} (${records.get(String(f.id)).brand})`);
+  assert.deepEqual(misnamed, [], 'npm run build:data');
+  assert.ok(records.size >= built.length - 5, 'most of data/ is in the dataset');
+  assert.equal(built.find(f => f.id === 17).brand, 'Hermès');
 });
 
 test('records load by id; ids the dataset lacks are left out', async () => {
@@ -108,11 +158,16 @@ test('a bottle nobody has voted on carries its accords’ estimate', () => {
 test('Fragrantica longevity and sillage stand in for Parfumo’s on its scale', () => {
   const r = fromFragrantica('1', { s: 'X/Y', n: 'Y', b: 'X', a: { woody: 100 }, l: [4.2, 500], si: [3.1, 480] });
   const p = performanceRating(r);
-  assert.equal(p.votes, 480);
+  assert.deepEqual([p.votes, p.parfumoShare], [{ longevity: 480, sillage: 480 }, { longevity: 0, sillage: 0 }]);
   assert.ok(p.longevity > 8.5 && p.longevity < 9.5, `${p.longevity}`);
   assert.ok(p.sillage > 8.5 && p.sillage < 9.3, `${p.sillage}`);
-  const both = { ...r, parfumo: { longevity: 6, sillage: 5, votes: 40 } };
-  assert.equal(performanceRating(both).longevity, 6, 'Parfumo first');
+  // With Parfumo's ratings too, each reads both by votes: 40 Parfumo votes against
+  // Fragrantica's 480, worth about 83 and 45 of Parfumo's.
+  const both = performanceRating({ ...r, parfumo: { longevity: 6, sillage: 5, votes: 40 } });
+  assert.ok(both.longevity > 7.5 && both.longevity < p.longevity, `${both.longevity}`);
+  assert.ok(both.sillage > 6.9 && both.sillage < 7.3, `${both.sillage}`);
+  assert.ok(Math.abs(both.votes.longevity - (40 + 1 / (1 / 480 + 1 / 100))) < 1e-9 && both.votes.sillage < both.votes.longevity);
+  assert.ok(Math.abs(both.parfumoShare.longevity - 40 / both.votes.longevity) < 1e-9);
 });
 
 test('accord profiles are fitted to this version of the dataset', () => {
