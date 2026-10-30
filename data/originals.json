@@ -1,6 +1,6 @@
 {
   "source": "fragrantica.com, the originals that dupes in data/ are inspired by",
-  "fetched": "2026-10-26",
+  "fetched": "2026-10-30",
   "fragrances": [
     {
       "id": 97924,
@@ -3413,6 +3413,190 @@
         "clones": [
           99815
         ]
+      }
+    },
+    {
+      "id": 53945,
+      "name": "Sun Song",
+      "brand": "Louis Vuitton",
+      "year": 2019,
+      "gender": "women and men",
+      "url": "https://www.fragrantica.com/perfume/Louis-Vuitton/Sun-Song-53945.html",
+      "thumb": "https://fimgs.net/mdimg/perfume-thumbs/dark-m.53945.2x.webp",
+      "rating": 4.4581,
+      "ratingVotes": 692,
+      "accords": {
+        "citrus": 100,
+        "white floral": 76,
+        "sweet": 47,
+        "soapy": 42,
+        "animalic": 40,
+        "fresh": 39,
+        "aldehydic": 35,
+        "musky": 32
+      },
+      "seasonVotes": {
+        "winter": 15,
+        "spring": 450,
+        "summer": 511,
+        "fall": 36
+      },
+      "timeVotes": {
+        "day": 494,
+        "night": 41
+      },
+      "season": {
+        "winter": 0.015,
+        "spring": 0.445,
+        "summer": 0.505,
+        "fall": 0.036
+      },
+      "dayNight": {
+        "day": 0.923,
+        "night": 0.077
+      },
+      "notes": {
+        "top": [
+          "Citron"
+        ],
+        "mid": [
+          "Orange Blossom"
+        ],
+        "base": [
+          "Musk"
+        ]
+      },
+      "noteVotes": {
+        "Citron": 1000,
+        "Orange Blossom": 1000,
+        "Musk": 485
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Louis_Vuitton/Sun_Song",
+        "longevity": 6.9,
+        "sillage": 6.7,
+        "votes": 426,
+        "occasion": {
+          "Leisure": 0.267,
+          "Daily": 0.248,
+          "Business": 0.178,
+          "Sport": 0.109,
+          "Night Out": 0.099,
+          "Evening": 0.099
+        },
+        "occasionVotes": 453
+      },
+      "like": {
+        "season": {
+          "winter": 0.206,
+          "spring": 0.28,
+          "summer": 0.28,
+          "fall": 0.235
+        },
+        "night": 0.443
+      },
+      "performance": {
+        "longevity": 4.0765,
+        "sillage": 3.0708,
+        "votes": 588
+      },
+      "sentiment": {
+        "hate": 9,
+        "dislike": 34,
+        "ok": 49,
+        "like": 139,
+        "love": 461
+      },
+      "about": {
+        "value": {
+          "avg": 2.98,
+          "votes": 564
+        },
+        "owners": {
+          "have": 539,
+          "had": 165,
+          "want": 831
+        },
+        "crowdGender": {
+          "lean": 0.42,
+          "votes": 583
+        },
+        "popularity": {
+          "all": 3180,
+          "recent": 1195
+        },
+        "perfumers": [
+          "Jacques Cavallier Belletrud"
+        ],
+        "line": "Les Parfums Louis Vuitton",
+        "pros": [
+          {
+            "text": "Strong performance for a citrus fragrance",
+            "up": 320,
+            "down": 0
+          },
+          {
+            "text": "Noticeable projection and scent trail",
+            "up": 319,
+            "down": 0
+          },
+          {
+            "text": "Ideal for extreme summer heat",
+            "up": 317,
+            "down": 0
+          }
+        ],
+        "cons": [
+          {
+            "text": "Discontinued and difficult to source",
+            "up": 328,
+            "down": 3
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 107116,
+            "up": 573,
+            "down": 15
+          }
+        ],
+        "alsoLiked": [
+          73344,
+          62251,
+          53947,
+          67370,
+          68357,
+          49754,
+          81423,
+          49752,
+          73006,
+          68356
+        ],
+        "flags": [
+          "discontinued",
+          "hardToFind"
+        ]
+      },
+      "extras": {
+        "value": 2.98,
+        "safe": 87,
+        "keep": 0.008,
+        "lean": 0.42,
+        "now": 51,
+        "like": [
+          107116
+        ],
+        "family": [
+          107116
+        ],
+        "alt": [],
+        "flags": [
+          "discontinued",
+          "hardToFind"
+        ],
+        "owners": 539,
+        "reach": 0.2,
+        "clones": []
       }
     },
     {

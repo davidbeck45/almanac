@@ -72,7 +72,7 @@ test('--exclude refuses a term that takes out most of the wardrobe, and an empty
   for (const extra of [['--slot', 'night'], ['--week'], ['--json'], ['--date', dayISO(1)], ['--layer', 'all'], ['--mix']]) {
     const run = cli('--loc', '40.7,-74', '--journal', file, ...extra);
     assert.equal(run.status, 1, extra.join(' '));
-    assert.match(run.stderr, /^Nothing left to rank: the journal leaves out all 25 bottles/);
+    assert.match(run.stderr, /^Nothing left to rank: the journal leaves out all 26 bottles/);
     assert.doesNotMatch(run.stderr, /at .*\.mjs:\d+/, 'no stack trace');
   }
 });
@@ -87,7 +87,7 @@ test('switched-off bottles are left out of picks but still owned for suggestions
   assert.deepEqual([own.verdict, own.reasons[0]], ['Redundant', 'You own it.']);
   assert.equal(original.verdict, 'Redundant', 'the original of a bottle he owns');
   assert.ok(!style.results.some(r => ['Liquid Brun', 'Amber Empire', 'Cream Velvet'].includes(r.name)), style.results.map(r => r.name).join(', '));
-  assert.equal(gaps.bottles, 24, 'covers nothing');
+  assert.equal(gaps.bottles, 25, 'covers nothing');
   assert.match(runs[4].stderr, /--top takes 1 or more for --gaps/);
 });
 

@@ -1,6 +1,6 @@
 {
   "source": "fragrantica.com/@doeszen wardrobe (Have)",
-  "fetched": "2026-10-26",
+  "fetched": "2026-10-30",
   "fragrances": [
     {
       "id": 98689,
@@ -5122,6 +5122,253 @@
         "flags": [],
         "owners": 1720,
         "reach": 0.8,
+        "clones": []
+      }
+    },
+    {
+      "id": 128507,
+      "name": "Jean Lowe Summer Vibes",
+      "brand": "Maison Alhambra",
+      "year": 2026,
+      "gender": "women and men",
+      "url": "https://www.fragrantica.com/perfume/Maison-Alhambra/Jean-Lowe-Summer-Vibes-128507.html",
+      "thumb": "https://fimgs.net/mdimg/perfume-thumbs/dark-m.128507.2x.webp",
+      "rating": 4.0296,
+      "ratingVotes": 135,
+      "accords": {
+        "citrus": 100,
+        "aromatic": 52,
+        "fresh": 44,
+        "white floral": 40,
+        "musky": 36,
+        "green": 34,
+        "powdery": 33,
+        "aldehydic": 33
+      },
+      "seasonVotes": {
+        "winter": 21,
+        "spring": 76,
+        "summer": 95,
+        "fall": 28
+      },
+      "timeVotes": {
+        "day": 77,
+        "night": 48
+      },
+      "season": {
+        "winter": 0.095,
+        "spring": 0.345,
+        "summer": 0.432,
+        "fall": 0.127
+      },
+      "dayNight": {
+        "day": 0.616,
+        "night": 0.384
+      },
+      "notes": {
+        "top": [
+          "Lemon",
+          "Petitgrain"
+        ],
+        "mid": [
+          "Orange Blossom",
+          "Neroli"
+        ],
+        "base": [
+          "Musk"
+        ]
+      },
+      "noteVotes": {
+        "Lemon": 1000,
+        "Petitgrain": 320,
+        "Orange Blossom": 320,
+        "Neroli": 320,
+        "Musk": 320
+      },
+      "original": {
+        "id": 53945,
+        "name": "Sun Song",
+        "brand": "Louis Vuitton",
+        "url": "https://www.fragrantica.com/perfume/Louis-Vuitton/Sun-Song-53945.html",
+        "thumb": "https://fimgs.net/mdimg/perfume-thumbs/dark-m.53945.2x.webp",
+        "rating": 4.4581,
+        "ratingVotes": 692,
+        "seasonVotes": {
+          "winter": 15,
+          "spring": 450,
+          "summer": 511,
+          "fall": 36
+        },
+        "timeVotes": {
+          "day": 494,
+          "night": 41
+        },
+        "season": {
+          "winter": 0.015,
+          "spring": 0.445,
+          "summer": 0.505,
+          "fall": 0.036
+        },
+        "dayNight": {
+          "day": 0.923,
+          "night": 0.077
+        },
+        "extras": {
+          "value": 2.98,
+          "safe": 87,
+          "keep": 0.008,
+          "lean": 0.42,
+          "now": 51,
+          "like": [
+            107116
+          ],
+          "family": [
+            107116
+          ],
+          "alt": [],
+          "flags": [
+            "discontinued",
+            "hardToFind"
+          ],
+          "owners": 539,
+          "reach": 0.2
+        },
+        "siblings": [],
+        "parfumo": {
+          "url": "https://www.parfumo.com/Perfumes/Louis_Vuitton/Sun_Song",
+          "longevity": 6.9,
+          "sillage": 6.7,
+          "votes": 426,
+          "occasion": {
+            "Leisure": 0.267,
+            "Daily": 0.248,
+            "Business": 0.178,
+            "Sport": 0.109,
+            "Night Out": 0.099,
+            "Evening": 0.099
+          },
+          "occasionVotes": 453
+        },
+        "performance": {
+          "longevity": 4.0765,
+          "sillage": 3.0708,
+          "votes": 588
+        }
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/maison-alhambra/summer-vibes",
+        "longevity": 6.9,
+        "sillage": 7.3,
+        "votes": 28,
+        "occasion": {
+          "Daily": 0.26,
+          "Leisure": 0.26,
+          "Sport": 0.24,
+          "Business": 0.18,
+          "Evening": 0.06
+        },
+        "occasionVotes": 34
+      },
+      "like": {
+        "season": {
+          "winter": 0.043,
+          "spring": 0.366,
+          "summer": 0.495,
+          "fall": 0.096
+        },
+        "night": 0.162
+      },
+      "performance": {
+        "longevity": 2.734,
+        "sillage": 1.8556,
+        "votes": 90
+      },
+      "sentiment": {
+        "hate": 3,
+        "dislike": 13,
+        "ok": 24,
+        "like": 32,
+        "love": 63
+      },
+      "about": {
+        "value": {
+          "avg": 3.46,
+          "votes": 98
+        },
+        "owners": {
+          "have": 379,
+          "had": 29,
+          "want": 397
+        },
+        "crowdGender": {
+          "lean": -0.13,
+          "votes": 100
+        },
+        "popularity": {
+          "all": 1154,
+          "recent": 1154
+        },
+        "perfumers": [],
+        "line": null,
+        "pros": [],
+        "cons": [],
+        "smellsLike": [
+          {
+            "id": 12192,
+            "up": 41,
+            "down": 20
+          },
+          {
+            "id": 114439,
+            "up": 29,
+            "down": 14
+          },
+          {
+            "id": 79939,
+            "up": 46,
+            "down": 36
+          },
+          {
+            "id": 55688,
+            "up": 20,
+            "down": 11
+          },
+          {
+            "id": 35575,
+            "up": 13,
+            "down": 4
+          }
+        ],
+        "alsoLiked": [
+          100480,
+          113593,
+          120605,
+          70839,
+          101314,
+          103352,
+          89050,
+          83666,
+          94702,
+          93272
+        ],
+        "flags": []
+      },
+      "extras": {
+        "value": 3.4,
+        "safe": 27,
+        "keep": 0.02,
+        "lean": -0.13,
+        "now": 49,
+        "like": [
+          12192,
+          114439,
+          35575
+        ],
+        "family": [],
+        "alt": [],
+        "flags": [],
+        "owners": 379,
+        "reach": 0.5,
         "clones": []
       }
     },

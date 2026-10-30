@@ -27,7 +27,7 @@ const owned = name => wardrobe.find(f => f.name === name);
 const ctx = gapContext({ owned: wardrobe, records, byId });
 const report = gapReport(ctx, { k: 5 });
 const BROOKE = ['69541', '122015', '128201', '115992', '64338', '137101', '77284', '97237', '88207'];
-const FRESH = ['Atlantis Extrait', 'Shiyaaka Sky', 'Essence de Blanc', 'Jake', 'Legacy', 'Cedrus Blanc', 'Aristo', 'Sauvage'];
+const FRESH = ['Atlantis Extrait', 'Shiyaaka Sky', 'Essence de Blanc', 'Jake', 'Legacy', 'Cedrus Blanc', 'Aristo', 'Sauvage', 'Jean Lowe Summer Vibes'];
 
 test('a bottle’s fit in a cell is exactly rank()’s score in that weather', () => {
   // One window per slot × band, so the cell's mean is that window.
@@ -220,9 +220,10 @@ test('David’s gaps name real situations, gaps before room to grow, and his str
   assert.ok(office.every(g => g.slot === 'day' && g.bands.join() === 'cold' && g.status === 'room'), office.map(g => g.title).join('; '));
   assert.ok(report.strengths.some(s => s.use === 'office' && s.bands.includes('cool') && s.bands.includes('hot')), 'the office is a strength');
   assert.match(report.overview.text, /^Your wardrobe covers every situation well; here’s where it could go further\./);
-  // Cold days: Cream Velvet leads, CH Men Prive and Rifaaqat close behind (the cold forgives their night lean), so it isn't thin.
+  // Cold days: Cream Velvet leads, CH Men Prive and Rifaaqat close behind (the cold forgives their night lean), so it isn't thin
+  // (plenty, with 5 strong bottles, since the accord refit that came with Sun Song; covered with 3 before).
   const cold = ctx.cov.find(c => c.cell.id === 'daily:day:cold');
-  assert.equal(cold.status, 'covered');
+  assert.equal(cold.status, 'plenty');
   assert.deepEqual(cold.top.map(t => t.bottle.name), ['Cream Velvet', 'CH Men Prive', 'Rifaaqat']);
   // A runner-up just under the strong line is depth too: thin needs the next best under the 85th percentile.
   const q = ctx.ref[ctx.cc.cells.indexOf(cold.cell)];

@@ -14,6 +14,8 @@ const mildDay = (dateISO = TODAY, slot = 'day') => ({
   ...(slot === 'day' ? { feelsF: 64, humidity: 60, dewF: 50 } : { feelsF: 54, humidity: 70, dewF: 46 }),
 });
 const reasons = entry => entry.reasons.map(r => r.text);
+// The bottle left unworn: S on the mild day, a close second to its pick.
+const IDLE = 'Cedrus Blanc';
 
 // A journal begun `start`, every bottle last worn `recent` (past the rotation
 // tail, not yet neglected) except those in `last` ({ name: date | null }).
@@ -28,13 +30,13 @@ function journal({ start = '2026-08-01', recent = '2026-09-20', last = {} } = {}
 
 test('a bottle unworn for a month takes a slot it nearly wins, and says so', () => {
   const plain = rank(fragrances, mildDay(), 'day');
-  const history = journal({ last: { 'Meant To Be Seen': '2026-09-01' } });
+  const history = journal({ last: { [IDLE]: '2026-09-01' } });
   const still = rank(fragrances, mildDay(), 'day', { history });
   assert.deepEqual(still.map(r => r.fragrance.id), plain.map(r => r.fragrance.id), 'without the opt, nothing moves');
 
   const ranked = rank(fragrances, mildDay(), 'day', { history, nudge: true });
   const [pick] = ranked;
-  assert.equal(pick.fragrance.name, 'Meant To Be Seen');
+  assert.equal(pick.fragrance.name, IDLE);
   assert.ok(pick.nudged);
   assert.equal(pick.parts.idle, 41);
   assert.equal(reasons(pick)[0], 'Not worn in 41 days');
@@ -45,25 +47,25 @@ test('a bottle unworn for a month takes a slot it nearly wins, and says so', () 
 });
 
 test('worn within the month, no nudge', () => {
-  const history = journal({ last: { 'Meant To Be Seen': shiftISO(TODAY, -(NUDGE_AFTER - 1)) } });
+  const history = journal({ last: { [IDLE]: shiftISO(TODAY, -(NUDGE_AFTER - 1)) } });
   const ranked = rank(fragrances, mildDay(), 'day', { history, nudge: true });
   assert.ok(!ranked.some(r => r.nudged || r.parts.idle));
 });
 
 test('a never-worn bottle counts from the journal’s first wear, once that is a month back', () => {
-  const young = journal({ start: '2026-09-22', recent: '2026-09-25', last: { 'Meant To Be Seen': null } });
+  const young = journal({ start: '2026-09-22', recent: '2026-09-25', last: { [IDLE]: null } });
   assert.ok(!rank(fragrances, mildDay(), 'day', { history: young, nudge: true }).some(r => r.nudged), '20-day journal');
-  const old = journal({ start: '2026-09-07', recent: '2026-09-25', last: { 'Meant To Be Seen': null } });
+  const old = journal({ start: '2026-09-07', recent: '2026-09-25', last: { [IDLE]: null } });
   const [pick] = rank(fragrances, mildDay(), 'day', { history: old, nudge: true });
-  assert.equal(pick.fragrance.name, 'Meant To Be Seen');
+  assert.equal(pick.fragrance.name, IDLE);
   assert.equal(pick.parts.idle, daysBetween('2026-09-07', TODAY));
   assert.ok(pick.parts.unworn);
   assert.equal(reasons(pick)[0], 'Not worn yet', 'not "in 35 days": it may have joined the shelf last week');
   assert.ok(!reasons(pick).some(t => /Not worn in/.test(t)));
   // A bottle that joined lately counts from the day it did.
-  const added = fragrances.map(f => (f.name === 'Meant To Be Seen' ? { ...f, added: '2026-10-01' } : f));
+  const added = fragrances.map(f => (f.name === IDLE ? { ...f, added: '2026-10-01' } : f));
   assert.ok(!rank(added, mildDay(), 'day', { history: old, nudge: true }).some(r => r.nudged), 'added 11 days ago');
-  const addedLongAgo = fragrances.map(f => (f.name === 'Meant To Be Seen' ? { ...f, added: '2026-08-01T09:30:00Z' } : f));
+  const addedLongAgo = fragrances.map(f => (f.name === IDLE ? { ...f, added: '2026-08-01T09:30:00Z' } : f));
   assert.equal(rank(addedLongAgo, mildDay(), 'day', { history: old, nudge: true })[0].parts.idle, 35, 'the journal’s start, when that is later');
   // Plans alone don't start a journal.
   const planned = fragrances.slice(0, 3).map(f => ({ id: f.id, date: '2026-08-01', slot: 'day', planned: true }));
@@ -71,15 +73,15 @@ test('a never-worn bottle counts from the journal’s first wear, once that is a
 });
 
 test('a bottle you rate 2★ or lower is left alone on purpose, never nudged', () => {
-  const history = journal({ last: { 'Meant To Be Seen': '2026-09-01' } });
+  const history = journal({ last: { [IDLE]: '2026-09-01' } });
   for (const rating of [1, 2]) {
-    const rated = fragrances.map(f => (f.name === 'Meant To Be Seen' ? { ...f, personal: { rating, longevity: 0, sillage: 0 } } : f));
+    const rated = fragrances.map(f => (f.name === IDLE ? { ...f, personal: { rating, longevity: 0, sillage: 0 } } : f));
     const ranked = rank(rated, mildDay(), 'day', { history, nudge: true });
     assert.ok(!ranked.some(r => r.nudged), `${rating}★`);
-    assert.notEqual(ranked[0].fragrance.name, 'Meant To Be Seen');
+    assert.notEqual(ranked[0].fragrance.name, IDLE);
   }
-  const liked = fragrances.map(f => (f.name === 'Meant To Be Seen' ? { ...f, personal: { rating: 4, longevity: 0, sillage: 0 } } : f));
-  assert.equal(rank(liked, mildDay(), 'day', { history, nudge: true })[0].fragrance.name, 'Meant To Be Seen', '4★ still is');
+  const liked = fragrances.map(f => (f.name === IDLE ? { ...f, personal: { rating: 4, longevity: 0, sillage: 0 } } : f));
+  assert.equal(rank(liked, mildDay(), 'day', { history, nudge: true })[0].fragrance.name, IDLE, '4★ still is');
 });
 
 test('never past the margin, and never trading an S pick for an A', () => {

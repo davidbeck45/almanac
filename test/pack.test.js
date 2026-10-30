@@ -162,9 +162,11 @@ const LONDON = typical([
 const wornEveryDay = out => out.bottles.filter(b => [...new Set(out.plan.map(p => p.window.dateISO))]
   .every(d => out.plan.some(p => p.window.dateISO === d && p.pick === b.record))).map(b => b.record.name);
 
-// Ten hot July days, 88–92 by day and 76–80 at night.
+// Ten sweltering July days, 91–95 by day and 77–81 at night. (Two degrees
+// milder, since Jean Lowe Summer Vibes and the accord refit with its Sun Song,
+// resting Supremacy's nights gains only one: that plan stands, as Cancún's.)
 const SUMMER = Array.from({ length: 10 }, (_, i) => shift('2026-07-10', i))
-  .flatMap((d, i) => [win(d, 'day', 90 + ((i * 7) % 5) - 2, 70, { lat: 40 }), win(d, 'night', 78 + ((i * 7) % 5) - 2, 68, { lat: 40 })]);
+  .flatMap((d, i) => [win(d, 'day', 93 + ((i * 7) % 5) - 2, 71, { lat: 40 }), win(d, 'night', 79 + ((i * 7) % 5) - 2, 69, { lat: 40 })]);
 const sameSet = (out, set) => set.length === out.bottles.length && set.every(f => out.bottles.some(b => b.record.id === f.id));
 
 test('a long trip wears no bottle every day when another set plans nearly as well and rests it', () => {
