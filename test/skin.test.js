@@ -78,7 +78,11 @@ test('a bottle you rate 1★ or 2★ drops out of the top 3 unless it’s clearl
   // The top pick of each window rated low: where it stays in the top 3, it led the 4th by far.
   const kept = { 1: 0, 2: 0 };
   let windows = 0;
-  for (const records of [fragrances, fragrances.filter((_, i) => i % 3 === 0)]) {
+  // Every third bottle, from each start: which bottles a third holds moves as bottles are added, and
+  // the rule has to hold in any list (Jean Lowe Summer Vibes left Supremacy the one warm night-out
+  // bottle in the first, leading the second by 0.19, more than 1★ takes off: holdBackLoathed).
+  const thirds = [0, 1, 2].map(k => fragrances.filter((_, i) => i % 3 === k));
+  for (const records of [fragrances, ...thirds]) {
     grid(records, (c, slot, occasion, plain) => {
       const top = plain[0].fragrance, lead = plain[0].score - plain[3].score;
       const where = `${top.name}, ${c.feelsF} ${slot} ${c.dateISO} ${occasion?.id ?? 'daily'}`;
@@ -96,7 +100,7 @@ test('a bottle you rate 1★ or 2★ drops out of the top 3 unless it’s clearl
       windows++;
     });
   }
-  assert.equal(windows, 2 * 64 * (OCCASIONS.length + 1));
+  assert.equal(windows, 4 * 64 * (OCCASIONS.length + 1));
   assert.ok(kept[1] > 0 && kept[2] > kept[1], `kept ${JSON.stringify(kept)}`);
 });
 

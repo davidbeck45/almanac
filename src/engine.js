@@ -388,11 +388,18 @@ const PERSONAL_SHIFT = 0.5;
 // near ties (half the time it sits second to fourth) without taking every
 // window. 1★ was -0.1 until the heat penalty (HEAT_WEIGHT) let a fresh bottle
 // lead a small wardrobe's hot night out by 0.142 (a third of David's: Supremacy
-// over Legacy), more than a 1★ took off; at -0.11 it never stays the pick
-// there, and one leading the 4th by 0.15 still shows in the top 3.
-// 4★ is what most bottles you keep would get, so it moves a bottle only
-// through quality(). By stars, 1 to 5.
+// over Legacy), more than a 1★ took off; at -0.11 one leading the 4th by 0.15
+// still shows in the top 3. 4★ is what most bottles you keep would get, so it
+// moves a bottle only through quality(). By stars, 1 to 5.
 const PERSONAL_PICK = [-0.11, -0.06, -0.01, 0, 0.02];
+// A bottle you rate 1★ is never the pick while anything else is ranked
+// (holdBackLoathed). The 0.15 that 1★ takes off can't do it alone: in a small
+// list one bottle can lead the second by up to 0.49 (Supremacy, the one
+// warm-weather night-out bottle in a third of David's, by 0.19), and any more
+// off would drop a clear only-fit out of the top 3. There its stars' term
+// grows to set it LOATHED_GAP under the best other bottle (2 points, so its
+// match never reads as a tie with the pick), above the next.
+const LOATHED_GAP = 0.02;
 // Ratings at or below this mean you'd rather not wear it: no nudges, no packing.
 export const DISLIKED = 2;
 
@@ -407,6 +414,30 @@ export const isDisliked = frag => Number.isFinite(frag?.personal?.rating) && fra
 export function personalPart(frag) {
   const stars = frag.personal?.rating;
   return Number.isFinite(stars) ? PERSONAL_PICK[clamp(Math.round(stars), 1, 5) - 1] : 0;
+}
+
+const isLoathed = frag => Number.isFinite(frag.personal?.rating) && Math.round(frag.personal.rating) <= 1;
+
+/**
+ * Keep a bottle you rate 1★ from the top of a scored list (see LOATHED_GAP):
+ * one that would outscore every other bottle takes LOATHED_GAP under the best
+ * of them, never under the second, through its stars' term, so scoreOf(parts)
+ * still gives its score and the Why page shows what your rating took off.
+ */
+function holdBackLoathed(scored, occasion) {
+  let best = -Infinity, second = -Infinity;
+  for (const s of scored) {
+    if (isLoathed(s.fragrance)) continue;
+    if (s.score > best) [best, second] = [s.score, best];
+    else if (s.score > second) second = s.score;
+  }
+  if (best === -Infinity) return;
+  const cap = Math.max(best - LOATHED_GAP, Math.min(second + 0.001, best - 0.001));
+  for (const s of scored) {
+    if (!isLoathed(s.fragrance) || s.score < best) continue;
+    s.parts.personal -= s.score - cap;
+    s.score = scoreOf(s.parts, occasion);
+  }
 }
 
 // Community rating, trusted more as votes grow; unknowns sit at neutral 0.5.
@@ -909,10 +940,13 @@ export function restReason({ daysAgo: d, planned }, slot) {
  *   saved?: Map(id -> event { dateISO, slot, occasion }) of bottles a plan
  *   keeps for an event later on: they keep their score, say so
  *   (`parts.saved`, savedReason) and are never nudged,
- *   nowISO?: the date that note is said on, the plan's today (default todayISO) }
+ *   nowISO?: the date that note is said on, the plan's today (default todayISO),
+ *   holdBack?: keep a bottle you rate 1★ off the top (holdBackLoathed; default
+ *   true). packTrip turns it off: it reads the top as the best fit there is,
+ *   and packs a disliked bottle only where nothing else comes near it }
  */
 export function rank(fragrances, conditions, slot, opts = {}) {
-  const { occasion = null, history = [], todayISO = conditions.dateISO ?? localISO(new Date()), nudge = false, saved = null, nowISO = todayISO } = opts;
+  const { occasion = null, history = [], todayISO = conditions.dateISO ?? localISO(new Date()), nudge = false, saved = null, nowISO = todayISO, holdBack = true } = opts;
   const weights = targetSeasonWeights(conditions.feelsF, conditions.date, conditions.lat);
 
   const scored = fragrances.map(frag => {
@@ -934,6 +968,7 @@ export function rank(fragrances, conditions, slot, opts = {}) {
     return { fragrance: frag, score: scoreOf(parts, occasion), parts };
   });
 
+  if (holdBack) holdBackLoathed(scored, occasion);
   scored.sort((a, b) => b.score - a.score);
 
   let i = 0;

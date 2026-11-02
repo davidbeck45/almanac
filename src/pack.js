@@ -121,7 +121,7 @@ export function packTrip(frags, windows, { max = 3, occasionOf = win => win.occa
   if (!frags.length || !windows.length) return { bottles: [], plan: [], uncovered: [], text: 'Nothing to pack for.' };
   const rows = windows.map(win => {
     const occasion = occasionOf(win);
-    const ranked = rank(frags, win, win.slot, { occasion, todayISO: win.dateISO });
+    const ranked = rank(frags, win, win.slot, { occasion, todayISO: win.dateISO, holdBack: false });
     return { win, occasion, ranked, top: ranked[0], byId: new Map(ranked.map(r => [r.fragrance.id, r])) };
   });
   const within = (row, id) => row.byId.get(id).score >= row.top.score - PLAN_MARGIN;
