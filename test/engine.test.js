@@ -205,7 +205,11 @@ test('comfort range: heavy scents open toward the cold, fresh ones toward the he
   assert.equal(amber.bestF, null, 'no single best for an open range');
   const fresh = byName('Essence de Blanc');
   assert.equal(fresh.highF, null);
-  assert.ok(fresh.lowF >= 68, `Essence de Blanc starts at ${fresh.lowF}°F`);
+  assert.ok(fresh.lowF >= 64 && fresh.lowF <= 70, `Essence de Blanc starts at ${fresh.lowF}°F`);
+  // Read in the season each suits: fall-voted rich bottles reach the cool fall days they're picked on, and
+  // spring-voted fresh ones the mild spring days (read as an even split, CH Men Prive ended at 47°F).
+  for (const name of HEAVY) assert.ok(byName(name).highF >= 54 && byName(name).highF <= 60, `${name} tops out at ${byName(name).highF}°F`);
+  for (const name of FRESH) assert.ok(byName(name).lowF >= 55 && byName(name).lowF <= 68, `${name} starts at ${byName(name).lowF}°F`);
   const allRounder = byName('Sauvage');
   assert.ok(allRounder.lowF < 60 && allRounder.highF > 80, JSON.stringify(allRounder));
   assert.ok(allRounder.bestF > allRounder.lowF && allRounder.bestF < allRounder.highF);

@@ -339,10 +339,28 @@ export function thinInCold(frag, conditions) {
   return rich * rich * clamp(-heaviness(frag.accords), 0, 1);
 }
 
+// The season weights at feelsF on a mid-October day (side 1) or a mid-April
+// one (side -1), as targetSeasonWeights reads them there: the transition
+// split at its fullest, and no midwinter or midsummer lean.
+function transitionWeights(feelsF, side) {
+  const w = targetSeasonWeights(feelsF, null);
+  const mild = clamp((feelsF - TRANSITION_COLD[0]) / (TRANSITION_COLD[1] - TRANSITION_COLD[0]), 0, 1);
+  const both = w.spring + w.fall, fall = 0.5 + side * TRANSITION_SPLIT * mild;
+  return { ...w, fall: both * fall, spring: both * (1 - fall) };
+}
+
 // Feels-like range a bottle suits on its own: its season and weather fit,
 // weighted as in daily picks, scanned in 1°F steps, whatever the time of year
 // (the calendar would otherwise move a cold-weather bottle's range by 26°F
-// between April and October). The range runs out from the peak to where the
+// between April and October). Weather between winter's and summer's comes in
+// spring and fall alike, so each step reads the season fit as of mid-October
+// and of mid-April and takes the better: the range is the bottle's in the
+// season it suits. Read as an even split, a 52°F day was half spring, which
+// fall-voted rich bottles aren't: CH Men Prive's range ended at 47°F though
+// it was the backtest's raw pick on 13% of its windows above that, and the
+// app's Now picks fell outside their bottle's range 5.7% of the time (1.4%
+// now); against the backtest's collector ranges the ends miss by 6.3°F, not
+// 8.8. The range runs out from the peak to where the
 // fit falls COMFORT_DROP below it; lowF / highF are null when it runs off the
 // scan (nothing is too cold for a winter scent). bestF, the middle of the
 // peak, is only given for a range closed on both ends. At a 0.1 drop rich
@@ -355,9 +373,9 @@ export function comfortRange(frag, { dewF = 55 } = {}) {
   const W = DAILY_WEIGHTS;
   const fits = [];
   for (let feelsF = COMFORT_SCAN[0]; feelsF <= COMFORT_SCAN[1]; feelsF++) {
-    const weights = targetSeasonWeights(feelsF, null);
+    const season = Math.max(seasonFit(frag, transitionWeights(feelsF, 1)), seasonFit(frag, transitionWeights(feelsF, -1)));
     const conditions = { feelsF, dewF, category: 'clear' };
-    fits.push((W.season * seasonFit(frag, weights) + W.weather * weatherFit(frag, conditions)) / (W.season + W.weather));
+    fits.push((W.season * season + W.weather * weatherFit(frag, conditions)) / (W.season + W.weather));
   }
   const peak = Math.max(...fits);
   const at = fits.indexOf(peak);
