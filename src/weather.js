@@ -22,9 +22,17 @@ const FORECAST_MODELS = 2;
 const CACHE_KEY = 'scentcast.weather';
 const CACHE_VERSION = 3; // bump when the request shape changes
 const CACHE_MAX_AGE = 20 * 60 * 1000;
-// An older forecast still opens the app (under "Updating…" while a fresh one
-// loads) up to this age: it still covers today and tomorrow.
-const SHOW_STALE_FOR = 12 * 60 * 60 * 1000;
+// An older forecast still opens the app at once (under "Updating…" while a
+// fresh one loads) up to SHOW_STALE_FOR: a 7-day forecast three days old
+// still covers today and tomorrow, and the blend's error grows about half a
+// degree a day. At 12 hours, the morning's first look (yesterday's forecast,
+// a day old) waited on the network for any pick, 17–24 s on a slow day.
+// When a fresh one can't be had (offline, the daily limit, no answer), one up
+// to FALL_BACK_FOR old stands in, marked `stale` (standIn): it still holds
+// today. Past that the app says why, with Try again, rather than a page with
+// no window left to rank.
+const SHOW_STALE_FOR = 72 * 60 * 60 * 1000;
+const FALL_BACK_FOR = 5 * 24 * 60 * 60 * 1000;
 
 // How long a request to Open-Meteo may take before it's dropped and fails
 // as `timeout` (forecastError: "isn't answering"). On a slow day in October
@@ -151,7 +159,19 @@ export function cachedForecast(loc, nowMs = Date.now()) {
   return { forecast: cached.forecast, fresh: age < CACHE_MAX_AGE };
 }
 
-// Cached fetch: fresh cache wins (unless forced), network next, stale cache if offline.
+/**
+ * A saved forecast standing in for one that couldn't be had: marked `stale`,
+ * and `offline` when the request never reached the service (no status, no
+ * timeout), so the page doesn't say "Offline" on the daily limit. Null past
+ * FALL_BACK_FOR.
+ */
+export function standIn(forecast, err, nowMs = Date.now()) {
+  if (!forecast || !(nowMs - forecast.fetchedAt < FALL_BACK_FOR)) return null;
+  return { ...forecast, stale: true, offline: !err?.status && !err?.timeout };
+}
+
+// Cached fetch: fresh cache wins (unless forced), network next, the saved one
+// standing in when that fails (standIn), while it still covers today.
 export async function getForecast(loc, { force = false } = {}) {
   const key = cacheKey(loc);
   const cached = readCache();
@@ -161,7 +181,8 @@ export async function getForecast(loc, { force = false } = {}) {
     try { localStorage.setItem(CACHE_KEY, JSON.stringify({ key, forecast })); } catch {}
     return forecast;
   } catch (err) {
-    if (cached?.key === key) return { ...cached.forecast, stale: true };
+    const saved = cached?.key === key ? standIn(cached.forecast, err) : null;
+    if (saved) return saved;
     throw err;
   }
 }
@@ -441,7 +462,9 @@ export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'
   return dates.flatMap(d => slots.map(s => found.get(key(d, s))).filter(Boolean));
 }
 
-function clock(forecast, nowMs) {
+// The place's wall clock at nowMs, by its forecast's UTC offset: today's and
+// tomorrow's dates and the hour (state.js canWear reads it).
+export function clock(forecast, nowMs = Date.now()) {
   const wallNow = nowMs + forecast.utc_offset_seconds * 1000;
   const nowDate = new Date(wallNow);
   return {
@@ -501,7 +524,10 @@ export function summarize(forecast, nowMs = Date.now()) {
 
   return {
     todayISO,
+    // When it was read: the app reads the Week at the same moment (state.js).
+    at: nowMs,
     stale: !!forecast.stale,
+    offline: !!forecast.offline,
     fetchedAt: forecast.fetchedAt,
     now: {
       ...reading,
@@ -514,6 +540,18 @@ export function summarize(forecast, nowMs = Date.now()) {
     day: next('day'),
     night: next('night'),
   };
+}
+
+/**
+ * What the app shows: the forecast read for nowMs (summarize), or null when
+ * it's too old to show (SHOW_STALE_FOR; FALL_BACK_FOR for one standing in,
+ * `stale`) or no longer holds the place's today, whose high and low
+ * summarize would take from its first day.
+ */
+export function wxAt(forecast, nowMs = Date.now()) {
+  if (!forecast || !(nowMs - forecast.fetchedAt < (forecast.stale ? FALL_BACK_FOR : SHOW_STALE_FOR))) return null;
+  if (!forecast.daily.time.includes(clock(forecast, nowMs).todayISO)) return null;
+  return summarize(forecast, nowMs);
 }
 
 // The forecast as days, each with whatever day and night windows are still

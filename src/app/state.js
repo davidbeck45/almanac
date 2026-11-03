@@ -4,7 +4,7 @@
 // shell (src/app/shell.js) renders and handles events.
 import { rank, rankEvent, planWindows } from '../engine.js';
 import { planTies } from '../contrast.js';
-import { week } from '../weather.js';
+import { week, wxAt, standIn, cachedForecast, forecastError, clock, WINDOWS } from '../weather.js';
 import { loadLocation } from '../location.js';
 import { loadHistory, wornIn, journalStats, journalCalendar, occasionCounts } from '../history.js';
 import { loadHidden, hiddenFor } from '../hidden.js';
@@ -58,8 +58,8 @@ export const state = {
   active: loadActive(), // 'demo' | 'mine'
   shared: null, // { name, ids, records, missing, loading } from a ?c= link
   loc: loadLocation(),
-  forecast: null,
-  wx: null,
+  forecast: null, // the forecast in hand for state.loc
+  wx: null, // it read for the hour it is (src/weather.js wxAt): what every pane shows
   loading: false,
   updating: false, // a cached forecast is on screen while a fresh one loads
   slow: false, // nothing on screen yet, and the forecast is slow to answer
@@ -70,7 +70,7 @@ export const state = {
   units: prefs.units === 'C' || prefs.units === 'F' ? prefs.units : defaultUnits(),
   occasion: prefs.occasion ?? 'casual',
   occasionSlot: null,
-  slot: null, // the window Now shows ('day' | 'night'); null = the next one
+  slot: null, // the window picked with Now's Day/Night toggle, { slot, dateISO }; null = the next one
   history: loadHistory(),
   events: loadEvents(), // what a day or night at home is for, set on the Occasion pane (src/events.js)
   hiding: loadHidden(), // { hidden, shown }: this device's hides and the defaults it switched on (src/hidden.js)
@@ -231,8 +231,8 @@ export function setEvent(dateISO, slot, occasion) {
   state.events = storeEvent(dateISO, slot, occasion, todayISO());
 }
 
-// The week's windows with the stored events on them.
-const weekWindows = () => withStoredEvents(week(state.forecast).flatMap(d => [d.day, d.night].filter(Boolean)), state.events);
+// The week's windows with the stored events on them, read when state.wx was.
+const weekWindows = () => withStoredEvents(week(state.forecast, state.wx?.at).flatMap(d => [d.day, d.night].filter(Boolean)), state.events);
 
 // Today's day and night are planned together, so the evening pick doesn't
 // repeat the daytime one and a logged wear becomes that window's pick. The
@@ -273,14 +273,17 @@ export function todaySlots() {
 // as Now planned them (for planTies: read only today's windows' ties).
 export const todayPlan = () => (state.today ? [...todaySlots(), ...(state.after ? [state.after] : []), ...state.ahead] : []);
 
-// The window Now shows: the one picked with the Day/Night toggle, else the next.
+// The window Now shows: the one picked with the Day/Night toggle while it's
+// still one of today's (Day picked this morning doesn't open tomorrow's
+// daytime at 6 pm), else the next.
 export function nowSlot() {
   const slots = todaySlots();
-  return slots.find(p => p.win.slot === state.slot) ?? slots[0] ?? null;
+  const picked = state.slot;
+  return slots.find(p => p.win.slot === picked?.slot && p.win.dateISO === picked.dateISO) ?? slots[0] ?? null;
 }
 
 export function computeWeek() {
-  const days = week(state.forecast);
+  const days = week(state.forecast, state.wx?.at);
   const windows = withStoredEvents(days.flatMap(d => [d.day, d.night].filter(Boolean)), state.events);
   const plan = planWindows(rankedFragrances(), windows, { history: state.history, nudge: true, nowISO: todayISO() });
   // Each window's toss-ups (src/contrast.js planTies), today's the same as
@@ -297,19 +300,81 @@ export function computeWeek() {
   return days.map(d => ({ ...d, day: slotPlan(d.day), night: slotPlan(d.night) }));
 }
 
-// Wear logging is for today's two windows, dated today: once the day window
-// has rolled over at night, Now's Day shows tomorrow's, which can only be
-// worn tomorrow (and Worn would hide a wear dated ahead).
-export function canWear(win) {
-  return Boolean(state.wx) && win.dateISO === state.wx.todayISO
-    && [state.wx.day, state.wx.night].some(w => w && w.dateISO === win.dateISO && w.slot === win.slot);
+// ---------- The forecast and the clock ----------
+// Every pane shows the forecast in hand read for the hour it is (state.wx,
+// src/weather.js wxAt), read again when a forecast lands, on the hour while
+// the page is visible and on coming back to it (src/app/shell.js says when):
+// a page left open overnight never shows last night's windows. The Week and
+// the Occasion pane read it at the same moment (`state.wx.at`), so they
+// agree with Now about which windows are left.
+
+/** Whether two places are the same spot (a forecast is asked for by its coordinates). */
+export const samePlace = (a, b) => a?.lat === b?.lat && a?.lon === b?.lon;
+
+const placeHour = (forecast, ms) => Math.floor((ms + forecast.utc_offset_seconds * 1000) / 3_600_000);
+
+/** Whether the hour at the place has turned since state.wx was read. */
+export const hourTurned = (nowMs = Date.now()) =>
+  Boolean(state.forecast && state.wx) && placeHour(state.forecast, state.wx.at) !== placeHour(state.forecast, nowMs);
+
+/**
+ * Reads the forecast in hand again once the hour has turned: -> whether it
+ * did. One too old to show any more stays as it was until a new one lands
+ * (the shell asks for it).
+ */
+export function readClock(nowMs = Date.now()) {
+  if (!hourTurned(nowMs)) return false;
+  const wx = wxAt(state.forecast, nowMs);
+  if (wx) state.wx = wx;
+  return Boolean(wx);
+}
+
+/**
+ * Before a forecast is asked for: the one in hand or, newer, the one saved on
+ * the device (another tab can have fetched it since), read for now, so it
+ * shows at once while the new one loads; nothing past what it can show
+ * (wxAt). -> true when it's fresh enough not to ask (cachedForecast).
+ */
+export function showSaved(nowMs = Date.now()) {
+  const saved = state.loc ? cachedForecast(state.loc, nowMs) : null;
+  if (saved && !(state.forecast?.fetchedAt > saved.forecast.fetchedAt)) state.forecast = saved.forecast;
+  state.wx = wxAt(state.forecast, nowMs);
+  return Boolean(state.wx && saved?.fresh && state.forecast === saved.forecast);
+}
+
+/**
+ * A forecast request's answer for `loc`, { forecast } or { error }, onto the
+ * state: the forecast read for now; failed, the one in hand standing in
+ * while it still covers today (standIn), else the error to show. An answer
+ * for a place picked over since, which asked for its own, changes nothing:
+ * -> false.
+ */
+export function takeForecast(loc, { forecast = null, error = null }, nowMs = Date.now()) {
+  if (!samePlace(state.loc, loc)) return false;
+  Object.assign(state, { loading: false, updating: false, slow: false, error: null });
+  state.forecast = forecast ?? standIn(state.forecast, error, nowMs);
+  state.wx = wxAt(state.forecast, nowMs);
+  if (!state.wx) state.error = error ? forecastError(error) : 'The forecast came back without today. Try again.';
+  return true;
+}
+
+// Wear logging is for today's two windows, dated today, until each is over:
+// once the day window has rolled over at night, Now's Day shows tomorrow's,
+// which can only be worn tomorrow (and Worn would hide a wear dated ahead).
+// It reads the clock, not the forecast as last read, so a window that ended
+// since the page was drawn takes no wear.
+export function canWear(win, nowMs = Date.now()) {
+  if (!state.forecast || !state.wx) return false;
+  const { todayISO, hour } = clock(state.forecast, nowMs);
+  return win.dateISO === todayISO && hour < WINDOWS[win.slot][1];
 }
 
 export const wornId = win => wornIn(state.history, win.dateISO, win.slot)?.id ?? null;
 
+// The hour at the place when the forecast was read (windows say "Now–5p").
 export function nowHour() {
   const offset = state.forecast?.utc_offset_seconds ?? 0;
-  return new Date(Date.now() + offset * 1000).getUTCHours();
+  return new Date((state.wx?.at ?? Date.now()) + offset * 1000).getUTCHours();
 }
 
 // The place's date once its forecast is in, else the device's (not UTC's,

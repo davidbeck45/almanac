@@ -74,9 +74,11 @@ export function heroHTML({ loc, wx, loading, error, updating, slow = false }, { 
   const sky = sceneNow(wx, { error: Boolean(error) });
   const stage = pick && !compact ? stagePoint(aspect, stageX(aspect)) : null;
   // The words over the scene: the temperature, the condition, a line under it
-  // (each reading kept to its number, should the line wrap).
+  // (each reading kept to its number, should the line wrap). A saved forecast
+  // standing in for one that couldn't be had says why: offline, or not
+  // updated (the daily limit, no answer).
   const [big, cond, sub, status] = now
-    ? [`${temp(now.tempF)}°`, now.label, `Feels\u00a0${deg(now.feelsF)} · H\u00a0${deg(now.hiF)} L\u00a0${deg(now.loF)}`, updating ? 'Updating…' : wx.stale ? 'Offline' : '']
+    ? [`${temp(now.tempF)}°`, now.label, `Feels\u00a0${deg(now.feelsF)} · H\u00a0${deg(now.hiF)} L\u00a0${deg(now.loF)}`, updating ? 'Updating…' : wx.stale ? (wx.offline ? 'Offline' : 'Not updated') : '']
     : error ? ['', 'Weather unavailable', loc?.name ?? '', '']
       : loading ? ['', slow ? 'Still checking the sky…' : 'Checking the sky…', slow ? 'The forecast is slow to answer.' : '', '']
         : ['', 'Where are you?', 'Set a location to get picks.', ''];
@@ -502,6 +504,11 @@ function emptyState() {
     action: '<a class="btn primary" href="#/wardrobe/owned"><span>Open your wardrobe</span></a>' });
 }
 
+// A forecast with no hours for the windows ahead (a model gap): said, with
+// Try again, rather than a skeleton nothing will fill.
+export const noHoursHTML = () => messageHTML({ glyph: icon.cloud, title: 'No forecast for the hours ahead', body: 'The forecast that came back doesn’t cover them yet.',
+  action: `<button class="btn primary" data-action="refresh">${icon.refresh}<span>Try again</span></button>` });
+
 // What a pane shows before it can rank: no place, no forecast, no bottles.
 function guard() {
   if (!state.loc) {
@@ -521,8 +528,9 @@ function guard() {
 function nowPane() {
   const blocked = guard();
   if (blocked) return blocked;
-  // A forecast without hours for either window (a model gap): nothing to rank yet.
-  if (!nowSlot()) return skeletonHTML(1);
+  // A forecast without hours for either window (a model gap): nothing to
+  // rank until a new one lands.
+  if (!nowSlot()) return state.loading ? skeletonHTML(1) : noHoursHTML();
   const { win, ranked, pick } = nowSlot();
   const worn = wornId(win);
   const slots = todaySlots();
@@ -570,6 +578,7 @@ function occasionPane(app, route) {
   const bar = when.whenBarHTML({ ...when.when, home: state.loc, today: state.wx.todayISO, slot: ev.win?.slot ?? slot, wx: state.wx, plan });
   const head = `${banner()}${occasionPickerHTML(occasion.id)}${bar}`;
   if (ev.status === 'loading') return head + skeletonHTML(1);
+  if (ev.status === 'error' && ev.here) return head + (state.loading ? skeletonHTML(1) : noHoursHTML());
   if (ev.status === 'error') {
     const where = when.when.place ? `in ${when.when.place.name}` : 'for that date';
     return head + messageHTML({ glyph: icon.cloud, title: `Couldn’t get the weather ${where}`, body: ev.error,
@@ -613,7 +622,10 @@ function showChosenOccasion() {
 }
 
 function weekPane() {
-  return guard() ?? banner() + weekHTML(computeWeek());
+  const blocked = guard();
+  if (blocked) return blocked;
+  const days = computeWeek();
+  return banner() + (days.length ? weekHTML(days) : state.loading ? skeletonHTML(1) : noHoursHTML());
 }
 
 // Packing for a trip (wear/trip.js): no forecast of your own needed, only bottles.
@@ -705,6 +717,9 @@ export const actions = {
   wear(el, app) {
     const ctx = state.contexts[el.dataset.ctx];
     if (!ctx) return;
+    // A window that ended since the page was drawn takes no wear: drawn
+    // again for the hour it is, the page shows the next one.
+    if (!canWear(ctx.win)) return app.render();
     state.history = toggleWear(el.dataset.id, ctx.win.dateISO, ctx.win.slot, state.loc, ctx.occasion?.id ?? 'daily');
     if (wornIn(state.history, ctx.win.dateISO, ctx.win.slot)) navigator.vibrate?.(12);
     app.keepingFocus(el, '#app', app.render);
@@ -767,9 +782,11 @@ export const actions = {
     const next = document.querySelector(kind === 'stars' ? '#app .pick .wear-btn' : '#app .also .shelf-item') ?? document.querySelector('#app .pick .wear-btn');
     if (next) app.refocus(next, '#app', { reveal: seen });
   },
-  // Now's Day/Night toggle in the hero.
+  // Now's Day/Night toggle in the hero: the window as shown, so the choice
+  // ends with it (nowSlot).
   slot(el, app) {
-    state.slot = el.dataset.value;
+    const p = todaySlots().find(x => x.win.slot === el.dataset.value);
+    state.slot = p ? { slot: p.win.slot, dateISO: p.win.dateISO } : null;
     app.keepingFocus(el, '#app', app.renderPage);
   },
   occasion(el, app) {

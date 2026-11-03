@@ -66,17 +66,21 @@ function load(key, place, dateISO, today, app) {
 
 /**
  * The window the Occasion pane ranks for `slot`: { status: 'ready', win,
- * here } or { status: 'loading' } or { status: 'error', error }. `here`:
- * today in your own place (its hours count from now). With `app`, a window
- * not fetched yet starts loading and renders the pane when it's in.
+ * here } or { status: 'loading' } or { status: 'error', error, here }.
+ * `here`: today in your own place (its hours count from now; with no hours
+ * left in the forecast, an error with none). With `app`, a window not
+ * fetched yet starts loading and renders the pane when it's in.
  */
 export function eventWindow(slot, app = null) {
   const wx = state.wx;
-  if (isNowHere()) return { status: 'ready', win: wx[slot] ?? wx.day ?? wx.night, here: true };
+  if (isNowHere()) {
+    const win = wx[slot] ?? wx.day ?? wx.night;
+    return win ? { status: 'ready', win, here: true } : { status: 'error', here: true };
+  }
   const place = when.place ?? state.loc;
   const dateISO = when.dateISO ?? wx.todayISO;
   if (!when.place) {
-    const day = week(state.forecast).find(d => d.dateISO === dateISO);
+    const day = week(state.forecast, wx.at).find(d => d.dateISO === dateISO);
     const win = day?.[slot] ?? day?.day ?? day?.night;
     if (win) return { status: 'ready', win };
   }
@@ -157,7 +161,7 @@ export const actions = {
     const today = state.wx?.todayISO ?? dateISO;
     const what = eventPhrase({ dateISO, slot, occasion: occasionById(id) }, today);
     const best = !on && state.contexts.occ?.ranked[0]?.fragrance;
-    const inWeek = week(state.forecast).some(d => d.dateISO === dateISO);
+    const inWeek = week(state.forecast, state.wx?.at).some(d => d.dateISO === dateISO);
     app.showToast(`<span>${esc(on ? `No plan for ${what} any more.` : best && inWeek ? `Planned: ${what}, with ${best.name}.` : `Planned: ${what}. The Week plans around it once the forecast gets there.`)}</span>`);
   },
   // Asks again for a date and place whose weather didn't come. The button
