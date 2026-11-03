@@ -8,6 +8,7 @@ import { renderScene, stagePoint, skyLight } from '../scene.js';
 import { calendarSeason, eventPhrase, PLAN_MARGIN } from '../engine.js';
 import { OCCASIONS, occasionById } from '../occasions.js';
 import { sprayGuide } from '../spray.js';
+import { packTrip } from '../pack.js';
 import { planTies, rankedTies, tieLine, contrast } from '../contrast.js';
 import { setSkin, loadSkin, loadAsked, markAsked, wasAsked } from '../skin.js';
 import { theme } from '../theme.js';
@@ -263,6 +264,13 @@ function alsoHTML(ranked, pick, ctx, worn, label, { tags = false } = {}) {
     <h3 class="also-title">Also good ${esc(label)}</h3>
     ${shelfHTML(rest, ctx, { wornId: worn, tagOf })}
   </div>`;
+}
+
+// "Out all day? Liam suits today and tonight." (allDayPick): one bottle for
+// both of today's windows, its name opening its page in the window shown.
+export function allDayHTML(f, ctx) {
+  if (!f) return '';
+  return `<p class="all-day">${icon.clock}<span>Out all day? <button class="link-btn" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(f.id)}">${esc(f.name)}</button> suits today and tonight.</span></p>`;
 }
 
 // ---------- Asking once ----------
@@ -596,6 +604,30 @@ function guard() {
   return null;
 }
 
+/**
+ * One bottle for the whole of today, or null: while both of today's windows
+ * are still today's, neither has a wear logged, neither is planned for an
+ * occasion (an event takes its own best) and their picks differ, the bottle
+ * packTrip packs alone for the two (as the CLI's --pack --max 1 does), when
+ * it suits both within PLAN_MARGIN of their best. Recent wears count as Now
+ * counts them, and a bottle the plan saves for an event later on sits out.
+ * Kept while its windows, bottles, wears and saved bottles stay the same: it
+ * ranks every bottle twice (8 ms the first time for David's in Node, 1.4
+ * after), and Now draws often.
+ */
+let allDayKept = null; // { key, pick }
+export function allDayPick() {
+  const slots = todaySlots();
+  if (slots.length !== 2 || slots.some(p => p.win.dateISO !== state.wx.todayISO || p.win.occasion || wornId(p.win))) return null;
+  if (slots[0].pick.fragrance.id === slots[1].pick.fragrance.id) return null;
+  const saved = new Set(state.ahead.map(p => p.pick.fragrance.id));
+  const key = [slots[0].win, slots[1].win, rankedFragrances(), state.history, [...saved].join('\n')];
+  if (allDayKept?.key.every((k, i) => k === key[i])) return allDayKept.pick;
+  const { bottles, uncovered } = packTrip(rankedFragrances().filter(f => !saved.has(f.id)), slots.map(p => p.win), { max: 1, history: state.history });
+  allDayKept = { key, pick: bottles.length && !uncovered.length ? bottles[0].record : null };
+  return allDayKept.pick;
+}
+
 function nowPane(app) {
   const blocked = guard();
   if (blocked) return blocked;
@@ -609,7 +641,8 @@ function nowPane(app) {
   // with it: none once he's wearing one.
   const ties = planTies(todayPlan(), { history: state.history })[slots.findIndex(p => p.win === win)] ?? [];
   const ask = nowQuestion(pick, worn);
-  // A trip under way: its day above, from the bottles packed (wear/trip.js).
+  // A trip under way: its day above, from the bottles packed (wear/trip.js),
+  // which answers "Out all day?" from what's in the bag.
   const away = trip.tripToday(app);
   return `${banner()}
     ${away ? trip.tripNowHTML(away, { worn: wornId }) : ''}
@@ -619,6 +652,7 @@ function nowPane(app) {
         ${pickHTML(pick, win.slot, worn, { canWear: canWear(win), spray: sprayGuide(pick.fragrance, win, win.occasion ?? null), event: win, ties, win, ask: ask.inPick })}
         ${other ? nextWindowHTML(other, wornId(other.win), nowHour()) : ''}
       </div>
+      ${away ? '' : allDayHTML(allDayPick(), win.slot)}
       ${ask.below}
       ${alsoHTML(ranked, pick, win.slot, worn, win.slot === 'day' ? 'by day' : 'tonight', { tags: true })}
     </section>

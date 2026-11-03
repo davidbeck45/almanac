@@ -264,6 +264,11 @@
 .ties { display: flex; align-items: flex-start; gap: var(--s-2); margin: calc(-1 * var(--s-1)) 0 var(--s-3); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .ties svg { width: 16px; height: 16px; flex: none; margin-top: 1px; color: var(--ambient); }
 .ties .link-btn { color: var(--text-primary); font-weight: 500; }
+/* "Out all day? Liam suits today and tonight.": under both of today's
+   windows, so it reads as about the two. */
+.all-day { display: flex; align-items: flex-start; gap: var(--s-2); margin: var(--s-3) 0 0; color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.all-day svg { width: 16px; height: 16px; flex: none; margin-top: 1px; color: var(--ambient); }
+.all-day .link-btn { color: var(--text-primary); font-weight: 500; }
 /* Now's one question: its stars under Wear this once he's wearing it (the
    bottle page's star buttons), how yesterday's wore under today's picks. */
 .ask { display: grid; gap: var(--s-2); }

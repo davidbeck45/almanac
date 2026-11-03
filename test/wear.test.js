@@ -1042,6 +1042,63 @@ test('a long trip packs after Now paints, its rows holding the card’s place un
   }
 });
 
+test('Out all day? names one bottle that suits both of today’s windows, and only while it can', () => {
+  const { state } = app;
+  const hot = syntheticForecast(8, { start: '2026-09-28', hot: d => d === '2026-09-28' });
+  const morning = (forecast, history = []) => {
+    Object.assign(state, { demo: { fetched: '2026-09-28', fragrances }, forecast, wx: summarize(forecast, Date.parse('2026-09-28T13:00:00Z')), loc: { name: 'Here', lat: 40, lon: -74 }, shared: null, active: 'demo', slot: null, history });
+    app.computeToday();
+    return wear.allDayPick();
+  };
+  try {
+    const f = morning(hot);
+    const [day, night] = app.todaySlots();
+    assert.deepEqual([day.win.dateISO, night.win.dateISO], ['2026-09-28', '2026-09-28']);
+    assert.notEqual(day.pick.fragrance.id, night.pick.fragrance.id);
+    const alone = packTrip(app.rankedFragrances(), [day.win, night.win], { max: 1 });
+    assert.ok(f && !alone.uncovered.length);
+    assert.equal(f.id, alone.bottles[0].record.id, 'as --pack --max 1 packs it');
+    const html = wear.wear.panes.find(p => p.id === 'now').render({}, { dest: 'wear', pane: 'now' });
+    assert.ok(html.includes('<p class="all-day">') && html.includes(`data-ctx="day" data-id="${esc(f.id)}">${esc(f.name)}</button> suits today and tonight.`));
+    assert.ok(html.indexOf('class="all-day"') > html.indexOf('class="now-picks"') && html.indexOf('class="all-day"') < html.indexOf('class="also"'));
+    // On a trip, the trip's card says what's in the bag for today and tonight.
+    trip.saveTrip({ ...saved, fromISO: '2026-09-27', toISO: '2026-09-30', windows: week(hot, Date.parse('2026-09-28T13:00:00Z')).flatMap(d => [d.day, d.night].filter(Boolean)), events: [] });
+    trip.forgetTrip();
+    const away = wear.wear.panes.find(p => p.id === 'now').render({}, { dest: 'wear', pane: 'now' });
+    assert.ok(away.includes('class="card trip-now"') && !away.includes('class="all-day"'));
+    localStorage.removeItem('scentcast.trip');
+    trip.forgetTrip();
+    assert.equal(wear.allDayHTML(null, 'day'), '');
+    assert.ok(!wear.allDayHTML(evil, 'day').includes(EVIL), 'escaped');
+
+    // Worn yesterday, it gives way, as Now's picks do; one saved for an event later on sits out.
+    assert.notEqual(morning(hot, [{ id: f.id, date: '2026-09-27', slot: 'night', occasion: 'daily' }])?.id, f.id);
+    morning(hot);
+    state.ahead = [{ pick: { fragrance: f } }];
+    assert.notEqual(wear.allDayPick()?.id, f.id);
+    // A wear logged today, or the day over: nothing to say.
+    assert.equal(morning(hot, [{ id: day.pick.fragrance.id, date: '2026-09-28', slot: 'day', occasion: 'daily' }]), null);
+    state.wx = summarize(hot, Date.parse('2026-09-28T23:00:00Z'));
+    app.computeToday();
+    assert.equal(wear.allDayPick(), null, 'tonight and tomorrow aren’t one day out');
+    // Tonight planned for an occasion: it takes its own best.
+    app.setEvent('2026-09-28', 'night', 'date');
+    assert.equal(morning(hot), null);
+    app.setEvent('2026-09-28', 'night', null);
+    // A mild day and a cool night no one bottle suits: nothing rather than a weak suggestion.
+    const split = syntheticForecast(8, { start: '2026-09-28' });
+    assert.equal(morning(split), null);
+    const [d2, n2] = app.todaySlots();
+    assert.ok(packTrip(app.rankedFragrances(), [d2.win, n2.win], { max: 1 }).uncovered.length);
+  } finally {
+    for (const e of [...state.events]) app.setEvent(e.dateISO, e.slot, null);
+    localStorage.removeItem('scentcast.trip');
+    trip.forgetTrip();
+    state.history = [];
+    state.ahead = [];
+  }
+});
+
 test('a plan link shows what it would plan, in the plan’s words, and plans nothing until asked', () => {
   const { state } = app;
   const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
