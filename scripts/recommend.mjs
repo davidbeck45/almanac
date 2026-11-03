@@ -34,8 +34,8 @@
 // bottles out, and suggestions and checks count them as owned (never
 // suggested back; "You own it."). A journal also carries his own
 // ratings and skin nudges, and turns on the rotation nudge (a bottle unworn
-// for a month takes a slot it nearly wins), and the gap finder reads its
-// wears' occasions into the use shares.
+// for a month takes a slot it nearly wins; --date only for today), and the
+// gap finder reads its wears' occasions into the use shares.
 import { readFileSync, existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { rank, planWindows, comfortRange, eventPhrase } from '../src/engine.js';
@@ -818,7 +818,8 @@ async function main() {
   // A window's pick, with the bottles that suit it just as well (`ties`,
   // src/contrast.js: within a point of its match, not worn lately, each with
   // how it differs from the pick). A window an event is on (--events)
-  // carries its occasion, and says so.
+  // carries its occasion, and says so. The runner-up is the best after the
+  // pick and its ties, which are equal choices, not seconds.
   const pickJSON = (pick, ranked, win, occ = null, ties = []) => ({
     ...(win.occasion && { occasion: win.occasion.id }),
     tier: pick.tier,
@@ -827,7 +828,7 @@ async function main() {
     inspiredBy: inspiredBy(pick.fragrance),
     score: +pick.score.toFixed(3),
     reasons: pick.reasons.map(sign),
-    runnerUp: ranked.find(r => r !== pick)?.fragrance.name ?? null,
+    runnerUp: ranked.find(r => r !== pick && !ties.some(t => t.entry === r))?.fragrance.name ?? null,
     ties: ties.map(({ entry, tags }) => ({ name: entry.fragrance.name, brand: entry.fragrance.brand, score: +entry.score.toFixed(3), tags })),
     spray: sprayJSON(sprayGuide(pick.fragrance, win, win.occasion ?? occ)),
   });
@@ -877,22 +878,27 @@ async function main() {
   const tiesOf = (result, planned) => newsOnly(result, planned ? planTies(result, { history }) : result.map(r => tiesFor(r.pick, r.ranked)));
 
   // One date anywhere: the forecast's windows, or typical weather past them.
-  // With --events on it, the date's windows are planned around them.
+  // With --events on it, the date's windows are planned around them. The
+  // rotation nudge only for today, as the app's Occasion pane has it: the
+  // journal can't say what will be idle by a later date, and planned alone,
+  // night after night, each date would nudge the same bottle. What the plan
+  // saves for an event is said from today ("on Saturday night").
   if (args.date) {
     const wanted = slot ?? occasion?.slot;
+    const opts = { history, nudge: nudge && args.date <= today, nowISO: today };
     let result, windows;
     try {
       if (events.length) windows = await tripWindows(place, args.date, args.date, { refusePast: true, ...(wanted && { slots: [wanted] }) });
       else {
         result = wanted
-          ? [await picksFor(fragrances, { place, dateISO: args.date, slot: wanted, occasion, history, nudge, refusePast: true })].filter(Boolean)
+          ? [await picksFor(fragrances, { place, dateISO: args.date, slot: wanted, occasion, ...opts, refusePast: true })].filter(Boolean)
             .map(({ window: win, ranked }) => ({ win, ranked, pick: ranked[0] }))
-          : planWindows(fragrances, await tripWindows(place, args.date, args.date, { refusePast: true }), { history, nudge });
+          : planWindows(fragrances, await tripWindows(place, args.date, args.date, { refusePast: true }), opts);
       }
     } catch (err) {
       weatherFailed(err, place, 'date', args.date);
     }
-    if (windows?.length) result = planWindows(fragrances, onWindows(windows, `--date ${args.date}`), { occasion, history, nudge });
+    if (windows?.length) result = planWindows(fragrances, onWindows(windows, `--date ${args.date}`), { occasion, ...opts });
     if (!result?.length) fail(`No weather came back for ${args.date}`);
     const typical = result.some(r => r.win.typical);
     const ties = tiesOf(result, !wanted || events.length > 0);

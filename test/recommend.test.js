@@ -451,6 +451,36 @@ test('--date answers for any day: the forecast when it reaches, typical weather 
   assert.ok(out.slots[0].pick.spray.text);
 });
 
+test('--date nudges only today: a later date ranks its best, as the app’s Occasion pane and an event there do', async () => {
+  const day = dayISO(2);
+  const plain = JSON.parse(cli('--loc', '40.7,-74', '--date', day, '--occasion', 'formal', '--json').stdout).slots[0];
+  const [best, second] = plain.ranked;
+  assert.equal(second.tier, best.tier, 'the second shares the best’s tier, so a month idle would nudge it');
+  // A two-month journal: every bottle worn a fortnight ago (past rotation's
+  // reach) but the second, never worn, so a month neglected.
+  const id = name => String(fragrances.find(f => f.name === name).id);
+  const history = [{ id: id(best.name), date: dayISO(-60), slot: 'night' },
+    ...fragrances.filter(f => f.name !== second.name).map(f => ({ id: String(f.id), date: dayISO(-15), slot: 'night' }))];
+  const token = journalToken(history, [], {}, { todayISO: dayISO(0) });
+  const [occasion, event, both, today] = await Promise.all([
+    run('--loc', '40.7,-74', '--date', day, '--occasion', 'formal', '--journal', token, '--json'),
+    run('--loc', '40.7,-74', '--date', day, '--events', `${day} night formal`, '--journal', token, '--json'),
+    run('--loc', '40.7,-74', '--date', day, '--journal', token, '--json'),
+    run('--loc', '40.7,-74', '--date', dayISO(0), '--slot', 'night', '--occasion', 'formal', '--journal', token, '--json'),
+  ]);
+  for (const r of [occasion, event, both, today]) assert.equal(r.status, 0, r.stderr);
+  const picks = r => JSON.parse(r.stdout).slots.map(s => s.pick);
+  assert.equal(picks(occasion)[0].name, best.name, 'not the neglected second');
+  assert.equal(picks(event)[1].name, best.name, 'the same as planning it for formal wear');
+  assert.ok(!picks(both).some(p => p.reasons.some(r => /Not worn/.test(r))), picks(both).map(p => p.reasons.join('; ')).join(' | '));
+  // Tonight the nudge still brings a neglected bottle in, as Now does.
+  assert.ok(JSON.parse(today.stdout).slots[0].ranked.some(r => r.reasons.some(t => /Not worn/.test(t))));
+  // What the plan saves for the night is said from today, not from the date.
+  const weekday = new Date(`${day}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
+  const saved = JSON.parse(event.stdout).slots[0].ranked.find(r => r.name === best.name);
+  assert.ok(saved.reasons.includes(`- Saved for formal wear on ${weekday} night`), saved.reasons.join('; '));
+});
+
 test('--spray gives counts for three situations, or the next window at a place', () => {
   const run = cli('--spray', 'Terra', '--json');
   assert.equal(run.status, 0, run.stderr);
@@ -511,6 +541,13 @@ test('a pick names the bottles that suit its window just as well, each with how 
   }
   assert.ok(JSON.parse(week.stdout).days.every(d => d.picks.every(p => Array.isArray(p.ties))));
   assert.ok(Array.isArray(JSON.parse(date.stdout).slots[0].pick.ties));
+  // A tie is an equal choice, not the runner-up: that's the next bottle after them.
+  const picks = [night.pick, ...slots.map(s => s.pick), ...JSON.parse(week.stdout).days.flatMap(d => d.picks)];
+  assert.ok(picks.some(p => p.ties.length), 'some window has ties');
+  for (const p of picks) {
+    assert.ok(p.runnerUp && p.runnerUp !== p.name);
+    assert.ok(!p.ties.some(t => t.name === p.runnerUp), `${p.name}: runner-up ${p.runnerUp} is a tie`);
+  }
   // Worn last night, it isn't offered tonight.
   const worn = fragrances.find(f => f.name === first.name);
   const dir = mkdtempSync(join(tmpdir(), 'almanac-'));
