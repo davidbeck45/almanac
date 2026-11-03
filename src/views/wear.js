@@ -5,7 +5,7 @@
 // Occasion pane's "When and where?" in wear/when.js, and the place and date
 // pickers both use in wear/pickers.js. Styles: src/css/wear.css.
 import { renderScene, stagePoint, skyLight } from '../scene.js';
-import { calendarSeason, eventPhrase, PLAN_MARGIN } from '../engine.js';
+import { calendarSeason, eventPhrase, isDisliked, PLAN_MARGIN } from '../engine.js';
 import { OCCASIONS, occasionById } from '../occasions.js';
 import { sprayGuide } from '../spray.js';
 import { packTrip } from '../pack.js';
@@ -636,7 +636,10 @@ function guard() {
  * occasion (an event takes its own best) and their picks differ, the bottle
  * packTrip packs alone for the two (as the CLI's --pack --max 1 does), when
  * it suits both within PLAN_MARGIN of their best. Recent wears count as Now
- * counts them, and a bottle the plan saves for an event later on sits out.
+ * counts them, a bottle the plan saves for an event later on sits out, and
+ * the best is what Now ranks first (`holdBack`: never a 1★). Never one he
+ * rates DISLIKED or lower, which Now never offers as a free choice (a
+ * toss-up): packed alone, no bottle he likes suits both, so it says nothing.
  * Kept while its windows, bottles, wears and saved bottles stay the same: it
  * ranks every bottle twice (8 ms the first time for David's in Node, 1.4
  * after), and Now draws often.
@@ -649,8 +652,8 @@ export function allDayPick() {
   const saved = new Set(state.ahead.map(p => p.pick.fragrance.id));
   const key = [slots[0].win, slots[1].win, rankedFragrances(), state.history, [...saved].join('\n')];
   if (allDayKept?.key.every((k, i) => k === key[i])) return allDayKept.pick;
-  const { bottles, uncovered } = packTrip(rankedFragrances().filter(f => !saved.has(f.id)), slots.map(p => p.win), { max: 1, history: state.history });
-  allDayKept = { key, pick: bottles.length && !uncovered.length ? bottles[0].record : null };
+  const { bottles: [packed], uncovered } = packTrip(rankedFragrances().filter(f => !saved.has(f.id)), slots.map(p => p.win), { max: 1, history: state.history, holdBack: true });
+  allDayKept = { key, pick: packed && !uncovered.length && !isDisliked(packed.record) ? packed.record : null };
   return allDayKept.pick;
 }
 

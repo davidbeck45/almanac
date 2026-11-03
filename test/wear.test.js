@@ -1364,6 +1364,38 @@ test('Out all day? names one bottle that suits both of today’s windows, and on
   }
 });
 
+test('Out all day? never names a bottle he rates 2★ or lower, and reads the best as Now does', () => {
+  const { state } = app;
+  // A 90°F day where Jean Lowe Summer Vibes is the one fresh bottle of five.
+  const list = ['Jean Lowe Summer Vibes', 'Cream Velvet', 'Amber Empire', 'CH Men Prive', 'Liquid Brun'].map(n => fragrances.find(f => f.name === n));
+  const hot = syntheticForecast(8, { start: '2026-09-28', hot: d => d === '2026-09-28' });
+  const morning = stars => {
+    localStorage.removeItem('scentcast.skin');
+    if (stars) setSkin(list[0].id, { rating: stars }, '2026-09-28');
+    Object.assign(state, { demo: { fetched: '2026-09-28', fragrances: list }, forecast: hot, wx: summarize(hot, Date.parse('2026-09-28T13:00:00Z')), loc: { name: 'Here', lat: 40, lon: -74 }, shared: null, active: 'demo', slot: null, history: [], ahead: [] });
+    app.computeToday();
+    return { slots: app.todaySlots(), all: wear.allDayPick() };
+  };
+  try {
+    // Rated 1★, it would still lead both windows, as a trip reads them; Now holds it back.
+    const loathed = morning(1);
+    assert.deepEqual(loathed.slots.map(p => p.pick.fragrance.name), ['Cream Velvet', 'Liquid Brun']);
+    assert.equal(packTrip(app.rankedFragrances(), loathed.slots.map(p => p.win), { max: 1 }).bottles[0].record.id, list[0].id);
+    assert.equal(loathed.all?.name, 'Cream Velvet', 'within reach of what Now ranks first in both windows');
+    const html = wear.wear.panes.find(p => p.id === 'now').render({}, { dest: 'wear', pane: 'now' });
+    assert.ok(!html.includes(`>${esc(list[0].name)}</button> suits today and tonight.`));
+    // Rated 2★, it's still today's pick, the clear only fit: no bottle he likes suits today too.
+    const disliked = morning(2);
+    assert.equal(disliked.slots[0].pick.fragrance.id, list[0].id);
+    assert.equal(disliked.all, null);
+    assert.equal(morning(3).all, null, 'his 3★ takes both windows itself');
+  } finally {
+    localStorage.removeItem('scentcast.skin');
+    state.history = [];
+    state.ahead = [];
+  }
+});
+
 test('a plan link shows what it would plan, in the plan’s words, and plans nothing until asked', () => {
   const { state } = app;
   const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
