@@ -39,7 +39,14 @@ const row = (label, control, { glyph = '', note = '' } = {}) => `<div class="set
     <span class="set-label">${glyph}<span class="set-text">${label}${note ? `<small>${note}</small>` : ''}</span></span>${control}
   </div>`;
 
-export function settingsHTML({ loc, units, themeName, stillSky = false, active, mineCount, shared, on, total, wears, updated, stale, credits }) {
+// The sky's switch says what the device holds it to: with Reduce Motion on
+// it's still whatever the setting says (base.css), so the switch shows off
+// and locked, and the setting keeps for when Reduce Motion goes off.
+const skyRow = (stillSky, deviceStill) => row('Animate the sky',
+  switchHTML({ on: !stillSky && !deviceStill, label: 'Animate the sky', action: 'sky-motion', id: 'sky', locked: deviceStill }),
+  { note: deviceStill ? 'Held still by Reduce Motion' : 'Stars, rain and smoke move' });
+
+export function settingsHTML({ loc, units, themeName, stillSky = false, deviceStill = false, active, mineCount, shared, on, total, wears, updated, stale, credits }) {
   return `
     ${group('Weather', `
       ${row(loc ? esc(loc.name) : 'Not set', '<button class="btn secondary compact" data-action="location">Change</button>', { glyph: icon.pin, note: loc?.region ? esc(loc.region) : '' })}
@@ -48,7 +55,7 @@ export function settingsHTML({ loc, units, themeName, stillSky = false, active, 
     ${group('Display', `
       ${row('Temperature', segHTML([{ value: 'F', label: '°F', on: units === 'F' }, { value: 'C', label: '°C', on: units === 'C' }], { action: 'units', label: 'Temperature units' }))}
       ${row('Theme', segHTML([{ value: 'default', label: 'Default', on: themeName === 'default' }, { value: 'gruvbox', label: 'Gruvbox', on: themeName === 'gruvbox' }], { action: 'theme', label: 'Theme' }))}
-      ${row('Animate the sky', switchHTML({ on: !stillSky, label: 'Animate the sky', action: 'sky-motion', id: 'sky' }), { note: 'Stars, rain and smoke move' })}
+      ${skyRow(stillSky, deviceStill)}
     `)}
     ${group('Collection', `
       ${shared ? `<p class="notice">Viewing ${esc(shared.name ? `${shared.name}’s` : 'a shared')} collection from a link. Picking a list closes it.</p>` : ''}
@@ -69,6 +76,7 @@ function settingsPage() {
     units: state.units,
     themeName: theme(),
     stillSky: state.stillSky,
+    deviceStill: Boolean(globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches),
     active: state.active,
     mineCount: state.mine.records.length,
     shared: state.shared,
@@ -202,6 +210,7 @@ export const actions = {
   // The scene's loops (stars, rain, smoke, lightning) can be held still
   // (WCAG 2.2.2); reduced motion holds them anyway.
   'sky-motion'(el, app) {
+    if (el.getAttribute('aria-disabled') === 'true') return;
     setStillSky(!state.stillSky);
     app.keepingFocus(el, '#app', app.render);
   },

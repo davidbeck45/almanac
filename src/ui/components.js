@@ -234,8 +234,10 @@ export function segLinksHTML(items, { label, cls = '' }) {
   return `<nav class="seg seg-links ${cls}" aria-label="${esc(label)}">${items.map(i => `<a href="${esc(i.href)}" data-href="${esc(i.href)}"${i.on ? ' aria-current="page"' : ''}>${i.icon ?? ''}<span>${esc(i.label)}</span></a>`).join('')}</nav>`;
 }
 
-export function switchHTML({ on, label, action, id }) {
-  return `<button class="switch" role="switch" aria-checked="${on}" data-action="${esc(action)}" data-id="${esc(id)}" aria-label="${esc(label)}"><span></span></button>`;
+// `locked`: it shows a state something else holds it in (aria-disabled, so
+// it keeps its Tab stop and its label is still read); its action ignores it.
+export function switchHTML({ on, label, action, id, locked = false }) {
+  return `<button class="switch" role="switch" aria-checked="${on}" data-action="${esc(action)}" data-id="${esc(id)}" aria-label="${esc(label)}"${locked ? ' aria-disabled="true"' : ''}><span></span></button>`;
 }
 
 // ---------- Rows ----------
