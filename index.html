@@ -25,6 +25,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <!-- Inter sets nearly every word; Fraunces (titles, bottle names) loads from the stylesheet, so the first paint doesn't wait on all three. -->
   <link rel="preload" href="fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
+  <!-- David's wardrobe and the catalog, alongside the modules rather than after them: the shell's fetch() takes these answers (crossorigin matches its same-origin credentials). -->
+  <link rel="preload" href="data/collection.json" as="fetch" crossorigin>
+  <link rel="preload" href="data/catalog.json" as="fetch" crossorigin>
   <link rel="stylesheet" href="src/tokens.css">
   <link rel="stylesheet" href="src/css/base.css">
   <link rel="stylesheet" href="src/css/components.css">
@@ -64,6 +67,7 @@
   <link rel="modulepreload" href="src/ui/components.js">
   <link rel="modulepreload" href="src/app/router.js">
   <link rel="modulepreload" href="src/app/state.js">
+  <link rel="modulepreload" href="src/app/version.js">
   <link rel="modulepreload" href="src/app/pool.js">
   <link rel="modulepreload" href="src/history.js">
   <link rel="modulepreload" href="src/events.js">

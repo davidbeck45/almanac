@@ -472,7 +472,7 @@
 }
 .message-icon { display: grid; place-items: center; width: 52px; height: 52px; margin-bottom: var(--s-4); border-radius: var(--r-round); background: color-mix(in srgb, var(--ambient) 12%, var(--surface-2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ambient) 25%, transparent); color: var(--ambient); }
 .message-icon svg { width: 22px; height: 22px; }
-.message h2 { margin-bottom: var(--s-2); font-family: var(--display); font-size: var(--fs-title-2); line-height: var(--lh-title-2); font-weight: 600; }
+.message :is(h1, h2) { margin-bottom: var(--s-2); font-family: var(--display); font-size: var(--fs-title-2); line-height: var(--lh-title-2); font-weight: 600; }
 .message p { color: var(--text-secondary); }
 .message > .btn { margin-top: var(--s-5); }
 .message-actions { display: grid; justify-items: center; gap: var(--s-2); margin-top: var(--s-5); }

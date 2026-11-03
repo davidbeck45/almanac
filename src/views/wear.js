@@ -11,7 +11,7 @@ import { sprayGuide } from '../spray.js';
 import { planTies, rankedTies, tieLine, contrast } from '../contrast.js';
 import { setSkin, loadSkin, loadAsked, markAsked, wasAsked } from '../skin.js';
 import { theme } from '../theme.js';
-import { toggleWear, wornIn, journalStats, shiftISO } from '../history.js';
+import { toggleWear, wornIn, journalStats, shiftISO, wearSettled, loadHistory } from '../history.js';
 import { routeHash } from '../app/router.js';
 import { esc, temp, deg, plural, shortDate, weekdayShort, windowRange, feelWords, displayReasons, moveText, listLabel } from '../ui.js';
 import {
@@ -720,6 +720,12 @@ export const actions = {
     // A window that ended since the page was drawn takes no wear: drawn
     // again for the hour it is, the page shows the next one.
     if (!canWear(ctx.win)) return app.render();
+    // Another tab logged or cleared this very wear since the button was
+    // drawn: it's done, and toggling would undo it.
+    if (wearSettled(state.history, el.dataset.id, ctx.win.dateISO, ctx.win.slot)) {
+      state.history = loadHistory();
+      return app.keepingFocus(el, '#app', app.render);
+    }
     state.history = toggleWear(el.dataset.id, ctx.win.dateISO, ctx.win.slot, state.loc, ctx.occasion?.id ?? 'daily');
     if (wornIn(state.history, ctx.win.dateISO, ctx.win.slot)) navigator.vibrate?.(12);
     app.keepingFocus(el, '#app', app.render);

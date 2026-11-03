@@ -17,7 +17,18 @@
 // versions don't mix. Whichever happens first decides, for the files
 // already in flight as well. The cache catches up on a launch where the
 // network answers in time, or when a new sw.js installs.
-const CACHE = 'almanac-v24';
+// A server error (GitHub Pages has its outages; a file it lost) is no
+// answer, as the network failing is: the saved copy answers, the page's and
+// every app file's, so one failing file never blanks an installed app. In a
+// launch that met a new version, that copy is the older one beside new
+// files, as it is offline. A file with no saved copy passes the error on
+// (a module's: the page says it didn't finish loading, src/app/early.js).
+// A new CACHE takes over the open pages (skipWaiting, clients.claim) and
+// deletes the old one, so a page whose files are the old version would load
+// the new one's from then on (a lazy import, the pool worker): it reloads
+// instead, at its next page change or once out of sight. It knows its
+// version by VERSION in src/app/version.js, which is CACHE: bump both.
+const CACHE = 'almanac-v25';
 const NETWORK_WAIT_MS = 2500;
 const SLOW_MS = 1000;
 // Dataset files (data/fragrantica/) load a shard at a time as people search
@@ -58,6 +69,7 @@ const SHELL = [
   'src/app/sheets.js',
   'src/app/shell.js',
   'src/app/state.js',
+  'src/app/version.js',
   'src/views/bottle.js',
   'src/views/bottle-check.js',
   'src/views/bottle-crowd.js',
@@ -257,6 +269,7 @@ self.addEventListener('fetch', e => {
       if (hit && launch?.cached) return hit;
       const net = fresh(req.url, hit);
       const network = () => net.then(res => {
+        if (!res.ok && hit) return hit; // a server error: as offline
         if (launch && !launch.cached && res.ok && changed(res, hit)) launch.changed = true;
         return keep(res);
       }).catch(async () => hit ?? (await caches.match(key, { ignoreSearch: true })) ?? Response.error());
@@ -271,7 +284,8 @@ self.addEventListener('fetch', e => {
         return hit;
       }
       if (first instanceof Response) {
-        if (first.ok && changed(first, hit)) launch.changed = true;
+        if (!first.ok) return hit; // a server error: as offline
+        if (changed(first, hit)) launch.changed = true;
         return keep(first);
       }
       // Slow, but another file came back new meanwhile: this one waits too.

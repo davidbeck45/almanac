@@ -55,6 +55,7 @@ test('a default hidden in a shared list stays hidden there, and the demo can sti
   const h = loadHidden();
   setHidden(h, '4310', true, false);
   assert.ok(hiddenFor(h, false).has('4310'));
+  assert.ok(hiddenFor(loadHidden(), false).has('4310'), 'after a reload too');
   setHidden(h, '4310', false, true);
   assert.ok(!hiddenFor(h, true).has('4310') && !hiddenFor(h, false).has('4310'));
 });

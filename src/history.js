@@ -51,6 +51,17 @@ export function toggleWear(id, dateISO, slot, where = null, occasion = null) {
   return next;
 }
 
+/**
+ * Whether a wear button drawn from `shown` (the journal as the page had it)
+ * finds its work done: another open tab logged that bottle for the window
+ * since (a "Wear this"), or cleared it (a "Wearing"). Toggling then would
+ * undo that tab's wear, so the page only reads the journal again.
+ */
+export function wearSettled(shown, id, dateISO, slot) {
+  const wore = history => wornIn(history, dateISO, slot)?.id === id;
+  return wore(shown) !== wore(loadHistory());
+}
+
 // The journal as a file: the wears, plus the device's place and hidden bottles
 // so a check can rebuild what the app was choosing from, your own ratings
 // and skin nudges (`skin`, src/skin.js's loadSkin()) and the days and nights

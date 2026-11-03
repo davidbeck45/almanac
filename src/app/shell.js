@@ -20,10 +20,11 @@ import { locationFromURL } from './early.js';
 import { askPool } from './pool.js';
 import { loadWants, hasWant, setWant } from '../wishlist.js';
 import {
-  state, computeToday, sourceRecords, knownBottles, library, setActive as chooseList,
-  addToMine as addRecord, markBottlesLoaded, keepBottles, loadFullRecord, retryClimate,
+  state, computeToday, sourceRecords, knownBottles, library, setActive as chooseList, viewingDemo,
+  addToMine as addRecord, markBottlesLoaded, loadBottles, keepBottles, loadFullRecord, retryClimate, reloadStored,
   readClock, hourTurned, showSaved, takeForecast, samePlace,
 } from './state.js';
+import { watchVersion } from './version.js';
 import {
   registerSheets, renderSheet, openSheet, updateSheet, closeSheet, sheetPopped, sheetEntry, replacePageURL, refocus, refocusNear, inSight,
   keepingFocus, showToast, hideToast, settleToast, watchToast, morph, canMorph, visible, reducedMotion, SHEET_OUT_MS,
@@ -66,6 +67,7 @@ const ACTIONS = {
   // The skip link: past the nav to the page's heading.
   skip: () => $('#page-title')?.focus(),
   'list-back': () => listBack(),
+  'bottles-retry': () => retryBottles(),
   ...merged('actions'),
 };
 const FORMS = merged('forms');
@@ -108,8 +110,9 @@ function setActive(active) {
 }
 
 function addToMine(record) {
-  addRecord(record);
+  const added = addRecord(record);
   if (state.shared) closeShared();
+  return added;
 }
 
 // The list "I own it" moved away from, for the toast's way back.
@@ -154,8 +157,9 @@ function listBack() {
 // control, replaced, hands focus to its successor, else to the nearest one
 // like it left in its list (a bottle hidden from a shelf); with none (a
 // button that became a tag, a banner that went), focus goes to the top of the
-// region it was in, never to the page's body.
-function render() {
+// region it was in, never to the page's body. `sheet: false` leaves an open
+// sheet as it is (another tab saved: someone may be typing).
+function render({ sheet = true } = {}) {
   const focused = document.activeElement;
   const seen = inSight(focused);
   const region = focused?.closest?.('#sheet, #bottle, #app');
@@ -166,7 +170,7 @@ function render() {
   renderNav();
   renderPage();
   renderBottle();
-  if (state.sheet) renderSheet({ keepScroll: true });
+  if (state.sheet && sheet) renderSheet({ keepScroll: true });
   if (focused && focused !== document.body && !focused.isConnected && !refocusNear(focused, scope, { reveal: seen })) {
     const fallback = { '#sheet': '#sheet .sheet-close', '#bottle': '#bottle .bp-close' }[scope] ?? '#page-title';
     $(fallback)?.focus({ preventScroll: true });
@@ -293,12 +297,15 @@ function renderPage() {
   const main = $('#main');
   const kept = keptScrolls(main);
   const stuck = Boolean(main.querySelector('.head-bar.stuck'));
-  main.innerHTML = `${headHTML(page, pane, r)}<div class="pane" data-pane="${esc(r.dest)}${r.pane ? `/${esc(r.pane)}` : ''}">${pane.render(app, r)}</div>`;
+  // Every page ranks or counts David's wardrobe while it's the list, but
+  // Settings: without it, they say so, with Try again.
+  const unloaded = bottlesFailed && viewingDemo() && r.dest !== 'settings';
+  main.innerHTML = `${headHTML(page, pane, r)}<div class="pane" data-pane="${esc(r.dest)}${r.pane ? `/${esc(r.pane)}` : ''}">${unloaded ? bottlesMissingHTML() : pane.render(app, r)}</div>`;
   keepScrolls(main, kept);
   watchHeadBar(stuck);
   main.classList.toggle('updating', state.updating);
   main.setAttribute('aria-busy', String(state.updating));
-  pane.after?.(app, r);
+  if (!unloaded) pane.after?.(app, r);
   document.body.dataset.route = r.dest;
   syncTitle();
   renderFoot();
@@ -517,6 +524,10 @@ function navigate(hash, { replace = false, quiet = false, instant = false, resto
   transition(next, { quiet, instant, restore });
 }
 
+// Whether another version took over this page (src/app/version.js; boot
+// starts the watch).
+let outdated = () => false;
+
 // Moves to a route: the page under a bottle page changes only when the route
 // isn't one. Closing a bottle page by Back flies the bottle home.
 // A route a view transition is on its way to (Back fires popstate and then
@@ -526,6 +537,9 @@ let arriving = null;
 function transition(next, { quiet = false, instant = false, restore = false } = {}) {
   const prev = state.route;
   if (sameRoute(arriving ?? prev, next)) return;
+  // Another version took over mid-visit: the page reloads into it whole,
+  // onto the route, which is in the URL already.
+  if (outdated()) return location.reload();
   if (prev?.dest === 'bottle' && next.dest !== 'bottle' && sameRoute(state.base, next) && canMorph()) {
     const from = $('#bottle .bp-bottle img');
     const id = prev.arg;
@@ -836,12 +850,30 @@ function listen() {
     new IntersectionObserver(([e]) => $('#hero').classList.toggle('offscreen', !e.isIntersecting)).observe($('#hero'));
   }
 
-  // Back online: a bottle page that couldn't load tries again, and so does
-  // the place's climate, and a forecast that couldn't be had.
+  // Back online: a bottle page that couldn't load tries again, and so do
+  // the place's climate, a wardrobe that didn't load and a forecast that
+  // couldn't be had.
   window.addEventListener('online', () => {
     retryClimate();
     if (state.route?.dest === 'bottle') retryBottle();
+    if (bottlesFailed) retryBottles();
     if (state.loc && !state.loading && (state.error || state.wx?.stale)) refreshWeather();
+  });
+
+  // Another tab saved what this one shows (Mine, switched-off bottles, the
+  // journal, plans, ratings, prefs): read it all again and draw it, once a
+  // frame, and in a hidden tab once it's in sight (it runs no frames). An
+  // open sheet stays as it is, and focus where it was (render). The
+  // forecast and climate another tab fetched are caches: nothing to draw.
+  let elsewhere = 0;
+  const cacheKeys = ['scentcast.weather', 'scentcast.climate'];
+  window.addEventListener('storage', e => {
+    if (e.key !== null && (!e.key.startsWith('scentcast.') || cacheKeys.includes(e.key))) return;
+    elsewhere ||= requestAnimationFrame(() => {
+      elsewhere = 0;
+      reloadStored();
+      render({ sheet: false });
+    });
   });
 
   // Coming back to the page (a tab, a phone unlocked, Back onto it from the
@@ -891,6 +923,11 @@ export async function boot({ early: asked = null } = {}) {
     history.replaceState(null, '', url);
   }
   listen();
+  // Out of sight, an outdated page reloads, unless a sheet is open: someone
+  // may be halfway through it, and the next page change reloads instead.
+  outdated = watchVersion(navigator.serviceWorker, document, {
+    reload: () => { if (!state.sheet) location.reload(); },
+  });
   statusNode(); // there before anything is said in it
   const first = parseRoute(location.hash || HOME, PANES);
   go(routeHash(first), { replace: true });
@@ -906,19 +943,7 @@ export async function boot({ early: asked = null } = {}) {
     early = { loc: state.loc, forecast: getForecast(state.loc) };
     early.forecast.catch(() => {}); // refreshWeather hears it
   }
-  try {
-    const [demo, catalog] = await Promise.all([
-      fetch('data/collection.json').then(r => r.json()),
-      fetch('data/catalog.json').then(r => r.json()).catch(() => ({ fragrances: [] })),
-    ]);
-    for (const f of [...demo.fragrances, ...catalog.fragrances]) f.id = String(f.id);
-    state.demo = demo;
-    state.catalog = catalog.fragrances;
-  } catch {
-    markBottlesLoaded();
-    $('#main').innerHTML = messageHTML({ glyph: icon.bottle, title: 'Collection missing', body: 'Couldn’t load David’s wardrobe. Check your connection and reload.' });
-    return;
-  }
+  await openBottles();
   markBottlesLoaded();
   const link = parseShare(params);
   if (link) openSharedLink(link);
@@ -927,4 +952,36 @@ export async function boot({ early: asked = null } = {}) {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   if (state.loc) await refreshWeather();
   else { render(); openSheet({ kind: 'location' }); }
+}
+
+// ---------- David's wardrobe ----------
+
+// Whether David's wardrobe didn't load (offline with nothing saved, the
+// server failing): the pages that rank it say so (bottlesMissingHTML), and
+// Try again, or coming back online, loads it again. Boot carries on without
+// it, so Mine and the forecast still work.
+let bottlesFailed = false;
+let bottlesRetry = null; // the load under way from Try again
+
+async function openBottles() {
+  try {
+    await loadBottles();
+    bottlesFailed = false;
+  } catch {
+    bottlesFailed = true;
+  }
+}
+
+const bottlesMissingHTML = () => messageHTML({
+  glyph: icon.bottle, title: 'Collection missing', body: 'Couldn’t load David’s wardrobe. Check your connection and try again.',
+  action: `<button class="btn primary" data-action="bottles-retry">${icon.refresh}<span>Try again</span></button>`,
+});
+
+function retryBottles() {
+  bottlesRetry ??= openBottles().then(() => {
+    bottlesRetry = null;
+    if (bottlesFailed) announce('Still couldn’t load David’s wardrobe.');
+    else render();
+  });
+  return bottlesRetry;
 }
