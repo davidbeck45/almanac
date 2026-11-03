@@ -270,7 +270,15 @@ test('a trip under way updates from the form: the open event is added, the days 
     await trip.forms['trip-pack'](null, ui);
     assert.equal(asked.length, 0);
     assert.deepEqual(trip.loadTrip().events.map(e => `${e.dateISO} ${e.slot} ${e.occasion}`), [`${today} night formal`, `${shiftISO(today, 1)} night date`]);
+    // Its plan's lists are in Lisbon: a wear logged from tonight's is Lisbon's.
+    trip.renderTrip();
+    const tonight = state.contexts[`trip:${today}:night`];
+    assert.equal(tonight.place.name, 'Lisbon');
+    state.history = [];
+    wear.actions.wear({ dataset: { ctx: `trip:${today}:night`, id: tonight.ranked[0].fragrance.id } }, { keepingFocus() {} });
+    assert.deepEqual([state.history[0].lat, state.history[0].lon, state.history[0].occasion], [38.7, -9.1, 'formal']);
   } finally {
+    state.history = [];
     globalThis.fetch = realFetch;
     globalThis.document = realDoc;
     state.route = null;
