@@ -11,6 +11,7 @@ import { ACCORDS } from '../src/accords.js';
 import { insightsSkeletonHTML } from '../src/views/wardrobe/insights.js';
 import { wishlistHTML } from '../src/views/wardrobe/wishlist.js';
 import { liveHTML } from '../src/views/wardrobe/parts.js';
+import { state } from '../src/app/state.js';
 
 const bottle = (id, name, brand) => ({ id, name, brand, accords: { woody: 80 } });
 const aventus = bottle('9828', 'Aventus', 'Creed');
@@ -241,6 +242,58 @@ test('arrow keys step through the calendar’s days, a week up or down, never pa
   assert.deepEqual(['Home', 'End'].map(k => wardrobe.calendarStep(k, 10, today)), [7, 13]);
   assert.equal(wardrobe.calendarStep('End', 28, today), today);
   assert.equal(wardrobe.calendarStep('Enter', 10, today), null);
+});
+
+test('the calendar keeps one tab stop, on the day focus came back to', () => {
+  // As drawn: today the stop. Then focus lands on Sat, Oct 31, as it does
+  // coming back from logging a wear there, which every draw gives -1.
+  const days = ['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02'].map(date => ({ date, tabIndex: date === '2026-11-02' ? 0 : -1 }));
+  const stops = () => days.filter(d => d.tabIndex === 0).map(d => d.date);
+  wardrobe.calendarStop(days, days[1]);
+  assert.deepEqual(stops(), ['2026-10-31']);
+  wardrobe.calendarStop(days, days[0]);
+  assert.deepEqual(stops(), ['2026-10-30']);
+});
+
+test('the log sheet’s filter says how many bottles are left, or that none match, past a Clear’s message', t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const realDoc = globalThis.document;
+  // The sheet as drawn: its status line empty, with nothing to say yet.
+  const draw = (say = '') => ({ id: 'log-live', dataset: { say }, textContent: '' });
+  let live = draw();
+  const rows = ['cream velvet xerjoff', 'liam lattafa', 'aventus creed'].map(name => ({ dataset: { name }, hidden: false }));
+  const sheet = { querySelectorAll: sel => (sel === '[data-say]' ? [live] : []) };
+  globalThis.document = {
+    activeElement: null,
+    getElementById: id => (id === 'log-live' ? live : id === 'sheet' ? sheet : null),
+    querySelector: sel => (sel === '#sheet .log-empty' ? { hidden: true } : null),
+    querySelectorAll: sel => (sel === '#sheet .log-rows li[data-name]' ? rows : []),
+  };
+  const ui = { openSheet(s) { state.sheet = s; } };
+  const type = value => {
+    wardrobe.fields['journal-log-filter']({ value });
+    t.mock.timers.tick(400);
+    t.mock.timers.tick(150);
+    return live.textContent;
+  };
+  try {
+    wardrobe.actions['journal-log']({ dataset: { date: '2026-10-31', slot: 'day' } }, ui);
+    assert.equal(type('cream'), '1 bottle');
+    assert.equal(state.sheet.said, '1 bottle', 'a redraw keeps it, unsaid');
+    assert.equal(type('zzzz'), 'No bottles match');
+    // A Clear's message in the line: the count still takes its place.
+    live = draw('Cleared Liam from Sat, Oct 31.');
+    live.textContent = live.dataset.say;
+    assert.equal(type(''), '3 bottles');
+    // Opened again, the same filter is said again.
+    state.sheet = null;
+    live = draw();
+    wardrobe.actions['journal-log']({ dataset: { date: '2026-10-31', slot: 'day' } }, ui);
+    assert.equal(type('cream'), '1 bottle');
+  } finally {
+    globalThis.document = realDoc;
+    state.sheet = null;
+  }
 });
 
 test('the log sheet names the day, its wears with Clear, and the bottles most recently worn first', () => {

@@ -151,11 +151,25 @@ export function calendarStep(key, i, last) {
   return to === null ? null : Math.max(0, Math.min(last, to));
 }
 
+/**
+ * The calendar's one stop in the tab order: `day`, of the calendar's `days`.
+ * Each draw makes today the stop, so a day focus comes back to (a wear just
+ * logged there, a redraw while it had focus) takes it over, and Tab leaves
+ * the calendar from there.
+ */
+export function calendarStop(days, day) {
+  for (const d of days) d.tabIndex = d === day ? 0 : -1;
+}
+
 let calendarWatched = false;
 function watchCalendar() {
   if (calendarWatched || typeof document === 'undefined') return;
   calendarWatched = true;
   document.addEventListener('keydown', calendarKeys);
+  document.addEventListener('focusin', e => {
+    const day = e.target.closest?.('.calendar button.cal-cell');
+    if (day) calendarStop(day.parentElement.querySelectorAll('button.cal-cell'), day);
+  });
 }
 function calendarKeys(e) {
   const from = e.target.closest?.('.calendar button.cal-cell');
@@ -165,8 +179,7 @@ function calendarKeys(e) {
   const to = calendarStep(e.key, days.indexOf(from), last);
   if (to === null) return;
   e.preventDefault();
-  from.tabIndex = -1;
-  days[to].tabIndex = 0;
+  calendarStop(days.filter(d => d.matches('button')), days[to]);
   days[to].focus();
 }
 
@@ -550,7 +563,10 @@ function wornAt(dateISO) {
 }
 
 // Filters the log sheet's rows in place, so typing keeps focus, and says how
-// many are left once typing pauses.
+// many are left once typing pauses, in the sheet's status line: the count
+// becomes its message (data-say, and the sheet's `said` for a redraw), or
+// say() would leave the line to the one it was drawn with (none, or a
+// Clear's).
 let logSaid = null;
 function filterLog() {
   const q = (state.sheet?.filter ?? '').trim().toLowerCase();
@@ -563,7 +579,13 @@ function filterLog() {
   const empty = document.querySelector('#sheet .log-empty');
   if (empty) empty.hidden = shown > 0 || !q;
   clearTimeout(logSaid);
-  logSaid = setTimeout(() => say('log-live', shown ? plural(shown, 'bottle') : 'No bottles match'), 400);
+  logSaid = setTimeout(() => {
+    const live = document.getElementById('log-live');
+    if (!live || state.sheet?.kind !== 'journal-log') return;
+    const text = shown ? plural(shown, 'bottle') : 'No bottles match';
+    state.sheet.said = live.dataset.say = text;
+    say('log-live', text);
+  }, 400);
 }
 
 export const sheets = {
@@ -1023,6 +1045,10 @@ export const actions = {
     if (!dateISO || dateISO > todayISO()) return;
     const empty = ['day', 'night'].find(k => !wornIn(state.history, dateISO, k)) ?? 'day';
     app.openSheet({ kind: 'journal-log', dateISO, slot: slot === 'day' || slot === 'night' ? slot : empty, filter: '', said: '' });
+    // Its status line starts afresh, so a filter's count said the last time
+    // it was open is said again.
+    const sheet = globalThis.document?.getElementById('sheet');
+    if (sheet) speak(sheet);
   },
   'journal-log-slot'(el, app) {
     redrawSheet(app, { slot: el.dataset.value, said: '' });
