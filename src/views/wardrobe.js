@@ -10,6 +10,7 @@ import { saveMine, shareURL, localMatches, nameMatches, importLines, MAX_IMPORT_
 import { customRecord, MAX_CUSTOM_ACCORDS } from '../custom.js';
 import { clearHistory, journalExport, journalToken, journalStats, toggleWear, wornIn, shiftISO, loadHistory } from '../history.js';
 import { loadSkin } from '../skin.js';
+import { placeClock } from '../weather.js';
 import { esc, plural, shortDate, weekdayShort, relativeDay, accordLabel, toastName } from '../ui.js';
 import {
   icon, img, slotIcon, messageHTML, rowHTML, switchHTML, segHTML, sheetFrame, sharedBannerHTML, accordColor, sectionHead,
@@ -260,7 +261,7 @@ export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confir
 
 // The list being ranked, named when the month's wears reach past it.
 function wornPane() {
-  const data = journalData();
+  const data = journalData(wornToday());
   const ranked = new Set(sourceRecords().map(f => f.id));
   const mixed = data.stats.top.some(([id]) => !ranked.has(id));
   const list = !mixed ? null : state.shared ? collectionLabel() : state.active === 'mine' ? 'Mine' : 'David’s wardrobe';
@@ -552,6 +553,15 @@ function logSheet(s) {
     return h ? { id: h.id, f: findRecord(h.id) } : null;
   };
   return logSheetHTML(s, { bottles: logOrder(activeFragrances(), lastWorn), worn: { day: wearOn('day'), night: wearOn('night') }, lastWorn, todayISO: today });
+}
+
+// Worn's today: home's, or a trip's under way a day ahead of it (late
+// evening here it's tomorrow morning in Tokyo, and Wear this on the trip's
+// card dates a wear by Tokyo's day), so that wear shows and can be changed.
+function wornToday() {
+  const today = todayISO(), trip = loadTrip();
+  const there = trip?.place && placeClock(trip.place).todayISO;
+  return there && there > today && trip.fromISO <= there && there <= trip.toISO ? there : today;
 }
 
 // Where a wear logged after the fact was worn: on the saved trip's place on
@@ -1042,7 +1052,7 @@ export const actions = {
   // logged. Never a day ahead.
   'journal-log'(el, app) {
     const { date: dateISO, slot } = el.dataset;
-    if (!dateISO || dateISO > todayISO()) return;
+    if (!dateISO || dateISO > wornToday()) return;
     const empty = ['day', 'night'].find(k => !wornIn(state.history, dateISO, k)) ?? 'day';
     app.openSheet({ kind: 'journal-log', dateISO, slot: slot === 'day' || slot === 'night' ? slot : empty, filter: '', said: '' });
     // Its status line starts afresh, so a filter's count said the last time

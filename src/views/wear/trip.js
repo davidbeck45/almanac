@@ -621,10 +621,10 @@ export async function freshenTrip(app) {
 const underWay = (trip, today) => Boolean(trip) && trip.fromISO <= today && today <= trip.toISO;
 
 /**
- * The saved trip's day while it's under way there: { trip, day, days,
- * bottles: how many are packed, picks: the plan entries of the windows of
- * its today that haven't ended there, in time order, each with its context
- * key `ctx` }; null when there's no trip or no bottle, it's over or not
+ * The saved trip's day while it's under way there: { trip, today (its date
+ * there), day, days, bottles: how many are packed, picks: the plan entries
+ * of the windows of its today that haven't ended there, in time order, each
+ * with its context key `ctx` }; null when there's no trip or no bottle, it's over or not
  * begun, or none of its today's windows is left. Packs as the pane does
  * (packFor: after a frame for a big list, `picks: null` and `slots`, those
  * windows' count, meanwhile, and Now draws again once it's in), and stores
@@ -639,7 +639,7 @@ export function tripToday(app = null, nowMs = Date.now()) {
   if (!underWay(trip, today)) return null;
   const slots = trip.windows.filter(w => windowOpen(w, at)).length;
   if (!slots) return null;
-  const base = { trip, day: daysBetween(trip.fromISO, today) + 1, days: tripDays(trip) };
+  const base = { trip, today, day: daysBetween(trip.fromISO, today) + 1, days: tripDays(trip) };
   const result = packFor(trip, app);
   if (!result) return { ...base, bottles: null, picks: null, slots };
   for (const [key, win, occasion, ranked] of memo.contexts) {

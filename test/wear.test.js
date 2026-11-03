@@ -1472,6 +1472,14 @@ test('a trip nine hours ahead of home reads its own day and hour: the card, its 
     wear.actions.wear({ dataset: { ctx: day.ctx, id: day.pick.id } }, ui);
     assert.deepEqual(state.history.map(h => [h.id, h.date, h.slot, h.lat, h.lon]), [[day.pick.id, '2026-11-03', 'day', 35.68, 139.69]], 'on Tokyo’s date');
     assert.ok(state.history[0].wx, 'in the forecast’s weather');
+    // Worn reads Tokyo's day, so the wear shows and its day can be changed.
+    const worn = wardrobe.wardrobe.panes.find(p => p.id === 'worn').render({}, { dest: 'wardrobe', pane: 'worn' });
+    assert.match(worn, /data-action="journal-log" data-date="2026-11-03"[^>]*aria-current="date"/);
+    // Home's evening is Tokyo's morning: no "Wore something this morning?"
+    // under the trip's card for home's day gone by.
+    state.history = [...state.history, { id: night.pick.id, date: '2026-10-31', slot: 'night' }];
+    assert.ok(draw().includes('class="card trip-now"') && !draw().includes('log-missed'));
+    state.history = state.history.filter(h => h.date !== '2026-10-31');
     // 7:30 pm there: the day is over, so the card has tonight alone, and
     // the day's page no longer logs it.
     at('2026-11-03T10:30:00Z');

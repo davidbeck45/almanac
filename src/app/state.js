@@ -461,8 +461,8 @@ export function dustWhen(id, days) {
 
 // Gathering dust says when this week each idle bottle would suit
 // (`when`, dustWhen), once the forecast is in; null before.
-export function journalData() {
-  const today = todayISO();
+// `today`: Worn's, home's unless a trip under way is a day ahead of it.
+export function journalData(today = todayISO()) {
   const stats = journalStats(state.history, today, DUSTY_AFTER_DAYS);
   const dusty = activeFragrances()
     .map(f => ({ f, last: stats.lastWorn.get(f.id) ?? null }))
