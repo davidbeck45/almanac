@@ -7,7 +7,7 @@ import { OCCASIONS, occasionById } from '../src/occasions.js';
 import { sprayGuide } from '../src/spray.js';
 import { setSkin, loadSkin, loadAsked, markAsked } from '../src/skin.js';
 import { planTies, rankedTies, whenOf, TIE_OCCASIONS, TIE_POINTS } from '../src/contrast.js';
-import { summarize, week } from '../src/weather.js';
+import { summarize, week, windowOn, wxAt } from '../src/weather.js';
 import { renderScene } from '../src/scene.js';
 import { shiftISO, toggleWear, wornIn, loadHistory } from '../src/history.js';
 import * as wear from '../src/views/wear.js';
@@ -1250,7 +1250,8 @@ test('a trip under way puts its day above Now: today’s and tonight’s packed 
     assert.ok(ctx.entries.has(night.pick.id));
     const model = bottleModel({ dest: 'bottle', arg: night.pick.id, query: { ctx: `trip:${today}:night` } });
     assert.equal(model.ctx, `trip:${today}:night`);
-    assert.equal(model.canWear, app.canWear(ctx.win), 'Wear this as for Now’s window');
+    assert.equal(model.canWear, app.canWear(ctx.win, ctx.place), 'Wear this by the trip’s clock');
+    assert.equal(model.canWear, true);
 
     const html = draw();
     assert.ok(html.indexOf('class="card trip-now"') > -1 && html.indexOf('class="card trip-now"') < html.indexOf('class="card slot"'), 'above Now’s own card');
@@ -1272,7 +1273,9 @@ test('a trip under way puts its day above Now: today’s and tonight’s packed 
   }
 });
 
-test('a long trip packs after Now paints, its rows holding the card’s place until then', async () => {
+test('a long trip packs after Now paints, its rows holding the card’s place until then', async t => {
+  // Noon there, so both of today's windows are still to come.
+  t.mock.timers.enable({ apis: ['Date'], now: nowMs });
   const { state, draw } = nowOnToday();
   const today = state.wx.todayISO;
   const windows = week(state.forecast).flatMap(d => [d.day, d.night].filter(Boolean));
@@ -1307,7 +1310,85 @@ test('a long trip packs after Now paints, its rows holding the card’s place un
   }
 });
 
-test('Out all day? names one bottle that suits both of today’s windows, and only while it can', () => {
+test('a trip nine hours ahead of home reads its own day and hour: the card, its pages and Wear this', t => {
+  const { state } = app;
+  // Home is New York (UTC-5 in November); the trip is Tokyo (UTC+9), Nov 2–5,
+  // its last two days past the forecast.
+  const ny = { name: 'New York', lat: 40.71, lon: -74.01 };
+  const tokyo = { name: 'Tokyo', region: 'JP', lat: 35.68, lon: 139.69, timezone: 'Asia/Tokyo' };
+  const home = { ...syntheticForecast(7, { start: '2026-11-01' }), utc_offset_seconds: -5 * 3600 };
+  const there = { ...syntheticForecast(7, { start: '2026-11-01' }), utc_offset_seconds: 9 * 3600 };
+  const days = ['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05'];
+  const windows = days.flatMap(d => ['day', 'night'].map(slot => ({ ...windowOn(there, d, slot), ...(d >= '2026-11-04' && { typical: true, samples: 21 }) })));
+  const named = picks => picks.map(p => `${p.window.dateISO} ${p.window.slot}`);
+  const at = iso => {
+    t.mock.timers.setTime(Date.parse(iso));
+    home.fetchedAt = Date.now() - 600_000;
+    state.wx = wxAt(home);
+    app.computeToday();
+  };
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-03T00:30:00Z') });
+  Object.assign(state, { demo: { fetched: '2026-11-02', fragrances }, shared: null, active: 'demo', loc: ny, forecast: home, history: [], events: [], slot: null, route: null, error: null });
+  trip.saveTrip({ place: tokyo, fromISO: days[0], toISO: days.at(-1), events: [], max: 3, windows, fetchedAt: Date.now() });
+  trip.forgetTrip();
+  const pane = wear.wear.panes.find(p => p.id === 'now');
+  const draw = () => clean(pane.render({}, { dest: 'wear', pane: 'now' }), 'Now on a trip');
+  const ui = { render() {}, keepingFocus(el, scope, f) { f(); } };
+  const pageOf = p => bottleModel({ dest: 'bottle', arg: p.pick.id, query: { ctx: p.ctx } });
+  try {
+    assert.equal(trip.loadTrip().place.timezone, 'Asia/Tokyo', 'the trip keeps its zone');
+    // 9:30 am on Nov 3 in Tokyo, 7:30 pm on Nov 2 at home: the card is
+    // Tokyo's Nov 3, day 2, both its windows still to come.
+    at('2026-11-03T00:30:00Z');
+    assert.equal(app.todayISO(), '2026-11-02');
+    let away = trip.tripToday();
+    assert.deepEqual([away.day, away.days], [2, 4]);
+    assert.deepEqual(named(away.picks), ['2026-11-03 day', '2026-11-03 night']);
+    const [day, night] = away.picks;
+    assert.deepEqual([pageOf(day).ctxLabel, pageOf(night).ctxLabel], ['Today', 'Tonight'], 'its pages say what the card says');
+    assert.deepEqual([pageOf(day).canWear, pageOf(night).canWear], [true, true]);
+    // Home's tonight is the morning after the trip's first night, over there.
+    assert.equal(app.canWear(windows[1], tokyo), false);
+    assert.equal(app.canWear(app.nowSlot().win), true, 'Now’s own window reads home’s clock');
+    wear.actions.wear({ dataset: { ctx: day.ctx, id: day.pick.id } }, ui);
+    assert.deepEqual(state.history.map(h => [h.id, h.date, h.slot, h.lat, h.lon]), [[day.pick.id, '2026-11-03', 'day', 35.68, 139.69]], 'on Tokyo’s date');
+    assert.ok(state.history[0].wx, 'in the forecast’s weather');
+    // 7:30 pm there: the day is over, so the card has tonight alone, and
+    // the day's page no longer logs it.
+    at('2026-11-03T10:30:00Z');
+    away = trip.tripToday();
+    assert.deepEqual(named(away.picks), ['2026-11-03 night']);
+    const html = draw();
+    assert.ok(html.includes('Day 2 of 4') && html.includes(`data-ctx="${night.ctx}"`) && !html.includes(`data-ctx="${day.ctx}"`));
+    assert.equal(pageOf(day).canWear, false);
+    // Past 11 pm there, its day is done: no card until the morning.
+    at('2026-11-03T14:30:00Z');
+    assert.equal(trip.tripToday(), null);
+    assert.ok(!draw().includes('trip-now'));
+
+    // Nov 4 there, with home's forecast out of reach: the trip's day shows
+    // from its saved weather above the message, and still logs, but typical
+    // weather isn't the weather it was worn in.
+    at('2026-11-04T00:30:00Z');
+    Object.assign(state, { forecast: null, wx: null, today: null, error: 'Can’t reach the forecast. Check your connection and try again.' });
+    const offline = draw();
+    assert.ok(offline.includes('class="card trip-now"') && offline.includes('Day 3 of 4'));
+    assert.ok(offline.indexOf('trip-now') < offline.indexOf('Couldn’t load the weather'));
+    away = trip.tripToday();
+    assert.deepEqual(named(away.picks), ['2026-11-04 day', '2026-11-04 night']);
+    assert.equal(pageOf(away.picks[0]).canWear, true);
+    wear.actions.wear({ dataset: { ctx: away.picks[0].ctx, id: away.picks[0].pick.id } }, ui);
+    assert.deepEqual(state.history.map(h => [h.date, h.slot, 'wx' in h]), [['2026-11-04', 'day', false], ['2026-11-03', 'day', true]]);
+  } finally {
+    localStorage.removeItem('scentcast.trip');
+    trip.forgetTrip();
+    Object.assign(state, { history: [], error: null, today: null });
+  }
+});
+
+test('Out all day? names one bottle that suits both of today’s windows, and only while it can', t => {
+  // The morning of the fixture's first day, where the trip below is under way.
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-09-28T13:00:00Z') });
   const { state } = app;
   const hot = syntheticForecast(8, { start: '2026-09-28', hot: d => d === '2026-09-28' });
   const morning = (forecast, history = []) => {

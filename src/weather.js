@@ -313,19 +313,28 @@ const WET_MM = 1;
 const FALLING = new Set(['drizzle', 'rain', 'storm', 'snow']);
 
 const shiftDays = (iso, days) => new Date(Date.parse(`${iso}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
-// A place's date before its forecast says: by its time zone, which a city
-// search gives (location.js searchCities), else by solar time at its
-// longitude three hours fast, as zones run ahead of the sun far more than
-// behind it (Spain, western China). Off by a day, that's late (a forecast
-// asked for that can't hold the date), not early, but for zones across the
-// date line (Samoa, Tonga), which a search finds.
-function placeDate({ lon, timezone }, nowMs) {
-  if (timezone) {
-    try {
-      return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(nowMs);
-    } catch {} // a zone this runtime doesn't know
+// A place's UTC offset (ms) at nowMs by its time zone, which a city search
+// gives (location.js searchCities); null without one, or for a zone this
+// runtime doesn't know.
+function zoneOffset(timezone, nowMs) {
+  if (!timezone) return null;
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric',
+    }).formatToParts(nowMs);
+    const at = Object.fromEntries(parts.map(p => [p.type, Number(p.value)]));
+    return Date.UTC(at.year, at.month - 1, at.day, at.hour, at.minute) - Math.floor(nowMs / 60_000) * 60_000;
+  } catch {
+    return null;
   }
-  return new Date(nowMs + (lon / 15 + 3) * 3_600_000).toISOString().slice(0, 10);
+}
+// A place's date before its forecast says: by its time zone, else by solar
+// time at its longitude three hours fast, as zones run ahead of the sun far
+// more than behind it (Spain, western China). Off by a day, that's late (a
+// forecast asked for that can't hold the date), not early, but for zones
+// across the date line (Samoa, Tonga), which a search finds.
+export function placeDate({ lon, timezone }, nowMs = Date.now()) {
+  return new Date(nowMs + (zoneOffset(timezone, nowMs) ?? (lon / 15 + 3) * 3_600_000)).toISOString().slice(0, 10);
 }
 // The same month and day `years` earlier; February 29 falls back to the 28th.
 function yearsBefore(iso, years) {
@@ -462,19 +471,38 @@ export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'
   return dates.flatMap(d => slots.map(s => found.get(key(d, s))).filter(Boolean));
 }
 
-// The place's wall clock at nowMs, by its forecast's UTC offset: today's and
-// tomorrow's dates and the hour (state.js canWear reads it).
-export function clock(forecast, nowMs = Date.now()) {
-  const wallNow = nowMs + forecast.utc_offset_seconds * 1000;
+// A wall clock from the place's time as a timestamp read in UTC: the hour,
+// and today's and tomorrow's dates.
+function wallClock(wallNow) {
   const nowDate = new Date(wallNow);
   return {
     wallNow,
     hour: nowDate.getUTCHours(),
     todayISO: nowDate.toISOString().slice(0, 10),
     tomorrowISO: new Date(wallNow + 86_400_000).toISOString().slice(0, 10),
-    lat: forecast.latitude,
   };
 }
+
+// The place's wall clock at nowMs, by its forecast's UTC offset: today's and
+// tomorrow's dates and the hour (state.js canWear reads it).
+export function clock(forecast, nowMs = Date.now()) {
+  return { ...wallClock(nowMs + forecast.utc_offset_seconds * 1000), lat: forecast.latitude };
+}
+
+/**
+ * The wall clock of a place whose forecast isn't in hand (a trip's, the
+ * Occasion pane's other city), shaped like clock's: by its time zone, else
+ * by solar time at its longitude. Zones mostly run ahead of the sun (Spain,
+ * western China), so without one a window there ends a little late rather
+ * than early.
+ */
+export function placeClock({ lon, timezone }, nowMs = Date.now()) {
+  return wallClock(nowMs + (zoneOffset(timezone, nowMs) ?? (lon / 15) * 3_600_000));
+}
+
+// Whether a window can still be worn by a place's clock (clock's or
+// placeClock's): it's dated today there and its hours haven't ended.
+export const windowOpen = (win, at) => win.dateISO === at.todayISO && at.hour < WINDOWS[win.slot][1];
 
 // Now's temperature, feels-like and humidity are the blend's, read between
 // this hour's row and the next, like the windows and the day's high and low.

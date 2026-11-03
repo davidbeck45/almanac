@@ -509,15 +509,21 @@ test('Wear this is for windows dated today until each is over: at night, tomorro
     state.forecast = { utc_offset_seconds: -4 * 3600 };
     state.wx = { todayISO: '2026-10-14' };
     // 22:49: the day window has rolled over to tomorrow's.
-    assert.equal(canWear(tonight, at('22:49')), true);
-    assert.equal(canWear(tomorrow, at('22:49')), false, 'Now’s Day toggle and Week’s tomorrow offer no Wear this');
-    assert.equal(canWear({ dateISO: '2026-10-16', slot: 'day' }, at('22:49')), false);
-    assert.equal(canWear(today, at('22:49')), false, 'today’s daytime is over');
-    assert.equal(canWear(today, at('16:59')), true);
+    assert.equal(canWear(tonight, null, at('22:49')), true);
+    assert.equal(canWear(tomorrow, null, at('22:49')), false, 'Now’s Day toggle and Week’s tomorrow offer no Wear this');
+    assert.equal(canWear({ dateISO: '2026-10-16', slot: 'day' }, null, at('22:49')), false);
+    assert.equal(canWear(today, null, at('22:49')), false, 'today’s daytime is over');
+    assert.equal(canWear(today, null, at('16:59')), true);
     // By the clock, not the forecast as last read: an hour turned since it was read is over still.
-    assert.equal(canWear(tonight, at('23:01')), false);
+    assert.equal(canWear(tonight, null, at('23:01')), false);
+    // A list ranked somewhere else (a trip, another city) reads that place's
+    // clock: at 22:49 here it's 11:49 tomorrow in Tokyo.
+    const tokyo = { name: 'Tokyo', lat: 35.68, lon: 139.69, timezone: 'Asia/Tokyo' };
+    assert.equal(canWear(tomorrow, tokyo, at('22:49')), true, 'Tokyo’s day under way');
+    assert.equal(canWear(tonight, tokyo, at('22:49')), false, 'over there since 11 pm');
     state.forecast = null;
-    assert.equal(canWear(tonight, at('20:00')), false, 'no forecast, no windows');
+    assert.equal(canWear(tonight, null, at('20:00')), false, 'no forecast, no windows');
+    assert.equal(canWear(tomorrow, tokyo, at('22:49')), true, 'a trip’s windows need no forecast of home’s');
   } finally {
     state.wx = null;
     state.forecast = null;

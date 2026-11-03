@@ -4,7 +4,7 @@
 // shell (src/app/shell.js) renders and handles events.
 import { rank, rankEvent, planWindows } from '../engine.js';
 import { planTies, TIE_POINTS } from '../contrast.js';
-import { week, wxAt, standIn, cachedForecast, forecastError, clock, WINDOWS } from '../weather.js';
+import { week, wxAt, standIn, cachedForecast, forecastError, clock, placeClock, windowOpen } from '../weather.js';
 import { loadLocation } from '../location.js';
 import { loadHistory, wornIn, journalStats, journalCalendar, occasionCounts } from '../history.js';
 import { loadHidden, hiddenFor } from '../hidden.js';
@@ -409,11 +409,13 @@ export function takeForecast(loc, { forecast = null, error = null }, nowMs = Dat
 // once the day window has rolled over at night, Now's Day shows tomorrow's,
 // which can only be worn tomorrow (and Worn would hide a wear dated ahead).
 // It reads the clock, not the forecast as last read, so a window that ended
-// since the page was drawn takes no wear.
-export function canWear(win, nowMs = Date.now()) {
-  if (!state.forecast || !state.wx) return false;
-  const { todayISO, hour } = clock(state.forecast, nowMs);
-  return win.dateISO === todayISO && hour < WINDOWS[win.slot][1];
+// since the page was drawn takes no wear. The clock is the window's own
+// place's: home's forecast's, or for a list ranked somewhere else (a trip,
+// the Occasion pane's other city: its context's `place`) that place's, whose
+// day its windows are dated in (src/weather.js placeClock).
+export function canWear(win, place = null, nowMs = Date.now()) {
+  if (place) return windowOpen(win, placeClock(place, nowMs));
+  return Boolean(state.forecast && state.wx) && windowOpen(win, clock(state.forecast, nowMs));
 }
 
 export const wornId = win => wornIn(state.history, win.dateISO, win.slot)?.id ?? null;

@@ -655,11 +655,16 @@ export function allDayPick() {
 }
 
 function nowPane(app) {
+  // A trip under way: its day above, from the bottles packed (wear/trip.js),
+  // which answers "Out all day?" from what's in the bag. Its weather is
+  // saved, so it shows while home's forecast can't (offline, the daily limit).
+  const away = trip.tripToday(app);
+  const awayHTML = away ? trip.tripNowHTML(away, { worn: wornId }) : '';
   const blocked = guard();
-  if (blocked) return blocked;
+  if (blocked) return awayHTML + blocked;
   // A forecast without hours for either window (a model gap): nothing to
   // rank until a new one lands.
-  if (!nowSlot()) return state.loading ? skeletonHTML(1) : noHoursHTML();
+  if (!nowSlot()) return awayHTML + (state.loading ? skeletonHTML(1) : noHoursHTML());
   const { win, ranked, pick } = nowSlot();
   const worn = wornId(win);
   const slots = todaySlots();
@@ -668,11 +673,8 @@ function nowPane(app) {
   // with it: none once he's wearing one.
   const ties = planTies(todayPlan(), { history: state.history })[slots.findIndex(p => p.win === win)] ?? [];
   const ask = nowQuestion(pick, worn);
-  // A trip under way: its day above, from the bottles packed (wear/trip.js),
-  // which answers "Out all day?" from what's in the bag.
-  const away = trip.tripToday(app);
   return `${banner()}
-    ${away ? trip.tripNowHTML(away, { worn: wornId }) : ''}
+    ${awayHTML}
     <section class="card slot" aria-labelledby="slot-title">
       ${slotHeadHTML(win, nowHour(), { id: 'slot-title' })}
       <div class="now-picks">
@@ -734,7 +736,7 @@ function occasionPane(app, route) {
   return `${head}
     <section class="card slot" aria-labelledby="occ-title">
       ${slotHeadHTML(win, ev.here ? nowHour() : -1, { id: 'occ-title', thumb: true, title: occasionHeading(route, ev) })}
-      ${pickHTML(ranked[0], 'occ', worn, { canWear: canWear(win), full: true, kicker, ties, win, tieWhen: phraseOf(occasion) })}
+      ${pickHTML(ranked[0], 'occ', worn, { canWear: canWear(win, when.when.place), full: true, kicker, ties, win, tieWhen: phraseOf(occasion) })}
       ${alsoHTML(ranked, ranked[0], 'occ', worn, `for ${phraseOf(occasion)}`)}
     </section>`;
 }
@@ -874,9 +876,10 @@ export const actions = {
   wear(el, app) {
     const ctx = state.contexts[el.dataset.ctx];
     if (!ctx) return;
-    // A window that ended since the page was drawn takes no wear: drawn
-    // again for the hour it is, the page shows the next one.
-    if (!canWear(ctx.win)) return app.render();
+    // A window that ended since the page was drawn (by the clock where it
+    // is) takes no wear: drawn again for the hour it is, the page shows the
+    // next one.
+    if (!canWear(ctx.win, ctx.place)) return app.render();
     // Another tab logged or cleared this very wear since the button was
     // drawn: it's done, and toggling would undo it.
     if (wearSettled(state.history, el.dataset.id, ctx.win.dateISO, ctx.win.slot)) {
