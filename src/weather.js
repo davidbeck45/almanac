@@ -292,6 +292,20 @@ const WET_MM = 1;
 const FALLING = new Set(['drizzle', 'rain', 'storm', 'snow']);
 
 const shiftDays = (iso, days) => new Date(Date.parse(`${iso}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+// A place's date before its forecast says: by its time zone, which a city
+// search gives (location.js searchCities), else by solar time at its
+// longitude three hours fast, as zones run ahead of the sun far more than
+// behind it (Spain, western China). Off by a day, that's late (a forecast
+// asked for that can't hold the date), not early, but for zones across the
+// date line (Samoa, Tonga), which a search finds.
+function placeDate({ lon, timezone }, nowMs) {
+  if (timezone) {
+    try {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(nowMs);
+    } catch {} // a zone this runtime doesn't know
+  }
+  return new Date(nowMs + (lon / 15 + 3) * 3_600_000).toISOString().slice(0, 10);
+}
 // The same month and day `years` earlier; February 29 falls back to the 28th.
 function yearsBefore(iso, years) {
   const [y, m, d] = iso.split('-').map(Number);
@@ -393,17 +407,29 @@ export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'
   for (let d = fromISO; d <= toISO; d = shiftDays(d, 1)) dates.push(d);
   const found = new Map();
   const key = (d, s) => `${d} ${s}`;
-  // The location's date can be a day off UTC's; windowOn finds what's there.
-  if (fromISO <= shiftDays(new Date(nowMs).toISOString().slice(0, 10), FORECAST_DAYS)) {
-    const forecast = await fetchForecast(loc, { days: FORECAST_DAYS, timeoutMs });
-    const { todayISO } = clock(forecast, nowMs);
-    if (refusePast && fromISO < todayISO) {
-      throw Object.assign(new Error(`${fromISO} has passed there; it's ${todayISO}`), { past: true, today: todayISO });
+  // The forecast holds the place's today and FORECAST_DAYS - 1 days after: a
+  // trip that starts past them waits on the archive alone, not on ten days of
+  // forecast first (32 s on a slow day). Its last two days are GFS and ECMWF
+  // alone, barely ahead of typical weather, so a trip within them that the
+  // forecast refuses (a 429 day) takes typical weather rather than failing.
+  const today = placeDate(loc, nowMs);
+  if (fromISO <= shiftDays(today, FORECAST_DAYS - 1)) {
+    let forecast = null;
+    try {
+      forecast = await fetchForecast(loc, { days: FORECAST_DAYS, timeoutMs });
+    } catch (err) {
+      if (fromISO < shiftDays(today, FORECAST_DAYS - 2)) throw err;
     }
-    for (const d of dates) {
-      for (const s of slots) {
-        const win = windowOn(forecast, d, s);
-        if (win && !(win.models < FORECAST_MODELS)) found.set(key(d, s), win);
+    if (forecast) {
+      const { todayISO } = clock(forecast, nowMs);
+      if (refusePast && fromISO < todayISO) {
+        throw Object.assign(new Error(`${fromISO} has passed there; it's ${todayISO}`), { past: true, today: todayISO });
+      }
+      for (const d of dates) {
+        for (const s of slots) {
+          const win = windowOn(forecast, d, s);
+          if (win && !(win.models < FORECAST_MODELS)) found.set(key(d, s), win);
+        }
       }
     }
   }

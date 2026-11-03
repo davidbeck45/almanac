@@ -127,6 +127,53 @@ test('a trip takes the forecast as far as it reaches, then typical weather', asy
   });
 });
 
+test('how far the forecast reaches is counted from the place’s date, not UTC’s', async () => {
+  // 9 pm on Nov 2 in New York is already Nov 3 in UTC; the forecast holds Nov 2 to Nov 11 there.
+  const nowMs = Date.parse('2026-11-03T01:00:00Z');
+  const ny = { lat: 40.71, lon: -74.01 };
+  const hosts = asked => asked.map(u => (u.hostname === 'api.open-meteo.com' ? 'forecast' : 'archive'));
+  await withFetch(u => (u.hostname === 'api.open-meteo.com'
+    ? syntheticForecast(FORECAST_DAYS, { start: '2026-11-02' })
+    : archive(u.searchParams.get('start_date'), u.searchParams.get('end_date'), 50)), async asked => {
+    const [last] = await tripWindows(ny, '2026-11-11', '2026-11-11', { nowMs, slots: ['night'] });
+    assert.equal(last.typical, undefined, 'the forecast’s last day is the forecast’s');
+    for (const d of ['2026-11-12', '2026-11-13']) {
+      asked.length = 0;
+      const [win] = await tripWindows(ny, d, d, { nowMs, slots: ['night'] });
+      assert.equal(win.typical, true, d);
+      assert.deepEqual([...new Set(hosts(asked))], ['archive'], `${d}: no wait on a ten-day forecast that can't hold it`);
+    }
+    // At 10:30 pm, past what longitude alone can tell (it reads Nov 3 there by
+    // then), a place from the city search knows its date by its time zone.
+    const late = Date.parse('2026-11-03T03:30:00Z');
+    for (const [where, place, wanted] of [['by longitude', ny, ['forecast', 'archive']], ['by time zone', { ...ny, timezone: 'America/New_York' }, ['archive']]]) {
+      asked.length = 0;
+      await tripWindows(place, '2026-11-12', '2026-11-12', { nowMs: late, slots: ['night'] });
+      assert.deepEqual([...new Set(hosts(asked))], wanted, where);
+    }
+    // Across the date line longitude reads a day behind (Samoa, UTC+13, where
+    // it's 2 pm on Nov 3): its zone gets the forecast's last day, the 12th.
+    const apia = { lat: -13.83, lon: -171.76 };
+    for (const [where, place, wanted] of [['by time zone', { ...apia, timezone: 'Pacific/Apia' }, true], ['a zone the runtime doesn’t know: by longitude', { ...apia, timezone: 'Nowhere/Atlantis' }, false]]) {
+      asked.length = 0;
+      await tripWindows(place, '2026-11-12', '2026-11-12', { nowMs, slots: ['night'] });
+      assert.equal(hosts(asked).includes('forecast'), wanted, where);
+    }
+  });
+  // On a day the forecast is refused, its last two days (GFS and ECMWF alone,
+  // barely ahead of typical weather) get typical weather; nearer dates say why.
+  const real = globalThis.fetch;
+  globalThis.fetch = async url => (new URL(String(url)).hostname === 'api.open-meteo.com'
+    ? new Response(JSON.stringify({ error: true, reason: 'Daily API request limit exceeded.' }), { status: 429 })
+    : json(archive(new URL(String(url)).searchParams.get('start_date'), new URL(String(url)).searchParams.get('end_date'), 50)));
+  try {
+    for (const d of ['2026-11-10', '2026-11-11']) assert.equal((await tripWindows(ny, d, d, { nowMs }))[0].typical, true, d);
+    await assert.rejects(tripWindows(ny, '2026-11-09', '2026-11-10', { nowMs }), err => err.status === 429);
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
 test('a forecast day left to one model gives way to typical weather', async () => {
   const today = '2026-10-13';
   const nowMs = Date.parse(`${today}T12:00:00Z`);

@@ -400,7 +400,7 @@ async function main() {
       fail(`Couldn't look up "${args.city}" (${err.message}). Check the connection, or pass --loc LAT,LON.`);
     }
     if (!hit) fail(`No city found for "${args.city}"`);
-    return { name: `${hit.name}, ${hit.region}`, lat: hit.lat, lon: hit.lon };
+    return { name: `${hit.name}, ${hit.region}`, lat: hit.lat, lon: hit.lon, ...(hit.timezone && { timezone: hit.timezone }) };
   }
 
   async function forecastFor(place) {

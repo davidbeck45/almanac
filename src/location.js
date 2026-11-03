@@ -39,7 +39,8 @@ export function deviceLocation() {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) return reject(new Error('This browser can’t share location.'));
     navigator.geolocation.getCurrentPosition(
-      p => resolve({ name: 'My location', lat: +p.coords.latitude.toFixed(3), lon: +p.coords.longitude.toFixed(3), device: true }),
+      // The device's own time zone is the place's: it's there.
+      p => resolve({ name: 'My location', lat: +p.coords.latitude.toFixed(3), lon: +p.coords.longitude.toFixed(3), device: true, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       e => reject(new Error(e.code === 1 ? 'Location permission was denied.' : 'Couldn’t get your location.')),
       { timeout: 10_000, maximumAge: 30 * 60 * 1000 },
     );
@@ -61,5 +62,8 @@ export async function searchCities(query) {
     region: [r.admin1, r.country_code].filter(Boolean).join(', '),
     lat: r.latitude,
     lon: r.longitude,
+    // Its IANA zone ("America/Chicago"): a trip's or a date's weather knows the
+    // place's date before its forecast says (weather.js tripWindows).
+    ...(r.timezone && { timezone: r.timezone }),
   }));
 }

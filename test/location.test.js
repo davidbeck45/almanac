@@ -1,6 +1,6 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadLocation, loadRecent, saveLocation } from '../src/location.js';
+import { loadLocation, loadRecent, saveLocation, searchCities } from '../src/location.js';
 
 let store;
 beforeEach(() => {
@@ -20,4 +20,14 @@ test('stored places without coordinates read as none, and a new place still save
   saveLocation(york);
   assert.deepEqual(loadLocation(), york);
   assert.deepEqual(loadRecent().map(r => r.name), ['New York', 'Oslo']);
+});
+
+test('a city found keeps its time zone, so a trip there knows its date before the forecast says', async t => {
+  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => ({ results: [
+    { name: 'Apia', admin1: 'Tuamasaga', country_code: 'WS', latitude: -13.83, longitude: -171.76, timezone: 'Pacific/Apia' },
+    { name: 'Nowhere', latitude: 1, longitude: 2 },
+  ] }) }));
+  const [apia, bare] = await searchCities('apia');
+  assert.deepEqual(apia, { name: 'Apia', region: 'Tuamasaga, WS', lat: -13.83, lon: -171.76, timezone: 'Pacific/Apia' });
+  assert.equal('timezone' in bare, false);
 });

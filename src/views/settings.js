@@ -184,7 +184,7 @@ export const actions = {
   },
   async city(el, app) {
     const r = state.sheet?.results?.[+el.dataset.value];
-    if (r) await app.setLocation({ name: r.name, region: r.region, lat: r.lat, lon: r.lon });
+    if (r) await app.setLocation({ name: r.name, region: r.region, lat: r.lat, lon: r.lon, ...(r.timezone && { timezone: r.timezone }) });
   },
   refresh: (el, app) => app.refreshWeather({ force: true }),
   units(el, app) {
