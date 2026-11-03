@@ -216,22 +216,26 @@ function gapWords(entry, pick, occasion) {
  * Velvet tonight, mostly the season fit." below it; above it (the plan
  * passed it over), what chose the pick: "2 points over Liam today, but the
  * plan gives Liam a turn." '' for the pick itself, and for a bottle saved
- * for an event later on, whose own note says why. Points as matchPct shows
- * them; never a temperature.
+ * for an event later on, whose own note says why. A bottle he rates
+ * DISLIKED or lower is never a toss-up (tiesFor), so within a point it says
+ * how near it comes and why not: "Just under Atlantis Extrait tonight,
+ * mostly your rating." (a 1★ held back can't always sit 2 points under the
+ * pick, holdBackLoathed). Points as matchPct shows them; never a temperature.
  */
 export function pickGapLine(entry, pick, win, { occasion = null, worn = null } = {}) {
   if (!entry || !pick || String(entry.fragrance.id) === String(pick.fragrance.id)) return '';
   const name = pick.fragrance.name;
   const what = `${occasion ? `${occasion.phrase ?? occasion.label.toLowerCase()} ` : ''}${whenOf(win)}`;
   const points = matchPct(pick) - matchPct(entry);
-  if (Math.abs(points) <= TIE_POINTS) return `Suits ${what} as well as ${name}.`;
+  if (Math.abs(points) <= TIE_POINTS && !isDisliked(entry.fragrance)) return `Suits ${what} as well as ${name}.`;
   const at = `${occasion ? `for ${what}` : what}`;
-  if (points > 0) return `${points} points under ${name} ${at}, mostly ${gapWords(entry, pick, occasion)}.`;
+  const by = n => (n ? `${n} point${n === 1 ? '' : 's'}` : 'Just');
+  if (entry.score < pick.score) return `${by(points)} under ${name} ${at}, mostly ${gapWords(entry, pick, occasion)}.`;
   if (entry.parts.saved) return '';
   const stars = entry.fragrance.personal?.rating;
   const but = String(worn) === String(pick.fragrance.id) ? `you’re wearing ${name}`
     : pick.nudged ? `${name} is due a wear`
       : isDisliked(entry.fragrance) ? `you rate it ${stars}★`
         : `the plan gives ${name} a turn`;
-  return `${-points} points over ${name} ${at}, but ${but}.`;
+  return `${by(-points)} over ${name} ${at}, but ${but}.`;
 }
