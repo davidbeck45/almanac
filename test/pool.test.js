@@ -110,6 +110,15 @@ test('pool owners and reach: owners to a quarter of a doubling, reach a share of
   // A name says so only with the kind: not a plain "spray" or "brume" (801 sea spray, Thomas Kosmala's Brume Radieuse).
   for (const id of ['51012', '53744']) assert.ok(!(await loadAbout(id, load)).flags.includes('mist'), id);
   for (const id of ['37572', '43933']) assert.ok((await loadAbout(id, load)).flags.includes('mist'), id); // Miss Dior Brume Soyeuse pour le Corps, Sauvage Very Cool Spray
+  // A page whose one format is a mist says so last: Victoria's Secret's Rush, "available as a 250 ml Fragrance Body Mist".
+  const flagsOf = id => fromPool(pool, pool.index.get(id)).extras.flags;
+  assert.ok(flagsOf('42992').includes('mist'), 'Rush');
+  // Bath & Body Works and Sol de Janeiro sell their scents as mists and their pages rarely say so: a bottle of
+  // theirs is one unless its name calls it a perfume (a Cologne Mist still a mist) or it's a men's cologne.
+  for (const id of ['93117', '67700', '67527']) assert.ok(flagsOf(id).includes('mist'), id); // If You Musk, Warm Vanilla Sugar, Cheirosa '40
+  for (const id of ['60095', '45335', '10190']) assert.ok(!flagsOf(id).includes('mist'), id); // SOL Cheirosa '62 Eau de Parfum, Bourbon, Bombshell
+  assert.ok((await loadAbout('104955', load)).flags.includes('mist'), 'My Signature Cologne Mist');
+  for (const id of ['90127', '71429']) assert.ok(!(await loadAbout(id, load)).flags.includes('mist'), id); // Tropidelic Eau de Parfum, Marble Cologne
 });
 
 test('discontinued only when a con says so of the bottle itself', () => {
