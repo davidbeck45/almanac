@@ -49,6 +49,11 @@ test('every window carries the bottles that suit it as well, as the app’s Now 
   // The panel shows it in place of the runner-up, on one line.
   const qml = readFileSync(new URL('../omarchy/Panel.qml', import.meta.url), 'utf8');
   assert.match(qml, /root\.pick\.tieLine \? root\.pick\.tieLine : root\.pick\.runnerUp/);
+  // The runner-up is the best after the ties, which are equal choices, not seconds.
+  assert.ok(out.now.ties.length, 'the fixture’s morning has toss-ups');
+  const runnerUp = plan[0].ranked.find(r => r !== plan[0].pick && !ties[0].some(t => t.entry === r));
+  assert.equal(out.now.runnerUp.name, runnerUp.fragrance.name);
+  assert.ok(!out.now.ties.some(t => t.name === out.now.runnerUp.name));
 });
 
 test('the widget hides the site defaults unless told otherwise', () => {
@@ -109,6 +114,14 @@ test('with the app’s plans in the journal the widget plans around them, as Now
   const formal = plan.find(p => p.win.occasion);
   assert.equal(out.days[3].night.id, String(formal.pick.fragrance.id), 'the formal night gets the app’s pick');
   assert.equal(out.days[3].night.occasion, 'formal');
+  // Said in the app's words, which the panel puts on the week's row and the hero, as Now and the Week mark it.
+  assert.equal(out.days[3].night.occasionPhrase, 'formal wear');
+  assert.ok(out.days.flatMap(d => [d.day, d.night]).filter(w => w && !w.occasion).every(w => !('occasionPhrase' in w)));
+  const office = widgetPayload(fragrances, syntheticForecast(7), place, at, { ...journal, events: [{ dateISO: bare.days[0].date, slot: 'day', occasion: 'office' }] });
+  assert.deepEqual([office.now.label, office.now.occasion, office.now.occasionPhrase], ['Today', 'office', 'the office']);
+  const qml = readFileSync(new URL('../omarchy/Panel.qml', import.meta.url), 'utf8');
+  assert.match(qml, /root\.pick\.occasionPhrase \? "for " \+ root\.pick\.occasionPhrase : root\.pick\.match \+ "% match"/);
+  assert.match(qml, /text: modelData\.occasionPhrase \? "for " \+ modelData\.occasionPhrase : ""/);
   assert.deepEqual(out.days.flatMap(d => [d.day?.id, d.night?.id]).filter(Boolean), plan.map(p => String(p.pick.fragrance.id)), 'every window as the app plans it');
   const plain = widgetPayload(fragrances, syntheticForecast(7), place, at, { ...journal, events: [] });
   assert.notEqual(plain.days[3].night.id, out.days[3].night.id, 'without it the night goes to the daily pick');

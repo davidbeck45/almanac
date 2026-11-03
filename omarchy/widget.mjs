@@ -109,23 +109,27 @@ export function widgetBottles(fragrances, hidden, journal = null) {
 const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
 
 // A window's pick, and the bottles that suit it as well (planTies': at most
-// two, each with how it differs, src/contrast.js).
+// two, each with how it differs, src/contrast.js). A window planned for an
+// occasion in the app carries it, and its phrase ("a date") for the panel to
+// say, as Now and the Week mark it ("For a date").
 function brief(p, ties = []) {
   if (!p?.pick) return null;
-  const f = p.pick.fragrance;
+  const f = p.pick.fragrance, o = p.win.occasion;
   return {
-    slot: p.win.slot, label: p.win.label, id: String(f.id), name: f.name, brand: f.brand, tier: p.pick.tier, ...(p.win.occasion && { occasion: p.win.occasion.id }),
+    slot: p.win.slot, label: p.win.label, id: String(f.id), name: f.name, brand: f.brand, tier: p.pick.tier,
+    ...(o && { occasion: o.id, occasionPhrase: o.phrase ?? o.label.toLowerCase() }),
     ties: ties.map(({ entry, tags }) => ({ id: String(entry.fragrance.id), name: entry.fragrance.name, brand: entry.fragrance.brand, tags })),
   };
 }
 
 // The window to wear now, in full; `tieLine` is the panel's one line on its
-// ties ("Legacy (fresher) suits tonight just as well."), '' with none.
+// ties ("Legacy (fresher) suits tonight just as well."), '' with none, and
+// the runner-up the best after them, as they're equal choices.
 function detail(p, ties = []) {
   if (!p?.pick) return null;
   const { win, pick, ranked } = p;
   const f = pick.fragrance;
-  const runnerUp = ranked.find(r => r !== pick);
+  const runnerUp = ranked.find(r => r !== pick && !ties.some(t => t.entry === r));
   return {
     ...brief(p, ties),
     tieLine: tieLine(ties, win),
