@@ -545,6 +545,7 @@ export const CONSENSUS = {
   'Hawas Elixir': { range: [15, 52], kind: 'warm' }, // Le Male Elixir clone: honey-vanilla-tobacco, winter
   'Cedrus Blanc': { range: [45, 85], kind: 'fresh' }, // aldehydic cedar-citrus, spring to fall
   'Terra': { range: [25, 58], kind: 'warm' }, // amber-spice, fall and winter
+  'Jean Lowe Summer Vibes': { range: [65, 100], kind: 'fresh' }, // Sun Song clone: citrus-neroli, summer
 };
 
 /** How far (°F) feelsF sits outside the bottle's consensus range: 0 inside, null without one. */

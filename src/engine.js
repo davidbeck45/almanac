@@ -358,7 +358,7 @@ function transitionWeights(feelsF, side) {
 // season it suits. Read as an even split, a 52°F day was half spring, which
 // fall-voted rich bottles aren't: CH Men Prive's range ended at 47°F though
 // it was the backtest's raw pick on 13% of its windows above that, and the
-// app's Now picks fell outside their bottle's range 5.7% of the time (1.4%
+// app's Now picks fell outside their bottle's range 5.7% of the time (1.5%
 // now); against the backtest's collector ranges the ends miss by 6.3°F, not
 // 8.8. The range runs out from the peak to where the
 // fit falls COMFORT_DROP below it; lowF / highF are null when it runs off the
