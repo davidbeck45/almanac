@@ -21,7 +21,7 @@ import {
 } from '../src/views/compare.js';
 import { parseRoute, routeHash, compareIds } from '../src/app/router.js';
 import { shareToken, customRecord } from '../src/custom.js';
-import { rank, comfortRange } from '../src/engine.js';
+import { rank, comfortRange, performanceRating } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { summarize } from '../src/weather.js';
 import { esc, matchPct } from '../src/ui.js';
@@ -746,7 +746,15 @@ test('compare marks one leader by the value it shows, and calls lasting and loud
   assert.match(bottlePageHTML(modelOf(rated)), /Lasts 8\.4 · Projects \d\.\d <span>of 10 on <a [^>]*>Parfumo<\/a> and Fragrantica<\/span>/);
   assert.match(bottlePageHTML(modelOf(byName('Sandalwood & Musk'))), /Lasts ≈ 6\.8 · Projects ≈ 6\.7 <span>of 10 on/);
   assert.match(bottlePageHTML(modelOf({ ...rated, performance: undefined })), /Lasts 8\.4 · Projects 8\.1 <span>of 10 on <a [^>]*>Parfumo<\/a><\/span>/, 'Parfumo’s alone');
-  assert.match(bottlePageHTML(modelOf(guess)), /Lasts 4\.0 of 5 · Projects 2\.9 of 4 <span>on Fragrantica/);
+  // Fragrantica's votes alone read on the same 0–10, as Compare reads them, not as its 1–5 and 1–4.
+  const est = performanceRating(guess);
+  const head = bottlePageHTML(modelOf(guess));
+  assert.ok(head.includes(`Lasts ≈ ${est.longevity.toFixed(1)} · Projects ≈ ${est.sillage.toFixed(1)} <span>of 10, estimated from Fragrantica votes</span>`), head.match(/<p class="performance">.*?<\/p>/)?.[0]);
+  assert.ok(!/ of [45]\b/.test(head.match(/<p class="performance">.*?<\/p>/)[0]));
+  assert.ok(lasts.includes(`≈ ${est.longevity.toFixed(1)}<small> of 10`), 'the figure Compare shows');
+  // Neither crowd: Fragella's words, else nothing.
+  assert.match(bottlePageHTML(modelOf({ ...guess, performance: undefined, longevity: 'Long lasting', sillage: 'Moderate' })), /<p class="performance">Long lasting · Moderate projection<\/p>/);
+  assert.ok(!bottlePageHTML(modelOf({ ...guess, performance: undefined })).includes('class="performance"'));
 });
 
 test('tonight’s pick is a bottle you own when one is among them', () => {
