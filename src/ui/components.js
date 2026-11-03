@@ -236,8 +236,9 @@ export function segLinksHTML(items, { label, cls = '' }) {
 
 // `locked`: it shows a state something else holds it in (aria-disabled, so
 // it keeps its Tab stop and its label is still read); its action ignores it.
-export function switchHTML({ on, label, action, id, locked = false }) {
-  return `<button class="switch" role="switch" aria-checked="${on}" data-action="${esc(action)}" data-id="${esc(id)}" aria-label="${esc(label)}"${locked ? ' aria-disabled="true"' : ''}><span></span></button>`;
+// `describedBy`: the id of the text that says what it does, or why it's locked.
+export function switchHTML({ on, label, action, id, locked = false, describedBy = '' }) {
+  return `<button class="switch" role="switch" aria-checked="${on}" data-action="${esc(action)}" data-id="${esc(id)}" aria-label="${esc(label)}"${locked ? ' aria-disabled="true"' : ''}${describedBy ? ` aria-describedby="${esc(describedBy)}"` : ''}><span></span></button>`;
 }
 
 // ---------- Rows ----------

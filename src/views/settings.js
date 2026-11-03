@@ -35,16 +35,18 @@ const group = (title, rows) => `<section class="set-group" aria-labelledby="set-
     <h2 id="set-${title.toLowerCase().replace(/\W+/g, '-')}">${esc(title)}</h2>
     <div class="set-rows">${rows}</div>
   </section>`;
-const row = (label, control, { glyph = '', note = '' } = {}) => `<div class="set-row">
-    <span class="set-label">${glyph}<span class="set-text">${label}${note ? `<small>${note}</small>` : ''}</span></span>${control}
+// `noteId`: the note describes the row's control (its aria-describedby).
+const row = (label, control, { glyph = '', note = '', noteId = '' } = {}) => `<div class="set-row">
+    <span class="set-label">${glyph}<span class="set-text">${label}${note ? `<small${noteId ? ` id="${noteId}"` : ''}>${note}</small>` : ''}</span></span>${control}
   </div>`;
 
 // The sky's switch says what the device holds it to: with Reduce Motion on
 // it's still whatever the setting says (base.css), so the switch shows off
-// and locked, and the setting keeps for when Reduce Motion goes off.
+// and locked, and the setting keeps for when Reduce Motion goes off. Its
+// note says why to a screen reader too, which hears it as the description.
 const skyRow = (stillSky, deviceStill) => row('Animate the sky',
-  switchHTML({ on: !stillSky && !deviceStill, label: 'Animate the sky', action: 'sky-motion', id: 'sky', locked: deviceStill }),
-  { note: deviceStill ? 'Held still by Reduce Motion' : 'Stars, rain and smoke move' });
+  switchHTML({ on: !stillSky && !deviceStill, label: 'Animate the sky', action: 'sky-motion', id: 'sky', locked: deviceStill, describedBy: 'sky-note' }),
+  { note: deviceStill ? 'Held still by Reduce Motion' : 'Stars, rain and smoke move', noteId: 'sky-note' });
 
 // When the forecast on screen was fetched: the time, and the day once it
 // isn't today's (a saved one can stand in for days).

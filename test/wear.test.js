@@ -1441,3 +1441,46 @@ test('a plan link shows what it would plan, in the plan’s words, and plans not
     state.base = state.route = null;
   }
 });
+
+test('a plan link opened after one of today’s windows has ended calls it gone by, as the Week no longer shows it', t => {
+  // 10:59 pm at the place (UTC-4), with the forecast just in.
+  const nowMs = Date.parse('2026-11-03T02:59:00Z');
+  t.mock.timers.enable({ apis: ['Date'], now: nowMs });
+  const { state } = app;
+  const live = { ...syntheticForecast(8, { start: '2026-11-02' }), fetchedAt: nowMs };
+  Object.assign(state, { demo: { fetched: '2026-11-02', fragrances }, forecast: live, wx: summarize(live, nowMs), loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], slot: null });
+  const route = plan => ({ dest: 'wear', pane: 'week', arg: null, query: { plan } });
+  const pane = wear.wear.panes.find(p => p.id === 'week');
+  const toasts = [];
+  const ui = { render() { app.computeToday(); }, showToast(html) { toasts.push(html); } };
+  try {
+    assert.match(pane.render({}, route('2026-11-02 night formal')), /Plan this\?.*Formal wear tonight/s, 'still on');
+    // A tap after 11 finds tonight over: nothing planned, and the card says so.
+    state.base = state.route = route('2026-11-02 night formal');
+    t.mock.timers.tick(2 * 60e3);
+    wear.actions['plan-link-apply']({}, ui);
+    assert.deepEqual(state.events, [], 'nothing planned for a window no one will see');
+    assert.deepEqual(toasts, []);
+    assert.equal(state.base.query.plan, '2026-11-02 night formal', 'the card stays to say why');
+    // Opened at 11:30 pm: the Week starts tomorrow, and tonight is gone by.
+    t.mock.timers.tick(29 * 60e3);
+    state.wx = summarize(live, Date.now());
+    assert.equal(state.wx.todayISO, '2026-11-02');
+    assert.ok(!app.computeWeek().some(d => d.dateISO === '2026-11-02'), 'the Week has nothing left of today');
+    const plan = wear.linkedPlan(route('2026-11-02 night formal; 2026-11-03 night formal'));
+    assert.deepEqual(plan.items.map(i => [i.dateISO, i.past]), [['2026-11-02', true], ['2026-11-03', false]]);
+    const html = clean(pane.render({}, route('2026-11-02 night formal')), 'a plan link for a window over');
+    assert.match(html, /Nothing new to plan/);
+    assert.ok(html.includes('<b>Formal wear on the night of Nov 2</b><small>Gone by</small>'), 'not "Formal wear tonight" to plan');
+    assert.ok(!html.includes('plan-link-apply'));
+
+    // At 5:30 pm, the day window is over and tonight's still to come.
+    state.wx = summarize(live, Date.parse('2026-11-02T21:30:00Z'));
+    assert.deepEqual(wear.linkedPlan(route('2026-11-02 office; 2026-11-02 night formal')).items.map(i => [i.slot, i.past]), [['day', true], ['night', false]]);
+    state.wx = summarize(live, Date.parse('2026-11-02T20:30:00Z'));
+    assert.deepEqual(wear.linkedPlan(route('2026-11-02 office')).items.map(i => i.past), [false], 'until 5');
+  } finally {
+    for (const e of [...state.events]) app.setEvent(e.dateISO, e.slot, null);
+    state.base = state.route = null;
+  }
+});

@@ -382,12 +382,20 @@ test('a page reloads into another version once that version takes over, never fo
   assert.equal(watchVersion(undefined, new EventTarget(), { reload() {} })(), false, 'no service workers, never outdated');
 });
 
-test('a module that doesn’t arrive leaves a message with Reload, not a blank page', async () => {
+test('a module that doesn’t arrive leaves a message with Reload, not a blank page', () => {
+  // One of main.js's own imports (early.js and the forecast's modules) fails
+  // its script, and the page says so with what index.html holds: a module
+  // can't, when it may be the one that didn't arrive.
+  assert.match(html, /<script type="module" src="src\/main\.js" onerror="showUnloaded\(\)"><\/script>/);
   const main = read('src/main.js');
+  assert.ok(!/^import[^;]*showUnloaded/m.test(main) && !read('src/app/early.js').includes('showUnloaded'), 'no module holds it');
+  // The shell's, imported once the forecast is out, fails main.js's await.
   const caught = main.slice(main.indexOf("await import('./app/shell.js')"));
-  assert.match(caught, /^await import\('\.\/app\/shell\.js'\)\.catch\(/, 'main.js catches the shell’s import');
+  assert.match(caught, /^await import\('\.\/app\/shell\.js'\)\.catch\(err => \{\s*showUnloaded\(\);/, 'main.js catches the shell’s import');
   assert.ok(caught.indexOf('boot(') > caught.indexOf('});'), 'and only the import: an error in boot never wipes a page that works');
-  const { showUnloaded } = await import('../src/app/early.js');
+  const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]).find(code => code.includes('function showUnloaded'));
+  assert.ok(script, 'a classic script in index.html, which needs nothing to arrive');
+  const { showUnloaded } = vm.runInNewContext(`${script}; ({ showUnloaded })`);
   let reloaded = false, onClick = null;
   const button = { addEventListener: (type, fn) => { if (type === 'click') onClick = fn; } };
   let skipped = false;

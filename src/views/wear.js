@@ -14,6 +14,7 @@ import { setSkin, loadSkin, loadAsked, markAsked, wasAsked } from '../skin.js';
 import { theme } from '../theme.js';
 import { toggleWear, wearStamp, wornIn, journalStats, journalFreshness, shiftISO, wearSettled, loadHistory } from '../history.js';
 import { parseEventText } from '../events.js';
+import { WINDOWS } from '../weather.js';
 import { routeHash, go } from '../app/router.js';
 import { esc, cap, temp, deg, plural, shortDate, weekdayShort, windowRange, feelWords, displayReasons, moveText, ratedText, listLabel } from '../ui.js';
 import {
@@ -22,7 +23,7 @@ import {
 } from '../ui/components.js';
 import {
   state, savePrefs, activeFragrances, sourceRecords, rankedFragrances, nowSlot, todaySlots, todayPlan, computeToday, computeWeek,
-  rankContext, canWear, wornId, nowHour, findRecord, eventAt, setEvent, todayISO,
+  rankContext, canWear, wornId, nowHour, readClock, findRecord, eventAt, setEvent, todayISO,
 } from '../app/state.js';
 import * as trip from './wear/trip.js';
 import * as when from './wear/when.js';
@@ -471,9 +472,11 @@ export function weekHTML(days) {
  * The route's plan link as the card lists it: { items: [{ dateISO, slot,
  * occasion, past, was: the occasion planned on that window already, or
  * null }] } in time order, { error: true } when it doesn't read, or null
- * when there's none.
+ * when there's none. `past`: the window has ended, by the clock the Week is
+ * read with (state.wx; the device's before a forecast is in), so tonight is
+ * gone by at 11:30 pm, when the Week starts tomorrow.
  */
-export function linkedPlan(route, today = todayISO()) {
+export function linkedPlan(route, today = todayISO(), hour = state.wx ? nowHour() : new Date().getHours()) {
   const text = route?.query?.plan;
   if (!text || text === answeredUnder) return null;
   let events;
@@ -483,7 +486,8 @@ export function linkedPlan(route, today = todayISO()) {
     return { error: true, items: [] };
   }
   if (!events.length) return null;
-  const items = events.map(e => ({ ...e, past: e.dateISO < today, was: occasionById(eventAt(e)?.occasion) ?? null }))
+  const past = e => e.dateISO < today || (e.dateISO === today && hour >= WINDOWS[e.slot][1]);
+  const items = events.map(e => ({ ...e, past: past(e), was: occasionById(eventAt(e)?.occasion) ?? null }))
     .sort((a, b) => a.dateISO.localeCompare(b.dateISO) || (a.slot === 'night') - (b.slot === 'night'));
   return { items };
 }
@@ -953,12 +957,15 @@ export const actions = {
   // A plan link's Plan them: each event still to come on its window (one
   // there already gives way), then the Week shows them, focus on the first
   // (the page's heading when it's past the forecast, or the Week's still
-  // loading).
+  // loading). Read by the clock as it is: a window that ended since the card
+  // was drawn isn't planned, and with nothing left the card says so.
   'plan-link-apply'(el, app) {
+    readClock();
     const plan = linkedPlan(state.base);
     if (!plan || plan.error) return;
     const today = todayISO();
     const set = planToSet(plan);
+    if (!set.length) return app.render();
     for (const e of set) setEvent(e.dateISO, e.slot, e.occasion.id);
     dropPlan();
     app.render();

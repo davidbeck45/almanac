@@ -22,7 +22,7 @@
 // every app file's, so one failing file never blanks an installed app. In a
 // launch that met a new version, that copy is the older one beside new
 // files, as it is offline. A file with no saved copy passes the error on
-// (a module's: the page says it didn't finish loading, src/app/early.js).
+// (a module's: the page says it didn't finish loading, index.html).
 // A new CACHE takes over the open pages (skipWaiting, clients.claim) and
 // deletes the old one, so a page whose files are the old version would load
 // the new one's from then on (a lazy import, the pool worker): it reloads
