@@ -130,6 +130,9 @@ button.cal-cell:active { transform: scale(0.95); }
 .dust-list span { display: grid; min-width: 0; }
 .dust-list b { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
 .dust-list small { overflow: hidden; color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); text-overflow: ellipsis; white-space: nowrap; }
+/* When this week it would suit: a line of its own, wrapping rather than cut. */
+.dust-list .dust-when { color: var(--text-secondary); white-space: normal; }
+.dust-list .dust-when.on { color: var(--ambient); }
 @container page (min-width: 600px) { .dust-list { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 /* Under a 360px phone two columns would cut a long word ("Sandalwood"). */
 @container page (max-width: 327px) { .dust-list { grid-template-columns: minmax(0, 1fr); } }

@@ -3,7 +3,7 @@
 // in the dataset. No DOM here, so views and tests import it in Node; the
 // shell (src/app/shell.js) renders and handles events.
 import { rank, rankEvent, planWindows } from '../engine.js';
-import { planTies } from '../contrast.js';
+import { planTies, TIE_POINTS } from '../contrast.js';
 import { week } from '../weather.js';
 import { loadLocation } from '../location.js';
 import { loadHistory, wornIn, journalStats, journalCalendar, occasionCounts } from '../history.js';
@@ -14,7 +14,7 @@ import { loadMine, saveMine, loadActive, saveActive, localMatches } from '../col
 import { fragranticaLibrary } from '../fragrantica.js';
 import { onPoolRecords } from './pool.js';
 import { setHidden } from '../hidden.js';
-import { setUnits } from '../ui.js';
+import { setUnits, matchPct } from '../ui.js';
 import { setTheme } from '../theme.js';
 
 const PREFS_KEY = 'scentcast.prefs';
@@ -328,6 +328,28 @@ export function wearInfo(id) {
   return { count: stats.wears, last: stats.lastWorn.get(id) ?? null };
 }
 
+/**
+ * When this week a bottle would suit, from the Week's own plan (computeWeek's
+ * days): { kind: 'planned', win, ctx } for the first window it's the pick
+ * of, else { kind: 'suits', … } for the first whose pick it comes within
+ * TIE_POINTS of (its displayed match, as toss-ups count) and that has no
+ * wear logged (the choice is made), else { kind: 'none' }: this week's
+ * weather isn't its.
+ */
+export function dustWhen(id, days) {
+  const windows = days.flatMap(d => [d.day, d.night]).filter(Boolean);
+  const at = (kind, p) => ({ kind, win: p.win, ctx: p.ctx });
+  const planned = windows.find(p => p.pick.fragrance.id === id);
+  if (planned) return at('planned', planned);
+  const suits = windows.find(p => {
+    const entry = !wornIn(state.history, p.win.dateISO, p.win.slot) && p.ranked.find(r => r.fragrance.id === id);
+    return entry && matchPct(p.pick) - matchPct(entry) <= TIE_POINTS;
+  });
+  return suits ? at('suits', suits) : { kind: 'none' };
+}
+
+// Gathering dust says when this week each idle bottle would suit
+// (`when`, dustWhen), once the forecast is in; null before.
 export function journalData() {
   const today = todayISO();
   const stats = journalStats(state.history, today, DUSTY_AFTER_DAYS);
@@ -336,7 +358,13 @@ export function journalData() {
     .filter(d => !d.last || d.last < stats.since)
     .sort((a, b) => (a.last ?? '').localeCompare(b.last ?? ''))
     .slice(0, 6);
-  return { stats, dusty, todayISO: today, calendar: journalCalendar(state.history, today, 5) };
+  const days = dusty.length && state.forecast && state.wx ? computeWeek() : null;
+  return {
+    stats,
+    dusty: dusty.map(d => ({ ...d, when: days ? dustWhen(d.f.id, days) : null })),
+    todayISO: today,
+    calendar: journalCalendar(state.history, today, 5),
+  };
 }
 
 // ---------- Finding bottles ----------

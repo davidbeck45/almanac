@@ -256,6 +256,26 @@ test('a wear logged after the fact is said by when it was', () => {
   assert.equal(wardrobe.logDayTitle('2026-11-01', today), 'Yesterday, Nov 1');
 });
 
+test('Gathering dust says when this week each bottle would suit, and opens it in that window’s list', () => {
+  const win = (dateISO, slot) => ({ dateISO, slot });
+  const data = {
+    stats: { wears: 1, bottles: 1, top: [[mango.id, 1]], lastWorn: new Map([[mango.id, '2026-10-01']]) },
+    calendar: [],
+    dusty: [
+      { f: aventus, last: null, when: { kind: 'planned', win: win('2026-11-03', 'night'), ctx: 'w:2026-11-03:night' } },
+      { f: nish, last: '2026-09-20', when: { kind: 'suits', win: win('2026-11-07', 'night'), ctx: 'w:2026-11-07:night' } },
+      { f: many[0], last: null, when: { kind: 'none' } },
+      { f: many[1], last: null, when: null },
+    ],
+    todayISO: '2026-11-02',
+  };
+  const html = wardrobe.wornHTML(data, id => [mango, aventus, nish].find(f => f.id === id));
+  assert.match(html, /data-ctx="w:2026-11-03:night" data-id="9828">[^]*?<small>Not worn yet<\/small><small class="dust-when on">Week’s pick for tomorrow night<\/small>/);
+  assert.match(html, /data-ctx="w:2026-11-07:night" data-id="91000">[^]*?<small>Last worn Sep 20<\/small><small class="dust-when on">Would suit Sat night<\/small>/);
+  assert.match(html, /data-ctx="" data-id="1">[^]*?<small class="dust-when">Not this week’s weather<\/small>/);
+  assert.match(html, /data-ctx="" data-id="2">[^]*?<small>Not worn yet<\/small><\/span>/, 'before the forecast, nothing to say');
+});
+
 test('the Insights map’s skeleton has a vial for every cell of both slots', () => {
   assert.equal((insightsSkeletonHTML().match(/sk-vial/g) ?? []).length, 80);
 });

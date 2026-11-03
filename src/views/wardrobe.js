@@ -19,6 +19,7 @@ import {
   fullRecords, collectionLabel, deviceToday, todayISO, sourceRecords,
 } from '../app/state.js';
 import { warmPool } from '../app/pool.js';
+import { whenPhrase } from './wear/when.js';
 import { liveHTML, say, speak } from './wardrobe/parts.js';
 import * as insights from './wardrobe/insights.js';
 import * as wishlist from './wardrobe/wishlist.js';
@@ -168,10 +169,19 @@ function calendarKeys(e) {
   days[to].focus();
 }
 
+/** When this week a bottle gathering dust would suit (src/app/state.js dustWhen), in a few words. */
+export function dustWhenText(when, todayISO) {
+  if (when.kind === 'none') return 'Not this week’s weather';
+  const at = whenPhrase(when.win, todayISO);
+  return when.kind === 'planned' ? `Week’s pick for ${at}` : `Would suit ${at}`;
+}
+
 /**
  * The journal. It keeps every wear on this device, whichever list was ranked;
- * Gathering dust reads the ranked list's rotation. `list`: that list's name,
- * given when the month's wears include bottles outside it, so both say so.
+ * Gathering dust reads the ranked list's rotation, and once the forecast is
+ * in says when this week each bottle would suit (`when`), opening its page in
+ * that window's list. `list`: that list's name, given when the month's wears
+ * include bottles outside it, so both say so.
  */
 export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confirmClear = false, list = null } = {}) {
   if (!stats.wears && !stats.lastWorn.size) {
@@ -213,7 +223,7 @@ export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confir
         <span class="rank-bar"><span style="width:${((n / peak) * 100).toFixed(0)}%"></span></span><span class="rank-n">${n}×</span></li>`).join('')}</ul>`
     : '<p class="muted small">Nothing logged in the last 30 days.</p>';
   const dustList = dusty.length
-    ? `<ul class="dust-list">${dusty.map(({ f, last }) => `<li><button data-action="open" data-ctx="" data-id="${esc(f.id)}">${img(f)}<span><b>${esc(f.name)}</b><small>${last ? `Last worn ${esc(relativeDay(last, todayISO))}` : 'Not worn yet'}</small></span></button></li>`).join('')}</ul>`
+    ? `<ul class="dust-list">${dusty.map(({ f, last, when }) => `<li><button data-action="open" data-ctx="${esc(when?.ctx ?? '')}" data-id="${esc(f.id)}">${img(f)}<span><b>${esc(f.name)}</b><small>${last ? `Last worn ${esc(relativeDay(last, todayISO))}` : 'Not worn yet'}</small>${when ? `<small class="dust-when${when.kind === 'none' ? '' : ' on'}">${esc(dustWhenText(when, todayISO))}</small>` : ''}</span></button></li>`).join('')}</ul>`
     : '<p class="muted small">Every bottle in rotation got worn this month. Nice.</p>';
   return `<section class="card journal" aria-labelledby="journal-title">
     ${sectionHead('Last 30 days', '', { id: 'journal-title' })}

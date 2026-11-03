@@ -6,7 +6,7 @@ import { rank, PLAN_MARGIN } from '../src/engine.js';
 import { OCCASIONS, occasionById } from '../src/occasions.js';
 import { sprayGuide } from '../src/spray.js';
 import { setSkin, loadSkin, loadAsked, markAsked } from '../src/skin.js';
-import { planTies, rankedTies, whenOf, TIE_OCCASIONS } from '../src/contrast.js';
+import { planTies, rankedTies, whenOf, TIE_OCCASIONS, TIE_POINTS } from '../src/contrast.js';
 import { summarize, week } from '../src/weather.js';
 import { renderScene } from '../src/scene.js';
 import { shiftISO } from '../src/history.js';
@@ -16,7 +16,7 @@ import * as trip from '../src/views/wear/trip.js';
 import * as when from '../src/views/wear/when.js';
 import { placeSheetHTML, datePillHTML } from '../src/views/wear/pickers.js';
 import { wxIconFor } from '../src/ui/components.js';
-import { esc } from '../src/ui.js';
+import { esc, matchPct } from '../src/ui.js';
 import * as app from '../src/app/state.js';
 import { bottleModel } from '../src/views/bottle.js';
 import { syntheticForecast } from './fixtures.js';
@@ -705,6 +705,53 @@ test('a morning not logged: Now offers to log it once the day has rolled over, a
     assert.equal(state.sheet.slot, 'night');
   } finally {
     Object.assign(state, { history: [], sheet: null, route: null });
+  }
+});
+
+test('Gathering dust reads the Week’s own plan: a bottle planned on it, else one within a point of a pick, else none', () => {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  const wxNow = summarize(live);
+  Object.assign(state, { demo: { fetched: wxNow.todayISO, fragrances }, forecast: null, wx: null, loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [] });
+  try {
+    // Never worn, every bottle gathers dust; before the forecast, nothing to say of when.
+    assert.ok(app.journalData().dusty.every(d => d.when === null));
+    Object.assign(state, { forecast: live, wx: wxNow });
+    const { dusty } = app.journalData();
+    const windows = app.computeWeek().flatMap(d => [d.day, d.night]).filter(Boolean);
+    assert.ok(dusty.length && dusty.some(d => d.when.kind === 'planned'), dusty.map(d => d.when.kind).join(' '));
+    for (const { f, when } of dusty) {
+      const first = windows.find(p => p.pick.fragrance.id === f.id);
+      const close = windows.find(p => { const e = p.ranked.find(r => r.fragrance.id === f.id); return matchPct(p.pick) - matchPct(e) <= TIE_POINTS; });
+      const expected = first ? ['planned', first.ctx] : close ? ['suits', close.ctx] : ['none', undefined];
+      assert.deepEqual([when.kind, when.ctx], expected, f.name);
+    }
+    // A pick's own bottle reads as planned, from the dust list's own pure reading too.
+    const pick = windows[1].pick.fragrance;
+    assert.deepEqual(app.dustWhen(pick.id, app.computeWeek()).kind, 'planned');
+  } finally {
+    Object.assign(state, { forecast: null, wx: null, history: [] });
+  }
+});
+
+test('when a bottle gathering dust would suit: its first window as the Week’s pick, else within a point of one with nothing logged', () => {
+  const { state } = app;
+  const entry = (id, score) => ({ fragrance: { id }, score });
+  const slot = (dateISO, slotName, pick, ranked) => ({ win: { dateISO, slot: slotName }, ctx: `w:${dateISO}:${slotName}`, pick: entry(pick, ranked[pick]), ranked: Object.entries(ranked).map(([id, sc]) => entry(id, sc)) });
+  const days = [
+    { day: slot('2026-11-02', 'day', 'a', { a: 0.9, b: 0.893, c: 0.7 }), night: slot('2026-11-02', 'night', 'a', { a: 0.88, b: 0.86, c: 0.8 }) },
+    { day: null, night: slot('2026-11-03', 'night', 'c', { c: 0.8, b: 0.795 }) },
+  ];
+  try {
+    state.history = [];
+    assert.deepEqual(app.dustWhen('c', days), { kind: 'planned', win: days[1].night.win, ctx: 'w:2026-11-03:night' });
+    assert.deepEqual(app.dustWhen('b', days), { kind: 'suits', win: days[0].day.win, ctx: 'w:2026-11-02:day' }, '89 against 90: as good');
+    // A wear logged today: that choice is made, so the next window that close.
+    state.history = [{ id: 'a', date: '2026-11-02', slot: 'day' }];
+    assert.equal(app.dustWhen('b', days).ctx, 'w:2026-11-03:night');
+    assert.deepEqual(app.dustWhen('x', days), { kind: 'none' });
+  } finally {
+    state.history = [];
   }
 });
 
