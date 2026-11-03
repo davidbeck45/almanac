@@ -333,6 +333,55 @@ test('a server error is no answer: the saved copy opens the app, page, modules a
   assert.equal(await w.get('src/main.js'), '/almanac/src/main.js from the network (v2)');
 });
 
+test('a page reloads into another version once that version takes over, never for its own', async () => {
+  const { VERSION, watchVersion } = await import('../src/app/version.js');
+  assert.equal(VERSION, sw.match(/const CACHE = '([\w-]+)'/)[1], 'src/app/version.js names the cache sw.js keeps this version in: bump both');
+  const tick = () => new Promise(resolve => setTimeout(resolve));
+  const page = cached => {
+    const workers = new EventTarget(), doc = Object.assign(new EventTarget(), { hidden: false });
+    let reloads = 0;
+    const outdated = watchVersion(workers, doc, { caches: { has: async name => cached.includes(name) }, reload: () => reloads++ });
+    return {
+      outdated,
+      reloads: () => reloads,
+      // A worker takes the page over as it starts activating; it's deleted
+      // the caches it doesn't keep once it's activated.
+      async takeOver() {
+        const worker = workers.controller = Object.assign(new EventTarget(), { state: 'activating' });
+        workers.dispatchEvent(new Event('controllerchange'));
+        await tick();
+        assert.equal(outdated(), false, 'not before it’s activated');
+        worker.state = 'activated';
+        worker.dispatchEvent(new Event('statechange'));
+        await tick();
+      },
+      hide() { doc.hidden = true; doc.dispatchEvent(new Event('visibilitychange')); },
+    };
+  };
+  // A first visit's own install, or a launch whose files came from the
+  // network while the new sw.js installed behind it: its version's cache is
+  // there, and nothing reloads.
+  let p = page([VERSION, 'almanac-data']);
+  await p.takeOver();
+  p.hide();
+  assert.equal(p.outdated(), false);
+  assert.equal(p.reloads(), 0);
+  // Another version took over and deleted this one's cache: the next page
+  // change reloads, and so does going out of sight.
+  p = page(['almanac-v999', 'almanac-data']);
+  await p.takeOver();
+  assert.equal(p.outdated(), true);
+  assert.equal(p.reloads(), 0, 'not under someone’s eyes');
+  p.hide();
+  assert.equal(p.reloads(), 1);
+  // Out of sight already when it took over.
+  p = page([]);
+  p.hide();
+  await p.takeOver();
+  assert.equal(p.reloads(), 1);
+  assert.equal(watchVersion(undefined, new EventTarget(), { reload() {} })(), false, 'no service workers, never outdated');
+});
+
 test('a module that doesn’t arrive leaves a message with Reload, not a blank page', async () => {
   const main = read('src/main.js');
   const caught = main.slice(main.indexOf("await import('./app/shell.js')"));

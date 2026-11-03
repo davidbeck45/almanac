@@ -23,6 +23,7 @@ import {
   state, computeToday, sourceRecords, knownBottles, library, setActive as chooseList, viewingDemo,
   addToMine as addRecord, markBottlesLoaded, loadBottles, keepBottles, loadFullRecord, retryClimate,
 } from './state.js';
+import { watchVersion } from './version.js';
 import {
   registerSheets, renderSheet, openSheet, updateSheet, closeSheet, sheetPopped, sheetEntry, replacePageURL, refocus, refocusNear, inSight,
   keepingFocus, showToast, hideToast, settleToast, watchToast, morph, canMorph, visible, reducedMotion, SHEET_OUT_MS,
@@ -518,6 +519,10 @@ function navigate(hash, { replace = false, quiet = false, instant = false, resto
   transition(next, { quiet, instant, restore });
 }
 
+// Whether another version took over this page (src/app/version.js; boot
+// starts the watch).
+let outdated = () => false;
+
 // Moves to a route: the page under a bottle page changes only when the route
 // isn't one. Closing a bottle page by Back flies the bottle home.
 // A route a view transition is on its way to (Back fires popstate and then
@@ -527,6 +532,9 @@ let arriving = null;
 function transition(next, { quiet = false, instant = false, restore = false } = {}) {
   const prev = state.route;
   if (sameRoute(arriving ?? prev, next)) return;
+  // Another version took over mid-visit: the page reloads into it whole,
+  // onto the route, which is in the URL already.
+  if (outdated()) return location.reload();
   if (prev?.dest === 'bottle' && next.dest !== 'bottle' && sameRoute(state.base, next) && canMorph()) {
     const from = $('#bottle .bp-bottle img');
     const id = prev.arg;
@@ -885,6 +893,11 @@ export async function boot({ early: asked = null } = {}) {
     history.replaceState(null, '', url);
   }
   listen();
+  // Out of sight, an outdated page reloads, unless a sheet is open: someone
+  // may be halfway through it, and the next page change reloads instead.
+  outdated = watchVersion(navigator.serviceWorker, document, {
+    reload: () => { if (!state.sheet) location.reload(); },
+  });
   statusNode(); // there before anything is said in it
   const first = parseRoute(location.hash || HOME, PANES);
   go(routeHash(first), { replace: true });

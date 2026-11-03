@@ -23,7 +23,12 @@
 // launch that met a new version, that copy is the older one beside new
 // files, as it is offline. A file with no saved copy passes the error on
 // (a module's: the page says it didn't finish loading, src/app/early.js).
-const CACHE = 'almanac-v24';
+// A new CACHE takes over the open pages (skipWaiting, clients.claim) and
+// deletes the old one, so a page whose files are the old version would load
+// the new one's from then on (a lazy import, the pool worker): it reloads
+// instead, at its next page change or once out of sight. It knows its
+// version by VERSION in src/app/version.js, which is CACHE: bump both.
+const CACHE = 'almanac-v25';
 const NETWORK_WAIT_MS = 2500;
 const SLOW_MS = 1000;
 // Dataset files (data/fragrantica/) load a shard at a time as people search
@@ -64,6 +69,7 @@ const SHELL = [
   'src/app/sheets.js',
   'src/app/shell.js',
   'src/app/state.js',
+  'src/app/version.js',
   'src/views/bottle.js',
   'src/views/bottle-check.js',
   'src/views/bottle-crowd.js',
