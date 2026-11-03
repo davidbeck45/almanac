@@ -119,6 +119,16 @@ test('pool owners and reach: owners to a quarter of a doubling, reach a share of
   for (const id of ['60095', '45335', '10190']) assert.ok(!flagsOf(id).includes('mist'), id); // SOL Cheirosa '62 Eau de Parfum, Bourbon, Bombshell
   assert.ok((await loadAbout('104955', load)).flags.includes('mist'), 'My Signature Cologne Mist');
   for (const id of ['90127', '71429']) assert.ok(!(await loadAbout(id, load)).flags.includes('mist'), id); // Tropidelic Eau de Parfum, Marble Cologne
+  // Nor when its page names a perfume's concentration as its format: Be Enchanted "Available as 75 ml EDT", Forever
+  // Red's "Forever Red EDP 75 ml" beside the collection's Fine Fragrance Mist, "Our Gingham Eau de Parfum", Kaleidoscope
+  // "Available as a 50 ml EDP", "First Sight Cologne by Bath & Body Works" (unisex). A mist's page measured against one
+  // stays a mist (Gingham Gorgeous: "a lower concentration of fragrance oils compared to an eau de parfum").
+  for (const id of ['13695', '17109']) assert.ok(!flagsOf(id).includes('mist'), id);
+  for (const id of ['56562', '52392', '93089']) assert.ok(!(await loadAbout(id, load)).flags.includes('mist'), id);
+  assert.ok(flagsOf('81249').includes('mist'), 'Gingham Gorgeous');
+  // A men's bottle whose page calls it a mist is one: "Rose Vanilla Essential Oil Mist is…". Not Atlantic's "sea mist".
+  assert.ok((await loadAbout('81269', load)).flags.includes('mist'), 'Rose Vanilla');
+  assert.ok(!(await loadAbout('59092', load)).flags.includes('mist'), 'Atlantic');
 });
 
 test('discontinued only when a con says so of the bottle itself', () => {

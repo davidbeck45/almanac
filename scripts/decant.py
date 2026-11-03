@@ -67,7 +67,7 @@ only what it needs:
   polarizing (hate share in the pool's top tenth); mist (a body or hair mist,
   body spray or splash, by its name, description or the AI summary: "Book
   Loft Fine Fragrance Mist by", "impressive longevity for a body mist"; or
-  by its house, MIST_HOUSES, unless its name calls it a perfume).
+  by its house, MIST_HOUSES, unless its name or page calls it a perfume).
   `slugs` lists the page
   slugs slug_of() can't derive; `license`.
 - pool-notes.json: `no`, row for row with the pool: each bottle's 8 strongest
@@ -217,18 +217,26 @@ MIST_DESC = re.compile(rf"\b(?:fine )?fragrance mist by\b|\bbody (?:mist|spray|s
 MIST_AI = re.compile(r"\b(?:for|from) (?:a|an) (?:\w+ )?(?:(?:body|fragrance|hair|aromatherapy) (?:mist|spray|splash)|mist|splash)\b|\bin mist form\b"
                      r"|\bthan (?:typical|other|most|basic|usual|regular|standard) (?:\w+ )?(?:body )?mists\b", re.I)
 # Houses whose pages are nearly all mists, though few say so. Of the pool
-# bottles the rules above leave unflagged, 43 of Bath & Body Works' 45 are its
+# bottles the rules above leave unflagged, 35 of Bath & Body Works' 45 are its
 # Fine Fragrance Mists (If You Musk, Warm Vanilla Sugar) and 11 of Sol de
 # Janeiro's 12 its Perfume Mists (the Cheirosas). A bottle of theirs is a mist
 # unless its name calls it a perfume (Tropidelic Eau de Parfum, SOL Cheirosa
-# '62 Eau de Parfum, Marble Cologne; not a Cologne Mist) or it's for men, which
-# at Bath & Body Works is a cologne (Bourbon, Coffee & Whiskey, the other two).
-# Not Victoria's Secret, Phlur or Ellis Brooklyn: their perfumes rarely say so
-# either (Bombshell, Missing Person, Myth), and they're most of what's left
-# (about a third of Victoria's Secret's 41 are Fragrance Mists, Love Spell and
-# Bare Vanilla among them; none of the other two's 31).
+# '62 Eau de Parfum, Marble Cologne; not a Cologne Mist), or its page does (8
+# of those 45: Sweet Pea "available as 50 ml edt", "Forever Red EDP 75 ml"
+# beside the collection's Fine Fragrance Mist; "Our Gingham Eau de Parfum",
+# "Woodlands Cologne by"), though not with a plain "perfume", which any scent
+# is there, nor on a mist's concentration ("a lower concentration of fragrance
+# oils compared to an eau de parfum"); or it's for men, which at Bath & Body
+# Works is a cologne (Bourbon, Coffee & Whiskey, the other two), unless its
+# page calls it a mist ("Rose Vanilla Essential Oil Mist is", "is a lightweight
+# all-over cologne mist"; not Atlantic's "sea mist"). Not Victoria's Secret,
+# Phlur or Ellis Brooklyn: their perfumes rarely say so either (Bombshell,
+# Missing Person, Myth), and they're most of what's left (about a third of
+# Victoria's Secret's 41 are Fragrance Mists, Love Spell and Bare Vanilla among
+# them; none of the other two's 31).
 MIST_HOUSES = {"Bath & Body Works", "Sol de Janeiro"}
 PERFUME_NAME = re.compile(r"\b(?:EDP|EDT|eau de (?:parfum|toilette|cologne)|parfum|perfume|cologne|extrait)\b", re.I)
+PERFUME_PAGE = re.compile(r"\b(?:EDP|EDT|eau de (?:parfum|toilette|cologne)|cologne|extrait)\b(?!\s+mist)", re.I)
 
 
 def is_mist(r: dict) -> bool:
@@ -239,10 +247,26 @@ def is_mist(r: dict) -> bool:
 
 
 def house_mist(r: dict) -> bool:
-    """A MIST_HOUSES bottle that its name doesn't call a perfume (a "Mist" in it always counts), nor a men's cologne."""
-    name = r["name"]
-    return r["brand"] in MIST_HOUSES and (bool(re.search(r"\bmist\b", name, re.I))
-                                          or not (PERFUME_NAME.search(name) or r.get("gender") == "male"))
+    """A MIST_HOUSES bottle that its name or page doesn't call a perfume (a "Mist" in its name always counts), nor a
+    men's cologne its page doesn't call a mist."""
+    name, desc = r["name"], r.get("description") or ""
+    if r["brand"] not in MIST_HOUSES:
+        return False
+    if re.search(r"\bmist\b", name, re.I):
+        return True
+    if PERFUME_NAME.search(name) or perfume_page(desc):
+        return False
+    return r.get("gender") != "male" or mist_page(name, desc)
+
+
+def perfume_page(desc: str) -> bool:
+    """A page with a sentence naming a perfume's concentration as the format, not as what a mist has less of."""
+    return any(PERFUME_PAGE.search(s) and not re.search(r"\bconcentration", s, re.I) for s in re.split(r"(?<=[.!?])\s+|\n+", desc))
+
+
+def mist_page(name: str, desc: str) -> bool:
+    """A page that calls the bottle a mist: after its name ("Rose Vanilla Essential Oil Mist") or as "is a … mist"."""
+    return bool(re.search(rf"\b{re.escape(name)}(?: [\w-]+){{0,3}} mist\b|\bis an? (?:[\w-]+ ){{0,4}}mist\b", desc, re.I))
 
 
 # Reach: how much a bottle's fans also like the pool's REACH_TOP most-owned
