@@ -56,16 +56,25 @@ const todayThere = (trip, nowMs = Date.now()) => placeClock(trip.place, nowMs).t
 
 // ---------- The saved trip ----------
 
+// The trip as the device holds it, as text; null when there's none.
+function storedText() {
+  try {
+    return localStorage.getItem(KEY);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The last trip: { place: { name, region, lat, lon, timezone? }, fromISO,
  * toISO, events: [{ dateISO, slot, occasion: id }], max, windows, fetchedAt },
  * its windows as tripWindows gave them (each `date` revived). Null when
  * there's none or it doesn't read: no window left that packTrip can rank,
- * or no time it was fetched.
+ * or no time it was fetched. `text`: the stored trip, read already.
  */
-export function loadTrip() {
+export function loadTrip(text = storedText()) {
   try {
-    const t = JSON.parse(localStorage.getItem(KEY));
+    const t = JSON.parse(text);
     const iso = x => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x);
     const slot = x => x === 'day' || x === 'night';
     if (!t || !Number.isFinite(t.place?.lat) || !Number.isFinite(t.place?.lon) || !iso(t.fromISO) || !iso(t.toISO) || !Array.isArray(t.windows)) return null;
@@ -380,7 +389,8 @@ const skeleton = (text = 'Checking the weather there…') => `<div class="stack 
 // ---------- The pane ----------
 
 const ui = {
-  saved: undefined, // the packed trip (loadTrip), read on first use
+  saved: undefined, // the packed trip (loadTrip, savedTrip)
+  text: null, // the device's copy of it, as text, when it was read or saved
   draft: null, // the form: { place, fromISO, toISO, events, max, auto }
   editing: false, // the form open over a packed trip
   adding: null, // an event being added: { dateISO, slot, occasion }
@@ -391,10 +401,19 @@ const ui = {
   refreshed: null, // the fetchedAt a refresh was last tried for
 };
 
+// The packed trip, read again once the device's copy changes (another tab
+// saved its own), so this tab never shows, or saves over, a trip changed
+// since; else the one read, so its plan stays packed.
 const savedTrip = () => {
-  if (ui.saved === undefined) ui.saved = loadTrip();
+  const text = storedText();
+  if (ui.saved === undefined || text !== ui.text) Object.assign(ui, { saved: loadTrip(text), text });
   return ui.saved;
 };
+// Saves the trip as this tab's own.
+function keep(trip) {
+  saveTrip(trip);
+  Object.assign(ui, { saved: trip, text: storedText() });
+}
 
 // `auto`: the default dates, from that day, until someone picks their own.
 function draftFrom(trip, today) {
@@ -546,8 +565,8 @@ const onTrip = () => state.route?.dest === 'wear' && state.route.pane === 'trip'
 const onNow = () => state.route?.dest === 'wear' && state.route.pane === 'now';
 
 function finish(app, trip) {
-  saveTrip(trip);
-  Object.assign(ui, { saved: trip, busy: false, editing: false, adding: null, error: '', note: '', draft: draftFrom(trip, todayISO()) });
+  keep(trip);
+  Object.assign(ui, { busy: false, editing: false, adding: null, error: '', note: '', draft: draftFrom(trip, todayISO()) });
   if (!onTrip()) return;
   app.renderPage();
   // The plan's head takes focus, so a screen reader hears where it went.
@@ -575,10 +594,12 @@ export async function freshenTrip(app) {
   if (onTrip()) repaint(app);
   try {
     const windows = await windowsFor(trip, trip);
-    // A new bottle count meanwhile keeps the new weather; new dates don't.
-    if (windows.length && sameDates(ui.saved, trip)) {
-      ui.saved = { ...ui.saved, windows, fetchedAt: Date.now() };
-      saveTrip(ui.saved);
+    // Into the trip as the device holds it now, which this tab or another
+    // may have changed meanwhile: a new bottle count or new events keep the
+    // new weather; a new place or dates don't.
+    const now = savedTrip();
+    if (windows.length && sameDates(now, trip)) {
+      keep({ ...now, windows, fetchedAt: Date.now() });
       ui.note = '';
     }
   } catch {
@@ -628,7 +649,7 @@ export function tripToday(app = null, nowMs = Date.now()) {
   return picks.length ? { ...base, bottles: result.bottles.length, picks } : null;
 }
 
-/** Forget the trip read from the device and its plan (tests; the page reads it once). */
+/** Forget the trip read from the device and its plan (tests). */
 export function forgetTrip() {
   ui.saved = undefined;
   memo = null;
@@ -733,10 +754,7 @@ export const actions = {
     if (!BOTTLE_CHOICES.includes(max)) return;
     draft().max = max;
     const trip = savedTrip();
-    if (trip && !el.closest('.trip-form')) {
-      ui.saved = { ...trip, max };
-      saveTrip(ui.saved);
-    }
+    if (trip && !el.closest('.trip-form')) keep({ ...trip, max });
     app.keepingFocus(el, '#app', app.renderPage);
   },
   // A new event starts on the first free night still to come.
