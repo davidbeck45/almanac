@@ -161,7 +161,11 @@ test('the shelf stands every bottle on the line with its magnitude, B and C incl
   for (const t of ['S', 'A', 'B', 'C']) {
     if (ranked.some(r => r.tier === t)) assert.ok(html.includes(`data-tier="${t}"`), `tier ${t} shows`);
   }
-  assert.match(html, /aria-label="[^"]+, \d+% match(, (top pick|strong|good))?"/, 'the name comes first in each label, then the match');
+  assert.match(html, /aria-label="[^"]+, \d+% match(, (excellent|strong|good))?"/, 'the name comes first in each label, then the match');
+  // Under the card that names the pick, no other bottle is heard as "top pick".
+  assert.ok(!html.includes('top pick'));
+  const best = ranked.find(r => r.tier === 'S');
+  assert.ok(html.includes(`aria-label="${ui.esc(best.fragrance.name)}, ${ui.matchPct(best)}% match, excellent"`), 'the S tier in a word beside strong and good');
   assert.ok(!/tier [SABC]/.test(html), 'no tier letters, which nobody sees');
 });
 

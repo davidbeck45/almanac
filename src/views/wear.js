@@ -688,6 +688,22 @@ export function skinSaid({ longevity = 0, sillage = 0 }) {
   return words.length ? `Saved: it ${words.join(' and ')} on you.` : 'Saved: it wears as voters say.';
 }
 
+// On a phone Now's question lands at the foot of the screen: Wear this draws
+// the stars there, and a star the line saying where the bottle moved, under
+// the floating tab bar. A tap doesn't scroll, so once the redraw settles the
+// question comes up just far enough to show whole (scrollIntoView keeps to
+// the page's scroll padding, which clears the bar); where it shows already,
+// nothing moves.
+export function showAsk(app, sel = '#app .ask') {
+  const frame = globalThis.requestAnimationFrame ?? (fn => fn());
+  frame(() => {
+    const ask = globalThis.document?.querySelector(sel);
+    if (!ask || !app.inSight || app.inSight(ask)) return;
+    const still = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    ask.scrollIntoView({ block: 'nearest', behavior: still ? 'auto' : 'smooth' });
+  });
+}
+
 function answerSkin(el, app, key) {
   const { id } = el.dataset;
   const value = Number(el.dataset.value);
@@ -697,6 +713,7 @@ function answerSkin(el, app, key) {
   const answers = { ...h?.answers, [key]: value };
   held = { kind: 'skin', id, base: state.base, answers, said: skinSaid(answers) };
   app.keepingFocus(el, '#app', app.render);
+  showAsk(app);
   app.announce?.(held.said);
 }
 
@@ -710,9 +727,13 @@ export const actions = {
   wear(el, app) {
     const ctx = state.contexts[el.dataset.ctx];
     if (!ctx) return;
+    const onNow = Boolean(el.closest?.('#app .pick'));
     state.history = toggleWear(el.dataset.id, ctx.win.dateISO, ctx.win.slot, state.loc, ctx.occasion?.id ?? 'daily');
-    if (wornIn(state.history, ctx.win.dateISO, ctx.win.slot)) navigator.vibrate?.(12);
+    const worn = wornIn(state.history, ctx.win.dateISO, ctx.win.slot);
+    if (worn) navigator.vibrate?.(12);
     app.keepingFocus(el, '#app', app.render);
+    // Wearing it asks for stars beside Wear this (askFor), maybe under the tab bar.
+    if (worn && onNow) showAsk(app, '#app .pick .ask');
   },
   // The pick card's spray line: its bottle page, at the spray section. The
   // bottle flies from the hero when it's in view.
@@ -749,6 +770,7 @@ export const actions = {
     const moved = moveText(before, placeOf(), listLabel(ctx.win, ctx.occasion));
     held = { kind: 'stars', id, base: state.base, rating: stars, said: ratedText(stars, moved) };
     app.keepingFocus(el, '#app', app.render);
+    showAsk(app);
     app.announce?.(held.said);
   },
   // How yesterday's bottle wore: each answer saves at once (asked from the

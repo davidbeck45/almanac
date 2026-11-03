@@ -960,6 +960,45 @@ test('Now asks what it needs once each: stars for the unrated bottle he’s wear
   wear.forgetAsked();
 });
 
+test('on a phone the question a tap brings up comes into view above the tab bar, and only when it’s out of sight', () => {
+  const scrolled = [];
+  const ask = { scrollIntoView: o => scrolled.push(o) };
+  const asked = [];
+  const realDoc = globalThis.document, realRaf = globalThis.requestAnimationFrame, realMatch = globalThis.matchMedia;
+  globalThis.document = { querySelector: sel => { asked.push(sel); return ask; } };
+  globalThis.requestAnimationFrame = fn => fn();
+  try {
+    globalThis.matchMedia = () => ({ matches: false });
+    wear.showAsk({ inSight: () => false });
+    assert.deepEqual(scrolled, [{ block: 'nearest', behavior: 'smooth' }], 'under the bar (or past the screen): just far enough up');
+    wear.showAsk({ inSight: () => true });
+    assert.equal(scrolled.length, 1, 'in sight already: the page stays put');
+    globalThis.matchMedia = () => ({ matches: true });
+    wear.showAsk({ inSight: () => false }, '#app .pick .ask');
+    assert.deepEqual(scrolled.at(-1), { block: 'nearest', behavior: 'auto' }, 'no glide with reduced motion');
+    assert.deepEqual(asked, ['#app .ask', '#app .ask', '#app .pick .ask']);
+    // Wear this on Now's card asks for the stars beside it; anywhere else, nothing scrolls.
+    const { state } = nowOnToday();
+    const now = app.nowSlot();
+    const ui = { keepingFocus(el, scope, fn) { fn(); }, render() { app.computeToday(); }, inSight: () => false };
+    const button = { dataset: { ctx: now.win.slot, id: now.pick.fragrance.id }, closest: sel => (sel === '#app .pick' ? {} : null) };
+    asked.length = 0;
+    wear.actions.wear(button, ui);
+    assert.deepEqual(asked, ['#app .pick .ask'], 'worn: its stars');
+    asked.length = 0;
+    wear.actions.wear(button, ui);
+    assert.deepEqual(asked, [], 'taken off: no question to show');
+    wear.actions.wear({ ...button, closest: () => null }, ui);
+    assert.deepEqual(asked, [], 'from the bottle page: Now behind it stays put');
+    state.history = [];
+  } finally {
+    globalThis.document = realDoc;
+    globalThis.requestAnimationFrame = realRaf;
+    globalThis.matchMedia = realMatch;
+    wear.forgetAsked();
+  }
+});
+
 test('Not now waves a question off for good; a bottle with his own nudges isn’t asked how it wore', () => {
   wear.forgetAsked();
   const a = { ...fragrances[1] }, b = { ...fragrances[2] }, c = { ...fragrances[3], personal: { rating: 4, longevity: 1, sillage: 0 } };

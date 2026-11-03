@@ -174,8 +174,10 @@ export function matchBadge(entry) {
 
 // A tier as star magnitude: one moonlight hue, S brightest.
 export const magDot = tier => `<span class="mag" data-tier="${esc(tier)}" aria-hidden="true"></span>`;
-// What a screen reader hears for a tier (sighted people see the dot).
-const TIER_WORDS = { S: 'top pick', A: 'strong', B: 'good' };
+// What a screen reader hears for a tier (sighted people see the dot). Not
+// "top pick": the shelf sits right under the card that names the pick, and
+// two or three bottles share the S tier.
+const TIER_WORDS = { S: 'excellent', A: 'strong', B: 'good' };
 
 // The magnitude shelf: bottles standing on a 1px shelf line with a caption
 // and a magnitude dot, B and C dimmed. Scrolls sideways on phones and stacks
