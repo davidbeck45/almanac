@@ -312,6 +312,9 @@ const EFFECT = {
 };
 const SWEET = ['vanilla', 'sweet', 'caramel', 'honey', 'cacao', 'almond', 'nutty'];
 const MARINE = ['aquatic', 'ozonic'];
+// A bottle leans toward its strongest few families: "Both lean citrus" of
+// Liquid Brun and Vintage Radio named a trace, 6% and 7%, seventh in each.
+const LEANS = 3;
 const LAYER_WEIGHT = { top: 0.6, mid: 1, base: 1.2, all: 1 };
 // Fragrantica's note votes ("Main Notes According to Your Votes") scale each
 // note by its votes over the bottle's average, within these bounds. A listed
@@ -410,7 +413,9 @@ const profileOf = frag => {
   if (!profiles.has(frag)) {
     const p = layerProfile(frag);
     const share = list => list.reduce((s, f) => s + (p.profile[f] ?? 0), 0);
-    profiles.set(frag, { ...p, entries: Object.entries(p.profile), sweet: share(SWEET), marine: share(MARINE) });
+    const entries = Object.entries(p.profile);
+    const leans = new Set([...entries].sort((x, y) => y[1] - x[1]).slice(0, LEANS).map(([f]) => f));
+    profiles.set(frag, { ...p, entries, leans, sweet: share(SWEET), marine: share(MARINE) });
   }
   return profiles.get(frag);
 };
@@ -530,8 +535,10 @@ export function layerPair(frag, other, conditions = null, { common = null } = {}
     const named = sharedNotes.slice(0, 2).join(' and ');
     reasons.push({ text: `Shared ${named} ${sharedNotes.length === 1 ? 'ties' : 'tie'} them together`, tone: 'good' });
   } else if (bridge >= 0.15 && !tooAlike) {
-    const [f] = Object.keys(a.profile).filter(x => b.profile[x]).sort((x, y) => Math.min(a.profile[y], b.profile[y]) - Math.min(a.profile[x], b.profile[x]));
-    if (f && !(bothMarine && MARINE.includes(f))) reasons.push({ text: `Both lean ${f}`, tone: 'good' });
+    // The family both lean toward most, if they share one (two aquatics say so below).
+    const [f] = [...a.leans].filter(x => b.leans.has(x) && !(bothMarine && MARINE.includes(x)))
+      .sort((x, y) => Math.min(a.profile[y], b.profile[y]) - Math.min(a.profile[x], b.profile[x]));
+    if (f) reasons.push({ text: `Both lean ${f}`, tone: 'good' });
   }
   if (!reasons.length && contrastScore > 0.5) reasons.push({ text: 'One richer, one lighter', tone: 'good' });
   if (community) {

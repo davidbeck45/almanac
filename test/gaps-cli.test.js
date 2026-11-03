@@ -52,6 +52,16 @@ test('--gaps and --check answer in the terminal', async () => {
   assert.match(nothing.stderr, /No bottle matches "xqzw"/);
 });
 
+test('--check names the bottle voters link it to, its value, and why a medium risk is Risky', async () => {
+  const [limited, khan, zenith] = await Promise.all([cli('--check', 'Liquid Brun Limited'), cli('--check', 'Muscs Koublai Khan'), cli('--check', 'Zenith', '--json')]);
+  // Voters call it a twin of Liquid Brun, though Terra is nearer by notes.
+  assert.match(limited.stdout, /\nLinked: your Liquid Brun \(0\.\d\d alike\)\. Voters call it a twin of your Liquid Brun\.\n/);
+  assert.match(khan.stdout, /^Muscs Koublai Khan by Serge Lutens \(1998\) · [\d.]+★ from [\d,]+ votes · value \d\.\d\nRisky\n/);
+  assert.match(khan.stdout, /\nRisk: medium, with a warning that counts double \(Reviewers say/);
+  const out = JSON.parse(zenith.stdout);
+  assert.ok(out.value >= 3.8 && out.overlap.name, JSON.stringify(out.overlap));
+});
+
 test('--check reads a number a bottle is named as its name, and id: as an id', async () => {
   const [named, id, four, jadore, zero] = await Promise.all([cli('--check', '1881'), cli('--check', 'id:1881'), cli('--check', '212'), cli('--check', '210'), cli('--check', '0')]);
   assert.match(jadore.stdout, /^J'adore by Dior/, 'a number only an obscure bottle is named is an id');

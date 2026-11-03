@@ -62,6 +62,21 @@ test('a bottle worn by day and night on one date says so once', () => {
   assert.match(out.bottles[0].why, /^The day and night of Oct 19/);
 });
 
+test('one day says it’s the day, as one night says it’s the night', () => {
+  // A hot day in a cold week, and a hot day before a cold night with room for one bottle.
+  const week = trip(4, [40, 28], [35, 25]).map(w => (w.dateISO === shift(START, 2) && w.slot === 'day' ? win(w.dateISO, 'day', 90, 72) : w));
+  const two = packTrip(fragrances, week, { max: 2 });
+  const hot = two.bottles.find(b => b.covers.some(w => w.feelsF === 90));
+  assert.match(hot.why, /^The day of Oct 21; /);
+  assert.match(two.text, new RegExp(`${hot.record.name} \\(the day of Oct 21\\)`));
+  const one = packTrip(fragrances, [win(START, 'day', 90, 72), win(START, 'night', 30, 20)], { max: 1 });
+  assert.match(one.text, /Nothing packed is quite right for the (day|night) of Oct 19; /);
+  // No date stands bare: one day reads "the day of", and only events read "on".
+  for (const out of [two, one, packTrip(fragrances, week, { max: 1 }), packTrip(fragrances, MIXED, { max: 2 })]) {
+    for (const text of [out.text, ...out.bottles.map(b => b.why)]) assert.doesNotMatch(text, /(?:^|\(|suits |for )[A-Z][a-z]{2} \d/, text);
+  }
+});
+
 // Denver, Oct 16–21 2026 as forecast on Oct 13: a greedy cover packed two
 // bottles and left the office day bare, though two others cover all twelve.
 const DENVER = [

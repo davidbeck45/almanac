@@ -823,12 +823,16 @@ export function tasteOf(record, ctx, liked) {
  * Whether a bottle is worth buying for this wardrobe: { verdict: 'Strong fit'
  * | 'Good' | 'Covered' | 'Redundant' | 'Risky', reasons (2–3 short
  * sentences), fills (the ones that matter), gain, realGain, overlap: {
- * bottle, via, sim, link }, risk, twin, quality, taste }. It's scored as its
- * pool row when it has one, else as sameFooting has it, so a catalog record
- * and its pool row check alike. opts.liked: the style ids the person likes
- * (Discover's chips; DEMO_LIKED for David), which tasteOf reads;
- * opts.stated false when they're only what the wardrobe leans toward (the
- * taste line then says "you reach for").
+ * bottle, via, sim, link }, risk, twin, quality, value, taste }. `overlap`
+ * is the owned bottle it's nearest, or the one voters link it to (`link`,
+ * the family's text: Terra can be nearer by notes to a twin of Liquid
+ * Brun), `via` the owned dupe when `bottle` is its original; `value` is
+ * voters' value for money, null without votes (quality's reads the pool's
+ * median then). It's scored as its pool row when it has one, else as
+ * sameFooting has it, so a catalog record and its pool row check alike.
+ * opts.liked: the style ids the person likes (Discover's chips; DEMO_LIKED
+ * for David), which tasteOf reads; opts.stated false when they're only what
+ * the wardrobe leans toward (the taste line then says "you reach for").
  * In order: Redundant when it duplicates something owned (owned, an owned
  * dupe's original or a twin of one, SAME_SIM alike to an owned bottle, or
  * KIN_SIM alike and placed in an owned bottle's family by voters). Risky
@@ -855,8 +859,19 @@ export function buyCheck(record, ctx, { liked = null, stated = true } = {}) {
   const risk = riskOf(scored, ctx.byId);
   const twin = cheaperTwin(scored, ctx.byId, ctx.allow);
   const q = candidateQuality(scored, ctx.norms, { valueSlope: ctx.valueSlope, byId: ctx.byId });
-  // The nearest owned bottle; for an original, the dupe you own rather than itself.
+  // The owned bottle it overlaps: the one voters tie it to when they do (its
+  // link names that one), else the nearest; for an original, the dupe you
+  // own rather than itself.
   let near = nov.nearest, sim = nov.sim;
+  if (dupe && !mine && near?.via !== dupe.via) {
+    let kin = null;
+    for (const entry of ctx.vecs) {
+      if (entry.via !== dupe.via) continue;
+      const s = similarity(scored, entry.vector);
+      if (!kin || s > kin[1]) kin = [entry, s];
+    }
+    if (kin) [near, sim] = kin;
+  }
   if (near && String(near.record.id) === String(scored.id)) [near, sim] = [{ record: near.via, via: near.via }, similarity(scored, near.via)];
   const overlap = near && !mine ? { bottle: near.record, via: near.via, sim, link: dupe?.text ?? null } : null;
 
@@ -864,7 +879,7 @@ export function buyCheck(record, ctx, { liked = null, stated = true } = {}) {
   const lookalike = !twinOwned && (nov.sim >= SAME_SIM || (dupe && nov.sim >= KIN_SIM));
   const lowRated = scored.ratingVotes >= RATED_VOTES && scored.rating < MIN_RATING;
   const taste = tasteOf(scored, ctx, liked);
-  const mist = signalsOf(scored, ctx.byId).flags.includes('mist');
+  const signals = signalsOf(scored, ctx.byId), mist = signals.flags.includes('mist');
   // Taste alone (it fills nothing) vouches only for a perfume, as suggestions
   // leave mists out unless asked, and not past a warning that counts double.
   const byTaste = !fills.length && Boolean(taste?.thin) && !(mist && !ctx.allow.mists);
@@ -937,7 +952,7 @@ export function buyCheck(record, ctx, { liked = null, stated = true } = {}) {
     reasons.push(fillLine ?? tasteLine, fillLine ? (taste?.thin && tasteLine) || overlapLine : likeLine);
     reasons.push(mistLine || (risk.level === 'medium' && risk.reasons[0]) || leanLine || (twin && !twin.owned && twin.text) || ratedLine);
   }
-  return { verdict, reasons: reasons.filter(Boolean).slice(0, 3), fills, gain, realGain, overlap, risk, twin, quality: q, taste };
+  return { verdict, reasons: reasons.filter(Boolean).slice(0, 3), fills, gain, realGain, overlap, risk, twin, quality: q, value: signals.value, taste };
 }
 
 // ---------------------------------------------------------------- plain output
@@ -1016,6 +1031,7 @@ export function checkJSON(record, check) {
     overlap: o && { ...stub(o.bottle), via: o.bottle === o.via ? null : stub(o.via), sim: round(o.sim, 3), link: o.link },
     risk: check.risk,
     twin: twinJSON(check.twin),
+    value: check.value ?? null,
     quality: { mult: round(check.quality.mult, 3), rating: round(check.quality.rating, 2), keep: round(check.quality.keep, 3), value: round(check.quality.value, 2) },
   };
 }

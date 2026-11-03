@@ -50,9 +50,11 @@ function datesPhrase(isos) {
   return listOf(parts);
 }
 
-// "every day and 3 nights", "formal wear on Dec 15", "the office on Oct
-// 20–22", "the day and night of Oct 14": a set of windows against the whole
-// trip. `the` reads "the days and nights" for all of them.
+// "every day and 3 nights", "the day of Oct 7 and 12 nights", "formal wear
+// on Dec 15", "the office on Oct 20–22", "the day and night of Oct 14": a set
+// of windows against the whole trip. `the` reads "the days and nights" for
+// all of them. One day says it's the day, as one night says it's the night:
+// a bare "Nov 7 and 12 nights" read as two dates' nights.
 function windowsPhrase(wins, all, { the = false } = {}) {
   const plain = slot => all.filter(w => !w.occasion && w.slot === slot);
   const day = wins.filter(w => !w.occasion && w.slot === 'day'), night = wins.filter(w => !w.occasion && w.slot === 'night');
@@ -61,7 +63,7 @@ function windowsPhrase(wins, all, { the = false } = {}) {
     const total = plain(slot).length;
     if (!mine.length) continue;
     if (mine.length === total && total > 1) parts.push(the ? `the ${slot}s` : `every ${slot}`);
-    else if (mine.length === 1) parts.push(`${slot === 'day' ? '' : 'the night of '}${shortDate(mine[0].dateISO)}`);
+    else if (mine.length === 1) parts.push(`the ${slot} of ${shortDate(mine[0].dateISO)}`);
     else parts.push(plural(mine.length, slot));
   }
   // One date's day and night together.

@@ -5,7 +5,7 @@
 //   node scripts/recommend.mjs --city "New York" --week   (day + night plan for the next 7 days)
 //   node scripts/recommend.mjs --city "New York" --week --events "2026-10-31 night formal"   (planned around it)
 //   node scripts/recommend.mjs --layer "Liquid Brun"       (what layers with it; --layer all for the best pairs)
-//   node scripts/recommend.mjs --layer "Liquid Brun" --city "New York" [--slot night]   (for that weather)
+//   node scripts/recommend.mjs --layer "Liquid Brun" --city "New York" [--slot night] [--date 2026-11-07]   (for that weather)
 //   node scripts/recommend.mjs --ideal "Amber Empire"     (the temperatures it wears best in)
 //   node scripts/recommend.mjs --mix                       (the collection's scent styles, bottle by bottle)
 //   node scripts/recommend.mjs --doubles                   (bottles in the collection that wear as one)
@@ -21,7 +21,9 @@
 //   node scripts/recommend.mjs --notes "iris leather" [--season winter] [--slot night] [--lean unisex] [--min-value 3.8] [--min-rating 3.6]
 //   node scripts/recommend.mjs --dupes "Aventus"           (its original, cheaper alternatives and smell-alikes)
 // Suggestions (--gaps, --style, --more-like, --notes) leave out body mists and
-// sprays; --mists lets them in.
+// sprays; --mists lets them in. A flag the mode asked for doesn't read stops
+// with what to do instead (MODES, misread), so no answer drops part of the
+// question.
 // --journal takes the app's journal export (Export in the wear journal) or its
 // Copy for Claude (a token beside Export: the last ten days' wears and what
 // the nudge reads, stars and switched-off bottles), so recent wears rotate
@@ -34,8 +36,8 @@
 // bottles out, and suggestions and checks count them as owned (never
 // suggested back; "You own it."). A journal also carries his own
 // ratings and skin nudges, and turns on the rotation nudge (a bottle unworn
-// for a month takes a slot it nearly wins), and the gap finder reads its
-// wears' occasions into the use shares.
+// for a month takes a slot it nearly wins; --date only for today), and the
+// gap finder reads its wears' occasions into the use shares.
 import { readFileSync, existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { rank, planWindows, comfortRange, eventPhrase } from '../src/engine.js';
@@ -63,9 +65,86 @@ import {
 } from '../src/discover.js';
 
 const SLOTS = ['day', 'night'];
-// The modes that answer without planning windows, so take no --events.
-const PLANLESS = ['layer', 'ideal', 'mix', 'doubles', 'styles', 'spray', 'gaps', 'check', 'style', 'more-like', 'notes', 'dupes'];
 const squash = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+// What each mode reads, in the order main() answers them, so the first one
+// given decides (null: today's picks, the mode without a flag of its own).
+// Every mode reads the wardrobe's flags (WARDROBE: who's asking, which the
+// buy-advice skill adds to every command); any other flag stops with a
+// sentence saying what to do instead (`misread`), so an answer never drops
+// part of the question unsaid: --layer --date ranked tonight's partners and
+// said "Tonight", --gaps --occasion formal answered for every occasion.
+const WARDROBE = ['json', 'exclude', 'journal', 'demo'];
+const PLACE = ['city', 'loc'];
+const FILTERS = ['season', 'slot', 'lean', 'min-value', 'min-rating', 'mists'];
+const MODES = [
+  ['layer', [...PLACE, 'slot', 'date']],
+  ['ideal', []],
+  ['mix', []],
+  ['doubles', []],
+  ['styles', []],
+  ['pack', [...PLACE, 'from', 'to', 'max', 'occasion', 'slot', 'events']],
+  ['spray', [...PLACE, 'date', 'slot', 'occasion']],
+  ['check', [...PLACE, 'uses', 'value', 'no-value', 'style', 'mists']],
+  ['gaps', [...PLACE, 'uses', 'value', 'no-value', 'mists', 'top']],
+  ['style', [...FILTERS, 'all', 'top']],
+  ['more-like', [...FILTERS, 'top']],
+  ['notes', [...FILTERS, 'top']],
+  ['dupes', ['top']],
+  ['date', [...PLACE, 'occasion', 'slot', 'events', 'top']],
+  ['week', [...PLACE, 'occasion', 'slot', 'events']],
+  [null, [...PLACE, 'occasion', 'slot', 'events', 'top']],
+];
+const given = (args, key) => args[key] !== undefined && args[key] !== false;
+/** The mode parseArgs' values ask for: its flag (null for today's picks). */
+export const modeOf = args => MODES.find(([flag]) => flag === null || given(args, flag))[0];
+
+/**
+ * Why a command can't be answered as asked, as a sentence for the user: a
+ * flag its mode doesn't read, and what to do instead; --city with --loc;
+ * --layer's and --spray's weather (--date, --slot) without a place. Null
+ * when it can be. `args`: parseArgs' values.
+ */
+export function misread(args) {
+  if (given(args, 'city') && given(args, 'loc')) return 'Give one place: --city NAME or --loc LAT,LON, not both';
+  const mode = modeOf(args), reads = MODES.find(([flag]) => flag === mode)[1];
+  const name = mode ? `--${mode}` : 'today\'s picks';
+  const key = Object.keys(args).find(k => given(args, k) && k !== mode && !WARDROBE.includes(k) && !reads.includes(k));
+  if (key) return insteadOf(key, mode, name, args);
+  if ((mode === 'layer' || mode === 'spray') && !given(args, 'city') && !given(args, 'loc')) {
+    const loose = ['date', 'slot'].find(k => given(args, k));
+    if (loose) return `--${loose} needs a place with ${name}: --city NAME or --loc LAT,LON`;
+  }
+  return null;
+}
+
+// What to do instead of a flag `mode` (named `name`) doesn't read.
+function insteadOf(key, mode, name, args) {
+  const off = `--${key} doesn't apply to ${name}`;
+  const suggesting = ['style', 'more-like', 'notes'].includes(mode);
+  switch (key) {
+    case 'events': return `--events goes with a plan (today's picks, --week, --date or --pack), not ${name}`;
+    case 'week': return mode === 'date' ? '--date picks for one day; leave out --week' : off;
+    case 'date': return mode === 'pack' ? `${off}; give the trip's dates with --from and --to` : `${off}; it goes with a place for that day's picks, --spray or --layer`;
+    case 'from': case 'to': return `${off}; --from and --to give --pack its dates${mode === 'date' ? '' : ' (for one day\'s picks, use --date)'}`;
+    case 'max': return `${off}; it's how many bottles --pack packs`;
+    case 'occasion':
+      if (mode === 'gaps' || mode === 'check') return `${off}; say how often you dress for it with --uses "${findOccasion(args.occasion)?.id ?? 'OCCASION'}=often"`;
+      if (suggesting) return `${off}; narrow suggestions with --season or --slot`;
+      return mode === 'layer' ? `${off}; layering reads only the weather (--slot, --date)` : off;
+    case 'value': case 'no-value': return suggesting ? `${off}; for value picks, set a floor with --min-value 3.8` : `${off}; it goes with --gaps and --check`;
+    case 'uses': return `${off}; it goes with --gaps and --check`;
+    case 'style': return `${off}; --style on its own lists bottles of a style, and with --check names the styles you like`;
+    case 'all': return `${off}; it goes with --style`;
+    case 'season': case 'lean': case 'min-value': case 'min-rating': return `${off}; it filters --style, --more-like and --notes`;
+    case 'mists': return `${off}; it lets body mists into --gaps, --check, --style, --more-like and --notes`;
+    case 'top': return mode === 'week' ? `${off}, which gives each window's pick; --date gives a day's ranking with reasons` : off;
+    case 'city': case 'loc':
+      if (suggesting) return `${off}; suggestions don't read the weather, so narrow them with --season or --slot`;
+      return mode === 'ideal' ? `${off}; it reads every temperature` : off;
+    default: return MODES.some(([flag]) => flag === key) ? `${off}; ask one at a time` : off;
+  }
+}
 
 /** An occasion by id, label or a former label, any case or spacing ("date", "Date Night", "night out", "everyday"), or null. */
 export function findOccasion(text) {
@@ -205,6 +284,9 @@ export function parseEvents(text) {
   return events;
 }
 
+// "formal wear on Sat, Nov 7 is at night": an event's slot, for a plan of the other.
+const eventWhen = e => `${e.occasion.phrase ?? e.occasion.label.toLowerCase()} on ${shortDate(e.dateISO)} is ${e.slot === 'day' ? 'by day' : 'at night'}`;
+
 /**
  * --journal: the app's Copy for Claude (a token, told apart by its shape)
  * or a file holding an export or a token. -> parseJournal's shape; throws
@@ -251,7 +333,7 @@ async function main() {
         pack: { type: 'boolean', default: false },
         from: { type: 'string' },
         to: { type: 'string' },
-        max: { type: 'string', default: '3' },
+        max: { type: 'string' },
         events: { type: 'string' },
         spray: { type: 'string' },
         gaps: { type: 'boolean', default: false },
@@ -274,6 +356,9 @@ async function main() {
   } catch (err) {
     fail(`${err.message}\n${USAGE}`);
   }
+  const misreading = misread(args);
+  if (misreading) fail(misreading);
+  const mode = modeOf(args);
 
   const slot = args.slot?.toLowerCase();
   if (args.slot && !SLOTS.includes(slot)) fail(`--slot must be day or night, not "${args.slot}"`);
@@ -294,21 +379,18 @@ async function main() {
   const earliest = dayBefore(today);
   if (args.date && args.date < earliest) fail(`--date ${args.date} has passed; pick today or later`);
   if (args.date && daysFrom(today, args.date) > MAX_AHEAD_DAYS) fail(`--date ${args.date} is more than a year out`);
-  if (args.date && args.week) fail('--date picks for one day; leave out --week');
 
   // --events: what a plan is for, window by window (today's picks, --week,
-  // --date and --pack plan around them). Here each event is checked against
-  // the plan's slot (--slot's, else --occasion's; --pack checks its own),
-  // and each mode checks the dates against its windows.
+  // --date and --pack plan around them; misread stops the rest). Here each
+  // event is checked against the plan's slot (--slot's, else --occasion's;
+  // --pack checks its own), and each mode checks the dates against its windows.
   let events = [];
   if (args.events !== undefined) {
-    const mode = PLANLESS.find(k => args[k] !== undefined && args[k] !== false);
-    if (mode) fail(`--events goes with a plan (today's picks, --week, --date or --pack), not --${mode}`);
     try { events = parseEvents(args.events); } catch (err) { fail(err.message); }
     const only = args.pack ? null : slot ?? occasion?.slot;
     for (const e of events) {
       if (e.dateISO < earliest) fail(`--events: ${e.dateISO} has passed`);
-      if (only && e.slot !== only) fail(`--events: the ${e.occasion.label} on ${e.dateISO} is ${e.slot === 'day' ? 'by day' : 'at night'}, and ${slot ? `--slot ${slot}` : `--occasion ${occasion.id}`} plans ${only === 'day' ? 'days' : 'nights'} only`);
+      if (only && e.slot !== only) fail(`--events: ${eventWhen(e)}, and ${slot ? `--slot ${slot}` : `--occasion ${occasion.id}`} plans ${only === 'day' ? 'days' : 'nights'} only`);
       if (args.date && e.dateISO !== args.date) fail(`--events: ${e.dateISO} isn't the --date, ${args.date}; --date plans that day only`);
     }
   }
@@ -337,8 +419,7 @@ async function main() {
   // --events, which wins on its window. One that doesn't fit what's asked
   // (gone by, the other slot, another date) is left out without a word,
   // since David didn't type it; trips keep their own.
-  const planless = PLANLESS.some(k => args[k] !== undefined && args[k] !== false);
-  if (journal?.events.length && !planless && !args.pack) {
+  if (journal?.events.length && [null, 'week', 'date'].includes(mode)) {
     const only = slot ?? occasion?.slot;
     for (const e of journal.events) {
       const o = occasionById(e.occasion);
@@ -427,12 +508,19 @@ async function main() {
   }
 
   // Partners for one bottle, or the best pairs overall. The weather is optional:
-  // with a place, pairs are scored for the next window (or --slot).
+  // with a place, pairs are scored for the next window (or --slot's), or for
+  // --date's night (its day with --slot day), typical weather past the forecast.
   if (args.layer) {
     let win = null;
     if (args.city || args.loc) {
-      const wx = summarize(await forecastFor(await resolvePlace()));
-      win = slot ? wx[slot] : [wx.day, wx.night].filter(Boolean).sort(byTime)[0];
+      const place = await resolvePlace();
+      if (args.date) {
+        [win] = await windowsAt(place, args.date, args.date, 'date', { slots: [slot ?? 'night'] });
+        if (!win) fail(`No weather came back for ${args.date}`);
+      } else {
+        const wx = summarize(await forecastFor(place));
+        win = slot ? wx[slot] : [wx.day, wx.night].filter(Boolean).sort(byTime)[0];
+      }
     }
     const pairLine = (a, p) => `${a.name} + ${p.fragrance.name} (${Math.round(p.score * 100)}%): ${p.reasons.map(r => r.text).join('; ')}. Spray ${p.first.name} first.`;
     let rows;
@@ -462,10 +550,10 @@ async function main() {
         ...(pair.offWeather && { offWeather: true }),
         sprayFirst: pair.first.name,
         reasons: pair.reasons.map(sign),
-        ...(win && { window: { label: win.label, feelsF: Math.round(win.feelsF), humidity: Math.round(win.humidity), condition: win.condition } }),
+        ...(win && { window: { label: win.label, ...(args.date && { date: win.dateISO }), feelsF: Math.round(win.feelsF), humidity: Math.round(win.humidity), condition: win.condition, ...(win.typical && { typical: true }) } }),
       })), null, 2));
     } else {
-      if (win) console.log(`${win.label}: ${win.condition}, feels ${Math.round(win.feelsF)}°F, ${Math.round(win.humidity)}% humidity\n`);
+      if (win) console.log(`${win.label}${args.date ? ` ${win.dateISO}` : ''}: ${win.typical ? `typically ${win.condition.toLowerCase()}` : win.condition}, feels ${Math.round(win.feelsF)}°F, ${Math.round(win.humidity)}% humidity\n`);
       console.log(rows.length ? rows.map(({ base, pair }) => pairLine(base, pair)).join('\n') : 'Nothing in the collection layers well with it.');
     }
     return;
@@ -600,11 +688,11 @@ async function main() {
     if (args.from < earliest) fail(`--from ${args.from} has passed; pick today or later`);
     if (daysFrom(args.from, args.to) >= MAX_TRIP_DAYS) fail(`--pack plans up to ${MAX_TRIP_DAYS} days at a time`);
     if (daysFrom(today, args.to) > MAX_AHEAD_DAYS) fail(`--to ${args.to} is more than a year out`);
-    const max = Number(args.max);
+    const max = Number(args.max ?? 3);
     if (!Number.isInteger(max) || max < 1 || max > 6) fail(`--max takes 1 to 6 bottles, not "${args.max}"`);
     for (const e of events) {
       if (e.dateISO < args.from || e.dateISO > args.to) fail(`--events: ${e.dateISO} is outside the trip`);
-      if (slot && e.slot !== slot) fail(`--events: the ${e.occasion.label} on ${e.dateISO} is at ${e.slot === 'day' ? 'day' : 'night'}, and --slot ${slot} packs for ${slot === 'day' ? 'days' : 'nights'} only`);
+      if (slot && e.slot !== slot) fail(`--events: ${eventWhen(e)}, and --slot ${slot} packs for ${slot === 'day' ? 'days' : 'nights'} only`);
     }
 
     // --slot packs for only days or nights; --occasion goes on every window of
@@ -656,7 +744,6 @@ async function main() {
   // How many sprays and where: for the next window (or --date, --slot) at a
   // place, else for a hot day, a mild day and a cold night.
   if (args.spray) {
-    if (args.date && !args.city && !args.loc) fail('--date needs a place: --city NAME or --loc LAT,LON');
     const f = findBottle(args.spray);
     let situations;
     if (args.city || args.loc) {
@@ -753,15 +840,18 @@ async function main() {
         console.log(JSON.stringify({ climate: where, preferValue: ctx.preferValue, liked, ...checkJSON(record, check) }, null, 2));
         return;
       }
-      console.log(`${byLine(record)} · ${stars(record)}`);
+      console.log([byLine(record), stars(record), check.value != null && `value ${check.value.toFixed(1)}`].filter(Boolean).join(' · '));
       console.log(`${check.verdict}`);
       for (const r of check.reasons) console.log(`  ${r}`);
       if (check.fills.length) console.log(`Fills:\n${check.fills.slice(0, 5).map(f => `  ${fillLine({ ...f, title: cellLabel(f.cell) })}`).join('\n')}`);
+      // The owned bottle it's nearest, or the one voters link it to (`link`).
       if (check.overlap) {
         const o = check.overlap;
-        console.log(`Closest: ${o.bottle === o.via ? `your ${o.via.name}` : `${o.bottle.name}, the original of your ${o.via.name}`} (${o.sim.toFixed(2)} alike)${o.link ? `. ${o.link}.` : ''}`);
+        console.log(`${o.link ? 'Linked' : 'Closest'}: ${o.bottle === o.via ? `your ${o.via.name}` : `${o.bottle.name}, the original of your ${o.via.name}`} (${o.sim.toFixed(2)} alike)${o.link ? `. ${o.link}.` : ''}`);
       }
-      console.log(`Risk: ${check.risk.level}${check.risk.reasons.length ? ` (${check.risk.reasons.join(' ')})` : ''}`);
+      // Risky on a medium risk: a warning that counts double (risk.major) outweighs a style you like.
+      const double = check.verdict === 'Risky' && check.risk.level === 'medium' && check.risk.major ? ', with a warning that counts double' : '';
+      console.log(`Risk: ${check.risk.level}${double}${check.risk.reasons.length ? ` (${check.risk.reasons.join(' ')})` : ''}`);
       if (check.twin) console.log(`Twin: ${check.twin.text}`);
       console.log(`\nClimate: ${where} · ${valueText} · styles you like: ${liked.map(id => styleById(id).label).join(', ')}`);
       console.log(`${CREDIT}.`);
@@ -818,7 +908,8 @@ async function main() {
   // A window's pick, with the bottles that suit it just as well (`ties`,
   // src/contrast.js: within a point of its match, not worn lately, each with
   // how it differs from the pick). A window an event is on (--events)
-  // carries its occasion, and says so.
+  // carries its occasion, and says so. The runner-up is the best after the
+  // pick and its ties, which are equal choices, not seconds.
   const pickJSON = (pick, ranked, win, occ = null, ties = []) => ({
     ...(win.occasion && { occasion: win.occasion.id }),
     tier: pick.tier,
@@ -827,7 +918,7 @@ async function main() {
     inspiredBy: inspiredBy(pick.fragrance),
     score: +pick.score.toFixed(3),
     reasons: pick.reasons.map(sign),
-    runnerUp: ranked.find(r => r !== pick)?.fragrance.name ?? null,
+    runnerUp: ranked.find(r => r !== pick && !ties.some(t => t.entry === r))?.fragrance.name ?? null,
     ties: ties.map(({ entry, tags }) => ({ name: entry.fragrance.name, brand: entry.fragrance.brand, score: +entry.score.toFixed(3), tags })),
     spray: sprayJSON(sprayGuide(pick.fragrance, win, win.occasion ?? occ)),
   });
@@ -877,22 +968,27 @@ async function main() {
   const tiesOf = (result, planned) => newsOnly(result, planned ? planTies(result, { history }) : result.map(r => tiesFor(r.pick, r.ranked)));
 
   // One date anywhere: the forecast's windows, or typical weather past them.
-  // With --events on it, the date's windows are planned around them.
+  // With --events on it, the date's windows are planned around them. The
+  // rotation nudge only for today, as the app's Occasion pane has it: the
+  // journal can't say what will be idle by a later date, and planned alone,
+  // night after night, each date would nudge the same bottle. What the plan
+  // saves for an event is said from today ("on Saturday night").
   if (args.date) {
     const wanted = slot ?? occasion?.slot;
+    const opts = { history, nudge: nudge && args.date <= today, nowISO: today };
     let result, windows;
     try {
       if (events.length) windows = await tripWindows(place, args.date, args.date, { refusePast: true, ...(wanted && { slots: [wanted] }) });
       else {
         result = wanted
-          ? [await picksFor(fragrances, { place, dateISO: args.date, slot: wanted, occasion, history, nudge, refusePast: true })].filter(Boolean)
+          ? [await picksFor(fragrances, { place, dateISO: args.date, slot: wanted, occasion, ...opts, refusePast: true })].filter(Boolean)
             .map(({ window: win, ranked }) => ({ win, ranked, pick: ranked[0] }))
-          : planWindows(fragrances, await tripWindows(place, args.date, args.date, { refusePast: true }), { history, nudge });
+          : planWindows(fragrances, await tripWindows(place, args.date, args.date, { refusePast: true }), opts);
       }
     } catch (err) {
       weatherFailed(err, place, 'date', args.date);
     }
-    if (windows?.length) result = planWindows(fragrances, onWindows(windows, `--date ${args.date}`), { occasion, history, nudge });
+    if (windows?.length) result = planWindows(fragrances, onWindows(windows, `--date ${args.date}`), { occasion, ...opts });
     if (!result?.length) fail(`No weather came back for ${args.date}`);
     const typical = result.some(r => r.win.typical);
     const ties = tiesOf(result, !wanted || events.length > 0);
@@ -1166,13 +1262,13 @@ async function discover(args, fragrances, { slot, count, history, hidden }) {
 }
 
 const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,NAME]) [--occasion ${OCCASIONS.map(o => o.id).join('|')}] [--slot day|night] [--week] [--events "DATE [day|night] OCCASION; …"] [--journal FILE|TOKEN] [--exclude NAME,NAME] [--demo] [--top N] [--json]
-       node scripts/recommend.mjs --layer NAME|all [--city NAME | --loc LAT,LON[,NAME]] [--slot day|night] [--exclude NAME,NAME] [--json]
+       node scripts/recommend.mjs --layer NAME|all [--city NAME | --loc LAT,LON[,NAME]] [--slot day|night] [--date YYYY-MM-DD] [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --ideal NAME [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --mix [--exclude NAME,NAME] [--demo] [--json]
        node scripts/recommend.mjs --doubles [--exclude NAME,NAME] [--demo] [--json]
        node scripts/recommend.mjs --styles NAME [--json]
        node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,NAME]) --date YYYY-MM-DD [--occasion ID] [--slot day|night] [--events "DATE [day|night] OCCASION; …"] [--journal FILE|TOKEN] [--json]
-       node scripts/recommend.mjs --pack (--city NAME | --loc LAT,LON[,NAME]) --from YYYY-MM-DD --to YYYY-MM-DD [--max N] [--events "DATE [day|night] OCCASION; …"] [--json]
+       node scripts/recommend.mjs --pack (--city NAME | --loc LAT,LON[,NAME]) --from YYYY-MM-DD --to YYYY-MM-DD [--max N] [--occasion ID] [--slot day|night] [--events "DATE [day|night] OCCASION; …"] [--json]
        node scripts/recommend.mjs --spray NAME [--city NAME | --loc LAT,LON[,NAME]] [--date YYYY-MM-DD] [--occasion ID] [--slot day|night] [--json]
        node scripts/recommend.mjs --gaps [--city NAME | --loc LAT,LON[,NAME]] [--uses USE=never|sometimes|often,…] [--value | --no-value] [--mists] [--top N] [--exclude NAME,NAME] [--journal FILE|TOKEN] [--demo] [--json]
        node scripts/recommend.mjs --check NAME|ID|id:ID [--city NAME | --loc LAT,LON[,NAME]] [--uses …] [--value | --no-value] [--style STYLE,STYLE] [--exclude NAME,NAME] [--journal FILE|TOKEN] [--json]

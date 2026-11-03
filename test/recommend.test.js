@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { findOccasion, matchBottles, parseEvents, weatherFailure } from '../scripts/recommend.mjs';
+import { findOccasion, matchBottles, parseEvents, weatherFailure, misread, modeOf } from '../scripts/recommend.mjs';
 import { journalExport, journalToken, shiftISO } from '../src/history.js';
 
 const script = fileURLToPath(new URL('../scripts/recommend.mjs', import.meta.url));
@@ -69,8 +69,9 @@ test('--exclude refuses a term that takes out most of the wardrobe, and an empty
   const dir = mkdtempSync(join(tmpdir(), 'almanac-'));
   const file = join(dir, 'journal.json');
   writeFileSync(file, JSON.stringify({ app: 'scentcast-journal', history: [], hidden: fragrances.map(f => String(f.id)) }));
-  for (const extra of [['--slot', 'night'], ['--week'], ['--json'], ['--date', dayISO(1)], ['--layer', 'all'], ['--mix']]) {
-    const run = cli('--loc', '40.7,-74', '--journal', file, ...extra);
+  const here = ['--loc', '40.7,-74'];
+  for (const extra of [[...here, '--slot', 'night'], [...here, '--week'], [...here, '--json'], [...here, '--date', dayISO(1)], [...here, '--layer', 'all'], ['--mix']]) {
+    const run = cli('--journal', file, ...extra);
     assert.equal(run.status, 1, extra.join(' '));
     assert.match(run.stderr, /^Nothing left to rank: the journal leaves out all 26 bottles/);
     assert.doesNotMatch(run.stderr, /at .*\.mjs:\d+/, 'no stack trace');
@@ -121,6 +122,53 @@ test('bad arguments stop with a message before any request', () => {
   assert.match(loc.stderr, /--loc takes LAT,LON/);
   assert.doesNotMatch(loc.stderr, /at .*\.mjs:\d+/, 'no stack trace');
   assert.equal(cli('--loc', ',-74').status, 1, 'an empty latitude isn’t 0');
+});
+
+test('a flag its mode doesn\'t read stops with what to do instead, not a quiet answer to another question', () => {
+  for (const [args, message] of [
+    [{ gaps: true, occasion: 'Formal' }, /^--occasion doesn't apply to --gaps; say how often you dress for it with --uses "formal=often"$/],
+    [{ check: 'Zenith', occasion: 'office' }, /--uses "office=often"/],
+    [{ loc: '40.7,-74', from: '2026-11-03', to: '2026-11-05' }, /^--from doesn't apply to today's picks; --from and --to give --pack its dates/],
+    [{ loc: '40.7,-74', season: 'winter' }, /^--season doesn't apply to today's picks; it filters --style, --more-like and --notes$/],
+    [{ loc: '40.7,-74', week: true, top: '3' }, /^--top doesn't apply to --week, which gives each window's pick/],
+    [{ pack: true, loc: '40.7,-74', date: '2026-11-05' }, /^--date doesn't apply to --pack; give the trip's dates with --from and --to$/],
+    [{ style: 'skin', city: 'Paris' }, /^--city doesn't apply to --style; suggestions don't read the weather/],
+    [{ style: 'skin', 'no-value': true }, /--min-value 3\.8$/],
+    [{ dupes: 'Aventus', mists: true }, /^--mists doesn't apply to --dupes/],
+    [{ layer: 'Liam', occasion: 'date' }, /^--occasion doesn't apply to --layer/],
+    [{ layer: 'Liam', ideal: 'Terra' }, /^--ideal doesn't apply to --layer; ask one at a time$/],
+    [{ spray: 'Liam', occasion: 'office', slot: 'night' }, /^--slot needs a place with --spray: --city NAME or --loc LAT,LON$/],
+    [{ layer: 'all', date: '2026-11-05' }, /^--date needs a place with --layer/],
+    [{ city: 'Paris', loc: '48.9,2.3' }, /not both$/],
+  ]) assert.match(misread(args) ?? 'answered', message, JSON.stringify(args));
+  assert.deepEqual([modeOf({ check: 'X', style: 'skin' }), modeOf({ loc: '1,2', date: '2026-11-05' }), modeOf({ loc: '1,2' })], ['check', 'date', null]);
+  // Every command the docs give reads all its flags (any optional ones taken).
+  const docs = ['CLAUDE.md', '.claude/skills/buy-advice/SKILL.md', 'README.md'].map(f => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8'));
+  let commands = 0;
+  for (const [, rest] of docs.join('\n').matchAll(/node scripts\/recommend\.mjs([^`\n]*)/g)) {
+    const args = Object.fromEntries([...rest.split(/\| jq|#/)[0].matchAll(/(?<![\w-])--([a-z][\w-]*)/g)].map(([, flag]) => [flag, 'x']));
+    if (!Object.keys(args).length) continue;
+    commands++;
+    assert.equal(misread(args), null, rest);
+  }
+  assert.ok(commands >= 20, `${commands} commands`);
+  // Stopped before any request, as a sentence.
+  const r = offline('--gaps', '--occasion', 'formal');
+  assert.equal(r.status, 1);
+  assert.equal(r.stderr, '--occasion doesn\'t apply to --gaps; say how often you dress for it with --uses "formal=often"\n');
+});
+
+test('--layer --date scores partners for that date\'s night, or its day, at the place', async () => {
+  const [night, day, far] = await Promise.all([
+    run('--layer', 'Liam', '--loc', '40.7,-74', '--date', dayISO(2), '--json'),
+    run('--layer', 'Liam', '--loc', '40.7,-74', '--date', dayISO(2), '--slot', 'day'),
+    run('--layer', 'all', '--loc', '40.7,-74', '--date', dayISO(60), '--json'),
+  ]);
+  for (const r of [night, day, far]) assert.equal(r.status, 0, r.stderr);
+  const weekday = new Date(`${dayISO(2)}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
+  assert.deepEqual(JSON.parse(night.stdout).map(p => [p.window.label, p.window.date])[0], [`${weekday} night`, dayISO(2)]);
+  assert.match(day.stdout, new RegExp(`^${weekday} ${dayISO(2)}: `));
+  assert.ok(JSON.parse(far.stdout).every(p => p.window.typical), 'typical weather past the forecast');
 });
 
 test('--loc takes an optional name after the coordinates, like the app\'s ?loc=', () => {
@@ -321,7 +369,7 @@ test('--events stops on a window the plan doesn\'t cover, and on a mode that doe
   for (const [args, message] of [
     [['--loc', '40.7,-74', '--week', '--events', `${dayISO(9)} night formal`], /^--events: \S+ is outside the week ahead \(/],
     [['--loc', '40.7,-74', '--events', `${dayISO(9)} night formal`], /is outside the week ahead/],
-    [['--loc', '40.7,-74', '--week', '--slot', 'day', '--events', `${dayISO(2)} night formal`], /^--events: the Formal on \S+ is at night, and --slot day plans days only/],
+    [['--loc', '40.7,-74', '--week', '--slot', 'day', '--events', `${dayISO(2)} night formal`], /^--events: formal wear on \w{3}, \w{3} \d+ is at night, and --slot day plans days only/],
     [['--loc', '40.7,-74', '--week', '--occasion', 'date', '--events', `${dayISO(2)} office`], /--occasion date plans nights only/],
     [['--loc', '40.7,-74', '--date', dayISO(2), '--events', `${dayISO(3)} night formal`], /isn't the --date/],
     [['--loc', '40.7,-74', '--week', '--events', `${dayISO(-3)} night formal`], /has passed/],
@@ -392,7 +440,8 @@ test('--pack and --date stop on bad dates before any request', () => {
     [['--pack', '--loc', '40.7,-74', '--from', dayISO(1), '--to', dayISO(40)], /up to 31 days/],
     [['--pack', '--loc', '40.7,-74', '--from', dayISO(1), '--to', dayISO(2), '--max', '9'], /--max takes 1 to 6/],
     [['--pack', '--loc', '40.7,-74', '--from', dayISO(1), '--to', dayISO(2), '--events', `${dayISO(9)} night date`], /outside the trip/],
-    [['--pack', '--loc', '40.7,-74', '--from', dayISO(1), '--to', dayISO(2), '--slot', 'day', '--events', `${dayISO(1)} formal`], /--slot day packs for days only/],
+    [['--pack', '--loc', '40.7,-74', '--from', dayISO(1), '--to', dayISO(2), '--slot', 'day', '--events', `${dayISO(1)} formal`], /^--events: formal wear on \w{3}, \w{3} \d+ is at night, and --slot day packs for days only/],
+    [['--pack', '--loc', '40.7,-74', '--from', dayISO(1), '--to', dayISO(2), '--slot', 'night', '--events', `${dayISO(1)} office`], /^--events: the office on \w{3}, \w{3} \d+ is by day, and --slot night packs for nights only/],
     [['--pack', '--from', dayISO(1), '--to', dayISO(2)], /--pack needs a place/],
     [['--loc', '40.7,-74', '--date', '2026-02-30'], /--date takes a date like/],
     [['--loc', '40.7,-74', '--date', dayISO(2), '--week'], /leave out --week/],
@@ -449,6 +498,36 @@ test('--date answers for any day: the forecast when it reaches, typical weather 
   assert.equal(out.slots[0].slot, 'night');
   assert.ok(out.slots[0].window.typical);
   assert.ok(out.slots[0].pick.spray.text);
+});
+
+test('--date nudges only today: a later date ranks its best, as the app’s Occasion pane and an event there do', async () => {
+  const day = dayISO(2);
+  const plain = JSON.parse(cli('--loc', '40.7,-74', '--date', day, '--occasion', 'formal', '--json').stdout).slots[0];
+  const [best, second] = plain.ranked;
+  assert.equal(second.tier, best.tier, 'the second shares the best’s tier, so a month idle would nudge it');
+  // A two-month journal: every bottle worn a fortnight ago (past rotation's
+  // reach) but the second, never worn, so a month neglected.
+  const id = name => String(fragrances.find(f => f.name === name).id);
+  const history = [{ id: id(best.name), date: dayISO(-60), slot: 'night' },
+    ...fragrances.filter(f => f.name !== second.name).map(f => ({ id: String(f.id), date: dayISO(-15), slot: 'night' }))];
+  const token = journalToken(history, [], {}, { todayISO: dayISO(0) });
+  const [occasion, event, both, today] = await Promise.all([
+    run('--loc', '40.7,-74', '--date', day, '--occasion', 'formal', '--journal', token, '--json'),
+    run('--loc', '40.7,-74', '--date', day, '--events', `${day} night formal`, '--journal', token, '--json'),
+    run('--loc', '40.7,-74', '--date', day, '--journal', token, '--json'),
+    run('--loc', '40.7,-74', '--date', dayISO(0), '--slot', 'night', '--occasion', 'formal', '--journal', token, '--json'),
+  ]);
+  for (const r of [occasion, event, both, today]) assert.equal(r.status, 0, r.stderr);
+  const picks = r => JSON.parse(r.stdout).slots.map(s => s.pick);
+  assert.equal(picks(occasion)[0].name, best.name, 'not the neglected second');
+  assert.equal(picks(event)[1].name, best.name, 'the same as planning it for formal wear');
+  assert.ok(!picks(both).some(p => p.reasons.some(r => /Not worn/.test(r))), picks(both).map(p => p.reasons.join('; ')).join(' | '));
+  // Tonight the nudge still brings a neglected bottle in, as Now does.
+  assert.ok(JSON.parse(today.stdout).slots[0].ranked.some(r => r.reasons.some(t => /Not worn/.test(t))));
+  // What the plan saves for the night is said from today, not from the date.
+  const weekday = new Date(`${day}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
+  const saved = JSON.parse(event.stdout).slots[0].ranked.find(r => r.name === best.name);
+  assert.ok(saved.reasons.includes(`- Saved for formal wear on ${weekday} night`), saved.reasons.join('; '));
 });
 
 test('--spray gives counts for three situations, or the next window at a place', () => {
@@ -511,6 +590,13 @@ test('a pick names the bottles that suit its window just as well, each with how 
   }
   assert.ok(JSON.parse(week.stdout).days.every(d => d.picks.every(p => Array.isArray(p.ties))));
   assert.ok(Array.isArray(JSON.parse(date.stdout).slots[0].pick.ties));
+  // A tie is an equal choice, not the runner-up: that's the next bottle after them.
+  const picks = [night.pick, ...slots.map(s => s.pick), ...JSON.parse(week.stdout).days.flatMap(d => d.picks)];
+  assert.ok(picks.some(p => p.ties.length), 'some window has ties');
+  for (const p of picks) {
+    assert.ok(p.runnerUp && p.runnerUp !== p.name);
+    assert.ok(!p.ties.some(t => t.name === p.runnerUp), `${p.name}: runner-up ${p.runnerUp} is a tie`);
+  }
   // Worn last night, it isn't offered tonight.
   const worn = fragrances.find(f => f.name === first.name);
   const dir = mkdtempSync(join(tmpdir(), 'almanac-'));

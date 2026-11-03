@@ -348,7 +348,8 @@ Panel {
                 Text {
                   anchors.verticalCenter: parent.verticalCenter
                   textFormat: Text.PlainText
-                  text: root.pick ? (root.pick.label + " · " + root.pick.match + "% match").toUpperCase() : ""
+                  // A window planned for an occasion in the app says so in place of the match.
+                  text: root.pick ? (root.pick.label + " · " + (root.pick.occasionPhrase ? "for " + root.pick.occasionPhrase : root.pick.match + "% match")).toUpperCase() : ""
                   color: root.dim
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
@@ -582,7 +583,7 @@ Panel {
                       }
 
                       Text {
-                        width: parent.width - slotMark.width - chip.width - parent.spacing * 2
+                        width: parent.width - slotMark.width - eventMark.width - chip.width - parent.spacing * (eventMark.visible ? 3 : 2)
                         anchors.verticalCenter: parent.verticalCenter
                         textFormat: Text.PlainText
                         text: modelData.name
@@ -590,6 +591,19 @@ Panel {
                         font.family: root.fontFamily
                         font.pixelSize: Style.font.body
                         elide: Text.ElideRight
+                      }
+
+                      // A window planned for an occasion in the app, as the app's Week marks it.
+                      Text {
+                        id: eventMark
+                        visible: !!modelData.occasionPhrase
+                        width: visible ? implicitWidth : 0
+                        anchors.verticalCenter: parent.verticalCenter
+                        textFormat: Text.PlainText
+                        text: modelData.occasionPhrase ? "for " + modelData.occasionPhrase : ""
+                        color: root.dim
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.caption
                       }
 
                       TierChip {
