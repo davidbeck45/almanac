@@ -58,7 +58,7 @@ import { packTrip, withEvents, picksFor, tripOccasion } from '../src/pack.js';
 import { sprayGuide } from '../src/spray.js';
 import { tiesFor, planTies, tieName, tiesNews, runnerUpOf } from '../src/contrast.js';
 import { doubles } from '../src/doubles.js';
-import { gapContext, gapReport, buyCheck, checkJSON, cellLabel, ratingText, DEFAULT_CLIMATE, USES, useLabel } from '../src/gaps.js';
+import { gapContext, gapReport, buyCheck, checkJSON, ratingText, DEFAULT_CLIMATE, USES, useLabel } from '../src/gaps.js';
 import { fetchClimate } from '../src/climate.js';
 import { parseUses, sharesFrom } from '../src/uses.js';
 import {
@@ -820,14 +820,17 @@ async function main() {
         liked = found.ids;
       }
       const check = buyCheck(record, ctx, { liked });
+      // Its fills as the plain data has them, rounded as --gaps' and the app's
+      // are, so one fill reads the same percentage everywhere.
+      const plain = checkJSON(record, check);
       if (args.json) {
-        console.log(JSON.stringify({ climate: where, preferValue: ctx.preferValue, liked, ...checkJSON(record, check) }, null, 2));
+        console.log(JSON.stringify({ climate: where, preferValue: ctx.preferValue, liked, ...plain }, null, 2));
         return;
       }
       console.log([byLine(record), stars(record), check.value != null && `value ${check.value.toFixed(1)}`].filter(Boolean).join(' · '));
       console.log(`${check.verdict}`);
       for (const r of check.reasons) console.log(`  ${r}`);
-      if (check.fills.length) console.log(`Fills:\n${check.fills.slice(0, 5).map(f => `  ${fillLine({ ...f, title: cellLabel(f.cell) })}`).join('\n')}`);
+      if (plain.fills.length) console.log(`Fills:\n${plain.fills.slice(0, 5).map(f => `  ${fillLine(f)}`).join('\n')}`);
       // The owned bottle it's nearest, or the one voters link it to (`link`).
       if (check.overlap) {
         const o = check.overlap;
