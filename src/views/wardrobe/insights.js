@@ -86,13 +86,29 @@ const vial = (status, { level = null, rare = false, i = null } = {}) => {
   return `<span class="vial${rare ? ' rare' : ''}" data-status="${esc(status)}"${style ? ` style="${style}"` : ''} aria-hidden="true"><span class="vial-fill"></span></span>`;
 };
 
+// Whether anything falls short or is thin, rather than only room to grow:
+// the headline and the cards under it say it the same way.
+const short = report => report.gaps.some(g => g.status !== 'room');
+
 /** The headline: how much of what you wear has a strong pick, and whether anything's thin. */
 export function headline(report) {
   const share = report.overview.strongShare;
   const lead = share >= 0.95 ? 'You’re covered for nearly everything you wear.' : `You have a strong pick for ${pct(share)}% of what you wear.`;
   const tail = !report.gaps.length ? 'Nothing’s thin. Here’s where you’re strongest.'
-    : report.gaps.some(g => g.status !== 'room') ? 'Here’s where it’s thin.' : 'Here’s where it could go further.';
+    : short(report) ? 'Here’s where it’s thin.' : 'Here’s where it could go further.';
   return { lead, tail };
+}
+
+/**
+ * The titles of the card that lists the spots and of the picks for them, as
+ * the headline words it: with only room to grow they go further, not thin.
+ */
+export function sectionTitles(report) {
+  const room = report.gaps.length > 0 && !short(report);
+  return {
+    thin: room ? 'Where it could go further' : 'Where it’s thin',
+    fill: room ? 'Bottles that would take it further' : 'Bottles that would fill the gaps',
+  };
 }
 
 /**
@@ -451,6 +467,7 @@ export function insightsSkeletonHTML() {
 export function insightsHTML(m) {
   const r = m.report;
   const h3 = { level: 3 };
+  const titles = r ? sectionTitles(r) : null;
   const situations = m.error && !r
     ? `<div class="card ins-error">${messageHTML({ glyph: icon.chart, title: 'Couldn’t work out your gaps', body: m.error, action: '<button class="btn primary" data-action="ins-retry">Try again</button>' })}</div>`
     : !r ? mapSkeleton(' aria-busy="true" aria-label="Working out your gaps"')
@@ -459,12 +476,12 @@ export function insightsHTML(m) {
         ${coverageHTML(r, { uses: m.uses, bands: m.bands, cell: m.cell, slot: m.slot, fresh: m.fresh })}
       </section>
       <section class="card ins-thin" aria-labelledby="thin-title">
-        ${sectionHead('Where it’s thin', '', { ...h3, id: 'thin-title' })}
+        ${sectionHead(titles.thin, '', { ...h3, id: 'thin-title' })}
         ${thinHTML(r, { all: m.allThin })}
         ${strongHTML(r)}
       </section>
       <section class="ins-fill" aria-labelledby="fill-title">
-        ${sectionHead('Bottles that would fill the gaps', '<p>Picked as a set: each adds what the ones before it don’t.</p>', { ...h3, id: 'fill-title' })}
+        ${sectionHead(titles.fill, '<p>Picked as a set: each adds what the ones before it don’t.</p>', { ...h3, id: 'fill-title' })}
         ${picksHTML(r, { wants: m.wants, ownedLabel: m.ownedLabel, preferValue: m.context.preferValue })}
       </section>`;
   const h = r ? headline(r) : null;

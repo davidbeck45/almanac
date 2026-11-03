@@ -84,6 +84,11 @@ test('Insights renders the report clean: the map, thin spots, strengths and sugg
   // Each half an h2, its cards h3s, what's in them h4s.
   assert.deepEqual([...html.matchAll(/<h2 id="([\w-]+)"/g)].map(m => m[1]), ['ins-headline', 'styles-title']);
   for (const id of ['cov-title', 'thin-title', 'fill-title', 'mix-title', 'more-title', 'start-title', 'doubles-title']) assert.match(html, new RegExp(`<h3 id="${id}"`));
+  // The cards say what the headline says: thin with spots that fall short, further with only room to grow.
+  assert.match(html, /<h3 id="thin-title">Where it’s thin<\/h3>[^]*<h3 id="fill-title">Bottles that would fill the gaps<\/h3>/);
+  const roomy = insights.insightsHTML({ ...model, report: { ...r, gaps: r.gaps.map(g => ({ ...g, status: 'room' })) } });
+  assert.match(roomy, /Here’s where it could go further\.[^]*<h3 id="thin-title">Where it could go further<\/h3>[^]*<h3 id="fill-title">Bottles that would take it further<\/h3>/);
+  assert.ok(!roomy.includes('Where it’s thin') && !roomy.includes('fill the gaps'));
   assert.ok(!/<h5/.test(html), 'no h5');
   const failed = clean(insights.stylesHTML({ ...model.styles, error: EVIL }), 'styles, failed');
   assert.equal((failed.match(/data-action="ins-retry"/g) ?? []).length, 2, 'Try again in place of each list');
@@ -126,6 +131,11 @@ test('the headline reads plainly, and the thin spots name what fills them', () =
   assert.equal(tail, 'Here’s where it’s thin.');
   assert.deepEqual(insights.headline({ ...report, overview: { strongShare: 0.81 }, gaps: [] }),
     { lead: 'You have a strong pick for 81% of what you wear.', tail: 'Nothing’s thin. Here’s where you’re strongest.' });
+  assert.deepEqual(insights.sectionTitles(report), { thin: 'Where it’s thin', fill: 'Bottles that would fill the gaps' });
+  assert.deepEqual(insights.sectionTitles({ ...report, gaps: [] }), { thin: 'Where it’s thin', fill: 'Bottles that would fill the gaps' }, 'nothing listed: "Nothing’s thin" under it');
+  const room = { ...report, gaps: report.gaps.map(g => ({ ...g, status: 'room' })) };
+  assert.equal(insights.headline(room).tail, 'Here’s where it could go further.');
+  assert.deepEqual(insights.sectionTitles(room), { thin: 'Where it could go further', fill: 'Bottles that would take it further' });
   // Five spots show whole; his six fold to the biggest four.
   const five = insights.thinHTML({ ...report, gaps: report.gaps.slice(0, 5) });
   assert.equal((five.match(/class="thin-row"/g) ?? []).length, 5, 'five spots show whole');
