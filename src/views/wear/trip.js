@@ -506,6 +506,9 @@ function commitAdding() {
 async function windowsFor(ask, old) {
   const start = later(ask.fromISO, placeDate(ask.place));
   const kept = old && samePlace(old.place, ask.place) ? old.windows.filter(w => w.dateISO >= ask.fromISO && w.dateISO < start) : [];
+  // Every day asked is over there already (late evening here, past midnight
+  // in London): the weather saved for them is all there is.
+  if (start > ask.toISO && kept.length) return kept;
   const fresh = await tripWindows(ask.place, start > ask.fromISO && !kept.length ? ask.fromISO : start, ask.toISO);
   return fresh.length ? [...kept, ...fresh].sort(byTime) : [];
 }

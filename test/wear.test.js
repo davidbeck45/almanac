@@ -1513,6 +1513,40 @@ test('a trip nine hours ahead of home reads its own day and hour: the card, its 
   }
 });
 
+test('a trip whose days are all over there packs again from its saved weather, asking for none', async t => {
+  // 8:30 pm in New York on Nov 3 (UTC-4 in the fixture): past midnight in London.
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-04T00:30:00Z') });
+  const { state } = app;
+  const home = syntheticForecast(8, { start: '2026-11-01' });
+  Object.assign(state, { forecast: home, wx: summarize(home), demo: { fetched: '2026-11-03', fragrances }, shared: null, active: 'demo', route: { dest: 'wear', pane: 'trip' } });
+  assert.equal(state.wx.todayISO, '2026-11-03');
+  const london = { name: 'London', region: 'England', lat: 51.51, lon: -0.13, timezone: 'Europe/London' };
+  const days = week(home, Date.parse('2026-11-01T14:00:00Z')).flatMap(d => [d.day, d.night].filter(Boolean)).filter(w => w.dateISO <= '2026-11-03');
+  const realFetch = globalThis.fetch, realDoc = globalThis.document;
+  const asked = [];
+  globalThis.fetch = async url => { asked.push(String(url)); throw new Error('no fetch expected'); };
+  globalThis.document = { querySelector: () => null, getElementById: () => null, activeElement: null };
+  const ui = { renderPage() {}, refocus() { return false; }, inSight() { return true; }, keepingFocus(el, scope, f) { f(); } };
+  try {
+    trip.saveTrip({ place: london, fromISO: '2026-11-01', toISO: '2026-11-03', events: [], max: 3, windows: days, fetchedAt: Date.now() });
+    trip.forgetTrip();
+    trip.actions['trip-edit'](null, ui);
+    trip.changes['trip-from']({ value: '2026-11-03' }, ui);
+    trip.changes['trip-to']({ value: '2026-11-03' }, ui);
+    await trip.forms['trip-pack'](null, ui);
+    const back = trip.loadTrip();
+    assert.deepEqual([back.fromISO, back.toISO], ['2026-11-03', '2026-11-03']);
+    assert.deepEqual(back.windows.map(w => `${w.dateISO} ${w.slot}`), ['2026-11-03 day', '2026-11-03 night'], 'the weather saved for it');
+    assert.deepEqual(asked, []);
+  } finally {
+    globalThis.fetch = realFetch;
+    globalThis.document = realDoc;
+    localStorage.removeItem('scentcast.trip');
+    trip.forgetTrip();
+    state.route = null;
+  }
+});
+
 test('a Trip form not planned yet keeps an outdated page from reloading out of sight, as an open sheet does', () => {
   const realDoc = globalThis.document;
   globalThis.document = { querySelector: () => null, getElementById: () => null, activeElement: null };
