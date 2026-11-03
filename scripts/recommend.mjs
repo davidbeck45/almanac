@@ -56,7 +56,7 @@ import { fragranticaLibrary, loadPool, fromPool, loadPoolStyles, loadAbout } fro
 import { applySkin } from '../src/skin.js';
 import { packTrip, withEvents, picksFor, tripOccasion } from '../src/pack.js';
 import { sprayGuide } from '../src/spray.js';
-import { tiesFor, planTies, tieName, tiesNews } from '../src/contrast.js';
+import { tiesFor, planTies, tieName, tiesNews, runnerUpOf } from '../src/contrast.js';
 import { doubles } from '../src/doubles.js';
 import { gapContext, gapReport, buyCheck, checkJSON, cellLabel, ratingText, DEFAULT_CLIMATE, USES, useLabel } from '../src/gaps.js';
 import { fetchClimate } from '../src/climate.js';
@@ -891,7 +891,8 @@ async function main() {
   // src/contrast.js: within a point of its match, not worn lately, each with
   // how it differs from the pick). A window an event is on (--events)
   // carries its occasion, and says so. The runner-up is the best after the
-  // pick and its ties, which are equal choices, not seconds.
+  // pick and its ties, which are equal choices, not seconds, and never one
+  // a tie couldn't be either: saved for a later event, or rated 2★ or lower.
   const pickJSON = (pick, ranked, win, occ = null, ties = []) => ({
     ...(win.occasion && { occasion: win.occasion.id }),
     tier: pick.tier,
@@ -900,7 +901,7 @@ async function main() {
     inspiredBy: inspiredBy(pick.fragrance),
     score: +pick.score.toFixed(3),
     reasons: pick.reasons.map(sign),
-    runnerUp: ranked.find(r => r !== pick && !ties.some(t => t.entry === r))?.fragrance.name ?? null,
+    runnerUp: runnerUpOf(pick, ranked, ties)?.fragrance.name ?? null,
     ties: ties.map(({ entry, tags }) => ({ name: entry.fragrance.name, brand: entry.fragrance.brand, score: +entry.score.toFixed(3), tags })),
     spray: sprayJSON(sprayGuide(pick.fragrance, win, win.occasion ?? occ)),
   });

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { contrast, tiesFor, planTies, rankedTies, tieLine, tieName, gapParts, pickGapLine, TIES_MAX, TIE_OCCASIONS } from '../src/contrast.js';
+import { contrast, tiesFor, planTies, rankedTies, tieLine, tieName, gapParts, pickGapLine, runnerUpOf, TIES_MAX, TIE_OCCASIONS } from '../src/contrast.js';
 import { heaviness } from '../src/accords.js';
 import { performanceLevel, rank } from '../src/engine.js';
 import { OCCASIONS, occasionById } from '../src/occasions.js';
@@ -232,4 +232,18 @@ test('above the pick, it says what chose the pick instead; a bottle saved for an
   assert.equal(pickGapLine(entry('Aristo', 0.9), pick, { ...win, label: 'Friday night' }, { occasion: occasionById('date') }), '4 points over Legacy for a date Friday night, but the plan gives Legacy a turn.');
   assert.equal(pickGapLine(null, pick, win), '');
   assert.equal(pickGapLine(over, null, win), '');
+});
+
+test('the runner-up is the best after the pick and its ties, never one saved for an event or rated 2★ or lower', () => {
+  const ranked = [entry('Legacy', 0.885), entry('Aristo', 0.881), entry('Jake', 0.87, { stars: 1 }), entry('Cedrus Blanc', 0.86), entry('Terra', 0.85), entry('Sauvage', 0.84)];
+  ranked[3].parts.saved = { dateISO: '2026-10-31', slot: 'night', occasion: occasionById('formal') };
+  const ties = tiesFor(ranked[0], ranked);
+  assert.deepEqual(ties.map(t => t.entry.fragrance.name), ['Aristo']);
+  assert.equal(runnerUpOf(ranked[0], ranked, ties).fragrance.name, 'Terra', 'not the tie, the 1★ held back under it, or the bottle saved for Saturday');
+  assert.equal(runnerUpOf(ranked[0], ranked).fragrance.name, 'Aristo', 'without ties, the next');
+  // A plan's pick needn't lead: the runner-up can rank above it, and a 3★ counts.
+  const planned = [entry('Glorious Oud', 0.9, { stars: 3 }), entry('Legacy', 0.88)];
+  assert.equal(runnerUpOf(planned[1], planned).fragrance.name, 'Glorious Oud Royal Blanc');
+  assert.equal(runnerUpOf(ranked[0], ranked.slice(0, 1)), null);
+  assert.equal(runnerUpOf(null, ranked), null);
 });

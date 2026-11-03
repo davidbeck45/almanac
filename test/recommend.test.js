@@ -598,3 +598,23 @@ test('a pick names the bottles that suit its window just as well, each with how 
   const after = JSON.parse(cli('--loc', '40.7,-74', '--json', '--slot', 'night', '--journal', file).stdout).slots[0];
   assert.ok(!after.pick.ties.some(t => t.name === worn.name));
 });
+
+test('a runner-up is never one the plan saves for a later event, nor one he rates 2★ or lower, as a tie never is', async () => {
+  const event = dayISO(3);
+  // Three bottles switched on, Supremacy rated 1★: second by day, but no runner-up.
+  const three = ['Supremacy Collector\'s Edition Pour Homme', 'Détour Noir', 'Aristo'].map(n => fragrances.find(f => f.name === n));
+  const token = journalToken([], fragrances.filter(f => !three.includes(f)).map(f => String(f.id)), { [three[0].id]: { rating: 1 } }, { todayISO: dayISO(0) });
+  const [week, rated] = await Promise.all([
+    run('--loc', '40.7,-74', '--json', '--week', '--events', `${event} day casual`),
+    run('--loc', '40.7,-74', '--json', '--date', dayISO(2), '--slot', 'day', '--journal', token),
+  ]);
+  const picks = JSON.parse(week.stdout).days.flatMap(d => d.picks.map(p => ({ ...p, date: d.date })));
+  const saved = picks.find(p => p.occasion === 'casual').name;
+  const before = picks.filter(p => p.date < event);
+  assert.ok(before.length >= 2);
+  for (const p of before) assert.notEqual(p.runnerUp, saved, `${p.date} ${p.slot}: ${saved} is saved for the casual day`);
+  const day = JSON.parse(rated.stdout).slots[0];
+  assert.equal(day.ranked[1].name, three[0].name);
+  assert.ok(day.ranked[1].reasons.includes('- You rate it 1★'));
+  assert.deepEqual([day.pick.name, day.pick.ties, day.pick.runnerUp], ['Aristo', [], 'Détour Noir']);
+});

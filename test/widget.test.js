@@ -56,6 +56,24 @@ test('every window carries the bottles that suit it as well, as the app’s Now 
   assert.ok(!out.now.ties.some(t => t.name === out.now.runnerUp.name));
 });
 
+test('the runner-up is never a bottle saved for a later event or rated 2★ or lower, as the CLI’s', () => {
+  const at = Date.parse('2026-09-28T13:00:00Z'); // 09:00 on the 28th
+  const run = (list, { events = [], skin = {} } = {}) => {
+    const journal = loadJournal(journalToken([], [], skin, { todayISO: '2026-09-28', events }));
+    return widgetPayload(widgetBottles(list, [], journal), syntheticForecast(7), place, at, journal);
+  };
+  assert.deepEqual([run(fragrances).now.name, run(fragrances).now.runnerUp.name], ['Aristo', 'Jake']);
+  // Tomorrow planned casual, with Jake its best: saved till then, so not today's runner-up.
+  const saving = run(fragrances, { events: [{ dateISO: '2026-09-29', slot: 'day', occasion: 'casual' }] });
+  assert.equal(saving.days[1].day.name, 'Jake');
+  assert.equal(saving.now.name, 'Aristo');
+  assert.ok(saving.now.runnerUp.name !== 'Jake' && !saving.now.ties.some(t => t.name === saving.now.runnerUp.name), saving.now.runnerUp.name);
+  // Rated 1★, Supremacy would lead three bottles; held back right under Aristo, it's still not the runner-up.
+  const three = ['Supremacy Collector\'s Edition Pour Homme', 'Détour Noir', 'Aristo'].map(n => fragrances.find(f => f.name === n));
+  const held = run(three, { skin: { [three[0].id]: { rating: 1 } } });
+  assert.deepEqual([held.now.name, held.now.ties, held.now.runnerUp.name], ['Aristo', [], 'Détour Noir']);
+});
+
 test('the widget hides the site defaults unless told otherwise', () => {
   const jake = fragrances.find(f => String(f.id) === '4310');
   assert.ok(!activeBottles(fragrances).includes(jake));

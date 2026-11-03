@@ -109,6 +109,20 @@ export function planTies(plan, { history = [] } = {}) {
   });
 }
 
+/**
+ * The runner-up to `pick` in `ranked` (a window's rank() list): the best
+ * bottle after it and its `ties` (tiesFor's, equal choices, not seconds),
+ * leaving out what a tie never is either: one the plan saves for an event
+ * later on, and one he rates DISLIKED or lower (a 1★ held back sits right
+ * under the pick on purpose). The CLI's runnerUp and the widget's read it.
+ * -> an entry of `ranked`, or null.
+ */
+export function runnerUpOf(pick, ranked, ties = []) {
+  if (!pick) return null;
+  return ranked.find(r => r !== pick && r.fragrance.id !== pick.fragrance.id && !ties.some(t => t.entry === r)
+    && !r.parts?.saved && !isDisliked(r.fragrance)) ?? null;
+}
+
 // "Legacy (fresher, white floral)": a tie's name with its tags.
 export const tieName = ({ entry, tags }) => `${entry.fragrance.name}${tags.length ? ` (${tags.join(', ')})` : ''}`;
 

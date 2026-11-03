@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { planWindows } from '../src/engine.js';
-import { planTies, tieLine } from '../src/contrast.js';
+import { planTies, tieLine, runnerUpOf } from '../src/contrast.js';
 import { accordColor } from '../src/accords.js';
 import { DEFAULT_HIDDEN } from '../src/hidden.js';
 import { readJournal, isJournalToken, journalFreshness } from '../src/history.js';
@@ -124,12 +124,13 @@ function brief(p, ties = []) {
 
 // The window to wear now, in full; `tieLine` is the panel's one line on its
 // ties ("Legacy (fresher) suits tonight just as well."), '' with none, and
-// the runner-up the best after them, as they're equal choices.
+// the runner-up the best after them, as they're equal choices (runnerUpOf:
+// never one saved for a later event or rated 2★ or lower, as the CLI's).
 function detail(p, ties = []) {
   if (!p?.pick) return null;
   const { win, pick, ranked } = p;
   const f = pick.fragrance;
-  const runnerUp = ranked.find(r => r !== pick && !ties.some(t => t.entry === r));
+  const runnerUp = runnerUpOf(pick, ranked, ties);
   return {
     ...brief(p, ties),
     tieLine: tieLine(ties, win),
