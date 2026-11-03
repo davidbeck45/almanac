@@ -122,7 +122,8 @@ function serviceWorker(scope = 'https://example.org/almanac/') {
       return new Response(null, { status: 304, headers: { etag: `"${version}"` } });
     }
     net.sent++;
-    return new Response(`${pathname} from the network (${version})`, { status: net.status, headers: { etag: `"${version}"` } });
+    if (net.status !== 200) return new Response(`${pathname}: ${net.status}`, { status: net.status });
+    return new Response(`${pathname} from the network (${version})`, { headers: { etag: `"${version}"` } });
   };
   const context = { self, caches, fetch, Response, URL, setTimeout, clearTimeout };
   // The waits for a slow network, cut short so the suite doesn't sit through them.
@@ -306,6 +307,52 @@ test('files in flight together keep to the launch’s one decision, whichever fi
   assert.equal(await w.cached(CACHE, 'src/main.js').text(), '/almanac/src/main.js from the network (v1)');
 });
 
+test('a server error is no answer: the saved copy opens the app, page, modules and wardrobe alike', async () => {
+  const CACHE = sw.match(/const CACHE = '([\w-]+)'/)[1];
+  const w = serviceWorker();
+  await w.get('', 'navigate');
+  for (const f of ['src/main.js', 'src/app/shell.js', 'data/collection.json']) await w.get(f);
+  // The page comes, then GitHub Pages answers 503 for the rest: each file
+  // the launch asks for is the saved copy, as is one from a page the worker
+  // didn't open (the first visit that installed it).
+  await w.get('', 'navigate', { resultingClientId: 'a' });
+  w.net.status = 503;
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'a' }), '/almanac/src/main.js from the network (v1)');
+  assert.equal(await w.get('data/collection.json', 'cors', { clientId: 'a' }), '/almanac/data/collection.json from the network (v1)', 'not "Collection missing"');
+  assert.equal(await w.get('src/app/shell.js'), '/almanac/src/app/shell.js from the network (v1)', 'without a launch too');
+  // A launch whose page met the error opens the saved app, as offline.
+  assert.equal(await w.get('', 'navigate', { resultingClientId: 'b' }), '/almanac/ from the network (v1)');
+  assert.equal(await w.get('src/main.js', 'cors', { clientId: 'b' }), '/almanac/src/main.js from the network (v1)');
+  assert.equal(await w.cached(CACHE, 'src/app/shell.js').text(), '/almanac/src/app/shell.js from the network (v1)', 'and the error isn’t saved over it');
+  // A file it never saved has nothing better to give: the error goes
+  // through, and the page says the app didn't finish loading.
+  assert.equal(await w.get('src/app/version.js', 'cors', { clientId: 'a' }), '/almanac/src/app/version.js: 503');
+  // Once the server's back, so is the network's copy.
+  w.net.status = 200;
+  w.net.version = 'v2';
+  assert.equal(await w.get('src/main.js'), '/almanac/src/main.js from the network (v2)');
+});
+
+test('a module that doesn’t arrive leaves a message with Reload, not a blank page', async () => {
+  const main = read('src/main.js');
+  const caught = main.slice(main.indexOf("await import('./app/shell.js')"));
+  assert.match(caught, /^await import\('\.\/app\/shell\.js'\)\.catch\(/, 'main.js catches the shell’s import');
+  assert.ok(caught.indexOf('boot(') > caught.indexOf('});'), 'and only the import: an error in boot never wipes a page that works');
+  const { showUnloaded } = await import('../src/app/early.js');
+  let reloaded = false, onClick = null;
+  const button = { addEventListener: (type, fn) => { if (type === 'click') onClick = fn; } };
+  let skipped = false;
+  const els = { nav: { hidden: false }, main: { innerHTML: '', querySelector: () => button } };
+  showUnloaded({ getElementById: id => els[id], querySelector: () => ({ remove() { skipped = true; } }) }, () => { reloaded = true; });
+  assert.equal(els.nav.hidden, true, 'no empty tab bar');
+  assert.ok(skipped, 'nor a skip link to nowhere');
+  assert.match(els.main.innerHTML, /role="alert"/);
+  assert.match(els.main.innerHTML, /<h1>Almanac didn’t finish loading<\/h1>/);
+  assert.match(els.main.innerHTML, /<button class="btn primary" type="button">Reload<\/button>/);
+  onClick();
+  assert.ok(reloaded);
+});
+
 test('dataset files answer from the cache at once and are checked behind it', async () => {
   const w = serviceWorker();
   w.net.version = 'v2';
@@ -380,6 +427,26 @@ test('a climate archive that fails isn’t asked again by every pool question', 
   } finally {
     globalThis.fetch = realFetch;
     state.loc = null;
+  }
+});
+
+test('David’s wardrobe loads with the catalog beside it, and a server’s error page is no wardrobe', async () => {
+  const { state, loadBottles } = await import('../src/app/state.js');
+  const realFetch = globalThis.fetch;
+  const answers = {};
+  globalThis.fetch = async url => answers[url] ?? new Response('down', { status: 503 });
+  try {
+    answers['data/collection.json'] = Response.json({ fetched: '2026-10-30', fragrances: [{ id: 12, name: 'Twelve' }] });
+    await loadBottles();
+    assert.deepEqual(state.demo.fragrances.map(f => f.id), ['12'], 'ids as strings');
+    assert.deepEqual(state.catalog, [], 'a catalog that doesn’t load only misses its bottles');
+    state.demo = null;
+    delete answers['data/collection.json'];
+    await assert.rejects(loadBottles(), /503/, 'the shell says the wardrobe is missing, with Try again');
+    assert.equal(state.demo, null);
+  } finally {
+    globalThis.fetch = realFetch;
+    state.demo = null;
   }
 });
 

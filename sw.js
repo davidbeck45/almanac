@@ -17,6 +17,12 @@
 // versions don't mix. Whichever happens first decides, for the files
 // already in flight as well. The cache catches up on a launch where the
 // network answers in time, or when a new sw.js installs.
+// A server error (GitHub Pages has its outages; a file it lost) is no
+// answer, as the network failing is: the saved copy answers, the page's and
+// every app file's, so one failing file never blanks an installed app. In a
+// launch that met a new version, that copy is the older one beside new
+// files, as it is offline. A file with no saved copy passes the error on
+// (a module's: the page says it didn't finish loading, src/app/early.js).
 const CACHE = 'almanac-v24';
 const NETWORK_WAIT_MS = 2500;
 const SLOW_MS = 1000;
@@ -257,6 +263,7 @@ self.addEventListener('fetch', e => {
       if (hit && launch?.cached) return hit;
       const net = fresh(req.url, hit);
       const network = () => net.then(res => {
+        if (!res.ok && hit) return hit; // a server error: as offline
         if (launch && !launch.cached && res.ok && changed(res, hit)) launch.changed = true;
         return keep(res);
       }).catch(async () => hit ?? (await caches.match(key, { ignoreSearch: true })) ?? Response.error());
@@ -271,7 +278,8 @@ self.addEventListener('fetch', e => {
         return hit;
       }
       if (first instanceof Response) {
-        if (first.ok && changed(first, hit)) launch.changed = true;
+        if (!first.ok) return hit; // a server error: as offline
+        if (changed(first, hit)) launch.changed = true;
         return keep(first);
       }
       // Slow, but another file came back new meanwhile: this one waits too.

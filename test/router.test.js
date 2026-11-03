@@ -69,7 +69,7 @@ test('the old ?view= shortcuts open the same panes', () => {
 
 test('every action a template names has one handler', () => {
   // Handled by the shell itself (src/app/shell.js).
-  const handled = new Set(['close-sheet', 'skip', 'list-back']);
+  const handled = new Set(['close-sheet', 'skip', 'list-back', 'bottles-retry']);
   for (const view of VIEWS) {
     for (const name of Object.keys(view.actions ?? {})) {
       assert.ok(!handled.has(name), `two handlers for "${name}"`);

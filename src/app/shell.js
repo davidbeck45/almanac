@@ -20,8 +20,8 @@ import { locationFromURL } from './early.js';
 import { askPool } from './pool.js';
 import { loadWants, hasWant, setWant } from '../wishlist.js';
 import {
-  state, computeToday, sourceRecords, knownBottles, library, setActive as chooseList,
-  addToMine as addRecord, markBottlesLoaded, keepBottles, loadFullRecord, retryClimate,
+  state, computeToday, sourceRecords, knownBottles, library, setActive as chooseList, viewingDemo,
+  addToMine as addRecord, markBottlesLoaded, loadBottles, keepBottles, loadFullRecord, retryClimate,
 } from './state.js';
 import {
   registerSheets, renderSheet, openSheet, updateSheet, closeSheet, sheetPopped, sheetEntry, replacePageURL, refocus, refocusNear, inSight,
@@ -65,6 +65,7 @@ const ACTIONS = {
   // The skip link: past the nav to the page's heading.
   skip: () => $('#page-title')?.focus(),
   'list-back': () => listBack(),
+  'bottles-retry': () => retryBottles(),
   ...merged('actions'),
 };
 const FORMS = merged('forms');
@@ -290,12 +291,15 @@ function renderPage() {
   const main = $('#main');
   const kept = keptScrolls(main);
   const stuck = Boolean(main.querySelector('.head-bar.stuck'));
-  main.innerHTML = `${headHTML(page, pane, r)}<div class="pane" data-pane="${esc(r.dest)}${r.pane ? `/${esc(r.pane)}` : ''}">${pane.render(app, r)}</div>`;
+  // Every page ranks or counts David's wardrobe while it's the list, but
+  // Settings: without it, they say so, with Try again.
+  const unloaded = bottlesFailed && viewingDemo() && r.dest !== 'settings';
+  main.innerHTML = `${headHTML(page, pane, r)}<div class="pane" data-pane="${esc(r.dest)}${r.pane ? `/${esc(r.pane)}` : ''}">${unloaded ? bottlesMissingHTML() : pane.render(app, r)}</div>`;
   keepScrolls(main, kept);
   watchHeadBar(stuck);
   main.classList.toggle('updating', state.updating);
   main.setAttribute('aria-busy', String(state.updating));
-  pane.after?.(app, r);
+  if (!unloaded) pane.after?.(app, r);
   document.body.dataset.route = r.dest;
   syncTitle();
   renderFoot();
@@ -834,11 +838,12 @@ function listen() {
     new IntersectionObserver(([e]) => $('#hero').classList.toggle('offscreen', !e.isIntersecting)).observe($('#hero'));
   }
 
-  // Back online: a bottle page that couldn't load tries again, and so does
-  // the place's climate.
+  // Back online: a bottle page that couldn't load tries again, and so do
+  // the place's climate and a wardrobe that didn't load.
   window.addEventListener('online', () => {
     retryClimate();
     if (state.route?.dest === 'bottle') retryBottle();
+    if (bottlesFailed) retryBottles();
   });
 
   document.addEventListener('visibilitychange', () => {
@@ -895,19 +900,7 @@ export async function boot({ early: asked = null } = {}) {
     early = { loc: state.loc, forecast: getForecast(state.loc) };
     early.forecast.catch(() => {}); // refreshWeather hears it
   }
-  try {
-    const [demo, catalog] = await Promise.all([
-      fetch('data/collection.json').then(r => r.json()),
-      fetch('data/catalog.json').then(r => r.json()).catch(() => ({ fragrances: [] })),
-    ]);
-    for (const f of [...demo.fragrances, ...catalog.fragrances]) f.id = String(f.id);
-    state.demo = demo;
-    state.catalog = catalog.fragrances;
-  } catch {
-    markBottlesLoaded();
-    $('#main').innerHTML = messageHTML({ glyph: icon.bottle, title: 'Collection missing', body: 'Couldn’t load David’s wardrobe. Check your connection and reload.' });
-    return;
-  }
+  await openBottles();
   markBottlesLoaded();
   const link = parseShare(params);
   if (link) openSharedLink(link);
@@ -916,4 +909,36 @@ export async function boot({ early: asked = null } = {}) {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   if (state.loc) await refreshWeather();
   else { render(); openSheet({ kind: 'location' }); }
+}
+
+// ---------- David's wardrobe ----------
+
+// Whether David's wardrobe didn't load (offline with nothing saved, the
+// server failing): the pages that rank it say so (bottlesMissingHTML), and
+// Try again, or coming back online, loads it again. Boot carries on without
+// it, so Mine and the forecast still work.
+let bottlesFailed = false;
+let bottlesRetry = null; // the load under way from Try again
+
+async function openBottles() {
+  try {
+    await loadBottles();
+    bottlesFailed = false;
+  } catch {
+    bottlesFailed = true;
+  }
+}
+
+const bottlesMissingHTML = () => messageHTML({
+  glyph: icon.bottle, title: 'Collection missing', body: 'Couldn’t load David’s wardrobe. Check your connection and try again.',
+  action: `<button class="btn primary" data-action="bottles-retry">${icon.refresh}<span>Try again</span></button>`,
+});
+
+function retryBottles() {
+  bottlesRetry ??= openBottles().then(() => {
+    bottlesRetry = null;
+    if (bottlesFailed) announce('Still couldn’t load David’s wardrobe.');
+    else render();
+  });
+  return bottlesRetry;
 }

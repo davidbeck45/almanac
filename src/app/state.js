@@ -348,6 +348,27 @@ let bottlesIn;
 const bottlesLoaded = new Promise(resolve => { bottlesIn = resolve; });
 export const markBottlesLoaded = () => bottlesIn();
 
+/**
+ * David's wardrobe (data/collection.json) and the catalog, into the state.
+ * Rejects when the wardrobe doesn't load: offline with nothing saved, or the
+ * server failing, whose error page isn't the wardrobe. Without the catalog,
+ * search only misses its bottles. index.html preloads both with the same
+ * request, so these fetches take the preloaded answers.
+ */
+export async function loadBottles() {
+  const json = res => {
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  };
+  const [demo, catalog] = await Promise.all([
+    fetch('data/collection.json').then(json),
+    fetch('data/catalog.json').then(json).catch(() => ({ fragrances: [] })),
+  ]);
+  for (const f of [...demo.fragrances, ...catalog.fragrances]) f.id = String(f.id);
+  state.demo = demo;
+  state.catalog = catalog.fragrances;
+}
+
 // Matches from the demo and the catalog come first (scraped with Parfumo's
 // ratings), then the rest of Fragrantica as light records ({ stub: true });
 // `fullRecords` loads the ones that get added. When the library can't be
