@@ -159,6 +159,9 @@ test('a wear corrected after the fact keeps where the window was worn, with its 
   // Worn from a live window: that window's place.
   [entry] = toggleWear('c', '2026-11-02', 'night', home, 'daily', stamp);
   assert.deepEqual([entry.lat, entry.lon], [40.71, -74.01]);
+  // Then from a trip window on typical weather: no weather, not the wear it replaced.
+  [entry] = toggleWear('f', '2026-11-02', 'night', miami, 'daily', wearStamp({ feelsF: 44, typical: true }, 'f'));
+  assert.ok(!('wx' in entry), 'the replaced wear was another place’s weather');
   // One from before wears kept a place takes the place given.
   toggleWear('d', '2026-11-01', 'day');
   [entry] = toggleWear('e', '2026-11-01', 'day', miami).filter(h => h.date === '2026-11-01');

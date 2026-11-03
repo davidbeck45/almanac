@@ -88,7 +88,9 @@ export function toggleWear(id, dateISO, slot, where = null, occasion = null, sta
   const current = wornIn(history, dateISO, slot);
   const rest = history.filter(h => !(h.date === dateISO && h.slot === slot));
   const place = !stamp && Number.isFinite(current?.lat) && Number.isFinite(current.lon) ? current : where;
-  const wx = stamp?.wx ?? current?.wx;
+  // A live window's own stamp, even one with no weather (typical weather on
+  // a trip): only a wear logged after the fact keeps the replaced one's.
+  const wx = stamp ? stamp.wx : current?.wx;
   const pick = current ? current.pick : stamp?.pick;
   const use = occasion ?? current?.occasion;
   const entry = {
