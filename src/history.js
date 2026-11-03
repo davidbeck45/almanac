@@ -76,18 +76,20 @@ export function stampedWindow(h, lat = null) {
 // logged from a live window. One that replaces another in its window keeps
 // that one's pick (once a wear is logged, the window's pick is that wear,
 // planWindows, no longer the one shown) and, logged after the fact, its
-// weather, which was the same window's. The log stays newest first, so a
-// wear logged for an earlier day goes in its place.
+// weather and use, which were the same window's (a bottle corrected for
+// Saturday's formal night was still worn for it). The log stays newest
+// first, so a wear logged for an earlier day goes in its place.
 export function toggleWear(id, dateISO, slot, where = null, occasion = null, stamp = null) {
   const history = loadHistory();
   const current = wornIn(history, dateISO, slot);
   const rest = history.filter(h => !(h.date === dateISO && h.slot === slot));
   const wx = stamp?.wx ?? current?.wx;
   const pick = current ? current.pick : stamp?.pick;
+  const use = occasion ?? current?.occasion;
   const entry = {
     id, date: dateISO, slot,
     ...(where && { lat: round2(where.lat), lon: round2(where.lon) }),
-    ...(occasion && { occasion: String(occasion) }),
+    ...(use && { occasion: String(use) }),
     ...(wx && { wx }),
     ...(pick != null && { pick }),
   };

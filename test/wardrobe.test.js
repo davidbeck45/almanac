@@ -175,9 +175,85 @@ test('the calendar’s 1st names its month in parts a narrow cell can drop', () 
     dusty: [],
     todayISO: '2026-10-02',
   }, id => (id === mango.id ? mango : null));
-  assert.match(html, /class="cal-cell has first"[^>]*title="Oct 1: Mango Sticky Rice"/);
+  assert.match(html, /class="cal-cell has first"[^>]*title="Yesterday, Oct 1: Mango Sticky Rice by day"/);
   assert.match(html, /<span class="cal-mon">Oct<\/span><span class="cal-day"> 1<\/span>/);
   assert.match(html, /<small aria-hidden="true">30<\/small>/);
+});
+
+test('the calendar’s days gone by and today open the log sheet; days ahead don’t', () => {
+  const day = (dateISO, extra = {}) => ({ dateISO, future: false, day: null, night: null, ...extra });
+  const html = wardrobe.wornHTML({
+    stats: { wears: 1, bottles: 1, top: [[mango.id, 1]], lastWorn: new Map([[mango.id, '2026-10-31']]) },
+    calendar: [[day('2026-10-31', { night: { id: mango.id } }), day('2026-11-01'), day('2026-11-02'), day('2026-11-03', { future: true })]],
+    dusty: [],
+    todayISO: '2026-11-02',
+  }, id => (id === mango.id ? mango : null));
+  assert.match(html, /<button type="button" class="cal-cell has" data-action="journal-log" data-date="2026-10-31" title="Sat, Oct 31: Mango Sticky Rice at night" tabindex="-1">/);
+  assert.match(html, /<span class="visually-hidden">Sat, Oct 31: Mango Sticky Rice at night<\/span>/, 'named by its day and what was worn when');
+  assert.match(html, /data-date="2026-11-01" title="Yesterday, Nov 1: nothing logged" tabindex="-1">/);
+  // Today is the one stop in the tab order; arrow keys move from there.
+  assert.match(html, /class="cal-cell today" data-action="journal-log" data-date="2026-11-02" title="Today, Nov 2: nothing logged" tabindex="0" aria-current="date">/);
+  assert.match(html, /<span class="cal-cell future" title="Nov 3">/);
+  assert.ok(!html.includes('data-date="2026-11-03"'), 'a day ahead can’t be worn yet');
+  assert.match(html, /<h3>Calendar<\/h3><p class="muted small cal-hint">Choose a day to log a wear you didn’t at the time\.<\/p>/);
+  // An empty journal offers one too, for today.
+  const empty = wardrobe.wornHTML({ stats: { wears: 0, bottles: 0, top: [], lastWorn: new Map() }, calendar: [], dusty: [], todayISO: '2026-11-02' }, () => null);
+  assert.match(empty, /data-action="journal-log" data-date="2026-11-02">.*Log a wear<\/button>/s);
+});
+
+test('a calendar day names what was worn by day and at night, a bottle no list has included', () => {
+  const resolve = id => (id === mango.id ? mango : null);
+  const c = { dateISO: '2026-10-28', future: false, day: { id: 'gone' }, night: { id: mango.id } };
+  assert.equal(wardrobe.calendarLabel(c, resolve, '2026-11-02'), 'Wed, Oct 28: a bottle from another list by day, Mango Sticky Rice at night');
+  assert.equal(wardrobe.calendarLabel({ ...c, dateISO: '2026-11-04', future: true }, resolve, '2026-11-02'), 'Nov 4');
+});
+
+test('arrow keys step through the calendar’s days, a week up or down, never past today', () => {
+  // Five weeks, today the Monday of the last (index 29).
+  const today = 29;
+  assert.equal(wardrobe.calendarStep('ArrowLeft', today, today), 28);
+  assert.equal(wardrobe.calendarStep('ArrowRight', today, today), today, 'tomorrow can’t be worn yet');
+  assert.equal(wardrobe.calendarStep('ArrowUp', today, today), 22);
+  assert.equal(wardrobe.calendarStep('ArrowDown', 22, today), today);
+  assert.equal(wardrobe.calendarStep('ArrowDown', 26, today), today, 'next Thursday is ahead: today');
+  assert.equal(wardrobe.calendarStep('ArrowUp', 3, today), 0);
+  assert.equal(wardrobe.calendarStep('ArrowLeft', 0, today), 0);
+  assert.deepEqual(['Home', 'End'].map(k => wardrobe.calendarStep(k, 10, today)), [7, 13]);
+  assert.equal(wardrobe.calendarStep('End', 28, today), today);
+  assert.equal(wardrobe.calendarStep('Enter', 10, today), null);
+});
+
+test('the log sheet names the day, its wears with Clear, and the bottles most recently worn first', () => {
+  const bottles = [aventus, mango, ...many];
+  const lastWorn = new Map([[mango.id, '2026-11-01'], [aventus.id, '2026-10-20'], ['3', '2026-10-31']]);
+  const ordered = wardrobe.logOrder(bottles, lastWorn);
+  assert.deepEqual(ordered.slice(0, 4).map(f => f.name), ['Mango Sticky Rice', 'Bottle 3', 'Aventus', 'Bottle 1'], 'then by name');
+  const sheet = (s, worn = { day: null, night: null }) => wardrobe.logSheetHTML({ dateISO: '2026-10-31', slot: 'night', ...s }, { bottles: ordered, worn, lastWorn, todayISO: '2026-11-02' });
+  const html = sheet({}, { day: { id: mango.id, f: mango }, night: { id: aventus.id, f: aventus } });
+  assert.match(html, /<h2 id="log-title" class="sheet-title">Sat, Oct 31<\/h2>/);
+  assert.match(html, /data-action="journal-log-slot" data-value="night" aria-pressed="true"/);
+  assert.match(html, /<b>Mango Sticky Rice<\/b><small>Day<\/small><\/span>\s*<button class="btn tertiary compact" data-action="journal-log-clear" data-slot="day">Clear<span class="visually-hidden">: Mango Sticky Rice by day<\/span>/);
+  assert.match(html, /data-action="journal-log-clear" data-slot="night">Clear<span class="visually-hidden">: Aventus at night/);
+  assert.match(html, /<p class="list-title" id="log-list-title">What you wore at night<\/p>/);
+  // The night's bottle is marked, and logging it again does nothing.
+  assert.match(html, /data-id="9828" aria-disabled="true">[^]*?<small>Logged at night<\/small>/);
+  assert.match(html, /data-id="128201">[^]*?<small>d’Annam · worn yesterday<\/small>/);
+  assert.match(html, /placeholder="Filter 12 bottles"/);
+  // A filter hides the rest as drawn, so a redraw keeps it.
+  const filtered = sheet({ filter: 'bottle 1' });
+  assert.equal((filtered.match(/<li class="row"[^>]* hidden>/g) ?? []).length, 10, 'Bottle 1 and Bottle 10 stay');
+  assert.match(sheet({ filter: 'zzz' }), /<p class="muted small log-empty">No bottles match\.<\/p>/);
+  assert.match(sheet({ said: 'Cleared Aventus from Sat night, Oct 31.' }), /id="log-live" data-say="Cleared Aventus from Sat night, Oct 31\."/);
+  assert.ok(!sheet({}).includes('class="log-worn"'), 'nothing logged: no list of wears');
+  assert.match(wardrobe.logSheetHTML({ dateISO: '2026-11-02', slot: 'day' }, { bottles: [], worn: { day: null, night: null }, lastWorn, todayISO: '2026-11-02' }), /Today, Nov 2[^]*Every bottle is switched off/);
+});
+
+test('a wear logged after the fact is said by when it was', () => {
+  const today = '2026-11-02';
+  assert.deepEqual(['day', 'night'].map(k => wardrobe.loggedWhen(today, k, today)), ['today', 'tonight']);
+  assert.deepEqual(['day', 'night'].map(k => wardrobe.loggedWhen('2026-11-01', k, today)), ['yesterday', 'last night']);
+  assert.deepEqual(['day', 'night'].map(k => wardrobe.loggedWhen('2026-10-31', k, today)), ['Sat, Oct 31', 'Sat night, Oct 31']);
+  assert.equal(wardrobe.logDayTitle('2026-11-01', today), 'Yesterday, Nov 1');
 });
 
 test('the Insights map’s skeleton has a vial for every cell of both slots', () => {

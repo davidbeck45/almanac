@@ -11,7 +11,7 @@ import { sprayGuide } from '../spray.js';
 import { planTies, rankedTies, tieLine, contrast } from '../contrast.js';
 import { setSkin, loadSkin, loadAsked, markAsked, wasAsked } from '../skin.js';
 import { theme } from '../theme.js';
-import { toggleWear, wearStamp, wornIn, journalStats, shiftISO } from '../history.js';
+import { toggleWear, wearStamp, wornIn, journalStats, journalFreshness, shiftISO } from '../history.js';
 import { routeHash } from '../app/router.js';
 import { esc, temp, deg, plural, shortDate, weekdayShort, windowRange, feelWords, displayReasons, moveText, listLabel } from '../ui.js';
 import {
@@ -262,6 +262,20 @@ function alsoHTML(ranked, pick, ctx, worn, label, { tags = false } = {}) {
     <h3 class="also-title">Also good ${esc(label)}</h3>
     ${shelfHTML(rest, ctx, { wornId: worn, tagOf })}
   </div>`;
+}
+
+// Once the day window has rolled over (Now's Day is tomorrow's) with nothing
+// logged for this morning, a quiet line that opens Worn's log sheet for it:
+// a wear missed there lets the evening's and tomorrow's picks repeat it. Only
+// for someone keeping the journal (a wear in rotation's reach, RECENT_DAYS),
+// and after Now's own question, if it has one.
+export function missedHTML(todayISO) {
+  return `<p class="log-missed">${icon.journal}<span>Wore something this morning?</span><button class="link-btn" data-action="journal-log" data-date="${esc(todayISO)}" data-slot="day">Log it<span class="visually-hidden">: what you wore today</span></button></p>`;
+}
+function missedMorning() {
+  const today = state.wx?.todayISO;
+  return Boolean(today && state.wx.day && state.wx.day.dateISO !== today && !wornIn(state.history, today, 'day')
+    && journalFreshness(state.history, today).recent);
 }
 
 // ---------- Asking once ----------
@@ -539,6 +553,7 @@ function nowPane() {
         ${other ? nextWindowHTML(other, wornId(other.win), nowHour()) : ''}
       </div>
       ${ask.below}
+      ${!ask.inPick && !ask.below && missedMorning() ? missedHTML(state.wx.todayISO) : ''}
       ${alsoHTML(ranked, pick, win.slot, worn, win.slot === 'day' ? 'by day' : 'tonight', { tags: true })}
     </section>
     ${journalTeaser()}`;

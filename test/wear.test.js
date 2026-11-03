@@ -11,6 +11,7 @@ import { summarize, week } from '../src/weather.js';
 import { renderScene } from '../src/scene.js';
 import { shiftISO } from '../src/history.js';
 import * as wear from '../src/views/wear.js';
+import * as wardrobe from '../src/views/wardrobe.js';
 import * as trip from '../src/views/wear/trip.js';
 import * as when from '../src/views/wear/when.js';
 import { placeSheetHTML, datePillHTML } from '../src/views/wear/pickers.js';
@@ -658,6 +659,52 @@ test('a wear from the Occasion card in another city logs that city', async () =>
     globalThis.fetch = realFetch;
     when.when.place = null;
     state.history = [];
+  }
+});
+
+test('a morning not logged: Now offers to log it once the day has rolled over, and the log sheet counts it for rotation', () => {
+  const { state } = app;
+  // 7 pm there: Now's Day is tomorrow's.
+  const evening = summarize(forecast, Date.parse('2026-09-28T23:00:00Z'));
+  const day = evening.todayISO;
+  assert.notEqual(evening.day.dateISO, day);
+  Object.assign(state, { demo: { fetched: day, fragrances }, forecast, wx: evening, loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], slot: null, sheet: null, route: { dest: 'wear', pane: 'now' } });
+  const now = () => {
+    app.computeToday();
+    return wear.wear.panes.find(p => p.id === 'now').render({}, state.route);
+  };
+  try {
+    assert.ok(!now().includes('log-missed'), 'not for someone who keeps no journal');
+    state.history = [{ id: fragrances[5].id, date: shiftISO(day, -10), slot: 'night' }];
+    assert.ok(!now().includes('log-missed'), 'nor for one who stopped logging, past rotation’s reach');
+    // Yesterday's bottle with no nudges of his own: Now asks how it wore, and the line waits its turn.
+    state.history = [{ id: fragrances[5].id, date: shiftISO(day, -1), slot: 'night' }];
+    assert.ok(now().includes('data-kind="skin"'), 'Now’s question');
+    assert.ok(!now().includes('log-missed'), 'one question at a time');
+    state.history = [{ id: fragrances[5].id, date: shiftISO(day, -2), slot: 'night' }];
+    assert.match(now(), /<p class="log-missed">.*<span>Wore something this morning\?<\/span><button class="link-btn" data-action="journal-log" data-date="2026-09-28" data-slot="day">Log it/s);
+    // Log it: the sheet opens on this morning; never on a day ahead.
+    let toast = '';
+    const ui = { openSheet(s) { state.sheet = s; }, render() { app.computeToday(); }, closeSheet() { state.sheet = null; }, showToast(html) { toast = html; } };
+    wardrobe.actions['journal-log']({ dataset: { date: shiftISO(day, 1) } }, ui);
+    assert.equal(state.sheet, null);
+    wardrobe.actions['journal-log']({ dataset: { date: day, slot: 'day' } }, ui);
+    assert.deepEqual(state.sheet, { kind: 'journal-log', dateISO: day, slot: 'day', filter: '', said: '' });
+    // Tonight's pick, worn this morning after all.
+    const tonight = state.today.night.pick.fragrance;
+    wardrobe.actions['journal-log-pick']({ dataset: { id: tonight.id }, getAttribute: () => null }, ui);
+    assert.equal(state.sheet, null, 'logged: the sheet closes');
+    assert.match(toast, new RegExp(`Logged ${tonight.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} for today\\.`));
+    assert.deepEqual(state.history[0], { id: tonight.id, date: day, slot: 'day', lat: 40.7, lon: -74 }, 'no window to stamp, no use: untagged');
+    const entry = state.today.night.ranked.find(r => r.fragrance.id === tonight.id);
+    assert.ok(entry.parts.rotation > 0, 'tonight gives it a rest');
+    assert.notEqual(state.today.night.pick.fragrance.id, tonight.id);
+    assert.ok(!now().includes('log-missed'), 'the morning is logged');
+    // A day with its daytime logged opens on its night.
+    wardrobe.actions['journal-log']({ dataset: { date: day } }, ui);
+    assert.equal(state.sheet.slot, 'night');
+  } finally {
+    Object.assign(state, { history: [], sheet: null, route: null });
   }
 });
 

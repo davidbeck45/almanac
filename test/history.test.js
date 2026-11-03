@@ -120,15 +120,18 @@ test('the export carries the stamps and Copy for Claude leaves them out', () => 
 
 test('a wear that replaces another in its window keeps the pick shown before either, and the log stays newest first', () => withStore(() => {
   const stamp = pick => wearStamp({ feelsF: 70, dewF: 55, humidity: 60, pop: 0, code: 1 }, pick);
-  toggleWear('a', '2026-10-02', 'day', null, 'daily', stamp('a'));
+  toggleWear('a', '2026-10-02', 'day', null, 'formal', stamp('a'));
   // Wear this on another bottle: the window's pick had become the wear.
-  let [entry] = toggleWear('b', '2026-10-02', 'day', null, 'daily', stamp('b'));
+  let [entry] = toggleWear('b', '2026-10-02', 'day', null, 'formal', stamp('b'));
   assert.deepEqual([entry.id, entry.pick], ['b', 'a']);
-  // Logged after the fact (no stamp), it keeps the window's weather too.
+  // Corrected after the fact (no stamp), it keeps the window's weather and use too.
   [entry] = toggleWear('c', '2026-10-02', 'day', null, null);
-  assert.deepEqual([entry.id, entry.pick, entry.wx], ['c', 'a', stamp('a').wx]);
-  assert.equal(entry.occasion, undefined, 'untagged');
-  // Cleared, then worn again: the pick shown is the list's own again.
+  assert.deepEqual([entry.id, entry.pick, entry.wx, entry.occasion], ['c', 'a', stamp('a').wx, 'formal']);
+  // Cleared, then logged after the fact: no stamp, untagged.
+  assert.equal(toggleWear('c', '2026-10-02', 'day').length, 0);
+  [entry] = toggleWear('c', '2026-10-02', 'day', null, null);
+  assert.deepEqual(Object.keys(entry), ['id', 'date', 'slot']);
+  // Worn from a list: the pick shown is the list's own again.
   assert.equal(toggleWear('c', '2026-10-02', 'day').length, 0);
   assert.equal(toggleWear('b', '2026-10-02', 'day', null, 'daily', stamp('d'))[0].pick, 'd');
   // A forgotten day goes in its place: newest first, a night before its day.
