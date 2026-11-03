@@ -391,9 +391,12 @@ function wearsHTML(wears, today) {
   return `<p class="fact">${icon.clock}<span>${esc(text)}</span></p>`;
 }
 
-function summarySection({ entry, comfort, wears, todayISO: today, owned }) {
+// Why says what a rest takes off ("Worn 5 days ago: 4% lower so others get a
+// turn.") and the wears line when it was, so the reasons leave it to them.
+function summarySection({ entry, win, comfort, wears, todayISO: today, owned }) {
+  const rest = entry?.parts.rotation > 0 ? restReason(entry.parts, win?.slot) : null;
   return `<div class="bp-summary">
-    ${entry ? reasonsList(entry.reasons, 'full') : ''}
+    ${entry ? reasonsList(entry.reasons.filter(r => r.text !== rest), 'full') : ''}
     ${comfortHTML(comfort)}
     ${owned ? wearsHTML(wears, today) : ''}
   </div>`;

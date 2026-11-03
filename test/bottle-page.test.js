@@ -145,6 +145,13 @@ test('why it ranks here: the rating bar says whose rating it is, and a bottle no
   assert.ok(!/rotation/i.test(rest));
   const planned = rank([f], wx.night, 'night', { history: [{ id: f.id, date: wx.night.dateISO, slot: 'day', planned: true }], todayISO: wx.night.dateISO })[0];
   assert.match(bottlePageHTML(modelOf(f, { entry: planned })), /Already picked for daytime: \d+% lower so others get a turn\./);
+  // Why says it, and the wears line when it was: the reasons over them leave it out (it was there three times).
+  const page = bottlePageHTML(modelOf(f, { entry: e, wears: { count: 6, last: '2026-09-25' } }));
+  assert.ok(e.reasons.some(r => r.text === 'Worn 3 days ago'), 'a reason the engine gives');
+  assert.equal(page.split('Worn 3 days ago').length - 1, 1, 'once, in Why');
+  assert.match(page, /Worn 6× in the last 30 days · last 3 days ago/);
+  assert.equal(bottlePageHTML(modelOf(f, { entry: planned })).split('Already picked for daytime').length - 1, 1);
+  assert.ok(bottlePageHTML(modelOf(f, { entry: night(f) })).includes('class="reasons full"'), 'the other reasons stay');
   // A rich bottle on a sweltering date night: what the heat takes off, for that occasion only.
   const date = occasionById('date'), sweltering = { ...wx.night, feelsF: 90, dewF: 70 };
   const hot = (rec, occasion) => {
@@ -386,6 +393,12 @@ test('the buy check: nothing for a bottle you own, a skeleton until it answers, 
 
   const covered = buyCheckHTML(m, { status: 'ready', result: { ...check, verdict: 'Covered', fills: [], overlap: null, twin: null } }, { who: 'My collection' });
   assert.match(covered, /data-tone="neutral">Covered/, 'a verdict it doesn’t know reads neutral');
+  // The head shows the rating: a plain rating line goes, a low rating's warning stays.
+  const rated = buyCheckHTML(m, { status: 'ready', result: { ...check, verdict: 'Good', fills: [], overlap: null, twin: null, reasons: ['Nothing you own smells like it.', 'Rated 4.5★ by 1,055 voters.'] } });
+  assert.ok(!rated.includes('Rated 4.5★'), 'said in the head already');
+  assert.match(rated, /Nothing you own smells like it\./);
+  const low = buyCheckHTML(m, { status: 'ready', result: { ...check, verdict: 'Risky', fills: [], overlap: null, twin: null, reasons: ['Voters rate it only 3.6★.'] } });
+  assert.match(low, /Voters rate it only 3\.6★\./);
   assert.match(covered, /Would it suit your collection\?/);
   const linked = buyCheckHTML(m, { status: 'ready', result: { ...check, overlap: { ...check.overlap, sim: 0.4, link: `Voters call it a twin of ${EVIL}` } } });
   assert.match(clean(linked, 'linked'), /Voters link them · 40% alike/, 'voters’ link is named however alike');
