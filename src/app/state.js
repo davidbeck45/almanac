@@ -199,13 +199,15 @@ export function addToMine(record) {
 // ranked[0]), which a bottle page measures itself against; a trip's packs
 // from its own bottles and carries none. The Week's carry its `ties` too
 // (planTies'), which lead the pick's page's shelf, since its board names them
-// without a link.
+// without a link. A list ranked for somewhere other than home (a trip, the
+// Occasion pane's other city) carries its `place`, where a wear logged from
+// it happened.
 
 const SLOT_ORDER = { day: 0, night: 1 };
 export const byTime = (a, b) => a.dateISO.localeCompare(b.dateISO) || SLOT_ORDER[a.slot] - SLOT_ORDER[b.slot];
 
-export function storeContext(key, win, occasion, ranked, { event = Boolean(win.occasion), pick = null, ties = [] } = {}) {
-  state.contexts[key] = { win, occasion, ranked, event, pick, ties, entries: new Map(ranked.map(r => [r.fragrance.id, r])) };
+export function storeContext(key, win, occasion, ranked, { event = Boolean(win.occasion), pick = null, ties = [], place = null } = {}) {
+  state.contexts[key] = { win, occasion, ranked, event, pick, ties, place, entries: new Map(ranked.map(r => [r.fragrance.id, r])) };
 }
 
 // Rankings put a bottle left on the shelf a month first when it's within
@@ -213,11 +215,12 @@ export function storeContext(key, win, occasion, ranked, { event = Boolean(win.o
 // Only for a window you're about to wear in: `nudge: false` for a later date
 // or another place, where the journal can't say what's idle then. A window
 // planned for this occasion (`event`) ranks as the plan ranks it (rankEvent:
-// the best for it, recent wears or not), so the two agree.
-export function rankContext(key, win, occasion, { nudge = true, event = false } = {}) {
+// the best for it, recent wears or not), so the two agree. `place`: where
+// the window is, when it isn't home.
+export function rankContext(key, win, occasion, { nudge = true, event = false, place = null } = {}) {
   const ranked = event ? rankEvent(rankedFragrances(), win, occasion)
     : rank(rankedFragrances(), win, win.slot, { occasion, history: state.history, todayISO: win.dateISO, nudge });
-  storeContext(key, win, occasion, ranked, { event, pick: ranked[0] ?? null });
+  storeContext(key, win, occasion, ranked, { event, pick: ranked[0] ?? null, place });
   return ranked;
 }
 

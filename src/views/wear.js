@@ -580,7 +580,7 @@ function occasionPane(app, route) {
   // can't say what will have been worn by then, and a wedding wants the best.
   // A window here planned for this occasion ranks as the plan ranks it (the best for it).
   const planned = !when.when.place && eventAt(win)?.occasion === occasion.id;
-  const ranked = rankContext('occ', win, occasion, { nudge: Boolean(ev.here), event: planned });
+  const ranked = rankContext('occ', win, occasion, { nudge: Boolean(ev.here), event: planned, place: when.when.place });
   const worn = wornId(win);
   // A nudged pick isn't the best for it (that one leads Also good).
   const kicker = ranked[0].nudged ? 'Due a wear' : `Best for ${phraseOf(occasion)}`;
@@ -699,15 +699,16 @@ export const actions = {
   ...trip.actions,
   ...when.actions,
   ...pickers.actions,
-  // Logs (or clears) a wear for the window of the list it's in, with the use
-  // it was for (the Occasion pane's occasion, an event's on a trip, else
-  // 'daily'), which the gap finder's "How you wear" counts, and the window's
-  // weather and the pick the list showed (wearStamp), which journal-check
-  // reads in place of the archive's.
+  // Logs (or clears) a wear for the window of the list it's in, where that
+  // window is (a trip's place or the Occasion pane's other city, else home),
+  // with the use it was for (the Occasion pane's occasion, an event's on a
+  // trip, else 'daily'), which the gap finder's "How you wear" counts, and the
+  // window's weather and the pick the list showed (wearStamp), which
+  // journal-check reads in place of the archive's.
   wear(el, app) {
     const ctx = state.contexts[el.dataset.ctx];
     if (!ctx) return;
-    state.history = toggleWear(el.dataset.id, ctx.win.dateISO, ctx.win.slot, state.loc, ctx.occasion?.id ?? 'daily', wearStamp(ctx.win, ctx.pick?.fragrance.id));
+    state.history = toggleWear(el.dataset.id, ctx.win.dateISO, ctx.win.slot, ctx.place ?? state.loc, ctx.occasion?.id ?? 'daily', wearStamp(ctx.win, ctx.pick?.fragrance.id));
     if (wornIn(state.history, ctx.win.dateISO, ctx.win.slot)) navigator.vibrate?.(12);
     app.keepingFocus(el, '#app', app.render);
   },

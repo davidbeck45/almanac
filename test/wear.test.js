@@ -626,12 +626,39 @@ test('a wear keeps the weather it was logged in and the pick its list showed', (
   const [entry] = state.history;
   assert.equal(entry.pick, ranked[0].fragrance.id);
   assert.deepEqual(entry.wx, { f: Math.round(wx.night.feelsF * 10) / 10, d: Math.round(wx.night.dewF * 10) / 10, h: Math.round(wx.night.humidity), p: wx.night.pop, c: wx.night.code });
-  // A trip's list has no pick of its own: the weather alone.
-  app.storeContext('trip:x', wx.day, null, rank(fragrances, wx.day, 'day'));
+  // A trip's list has no pick of its own: the weather alone, and the trip's place.
+  app.storeContext('trip:x', wx.day, null, rank(fragrances, wx.day, 'day'), { place: { name: 'Miami', lat: 25.7617, lon: -80.1918 } });
   wear.actions.wear({ dataset: { ctx: 'trip:x', id: fragrances[1].id } }, ui);
   const day = state.history.find(h => h.slot === 'day');
   assert.ok(day.wx && !('pick' in day));
+  assert.deepEqual([day.lat, day.lon], [25.76, -80.19], 'where the trip is, not home');
+  assert.deepEqual([entry.lat, entry.lon], [40.7, -74], 'a list at home logs home');
   state.history = [];
+});
+
+test('a wear from the Occasion card in another city logs that city', async () => {
+  const { state } = app;
+  const start = new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10);
+  const live = syntheticForecast(8, { start });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ ...syntheticForecast(8, { start: shiftISO(start, -1) }), utc_offset_seconds: -4 * 3600 }) });
+  Object.assign(state, { demo: { fetched: start, fragrances }, forecast: live, wx: summarize(live), loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], occasionSlot: null, route: null });
+  when.when.place = { name: 'Chicago', region: 'Illinois', lat: 41.88, lon: -87.63 };
+  try {
+    const pane = wear.wear.panes.find(p => p.id === 'occasion');
+    const route = { dest: 'wear', pane: 'occasion', arg: 'casual' };
+    pane.render({}, route);
+    for (let i = 0; i < 50 && when.eventWindow('day').status === 'loading'; i++) await new Promise(r => setTimeout(r, 5));
+    pane.render({}, route);
+    const ctx = state.contexts.occ;
+    assert.equal(ctx.place, when.when.place);
+    wear.actions.wear({ dataset: { ctx: 'occ', id: ctx.ranked[0].fragrance.id } }, { keepingFocus() {}, render() {} });
+    assert.deepEqual([state.history[0].lat, state.history[0].lon], [41.88, -87.63]);
+  } finally {
+    globalThis.fetch = realFetch;
+    when.when.place = null;
+    state.history = [];
+  }
 });
 
 test('Now’s cards read in the order they’re drawn, and only the window has a heading', () => {
