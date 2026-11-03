@@ -96,11 +96,11 @@ Stderr matters: "matches N bottles (…); using the most voted" (confirm the bra
 - Credit Le Decanteur's Fragrantica dataset (CC BY-NC-SA 4.0) once, as the output's last line does.
 - Offer the app for a closer look: `https://davidbeck45.github.io/almanac/#/bottle/<id>`, `#/compare/<id>,<id>`, `#/discover?styles=skin,clean,intimate` or `#/discover?q=iris%20leather`.
 
-The shape, from a `--gaps` run (the bottles and figures change as the data does: quote the run, not this):
+The shape, from a `--gaps` run of November 2026 (the bottles and figures change as the data does: quote the run, not this):
 
-> Nothing's missing: you're covered everywhere, with the most room to grow on Date Night on mild and warm nights, the office on cold days and formal cool nights.
+> Nothing's missing: you're covered everywhere, with the most room to grow for the office on cold days, Date Night on mild and warm nights and formal cool nights.
 > 1. **Zenith** (Riiffs, 4.5★ from 1,055 votes, value 4.1, low risk): your best date-night bottle on mild nights, 88% against Infini Rose's 80%, and on warm ones. Closest you own is Cream Velvet (63% alike, vanilla and powdery), so it's your lane, not a copy.
-> 2. **Kayaan Classic** (Al Wataniah, 4.5★ from 1,746 votes, value 4.4, low risk): an iris that lasts and keeps close, for the office in the cold (82% against Détour Noir's 79%) and formal cool nights (90% against Sticky Fingers' 87%). Closest you own is Meant To Be Seen (59% alike, iris and powder).
-> 3. **Infinity For Men** (Armaf, 4.6★ from 613 votes, value 4.1, low risk): for hot nights, 81% against Jake's 79%. Closest is Absolu Aventus, the original of your Supremacy (60% alike), so it's near your lane.
+> 2. **Kayaan Classic** (Al Wataniah, 4.5★ from 1,746 votes, value 4.4, low risk): an iris that lasts and keeps close, for the office in the cold (82% against Détour Noir's 78%) and formal cool nights (90% against Sticky Fingers' 87%). Closest you own is Meant To Be Seen (59% alike, iris and powder).
+> 3. **Infinity For Men** (Armaf, 4.6★ from 613 votes, value 4.1, low risk): for hot nights, 82% against Jake's 79%. Closest is Absolu Aventus, the original of your Supremacy (60% alike), so it's near your lane.
 >
 > Nothing else would fill these gaps by enough. (Le Decanteur's Fragrantica dataset)

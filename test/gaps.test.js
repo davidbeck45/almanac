@@ -243,6 +243,30 @@ test('David’s gaps name real situations, gaps before room to grow, and his str
   assert.match(explainCell(ctx.cov.find(c => c.cell.id === 'date:night:cold')), /^\d+ strong picks, led by /);
 });
 
+test('the buy-advice skill’s sample reply and CLAUDE.md’s strengths quote this report', () => {
+  const pct = x => Math.round(x * 100);
+  // The sample: its picks in the report's order, each "88% against Infini
+  // Rose's 80%" one of their fills, and the first gap leading.
+  const skill = readFileSync(new URL('../.claude/skills/buy-advice/SKILL.md', import.meta.url), 'utf8');
+  const sample = skill.slice(skill.indexOf('The shape, from a `--gaps` run'));
+  assert.deepEqual([...sample.matchAll(/\*\*(.+?)\*\*/g)].map(m => m[1]), report.picks.slice(0, 3).map(p => p.name));
+  const straight = text => text.replace(/’/g, "'");
+  const fills = report.picks.flatMap(p => p.fills).filter(f => f.first)
+    .map(f => straight(`${pct(f.to)}% against ${f.beats.name}${f.beats.name.endsWith('s') ? "'" : "'s"} ${pct(f.from)}%`));
+  const quoted = [...sample.matchAll(/\d+% against [^%]+? \d+%/g)].map(m => straight(m[0]));
+  assert.ok(quoted.length >= 3);
+  for (const q of quoted) assert.ok(fills.includes(q), `${q} isn't in the run: ${fills.join('; ')}`);
+  assert.match(sample.split('\n').find(l => l.startsWith('> Nothing')).toLowerCase(), new RegExp(report.gaps[0].title.toLowerCase()));
+  // CLAUDE.md: the strengths in order, the first two with 7 or more strong bottles each.
+  const claude = readFileSync(new URL('../CLAUDE.md', import.meta.url), 'utf8');
+  const said = claude.slice(claude.indexOf('His strengths read'), claude.indexOf('(the report names four'));
+  const at = report.strengths.map(s => said.indexOf(s.title));
+  assert.ok(at.every((i, n) => i > 0 && (n === 0 || i > at[n - 1])), `${report.strengths.map(s => s.title).join(', ')} in: ${said}`);
+  assert.match(said, /\(7 or more strong bottles each, Date Night's since night votes count for a date\)/);
+  assert.ok(report.strengths.slice(0, 2).every(s => s.strong >= 7), report.strengths.map(s => `${s.title} ${s.strong}`).join('; '));
+  assert.equal(report.strengths[1].use, 'date');
+});
+
 test('a gap’s text describes a cell in the state its status names, the one Insights opens on', () => {
   const brooke = JSON.parse(readFileSync(new URL('../data/catalog.json', import.meta.url))).fragrances
     .filter(f => BROOKE.includes(String(f.id))).map(f => ({ ...f, id: String(f.id) }));
