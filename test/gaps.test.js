@@ -4,6 +4,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { rank, steadyShares, votedShares, performanceRating } from '../src/engine.js';
 import { loadPool, fromPool } from '../src/fragrantica.js';
 import { allow, genderLean, leanWindow } from '../src/candidates.js';
+import { similarity } from '../src/similar.js';
 import {
   BANDS, USES, DEFAULT_CLIMATE, PER_CELL, MAX_ACCORDS, climateSummary, cellsFor, fitTable, sameFooting, flatVotes, gapContext,
   coverage, gapSummary, strengths, suggest, buyCheck, gapReport, checkJSON, cellTitle, explainCell, SAME_SIM, warmPoolTable,
@@ -395,6 +396,19 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   assert.match(sibling.reasons[0], /twin of your Liquid Brun/);
   const sauvage = verdict('31861');
   assert.deepEqual([sauvage.verdict, sauvage.reasons, sauvage.fills], ['Redundant', ['You own it.'], []]);
+  // A bottle voters tie to one you own overlaps that one, though another is nearer by notes
+  // (Liquid Brun Limited Edition read "Closest: your Terra. Voters call it a twin of your Liquid Brun").
+  const limited = verdict('123526');
+  assert.deepEqual([limited.overlap.via.name, limited.overlap.link], ['Liquid Brun', 'Voters call it a twin of your Liquid Brun']);
+  assert.equal(limited.overlap.sim, similarity(sameFooting(byId.get('123526')), limited.overlap.bottle), 'as alike as it is to that one');
+  assert.equal(verdict('56324').overlap.bottle.name, 'Sauvage', 'Sauvage Parfum, not Aristo’s original');
+  for (const r of records) {
+    const dupe = ctx.family.dupeOf(r);
+    if (!dupe || dupe.kind === 'owned') continue;
+    const { overlap } = buyCheck(r, ctx);
+    assert.equal(overlap.via, dupe.via, `${r.name}: ${overlap.bottle.name} beside "${dupe.text}"`);
+    assert.equal(overlap.link, dupe.text);
+  }
   const tobacco = buyCheck(records.find(r => r.name === 'Tobacco Vanille'), ctx);
   assert.equal(tobacco.verdict, 'Covered', 'one point better than Terra fills nothing');
   assert.match(tobacco.reasons[0], /^It would barely beat your Terra for /);
@@ -447,6 +461,12 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   }
   const json = checkJSON(byId.get('124649'), zenith);
   assert.equal(JSON.parse(JSON.stringify(json)).verdict, 'Strong fit');
+  // Its own value for money, and null for a bottle nobody valued (quality's reads the pool's median then).
+  assert.equal(json.value, byId.get('124649').extras.value);
+  const unvalued = { ...byId.get('124649'), id: 'my:unvalued', name: 'Unvalued', brand: 'Nobody', extras: { ...byId.get('124649').extras, value: null } };
+  const blank = checkJSON(unvalued, buyCheck(unvalued, ctx));
+  assert.equal(blank.value, null);
+  assert.ok(blank.quality.value > 0);
 });
 
 test('the buy check knows what he likes: more of a style he’s thin on is good, overlap redundant, the rest covered', () => {

@@ -753,15 +753,18 @@ async function main() {
         console.log(JSON.stringify({ climate: where, preferValue: ctx.preferValue, liked, ...checkJSON(record, check) }, null, 2));
         return;
       }
-      console.log(`${byLine(record)} · ${stars(record)}`);
+      console.log([byLine(record), stars(record), check.value != null && `value ${check.value.toFixed(1)}`].filter(Boolean).join(' · '));
       console.log(`${check.verdict}`);
       for (const r of check.reasons) console.log(`  ${r}`);
       if (check.fills.length) console.log(`Fills:\n${check.fills.slice(0, 5).map(f => `  ${fillLine({ ...f, title: cellLabel(f.cell) })}`).join('\n')}`);
+      // The owned bottle it's nearest, or the one voters link it to (`link`).
       if (check.overlap) {
         const o = check.overlap;
-        console.log(`Closest: ${o.bottle === o.via ? `your ${o.via.name}` : `${o.bottle.name}, the original of your ${o.via.name}`} (${o.sim.toFixed(2)} alike)${o.link ? `. ${o.link}.` : ''}`);
+        console.log(`${o.link ? 'Linked' : 'Closest'}: ${o.bottle === o.via ? `your ${o.via.name}` : `${o.bottle.name}, the original of your ${o.via.name}`} (${o.sim.toFixed(2)} alike)${o.link ? `. ${o.link}.` : ''}`);
       }
-      console.log(`Risk: ${check.risk.level}${check.risk.reasons.length ? ` (${check.risk.reasons.join(' ')})` : ''}`);
+      // Risky on a medium risk: a warning that counts double (risk.major) outweighs a style you like.
+      const double = check.verdict === 'Risky' && check.risk.level === 'medium' && check.risk.major ? ', with a warning that counts double' : '';
+      console.log(`Risk: ${check.risk.level}${double}${check.risk.reasons.length ? ` (${check.risk.reasons.join(' ')})` : ''}`);
       if (check.twin) console.log(`Twin: ${check.twin.text}`);
       console.log(`\nClimate: ${where} · ${valueText} · styles you like: ${liked.map(id => styleById(id).label).join(', ')}`);
       console.log(`${CREDIT}.`);

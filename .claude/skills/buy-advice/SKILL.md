@@ -30,7 +30,7 @@ These change the answer, so settle them before running:
 
 - **Wardrobe.** His is the default; `--demo` only when he asks what a first-time visitor would see.
 - **Switched-off bottles.** Pass the ones he mentions with `--exclude "Name,Name"`.
-- **Journal.** When he sends his export (`almanac-journal-<date>.json`), add `--journal <file>` to every command.
+- **Journal.** When he pastes the app's Copy for Claude (a token starting `scj1.`) or sends his export (`almanac-journal-<date>.json`), add `--journal <token or file>` to every command: it carries his stars, switched-off bottles and the occasions he wears.
 - **How he wears.** When he names an occasion, or the answer hinges on one, pass `--uses` (to `--check` too): Formal and Date Night settle most of `--gaps`' list. Ask when you can't tell.
 - **Climate.** Pass `--city "<city>"` when he gives a place. `climate` in the JSON (in `--gaps`' text, its first line) names the climate the answer is for; when it isn't his place (Open-Meteo's archive failed, and stderr says "using the default climate"), tell him.
 - **Value.** Keep "Prefer great value" on: he buys clones. `--no-value` when he says money's no object or asks for designer or niche picks.
@@ -44,7 +44,7 @@ A list says what a bottle is like; `--check` says whether it earns a place in hi
 
 ```bash
 ids=$(node scripts/recommend.mjs --style "vanilla,powdery" --all --min-value 3.8 --top 4 --json | jq -r '.results[].id')
-for id in $ids; do node scripts/recommend.mjs --check "id:$id" --json | jq -r '"\(.name): \(.verdict), value \(.quality.value // "unknown"). \(.reasons[0])"'; done
+for id in $ids; do node scripts/recommend.mjs --check "id:$id" --json | jq -r '"\(.name): \(.verdict), value \(.value // "unknown"). \(.reasons[0])"'; done
 ```
 
 - **Widen a gap.** `--gaps` gives the best picks for its gaps and stops there ("Nothing else would fill these gaps by enough" is an answer). For more options for one gap: `--styles "<a pick>"` (plural: one bottle's style scores) shows the pick's styles, `--style "<those>"` (with `--season` or `--slot` matching the gap) lists more, and `--check` keeps the ones whose verdict is Strong fit or Good with that gap in `fills`.
@@ -60,24 +60,24 @@ for id in $ids; do node scripts/recommend.mjs --check "id:$id" --json | jq -r '"
 
 ## 4. Read the output
 
-Text output is enough for `--gaps` and the lists, and shows a list pick's medium or high risk; use `--json` for ids or risk reasons. Read `--check` as `--json` (2 to 5 KB): its text leaves out `quality.value`.
+Text output is enough for `--gaps`, `--check` and the lists, and shows a list pick's medium or high risk; use `--json` for ids, risk reasons and loops (a check is 2 to 5 KB). `--check`'s text gives the verdict, its reasons, what it fills, the owned bottle it's closest to (`Linked:` when voters tie it to one, which needn't be the nearest by notes), its risk, twin and value.
 
 `--check` verdicts:
 
 | Verdict | Means | Say |
 |---|---|---|
 | Redundant | He owns it, its original, a twin, or something 80%+ alike | Don't buy; name what he owns |
-| Risky | High blind-buy risk, or voters rate it under 3.8 | Sample first; give the reason |
+| Risky | High blind-buy risk, voters rate it under 3.8, or a style he likes with a warning that counts double (`risk.major`: not a safe blind buy, divisive; its text says "Risk: medium, with a warning that counts double") | Sample first; give the reason |
 | Covered | Nothing it adds matters, and it isn't a liked style he's thin on | Not needed; name who covers it |
 | Strong fit | Fills his listed gaps a lot, at the pool's usual quality or better, low risk | Recommend |
 | Good | Fills something, or is more of a style he likes and owns under 3 of | A fair buy; say which reason |
 
-Verdicts ignore "Prefer great value". When `quality.value` is under 3.8, say so beside the verdict and look for a cheaper one (step 3).
+Verdicts ignore "Prefer great value". When `value` is under 3.8, say so beside the verdict and look for a cheaper one (step 3); null means nobody has voted on it (`quality.value` reads the pool's median then, so don't quote it).
 
 Fields worth reading:
 
 - `--gaps`: `gaps[]` (`title`, `status`: gap, then thin, then room to grow; `text`), `strengths[].text`, `coverage[]` per use × day or night × weather band (`status`: plenty, covered, room, thin, gap, off), and `picks[]`: `rating`, `ratingVotes`, `quality.value`, `fills[]` (`title`, `from` → `to`, `beats.name`), `nearest` (closest owned; `via` when it's an owned dupe's original), `twin.text`, `risk`.
-- `--check`: `verdict`, `reasons[]`, `fills[]`, `overlap` (closest owned, `via`, `link`), `risk`, `twin`, `quality.value`.
+- `--check`: `verdict`, `reasons[]`, `fills[]`, `overlap` (the owned bottle it's closest to, or with `link` the one voters tie it to; `via` when it's an owned dupe's original), `risk`, `twin`, `value`.
 - `--style`, `--more-like`, `--notes`: `results[]` with `rating`, `votes`, `value`, `styles`, `wearsClose`, `leansOnly` (under `--all`, the chosen styles a pick only leans toward; the text says how many are all of them), `smellsLike` (what a clone copies, with votes), `closestOwned` (`through` an owned dupe's original; `shares`), `risk`, `cheaperTwin`, `why`.
 - `--dupes`: `original` (`built: true` is the original of a dupe he owns; otherwise "going by the votes"), `cheaper[]` (`why: "notes"`: alike by notes, no votes; `notesDiffer`: voted alike but the notes differ), `siblings[]`, `smellsLikeVotes` [yes, no], `owned`, `mist`.
 - `risk.level`: low, medium (a reason to mention), high (sample first) or unknown (no crowd data yet).
@@ -96,11 +96,11 @@ Stderr matters: "matches N bottles (…); using the most voted" (confirm the bra
 - Credit Le Decanteur's Fragrantica dataset (CC BY-NC-SA 4.0) once, as the output's last line does.
 - Offer the app for a closer look: `https://davidbeck45.github.io/almanac/#/bottle/<id>`, `#/compare/<id>,<id>`, `#/discover?styles=skin,clean,intimate` or `#/discover?q=iris%20leather`.
 
-The shape, from a `--gaps` run (the bottles change as the data does):
+The shape, from a `--gaps` run (the bottles and figures change as the data does: quote the run, not this):
 
 > Nothing's missing: you're covered everywhere, with the most room to grow on Date Night on mild and warm nights, the office on cold days and formal cool nights.
 > 1. **Zenith** (Riiffs, 4.5★ from 1,055 votes, value 4.1, low risk): your best date-night bottle on mild nights, 88% against Infini Rose's 80%, and on warm ones. Closest you own is Cream Velvet (63% alike, vanilla and powdery), so it's your lane, not a copy.
-> 2. **Kayaan Classic** (Al Wataniah, 4.5★ from 1,746 votes, value 4.4, low risk): an iris that lasts and keeps close, for the office in the cold (82% against Détour Noir's 78%) and formal cool nights (90% against Sticky Fingers' 87%). Closest you own is Meant To Be Seen (59% alike, iris and powder).
-> 3. **Infinity For Men** (Armaf, 4.6★ from 613 votes, value 4.1, low risk): for hot nights, 82% against Jake's 79%. Closest is Absolu Aventus, the original of your Supremacy (60% alike), so it's near your lane.
+> 2. **Kayaan Classic** (Al Wataniah, 4.5★ from 1,746 votes, value 4.4, low risk): an iris that lasts and keeps close, for the office in the cold (82% against Détour Noir's 79%) and formal cool nights (90% against Sticky Fingers' 87%). Closest you own is Meant To Be Seen (59% alike, iris and powder).
+> 3. **Infinity For Men** (Armaf, 4.6★ from 613 votes, value 4.1, low risk): for hot nights, 81% against Jake's 79%. Closest is Absolu Aventus, the original of your Supremacy (60% alike), so it's near your lane.
 >
 > Nothing else would fill these gaps by enough. (Le Decanteur's Fragrantica dataset)
