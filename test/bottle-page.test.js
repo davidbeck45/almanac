@@ -5,13 +5,13 @@
 // the compare route parses and round-trips.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { SECTIONS, bottlePageHTML, bottleModel, pooled, sectionsFor, linkId, likedStyleIds, likedTaste, shelfOf } from '../src/views/bottle.js';
 import { state, computeToday, nowSlot, keepBottles } from '../src/app/state.js';
 import '../src/views/sections.js';
 import { buyCheckHTML, checkable, fillGroups } from '../src/views/bottle-check.js';
 import { sprayHTML, figureSVG, sprayCount } from '../src/views/bottle-spray.js';
-import { skinHTML, moveText, listLabel, ordinal, sprayText } from '../src/views/bottle-skin.js';
+import { skinHTML, moveText, ratedText, listLabel, ordinal, sprayText } from '../src/views/bottle-skin.js';
 import { stylesHTML } from '../src/views/bottle-styles.js';
 import { dupesHTML } from '../src/views/bottle-dupes.js';
 import { crowdHTML, riskLine, wholePercents } from '../src/views/bottle-crowd.js';
@@ -21,7 +21,7 @@ import {
 } from '../src/views/compare.js';
 import { parseRoute, routeHash, compareIds } from '../src/app/router.js';
 import { shareToken, customRecord } from '../src/custom.js';
-import { rank, comfortRange } from '../src/engine.js';
+import { rank, comfortRange, performanceRating } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { summarize } from '../src/weather.js';
 import { esc, matchPct } from '../src/ui.js';
@@ -145,6 +145,13 @@ test('why it ranks here: the rating bar says whose rating it is, and a bottle no
   assert.ok(!/rotation/i.test(rest));
   const planned = rank([f], wx.night, 'night', { history: [{ id: f.id, date: wx.night.dateISO, slot: 'day', planned: true }], todayISO: wx.night.dateISO })[0];
   assert.match(bottlePageHTML(modelOf(f, { entry: planned })), /Already picked for daytime: \d+% lower so others get a turn\./);
+  // Why says it, and the wears line when it was: the reasons over them leave it out (it was there three times).
+  const page = bottlePageHTML(modelOf(f, { entry: e, wears: { count: 6, last: '2026-09-25' } }));
+  assert.ok(e.reasons.some(r => r.text === 'Worn 3 days ago'), 'a reason the engine gives');
+  assert.equal(page.split('Worn 3 days ago').length - 1, 1, 'once, in Why');
+  assert.match(page, /Worn 6× in the last 30 days · last 3 days ago/);
+  assert.equal(bottlePageHTML(modelOf(f, { entry: planned })).split('Already picked for daytime').length - 1, 1);
+  assert.ok(bottlePageHTML(modelOf(f, { entry: night(f) })).includes('class="reasons full"'), 'the other reasons stay');
   // A rich bottle on a sweltering date night: what the heat takes off, for that occasion only.
   const date = occasionById('date'), sweltering = { ...wx.night, feelsF: 90, dewF: 70 };
   const hot = (rec, occasion) => {
@@ -386,6 +393,12 @@ test('the buy check: nothing for a bottle you own, a skeleton until it answers, 
 
   const covered = buyCheckHTML(m, { status: 'ready', result: { ...check, verdict: 'Covered', fills: [], overlap: null, twin: null } }, { who: 'My collection' });
   assert.match(covered, /data-tone="neutral">Covered/, 'a verdict it doesn’t know reads neutral');
+  // The head shows the rating: a plain rating line goes, a low rating's warning stays.
+  const rated = buyCheckHTML(m, { status: 'ready', result: { ...check, verdict: 'Good', fills: [], overlap: null, twin: null, reasons: ['Nothing you own smells like it.', 'Rated 4.5★ by 1,055 voters.'] } });
+  assert.ok(!rated.includes('Rated 4.5★'), 'said in the head already');
+  assert.match(rated, /Nothing you own smells like it\./);
+  const low = buyCheckHTML(m, { status: 'ready', result: { ...check, verdict: 'Risky', fills: [], overlap: null, twin: null, reasons: ['Voters rate it only 3.6★.'] } });
+  assert.match(low, /Voters rate it only 3\.6★\./);
   assert.match(covered, /Would it suit your collection\?/);
   const linked = buyCheckHTML(m, { status: 'ready', result: { ...check, overlap: { ...check.overlap, sim: 0.4, link: `Voters call it a twin of ${EVIL}` } } });
   assert.match(clean(linked, 'linked'), /Voters link them · 40% alike/, 'voters’ link is named however alike');
@@ -477,6 +490,32 @@ test('on my skin: stars, nudges and where the bottle moved', () => {
   assert.equal(listLabel({ label: 'Friday night' }, null), 'for Friday night');
 });
 
+test('rating a bottle on its page says the stars, as Now’s Rate it does, and when they come off', () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)) };
+  globalThis.document = { activeElement: null, querySelector: () => null };
+  const rate = SECTIONS.find(s => s.id === 'skin').actions['bp-skin-rate'];
+  const said = [];
+  const app = { render() { computeToday(); }, renderBottle() {}, keepingFocus(el, scope, fn) { fn(); }, announce: t => said.push(t) };
+  try {
+    Object.assign(state, { demo: { fragrances }, active: 'demo', shared: null, wx, history: [] });
+    computeToday();
+    const f = state.contexts.night.ranked[9].fragrance;
+    state.route = { dest: 'bottle', arg: f.id, query: { ctx: 'night' } };
+    const star = (value, on) => ({ dataset: { value: String(value) }, getAttribute: () => String(on), isConnected: true });
+    rate(star(4, false), app, { detail: 1 });
+    assert.match(said.at(-1), /^Rated 4★\. (Still|Now) \d+(st|nd|rd|th) for tonight[.,]/);
+    rate(star(4, true), app, { detail: 1 });
+    assert.match(said.at(-1), /^Rating cleared\. (Still|Now) \d+(st|nd|rd|th) for tonight[.,]/, 'the same star again takes it off, and says so');
+    assert.equal(ratedText(5, 'Still 1st for tonight.'), 'Rated 5★. Still 1st for tonight.');
+    assert.equal(ratedText(null, ''), 'Rating cleared.');
+  } finally {
+    delete globalThis.localStorage;
+    delete globalThis.document;
+    Object.assign(state, { demo: null, wx: null, today: null, contexts: {}, route: null });
+  }
+});
+
 // ---------- Styles ----------
 
 test('styles link to Discover, and a quiet bottle is Intimate, which wears close', () => {
@@ -497,6 +536,29 @@ test('styles link to Discover, and a quiet bottle is Intimate, which wears close
   assert.match(guessed, /You reach for it/);
   assert.ok(!guessed.includes('You like it') && !guessed.includes('style-row liked'));
   for (const html of [said, guessed]) assert.ok(!html.includes(icon.heartFill), 'the heart means Want');
+  assert.match(said, /aria-labelledby="bp-styles-title">\s*<h3 id="bp-styles-title">Its style</);
+});
+
+// From 1100px the page docks beside any other, in one document: an id a
+// section shares with a view names the wrong thing (Insights' "Your styles"
+// named the section "Its style" labels) and sends refocus-by-id astray.
+test('the bottle page’s ids are its own: no view, sheet or shell part uses one', () => {
+  const root = new URL('../', import.meta.url);
+  const walk = dir => readdirSync(new URL(dir, root), { withFileTypes: true })
+    .flatMap(e => (e.isDirectory() ? walk(`${dir}${e.name}/`) : /\.(js|html)$/.test(e.name) ? [`${dir}${e.name}`] : []));
+  const files = [...walk('src/views/'), ...walk('src/app/'), ...walk('src/ui/'), 'src/ui.js', 'index.html'];
+  const idsIn = file => new Set([...readFileSync(new URL(file, root), 'utf8').matchAll(/\bid="([\w-]+)"/g)].map(m => m[1]));
+  const page = files.filter(f => /^src\/views\/bottle(-[\w-]+)?\.js$/.test(f));
+  assert.ok(page.length >= 8, page.join(', '));
+  const owner = new Map();
+  for (const file of page) for (const id of idsIn(file)) {
+    assert.ok(!owner.has(id), `${id} is in ${owner.get(id)} and ${file}`);
+    owner.set(id, file);
+  }
+  for (const file of files.filter(f => !page.includes(f))) {
+    const shared = [...idsIn(file)].filter(id => owner.has(id));
+    assert.deepEqual(shared, [], `${file} uses the bottle page’s ${shared.map(id => `${id} (${owner.get(id)})`).join(', ')}`);
+  }
 });
 
 // ---------- Smells like ----------
@@ -746,7 +808,15 @@ test('compare marks one leader by the value it shows, and calls lasting and loud
   assert.match(bottlePageHTML(modelOf(rated)), /Lasts 8\.4 · Projects \d\.\d <span>of 10 on <a [^>]*>Parfumo<\/a> and Fragrantica<\/span>/);
   assert.match(bottlePageHTML(modelOf(byName('Sandalwood & Musk'))), /Lasts ≈ 6\.8 · Projects ≈ 6\.7 <span>of 10 on/);
   assert.match(bottlePageHTML(modelOf({ ...rated, performance: undefined })), /Lasts 8\.4 · Projects 8\.1 <span>of 10 on <a [^>]*>Parfumo<\/a><\/span>/, 'Parfumo’s alone');
-  assert.match(bottlePageHTML(modelOf(guess)), /Lasts 4\.0 of 5 · Projects 2\.9 of 4 <span>on Fragrantica/);
+  // Fragrantica's votes alone read on the same 0–10, as Compare reads them, not as its 1–5 and 1–4.
+  const est = performanceRating(guess);
+  const head = bottlePageHTML(modelOf(guess));
+  assert.ok(head.includes(`Lasts ≈ ${est.longevity.toFixed(1)} · Projects ≈ ${est.sillage.toFixed(1)} <span>of 10, estimated from Fragrantica votes</span>`), head.match(/<p class="performance">.*?<\/p>/)?.[0]);
+  assert.ok(!/ of [45]\b/.test(head.match(/<p class="performance">.*?<\/p>/)[0]));
+  assert.ok(lasts.includes(`≈ ${est.longevity.toFixed(1)}<small> of 10`), 'the figure Compare shows');
+  // Neither crowd: Fragella's words, else nothing.
+  assert.match(bottlePageHTML(modelOf({ ...guess, performance: undefined, longevity: 'Long lasting', sillage: 'Moderate' })), /<p class="performance">Long lasting · Moderate projection<\/p>/);
+  assert.ok(!bottlePageHTML(modelOf({ ...guess, performance: undefined })).includes('class="performance"'));
 });
 
 test('tonight’s pick is a bottle you own when one is among them', () => {

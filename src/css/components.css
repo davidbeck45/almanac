@@ -405,6 +405,8 @@
 .switch span { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: var(--r-round); background: var(--paper); box-shadow: 0 1px 3px rgb(var(--shade) / 0.35); transition: transform var(--dur-2) var(--ease-sheet); }
 .switch[aria-checked='true'] { background: var(--positive); }
 .switch[aria-checked='true'] span { transform: translateX(18px); }
+/* Held in its state by something else (Settings' sky under Reduce Motion). */
+.switch[aria-disabled='true'] { opacity: 0.55; cursor: default; }
 .check {
   display: grid;
   flex: none;
@@ -610,6 +612,9 @@
   transition: opacity var(--dur-2), transform var(--dur-3) var(--ease-sheet), bottom var(--dur-3) var(--ease-sheet), left var(--dur-3) var(--ease-sheet);
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+/* Away it's empty and see-through, but stays on the page as a live region
+   (src/app/sheets.js), so it mustn't catch taps meant for what's under it. */
+.toast:not(.show) { pointer-events: none; }
 .toast > svg { width: 16px; height: 16px; flex: none; color: var(--positive); }
 .toast[data-tone='error'] > svg { width: 18px; height: 18px; color: var(--negative); }
 .toast:not(:has(button, a)) { padding-right: var(--s-5); }

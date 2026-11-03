@@ -309,11 +309,33 @@ test('the week board promises no repeats only when there are none, and says rain
   const same = days.map(d => ({ ...d, day: d.day && pickOf(one, 'a'), night: d.night && pickOf(one, 'b') }));
   const html = wear.weekHTML(same);
   assert.ok(!/repeats/.test(html), 'a list of one can’t keep that promise');
-  assert.match(html, /Planned against the forecast\. Open a bottle to see why\./);
+  assert.match(html, /Planned against how each day and night will feel\. Open a bottle to see why\./);
   // Rain: the chance and the word, the whole phrase for screen readers.
   const wet = wear.weekHTML(varied.map((d, n) => ({ ...d, pop: n === 1 ? 87 : 10 })));
   assert.match(wet, /<span class="wk-pop">87%<span class="visually-hidden"> chance of<\/span> rain<\/span>/);
   assert.equal((wet.match(/% rain|chance of/g) ?? []).length, 1, 'only on the rainy day');
+});
+
+test('each of the Week’s picks says how its window feels, what the plan picked for, beside the day’s high and low', () => {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  Object.assign(state, { demo: { fetched: today, fragrances }, forecast: live, wx: summarize(live), loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], occasionSlot: null });
+  const days = app.computeWeek();
+  const board = clean(wear.weekHTML(days), 'week');
+  const slots = days.flatMap(d => [d.day, d.night]).filter(Boolean);
+  assert.ok(slots.length > 7);
+  for (const p of slots) {
+    const cell = wear.weekPick(p, p.win.slot, 'Friday');
+    const feels = `${Math.round(p.win.feelsF)}°`;
+    assert.ok(cell.includes(`<span class="wk-feels">${feels}</span>`), `${p.win.dateISO} ${p.win.slot}: its window's ${feels}`);
+    assert.match(cell, new RegExp(`aria-label="Friday (daytime|night): [^"]+, feels ${feels}`), 'said after the name, as Trip says it');
+  }
+  // The day's air high and low stay in the date column.
+  for (const d of days) assert.ok(board.includes(`<b>${Math.round(d.hiF)}°</b><small>${Math.round(d.loF)}°</small>`));
+  assert.match(board, /Planned against how each day and night will feel/);
+  // A window without a reading (a pick handed in bare) shows none.
+  const bare = wear.weekPick({ ...slots[0], win: undefined }, 'day', 'Friday');
+  assert.ok(!bare.includes('wk-feels') && !bare.includes('feels'));
 });
 
 test('the Week counts a window’s equals under its pick, “+2 as good” in a row and the columns alike, and names them in its tooltip and label', () => {
@@ -343,7 +365,14 @@ test('the Week counts a window’s equals under its pick, “+2 as good” in a 
   assert.match(cell(two), /<small class="wk-mark wk-tie">.*<span>\+2 as good<\/span><\/small>/s);
   assert.match(cell(one), /<small class="wk-mark wk-tie">.*<span>\+1 as good<\/span><\/small>/s);
   assert.ok(!/wk-long|wk-short/.test(cell(two).match(/<small class="wk-mark wk-tie">.*<\/small>/s)[0]), 'no wording for one layout only');
-  assert.ok(cell(two).includes(`aria-label="${esc(`Friday ${two.win.slot === 'day' ? 'daytime' : 'night'}: ${two.pick.fragrance.name}, ${first} and ${second} suit it as well`)}"`));
+  // A column holds the 64px it takes only without its glyph (it was "+2 as go…" at every width).
+  const css = readFileSync(new URL('../src/css/wear.css', import.meta.url), 'utf8');
+  const columns = [...css.matchAll(/@container page \(min-width: 700px\) \{([\s\S]*?)\n\}/g)].map(m => m[1]).find(b => b.includes('.wk-list'));
+  assert.match(columns, /\.wk-tie svg \{ display: none; \}/);
+  // So does a 320px phone's row beside the window's feels-like (71px), where the marks take the columns' words.
+  const narrow = css.match(/@media \(max-width: 374px\) \{([\s\S]*?)\n\}/)[1];
+  assert.ok(narrow.includes('.wk-pick {') && narrow.includes('.wk-tie svg { display: none; }') && narrow.includes('.wk-mark .wk-short { display: inline; }'));
+  assert.ok(cell(two).includes(`aria-label="${esc(`Friday ${two.win.slot === 'day' ? 'daytime' : 'night'}: ${two.pick.fragrance.name}, feels ${Math.round(two.win.feelsF)}°, ${first} and ${second} suit it as well`)}"`));
   assert.match(cell(two), / title="[^"]+ suit [^"]+ just as well\."/, 'the tooltip has their tags');
   // An event's mark says what it's for instead; a worn window has none.
   assert.ok(!cell({ ...two, win: { ...two.win, occasion: occasionById('formal') } }).includes('wk-tie'));
@@ -1121,6 +1150,48 @@ test('Now asks what it needs once each: stars for the unrated bottle he’s wear
   state.base = { dest: 'wear', pane: 'now' };
   assert.ok(!draw().includes('class="ask'), 'and it never comes back');
   wear.forgetAsked();
+});
+
+test('on a phone the question a tap brings up comes into view above the tab bar, and only when it’s out of sight', t => {
+  // Noon there, so Now's window can still be worn.
+  t.mock.timers.enable({ apis: ['Date'], now: nowMs });
+  const scrolled = [];
+  const ask = { scrollIntoView: o => scrolled.push(o) };
+  const asked = [];
+  const realDoc = globalThis.document, realRaf = globalThis.requestAnimationFrame, realMatch = globalThis.matchMedia;
+  globalThis.document = { querySelector: sel => { asked.push(sel); return ask; } };
+  globalThis.requestAnimationFrame = fn => fn();
+  try {
+    globalThis.matchMedia = () => ({ matches: false });
+    wear.showAsk({ inSight: () => false });
+    assert.deepEqual(scrolled, [{ block: 'nearest', behavior: 'smooth' }], 'under the bar (or past the screen): just far enough up');
+    wear.showAsk({ inSight: () => true });
+    assert.equal(scrolled.length, 1, 'in sight already: the page stays put');
+    globalThis.matchMedia = () => ({ matches: true });
+    wear.showAsk({ inSight: () => false }, '#app .pick .ask');
+    assert.deepEqual(scrolled.at(-1), { block: 'nearest', behavior: 'auto' }, 'no glide with reduced motion');
+    assert.deepEqual(asked, ['#app .ask', '#app .ask', '#app .pick .ask']);
+    // Wear this on Now's card asks for the stars beside it; anywhere else, nothing scrolls.
+    const { state } = nowOnToday();
+    app.computeToday();
+    const now = app.nowSlot();
+    const ui = { keepingFocus(el, scope, fn) { fn(); }, render() { app.computeToday(); }, inSight: () => false };
+    const button = { dataset: { ctx: now.win.slot, id: now.pick.fragrance.id }, closest: sel => (sel === '#app .pick' ? {} : null) };
+    asked.length = 0;
+    wear.actions.wear(button, ui);
+    assert.deepEqual(asked, ['#app .pick .ask'], 'worn: its stars');
+    asked.length = 0;
+    wear.actions.wear(button, ui);
+    assert.deepEqual(asked, [], 'taken off: no question to show');
+    wear.actions.wear({ ...button, closest: () => null }, ui);
+    assert.deepEqual(asked, [], 'from the bottle page: Now behind it stays put');
+    state.history = [];
+  } finally {
+    globalThis.document = realDoc;
+    globalThis.requestAnimationFrame = realRaf;
+    globalThis.matchMedia = realMatch;
+    wear.forgetAsked();
+  }
 });
 
 test('Not now waves a question off for good; a bottle with his own nudges isn’t asked how it wore', () => {

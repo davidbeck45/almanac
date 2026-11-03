@@ -225,8 +225,12 @@ export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confir
   const dustList = dusty.length
     ? `<ul class="dust-list">${dusty.map(({ f, last, when }) => `<li><button data-action="open" data-ctx="${esc(when?.ctx ?? '')}" data-id="${esc(f.id)}">${img(f)}<span><b>${esc(f.name)}</b><small>${last ? `Last worn ${esc(relativeDay(last, todayISO))}` : 'Not worn yet'}</small>${when ? `<small class="dust-when${when.kind === 'none' ? '' : ' on'}">${esc(dustWhenText(when, todayISO))}</small>` : ''}</span></button></li>`).join('')}</ul>`
     : '<p class="muted small">Every bottle in rotation got worn this month. Nice.</p>';
+  // Copy for Claude heads the card: a token goes stale in a day, so it's
+  // asked for often, and at the foot it was a phone screen and a half down.
+  const claude = `<button class="btn secondary compact" data-action="journal-claude">${icon.paste}Copy for Claude</button>
+    <p>Copies your last ten days, stars and switched-off bottles for Claude’s picks (no places).</p>`;
   return `<section class="card journal" aria-labelledby="journal-title">
-    ${sectionHead('Last 30 days', '', { id: 'journal-title' })}
+    ${sectionHead('Last 30 days', claude, { id: 'journal-title' })}
     ${list ? '<p class="muted small journal-scope">Every wear logged on this device, from any list.</p>' : ''}
     ${tiles}
     <section><h3>Calendar</h3><p class="muted small cal-hint">Choose a day to log a wear you didn’t at the time.</p><div class="calendar">${weekdays}${cells}</div></section>
@@ -234,10 +238,9 @@ export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confir
     <section><h3>Gathering dust</h3>${list ? `<p class="muted small journal-scope">From ${esc(list)}: in rotation, not worn in 30 days.</p>` : ''}${dustList}</section>
     <div class="action-row end">
       <button class="btn secondary" data-action="journal-export">${icon.download}Export</button>
-      <button class="btn secondary" data-action="journal-claude">${icon.paste}Copy for Claude</button>
       <button class="btn ${confirmClear ? 'secondary danger' : 'tertiary'}" data-action="journal-clear">${icon.remove}${confirmClear ? 'Press again to clear' : 'Clear history'}</button>
     </div>
-    <p class="muted small">Logged with “Wear this”, or on the calendar. History stays on this device; Export saves it as a file, and Copy for Claude copies your last ten days, stars and switched-off bottles (no places) for Claude’s picks.</p>
+    <p class="muted small">Logged with “Wear this”, or on the calendar. History stays on this device; Export saves it as a file.</p>
   </section>`;
 }
 

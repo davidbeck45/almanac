@@ -103,6 +103,8 @@ function twinRow(t, ctx, wants) {
 // A fill sentence the chips repeat ("It would be your best for …"); one with
 // a "though" says more than they do, so it stays.
 const fillReason = t => /^(Still, )?it would be (your best|a second strong pick) for /i.test(t) && !/\bthough\b/.test(t);
+// buyCheck's plain rating line (src/gaps.js), which the head already shows.
+const RATED = /^Rated [\d.]+★ by [\d,]+ voters?\.$/;
 
 /**
  * The section from the bottle's model and its check: undefined before it's
@@ -131,7 +133,9 @@ export function buyCheckHTML(m, answer, { who = 'your collection', wants = [], s
   const fills = groups.slice(0, MAX_FILLS);
   const more = groups.length - fills.length;
   const near = r.overlap && (r.overlap.link || r.overlap.sim >= NEAR_SIM);
-  const reasons = r.reasons.filter(t => t !== r.twin?.text && !(fills.length && fillReason(t)) && !(near && !r.overlap.link && /^Closest to /.test(t)));
+  // The page's head shows the rating and its votes, so a plain "Rated 4.5★ by
+  // 1,055 voters." goes (a low rating's warning stays).
+  const reasons = r.reasons.filter(t => t !== r.twin?.text && !(fills.length && fillReason(t)) && !(near && !r.overlap.link && /^Closest to /.test(t)) && !RATED.test(t));
   const overlap = near ? overlapRow(r.overlap, m.ctx) : '';
   const twin = r.twin ? twinRow(r.twin, m.ctx, wants) : '';
   const chip = g => `<li class="fill-chip${g.first ? ' first' : ''}">${esc(g.title)}</li>`;

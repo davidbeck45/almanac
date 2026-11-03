@@ -384,9 +384,12 @@
 /* ---------- Week ---------- */
 
 .wk-list { display: grid; }
+/* A row a day: the date, the day's weather (its high over its low, so the
+   picks keep room for their names beside how each window feels) and the
+   day's pick over the night's. */
 .wk-day {
   display: grid;
-  grid-template-columns: 52px 52px 1fr;
+  grid-template-columns: 48px 40px 1fr;
   align-items: center;
   gap: var(--s-3);
   padding: var(--s-3) var(--s-0);
@@ -399,23 +402,24 @@
 .wk-day.today .wk-date b { color: var(--accent); }
 .wk-wx { display: grid; justify-items: center; gap: var(--s-0); }
 .wk-wx .wx svg { width: 28px; height: 28px; }
-.wk-temps { display: flex; gap: var(--s-1); align-items: baseline; font-variant-numeric: tabular-nums; }
+.wk-temps { display: flex; flex-direction: column; align-items: center; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .wk-temps b { font-size: var(--fs-footnote); font-weight: 600; }
 .wk-temps small { color: var(--text-tertiary); font-size: var(--fs-caption); }
 /* "87% rain": two lines in a phone's narrow column. */
 .wk-pop { color: var(--info); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; }
 .wk-picks { display: grid; gap: var(--s-1); min-width: 0; }
 /* A pick: the photo with its time of day as a badge (a check once worn),
-   then the name, which gets the rest of the row. */
+   then the name, which gets the rest of the row, and how the window feels
+   at its end. */
 .wk-pick {
   position: relative;
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
+  grid-template-columns: 30px minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--s-2);
   min-width: 0;
   min-height: var(--hit);
-  padding: var(--s-1) var(--s-3) var(--s-1) var(--s-2);
+  padding: var(--s-1) var(--s-2);
   border-radius: var(--r-control);
   background: var(--surface-2);
   border: 1px solid var(--border-subtle);
@@ -451,6 +455,8 @@
 .wk-mark svg { width: 11px; height: 11px; flex: none; }
 .wk-mark span { overflow: hidden; text-overflow: ellipsis; }
 .wk-mark .wk-short { display: none; }
+/* The window's feels-like, as Trip's day by day reads it. */
+.wk-feels { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-variant-numeric: tabular-nums; }
 .wk-pick.event { border-color: color-mix(in srgb, var(--ambient) 40%, var(--border-subtle)); }
 .wk-event { font-weight: 600; }
 /* "+2 as good", in a row and in the columns alike. */
@@ -463,11 +469,15 @@
 .wk-pick.empty .wk-slot { position: static; width: auto; height: auto; background: none; box-shadow: none; color: var(--text-tertiary); }
 .wk-pick.empty .wk-slot svg { width: 14px; height: 14px; }
 @media (max-width: 374px) {
-  .wk-day { grid-template-columns: 40px 44px 1fr; gap: var(--s-2); }
-  .wk-temps { flex-direction: column; align-items: center; gap: 0; line-height: 1.2; }
-  .wk-pick { grid-template-columns: 26px minmax(0, 1fr); padding-right: var(--s-2); }
+  .wk-day { grid-template-columns: 40px 40px 1fr; gap: var(--s-2); }
+  .wk-pick { grid-template-columns: 26px minmax(0, 1fr) auto; }
   .wk-pick img { width: 22px; height: 28px; }
   .wk-slot { left: calc(var(--s-2) + 15px); }
+  /* Beside the feels-like a 320px phone leaves the marks 71px: they take
+     the columns' words ("+2 as good" without its glyph, "Unworn"). */
+  .wk-tie svg { display: none; }
+  .wk-mark .wk-long { display: none; }
+  .wk-mark .wk-short { display: inline; }
 }
 /* Room for the whole week side by side: a column a day, the day's pick
    over the night's. */
@@ -492,13 +502,16 @@
   .wk-temps { flex-direction: column; align-items: flex-start; gap: 0; line-height: 1.15; }
   .wk-pop { grid-column: 1 / -1; }
   .wk-pop[aria-hidden='true'] { display: none; }
-  .wk-picks { width: 100%; align-self: end; }
-  .wk-pick { grid-template-columns: 1fr; justify-items: center; gap: var(--s-1); padding: var(--s-2) var(--s-1); text-align: center; }
-  .wk-pick .wk-slot { top: var(--s-2); left: var(--s-2); bottom: auto; width: auto; height: auto; background: none; box-shadow: none; color: var(--text-tertiary); }
+  .wk-picks { grid-auto-rows: 1fr; width: 100%; align-self: end; }
+  /* The time of day and how it feels on a line over the photo: beside it,
+     a 40px photo leaves a tablet's column no room for "42°". */
+  .wk-pick { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: 'slot feels' 'photo photo' 'text text'; justify-items: center; gap: var(--s-1); padding: var(--s-2) var(--s-1); text-align: center; }
+  .wk-pick .wk-slot { position: static; grid-area: slot; width: auto; height: auto; margin-left: var(--s-1); background: none; box-shadow: none; color: var(--text-tertiary); }
   .wk-pick .wk-slot svg { width: 14px; height: 14px; }
   .wk-pick.worn .wk-slot { color: var(--positive); }
-  .wk-pick img { width: 40px; height: 48px; }
-  .wk-text { justify-items: center; max-width: 100%; }
+  .wk-feels { grid-area: feels; justify-self: start; }
+  .wk-pick img { grid-area: photo; width: 40px; height: 48px; }
+  .wk-text { grid-area: text; justify-items: center; max-width: 100%; }
   .wk-text b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; min-height: calc(2 * var(--lh-footnote)); }
   /* The marks in the column's words ("Formal"; the clock and "34 days"),
      on a line every cell keeps while one has it, so the days' cells stay in
@@ -507,7 +520,11 @@
   .wk-mark { justify-content: center; max-width: 100%; }
   .wk-mark .wk-long { display: none; }
   .wk-mark .wk-short { display: inline; }
-  .wk-pick.empty { grid-template-columns: 1fr; min-height: 104px; place-content: center; }
+  /* "+2 as good" needs 64px, which a column's 70 holds only without the glyph
+     (the note under the head still explains the count). */
+  .wk-tie svg { display: none; }
+  .wk-pick.empty { grid-template-columns: 1fr; grid-template-areas: none; min-height: 104px; place-content: center; }
+  .wk-pick.empty .wk-slot { grid-area: auto; margin-left: 0; }
 }
 
 /* A plan link's events over the Week, each in the plan's words, until he

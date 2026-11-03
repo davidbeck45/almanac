@@ -161,7 +161,11 @@ test('the shelf stands every bottle on the line with its magnitude, B and C incl
   for (const t of ['S', 'A', 'B', 'C']) {
     if (ranked.some(r => r.tier === t)) assert.ok(html.includes(`data-tier="${t}"`), `tier ${t} shows`);
   }
-  assert.match(html, /aria-label="[^"]+, \d+% match(, (top pick|strong|good))?"/, 'the name comes first in each label, then the match');
+  assert.match(html, /aria-label="[^"]+, \d+% match(, (excellent|strong|good))?"/, 'the name comes first in each label, then the match');
+  // Under the card that names the pick, no other bottle is heard as "top pick".
+  assert.ok(!html.includes('top pick'));
+  const best = ranked.find(r => r.tier === 'S');
+  assert.ok(html.includes(`aria-label="${ui.esc(best.fragrance.name)}, ${ui.matchPct(best)}% match, excellent"`), 'the S tier in a word beside strong and good');
   assert.ok(!/tier [SABC]/.test(html), 'no tier letters, which nobody sees');
 });
 
@@ -254,6 +258,18 @@ test('Settings can hold the sky still, and the location sheet stays in reach whi
   const base = { loc: { name: 'Here' }, units: 'F', themeName: 'default', active: 'demo', mineCount: 0, shared: null, on: 1, total: 1, wears: 0, updated: '', stale: false, credits: '' };
   assert.match(settings.settingsHTML(base), /role="switch" aria-checked="true" data-action="sky-motion"/);
   assert.match(settings.settingsHTML({ ...base, stillSky: true }), /role="switch" aria-checked="false" data-action="sky-motion"/);
+  assert.match(settings.settingsHTML(base), /Animate the sky<small>Stars, rain and smoke move<\/small>/);
+  assert.ok(!settings.settingsHTML(base).includes('aria-disabled="true"><span></span>'), 'free to change');
+  // Reduce Motion holds the sky still whatever it says, so it shows off, locked, and says why.
+  for (const stillSky of [false, true]) {
+    const held = settings.settingsHTML({ ...base, stillSky, deviceStill: true });
+    assert.match(held, /role="switch" aria-checked="false" data-action="sky-motion" data-id="sky" aria-label="Animate the sky" aria-disabled="true">/);
+    assert.match(held, /Animate the sky<small>Held still by Reduce Motion<\/small>/);
+  }
+  // A tap on it changes nothing, so the setting keeps for when Reduce Motion goes off.
+  let drawn = 0;
+  settings.actions['sky-motion']({ getAttribute: name => (name === 'aria-disabled' ? 'true' : null) }, { keepingFocus() { drawn++; } });
+  assert.equal(drawn, 0);
   const locating = settings.locationSheetHTML({ locating: true, error: 'Location permission was denied.' });
   assert.match(locating, /data-action="geo" aria-disabled="true"/, 'focusable while it looks, so focus stays in the sheet');
   assert.ok(!/data-action="geo"[^>]*\sdisabled/.test(locating));

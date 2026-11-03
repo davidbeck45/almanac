@@ -1,5 +1,6 @@
 // Settings (#/settings, behind the gear): location, units, theme, which list
-// is ranked and sharing it, the journal export, and where the data comes
+// is ranked and sharing it, the journal's export and Copy for Claude (its
+// handlers are Worn's, src/views/wardrobe.js), and where the data comes
 // from. Also the location sheet. Styles: src/css/shell.css (.set-*).
 import { loadRecent, deviceLocation, searchCities } from '../location.js';
 import { theme } from '../theme.js';
@@ -38,6 +39,13 @@ const row = (label, control, { glyph = '', note = '' } = {}) => `<div class="set
     <span class="set-label">${glyph}<span class="set-text">${label}${note ? `<small>${note}</small>` : ''}</span></span>${control}
   </div>`;
 
+// The sky's switch says what the device holds it to: with Reduce Motion on
+// it's still whatever the setting says (base.css), so the switch shows off
+// and locked, and the setting keeps for when Reduce Motion goes off.
+const skyRow = (stillSky, deviceStill) => row('Animate the sky',
+  switchHTML({ on: !stillSky && !deviceStill, label: 'Animate the sky', action: 'sky-motion', id: 'sky', locked: deviceStill }),
+  { note: deviceStill ? 'Held still by Reduce Motion' : 'Stars, rain and smoke move' });
+
 // When the forecast on screen was fetched: the time, and the day once it
 // isn't today's (a saved one can stand in for days).
 export function updatedText(fetchedAt, now = new Date()) {
@@ -47,7 +55,7 @@ export function updatedText(fetchedAt, now = new Date()) {
 }
 
 // `stale`: a saved forecast standing in, `offline` when the network was why.
-export function settingsHTML({ loc, units, themeName, stillSky = false, active, mineCount, shared, on, total, wears, updated, stale, offline = false, credits }) {
+export function settingsHTML({ loc, units, themeName, stillSky = false, deviceStill = false, active, mineCount, shared, on, total, wears, updated, stale, offline = false, credits }) {
   const age = !updated ? '' : !stale ? `Updated ${esc(updated)}` : offline ? `Offline · Updated ${esc(updated)}` : `Not updated since ${esc(updated)}`;
   return `
     ${group('Weather', `
@@ -57,7 +65,7 @@ export function settingsHTML({ loc, units, themeName, stillSky = false, active, 
     ${group('Display', `
       ${row('Temperature', segHTML([{ value: 'F', label: '°F', on: units === 'F' }, { value: 'C', label: '°C', on: units === 'C' }], { action: 'units', label: 'Temperature units' }))}
       ${row('Theme', segHTML([{ value: 'default', label: 'Default', on: themeName === 'default' }, { value: 'gruvbox', label: 'Gruvbox', on: themeName === 'gruvbox' }], { action: 'theme', label: 'Theme' }))}
-      ${row('Animate the sky', switchHTML({ on: !stillSky, label: 'Animate the sky', action: 'sky-motion', id: 'sky' }), { note: 'Stars, rain and smoke move' })}
+      ${skyRow(stillSky, deviceStill)}
     `)}
     ${group('Collection', `
       ${shared ? `<p class="notice">Viewing ${esc(shared.name ? `${shared.name}’s` : 'a shared')} collection from a link. Picking a list closes it.</p>` : ''}
@@ -66,6 +74,7 @@ export function settingsHTML({ loc, units, themeName, stillSky = false, active, 
     `)}
     ${group('Wear journal', `
       ${row(`<a class="set-link" href="#/wardrobe/worn">${plural(wears, 'wear')} logged</a>`, `<button class="btn tertiary compact" data-action="journal-export" ${wears ? '' : 'disabled'}>${icon.download}Export</button>`, { note: 'Stays on this device' })}
+      ${row('For Claude’s picks', `<button class="btn tertiary compact" data-action="journal-claude">${icon.paste}Copy for Claude</button>`, { note: 'Recent wears and stars' })}
     `)}
     ${group('About', `<p class="set-credits">${credits}</p><p class="set-credits">Almanac picks from your own bottles with the weather, time of day and occasion. Everything you add stays on this device.</p>`)}`;
 }
@@ -77,6 +86,7 @@ function settingsPage() {
     units: state.units,
     themeName: theme(),
     stillSky: state.stillSky,
+    deviceStill: Boolean(globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches),
     active: state.active,
     mineCount: state.mine.records.length,
     shared: state.shared,
@@ -214,6 +224,7 @@ export const actions = {
   // The scene's loops (stars, rain, smoke, lightning) can be held still
   // (WCAG 2.2.2); reduced motion holds them anyway.
   'sky-motion'(el, app) {
+    if (el.getAttribute('aria-disabled') === 'true') return;
     setStillSky(!state.stillSky);
     app.keepingFocus(el, '#app', app.render);
   },

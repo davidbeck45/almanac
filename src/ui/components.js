@@ -174,8 +174,10 @@ export function matchBadge(entry) {
 
 // A tier as star magnitude: one moonlight hue, S brightest.
 export const magDot = tier => `<span class="mag" data-tier="${esc(tier)}" aria-hidden="true"></span>`;
-// What a screen reader hears for a tier (sighted people see the dot).
-const TIER_WORDS = { S: 'top pick', A: 'strong', B: 'good' };
+// What a screen reader hears for a tier (sighted people see the dot). Not
+// "top pick": the shelf sits right under the card that names the pick, and
+// two or three bottles share the S tier.
+const TIER_WORDS = { S: 'excellent', A: 'strong', B: 'good' };
 
 // The magnitude shelf: bottles standing on a 1px shelf line with a caption
 // and a magnitude dot, B and C dimmed. Scrolls sideways on phones and stacks
@@ -232,8 +234,10 @@ export function segLinksHTML(items, { label, cls = '' }) {
   return `<nav class="seg seg-links ${cls}" aria-label="${esc(label)}">${items.map(i => `<a href="${esc(i.href)}" data-href="${esc(i.href)}"${i.on ? ' aria-current="page"' : ''}>${i.icon ?? ''}<span>${esc(i.label)}</span></a>`).join('')}</nav>`;
 }
 
-export function switchHTML({ on, label, action, id }) {
-  return `<button class="switch" role="switch" aria-checked="${on}" data-action="${esc(action)}" data-id="${esc(id)}" aria-label="${esc(label)}"><span></span></button>`;
+// `locked`: it shows a state something else holds it in (aria-disabled, so
+// it keeps its Tab stop and its label is still read); its action ignores it.
+export function switchHTML({ on, label, action, id, locked = false }) {
+  return `<button class="switch" role="switch" aria-checked="${on}" data-action="${esc(action)}" data-id="${esc(id)}" aria-label="${esc(label)}"${locked ? ' aria-disabled="true"' : ''}><span></span></button>`;
 }
 
 // ---------- Rows ----------

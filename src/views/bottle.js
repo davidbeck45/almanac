@@ -344,17 +344,18 @@ function headSection({ f, entry, ctxLabel, solo }) {
     ? '<span class="by-hand">Entered by hand</span>'
     : !f.rating ? 'Unrated'
     : `★ ${f.rating.toFixed(2)} <span>${esc(f.source === 'fragella' ? 'Fragella rating' : `${f.ratingVotes.toLocaleString()} votes`)}</span>`;
-  // Parfumo's 0–10 ratings when we have them, with Fragrantica's votes counted
-  // in as the engine reads both (performanceRating; ≈ where most are
-  // Fragrantica's, as Compare marks it), else Fragrantica's votes, else
-  // Fragella's words; Lasts and Projects, as compare and On your skin say it.
-  const pf = f.parfumo, fv = f.performance, p = pf && performanceRating(f);
+  // Both crowds' votes on Parfumo's 0–10 as the engine reads them
+  // (performanceRating; ≈ where most are Fragrantica's, as Compare marks
+  // it), so a bottle to buy reads on the scale of the ones you own; else
+  // Fragella's words. Lasts and Projects, as Compare and On your skin say it.
+  const pf = f.parfumo?.votes > 0 ? f.parfumo : null, p = performanceRating(f);
+  const keys = [['longevity', 'Lasts'], ['sillage', 'Projects']].filter(([key]) => p?.[key] != null);
   const figure = key => `${p.parfumoShare[key] < 0.5 ? '≈ ' : ''}${p[key].toFixed(1)}`;
   const parfumo = pf && `<a href="${esc(pf.url)}" target="_blank" rel="noopener" data-focus="bp-parfumo">Parfumo</a>`;
-  const performance = pf
-    ? `Lasts ${figure('longevity')} · Projects ${figure('sillage')} <span>of 10 on ${parfumo}${p.parfumoShare.longevity < 1 || p.parfumoShare.sillage < 1 ? ' and Fragrantica' : ''}</span>`
-    : fv
-    ? `Lasts ${fv.longevity.toFixed(1)} of 5 · Projects ${fv.sillage.toFixed(1)} of 4 <span>on Fragrantica</span>`
+  const fragrantica = keys.some(([key]) => p.parfumoShare[key] < 1);
+  const source = !pf ? 'of 10, estimated from Fragrantica votes' : `of 10 on ${parfumo}${fragrantica ? ' and Fragrantica' : ''}`;
+  const performance = keys.length
+    ? `${keys.map(([key, word]) => `${word} ${figure(key)}`).join(' · ')} <span>${source}</span>`
     : [f.longevity, f.sillage && `${f.sillage} projection`].filter(Boolean).map(esc).join(' · ');
   const o = f.original;
   const inspired = o ? `<p class="inspired">Inspired by ${o.url ? `<a href="${esc(o.url)}" target="_blank" rel="noopener" data-focus="bp-inspired">${esc(o.name)}</a>` : esc(o.name)} · ${esc(o.brand)}</p>` : '';
@@ -390,9 +391,12 @@ function wearsHTML(wears, today) {
   return `<p class="fact">${icon.clock}<span>${esc(text)}</span></p>`;
 }
 
-function summarySection({ entry, comfort, wears, todayISO: today, owned }) {
+// Why says what a rest takes off ("Worn 5 days ago: 4% lower so others get a
+// turn.") and the wears line when it was, so the reasons leave it to them.
+function summarySection({ entry, win, comfort, wears, todayISO: today, owned }) {
+  const rest = entry?.parts.rotation > 0 ? restReason(entry.parts, win?.slot) : null;
   return `<div class="bp-summary">
-    ${entry ? reasonsList(entry.reasons, 'full') : ''}
+    ${entry ? reasonsList(entry.reasons.filter(r => r.text !== rest), 'full') : ''}
     ${comfortHTML(comfort)}
     ${owned ? wearsHTML(wears, today) : ''}
   </div>`;

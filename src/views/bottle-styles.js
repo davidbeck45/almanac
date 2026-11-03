@@ -32,8 +32,8 @@ export function stylesHTML(m, liked = likedNow() ?? [], { stated = likedStatedNo
   const rows = topStyles(m.f).map(s => ({ ...s, strong: s.score >= STYLE_STRONG, blurb: styleById(s.id).blurb }));
   if (wearsClose(m.f)) rows.push({ id: 'intimate', label: styleById('intimate').label, strong: false, blurb: styleById('intimate').blurb });
   if (!rows.length) return '';
-  return `<section class="bp-section" aria-labelledby="styles-title">
-    <h3 id="styles-title">Its style</h3>
+  return `<section class="bp-section" aria-labelledby="bp-styles-title">
+    <h3 id="bp-styles-title">Its style</h3>
     <ul class="style-list">${rows.map(r => styleRow({ ...r, liked: liked.includes(r.id), stated })).join('')}</ul>
   </section>`;
 }

@@ -1,23 +1,24 @@
 // The bottle page's "On your skin" (order 260), for a bottle you own: your own
 // stars and how it wears on you against the crowd's votes (src/skin.js).
 // Stars move it in picks and the nudges tune its spray guide; saving ranks
-// everything again and says what changed: where the bottle moved in the list
-// it was opened from ("Now 3rd for tonight, was 1st"), or what it did to the
-// spray guide's count ("Now 1 spray, was 1–2", or that it's unchanged).
+// everything again and says what changed: the stars and where the bottle
+// moved in the list it was opened from ("Rated 4★. Now 3rd for tonight, was
+// 1st.", as Now's "Rate it" says it), or what a nudge did to the spray
+// guide's count ("Now 1 spray, was 1–2", or that it's unchanged).
 import { setSkin } from '../skin.js';
-import { esc, moveText, listLabel } from '../ui.js';
+import { esc, moveText, ratedText, listLabel } from '../ui.js';
 import { segHTML, starsHTML } from '../ui/components.js';
 import { addSection, bottleModel } from './bottle.js';
 import { guideFor, sprayCount } from './bottle-spray.js';
 import { state, nowSlot, findRecord } from '../app/state.js';
 
 // Where a save moved the bottle, in src/ui.js since Now's "Rate it" says it too.
-export { ordinal, moveText, listLabel } from '../ui.js';
+export { ordinal, moveText, ratedText, listLabel } from '../ui.js';
 
 const LASTS = [[-1, 'Shorter'], [0, 'As expected'], [1, 'Longer']];
 const PROJECTS = [[-1, 'Less'], [0, 'As expected'], [1, 'More']];
 
-/** The section for a bottle's model; `change`: the last save's moveText for it, or ''. */
+/** The section for a bottle's model; `change`: what the last save for it did (ratedText, sprayText), or ''. */
 export function skinHTML(m, change = '') {
   if (!m.owned && !m.inMine) return '';
   const id = esc(m.f.id);
@@ -87,9 +88,10 @@ function save(el, app, patch) {
   if ('skin' in state) state.skin = next;
   changes.clear();
   app.render();
-  // Stars move it in the list; how it wears on you may change the spray guide.
+  // Stars move it in the list, said as Now's "Rate it" says it; how it wears
+  // on you may change the spray guide.
   const ctx = state.contexts[key];
-  const said = 'rating' in patch ? moveText(before, placeIn(key, id), listLabel(ctx?.win, ctx?.occasion)) : sprayText(was, sprayNow());
+  const said = 'rating' in patch ? ratedText(patch.rating, moveText(before, placeIn(key, id), listLabel(ctx?.win, ctx?.occasion))) : sprayText(was, sprayNow());
   changes.set(id, said);
   app.keepingFocus(el, '#bottle', app.renderBottle);
   if (!el.isConnected && !document.activeElement?.closest?.('#bottle')) document.querySelector('#skin-title')?.focus({ preventScroll: true });
