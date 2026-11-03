@@ -3,8 +3,9 @@
 // covers each), the modules Insights and the Wishlist load on demand stay out
 // of the boot graph, a bottle page's shopping order reads as the page does,
 // its order slots are the registry's, the --journal example names the file
-// Export saves, the code names, paths and files CLAUDE.md gives are still in
-// the repo, and nothing tracked points at the git-excluded sweep notes.
+// Export saves, Export is on the screens CLAUDE.md names, the code names,
+// paths and files CLAUDE.md gives are still in the repo, and nothing tracked
+// points at the git-excluded sweep notes.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -70,6 +71,17 @@ test('a bottle page you shop from reads in the order CLAUDE.md gives', () => {
 test("README's --journal example names the file Export saves", () => {
   assert.match(read('src/views/wardrobe.js'), /a\.download = `almanac-journal-\$\{deviceToday\(\)\}\.json`/, 'named by the device’s date, not UTC’s');
   assert.ok(/--journal almanac-journal-\d{4}-\d{2}-\d{2}\.json/.test(read('README.md')), 'README.md runs --journal on almanac-journal-<date>.json');
+});
+
+test('the journal’s Export is where CLAUDE.md says: Worn’s and Settings › Wear journal’s', async () => {
+  assert.match(claude, /Worn's Export button \(and Settings › Wear journal's\) downloads them/);
+  const wardrobe = read('src/views/wardrobe.js');
+  const worn = wardrobe.slice(wardrobe.indexOf('export function wornHTML'));
+  assert.ok(worn.slice(0, worn.indexOf('\nexport function')).includes('data-action="journal-export"'), 'Worn’s');
+  const { settingsHTML } = await import('../src/views/settings.js');
+  const page = settingsHTML({ loc: null, units: 'F', themeName: 'default', active: 'demo', mineCount: 0, shared: null, on: 1, total: 1, wears: 3, updated: '', stale: false, credits: '' });
+  const journal = page.slice(page.indexOf('>Wear journal</h2>'));
+  assert.ok(journal.slice(0, journal.indexOf('</section>')).includes('data-action="journal-export"'), 'Settings’');
 });
 
 test('CLAUDE.md lists every bottle-page section at its order slot', () => {
