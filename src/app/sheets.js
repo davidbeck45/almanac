@@ -290,10 +290,14 @@ export function closeSheet({ instant = false, fromHistory = false, then = null }
 // puts it away (the shell's clicks). Callers pass HTML: escape names, and an
 // Undo button goes inside. `tone`: 'success' (the default) leads with a
 // check, 'error' (it didn't work, or can't be done) with an alert mark, and
-// 'info' (a fallback, a note) with nothing.
+// 'info' (a fallback, a note) with nothing. #toast is a live region that
+// never leaves the page, only empties: one hidden until it held its text
+// often went unread (as `announce` below says), and planning an event names
+// its bottle only here.
 
 const TOAST_MS = 5000;
 let toastTimer;
+let toastEmpty; // empties it once it has faded, unless another came meanwhile
 let toastWaits = false; // shown by a key press with a control in it: no timer
 let byKey = false; // the last input was a key press, not a pointer
 function armToast(ms = TOAST_MS) {
@@ -304,10 +308,10 @@ const undoButton = () => [...$('#toast').querySelectorAll('button')].find(b => b
 const TOAST_GLYPH = { success: icon.check, error: icon.alert, info: '' };
 export function showToast(html, { tone = 'success' } = {}) {
   const el = $('#toast');
+  clearTimeout(toastEmpty);
   const known = Object.hasOwn(TOAST_GLYPH, tone) ? tone : 'success';
   el.innerHTML = `${TOAST_GLYPH[known]}${html}`;
   el.dataset.tone = known;
-  el.hidden = false;
   // A message on two lines takes the rounded box, not the pill.
   const text = el.querySelector(':scope > span');
   el.classList.toggle('wrapped', Boolean(text) && text.getBoundingClientRect().height > 1.5 * parseFloat(getComputedStyle(text).lineHeight));
@@ -324,7 +328,8 @@ export function hideToast() {
   toastWaits = false;
   el.classList.remove('show');
   queueMicrotask(() => { if (el.contains(document.activeElement)) focusTop(); });
-  setTimeout(() => { if (!el.classList.contains('show')) el.hidden = true; }, 200);
+  clearTimeout(toastEmpty);
+  toastEmpty = setTimeout(() => el.replaceChildren(), 200);
 }
 // A toast waiting for the next thing done (above) goes once it's done.
 export function settleToast() {
