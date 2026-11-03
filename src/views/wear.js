@@ -13,7 +13,7 @@ import { setSkin, loadSkin, loadAsked, markAsked, wasAsked } from '../skin.js';
 import { theme } from '../theme.js';
 import { toggleWear, wornIn, journalStats, shiftISO } from '../history.js';
 import { routeHash } from '../app/router.js';
-import { esc, temp, deg, plural, shortDate, weekdayShort, windowRange, feelWords, displayReasons, moveText, listLabel } from '../ui.js';
+import { esc, temp, deg, plural, shortDate, weekdayShort, windowRange, feelWords, displayReasons, moveText, ratedText, listLabel } from '../ui.js';
 import {
   icon, img, slotIcon, wxIcon, wxIconFor, messageHTML, skeletonHTML, reasonsList, chips, matchBadge, shelfHTML,
   wearButton, segHTML, starsHTML, sharedBannerHTML, accordColor, sectionHead,
@@ -747,7 +747,7 @@ export const actions = {
     markAsked(id, 'stars');
     computeToday();
     const moved = moveText(before, placeOf(), listLabel(ctx.win, ctx.occasion));
-    held = { kind: 'stars', id, base: state.base, rating: stars, said: `${stars ? `Rated ${stars}★.` : 'Rating cleared.'} ${moved}`.trim() };
+    held = { kind: 'stars', id, base: state.base, rating: stars, said: ratedText(stars, moved) };
     app.keepingFocus(el, '#app', app.render);
     app.announce?.(held.said);
   },

@@ -87,6 +87,9 @@ export function moveText(before, after, label) {
   return `Now ${ordinal(after)} ${label}, was ${ordinal(before)}.`;
 }
 
+/** What a save of his stars did, said alike wherever he rates: "Rated 4★. Still 10th for tonight.", "Rating cleared. Now 2nd…". */
+export const ratedText = (stars, moved = '') => `${stars ? `Rated ${stars}★.` : 'Rating cleared.'} ${moved}`.trim();
+
 // "for tonight", "for date night tonight", "for Friday night".
 export function listLabel(win, occasion) {
   if (!win) return '';

@@ -5,13 +5,13 @@
 // the compare route parses and round-trips.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { SECTIONS, bottlePageHTML, bottleModel, pooled, sectionsFor, linkId, likedStyleIds, likedTaste, shelfOf } from '../src/views/bottle.js';
 import { state, computeToday, nowSlot, keepBottles } from '../src/app/state.js';
 import '../src/views/sections.js';
 import { buyCheckHTML, checkable, fillGroups } from '../src/views/bottle-check.js';
 import { sprayHTML, figureSVG, sprayCount } from '../src/views/bottle-spray.js';
-import { skinHTML, moveText, listLabel, ordinal, sprayText } from '../src/views/bottle-skin.js';
+import { skinHTML, moveText, ratedText, listLabel, ordinal, sprayText } from '../src/views/bottle-skin.js';
 import { stylesHTML } from '../src/views/bottle-styles.js';
 import { dupesHTML } from '../src/views/bottle-dupes.js';
 import { crowdHTML, riskLine, wholePercents } from '../src/views/bottle-crowd.js';
@@ -490,6 +490,32 @@ test('on my skin: stars, nudges and where the bottle moved', () => {
   assert.equal(listLabel({ label: 'Friday night' }, null), 'for Friday night');
 });
 
+test('rating a bottle on its page says the stars, as Now’s Rate it does, and when they come off', () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)) };
+  globalThis.document = { activeElement: null, querySelector: () => null };
+  const rate = SECTIONS.find(s => s.id === 'skin').actions['bp-skin-rate'];
+  const said = [];
+  const app = { render() { computeToday(); }, renderBottle() {}, keepingFocus(el, scope, fn) { fn(); }, announce: t => said.push(t) };
+  try {
+    Object.assign(state, { demo: { fragrances }, active: 'demo', shared: null, wx, history: [] });
+    computeToday();
+    const f = state.contexts.night.ranked[9].fragrance;
+    state.route = { dest: 'bottle', arg: f.id, query: { ctx: 'night' } };
+    const star = (value, on) => ({ dataset: { value: String(value) }, getAttribute: () => String(on), isConnected: true });
+    rate(star(4, false), app, { detail: 1 });
+    assert.match(said.at(-1), /^Rated 4★\. (Still|Now) \d+(st|nd|rd|th) for tonight[.,]/);
+    rate(star(4, true), app, { detail: 1 });
+    assert.match(said.at(-1), /^Rating cleared\. (Still|Now) \d+(st|nd|rd|th) for tonight[.,]/, 'the same star again takes it off, and says so');
+    assert.equal(ratedText(5, 'Still 1st for tonight.'), 'Rated 5★. Still 1st for tonight.');
+    assert.equal(ratedText(null, ''), 'Rating cleared.');
+  } finally {
+    delete globalThis.localStorage;
+    delete globalThis.document;
+    Object.assign(state, { demo: null, wx: null, today: null, contexts: {}, route: null });
+  }
+});
+
 // ---------- Styles ----------
 
 test('styles link to Discover, and a quiet bottle is Intimate, which wears close', () => {
@@ -510,6 +536,29 @@ test('styles link to Discover, and a quiet bottle is Intimate, which wears close
   assert.match(guessed, /You reach for it/);
   assert.ok(!guessed.includes('You like it') && !guessed.includes('style-row liked'));
   for (const html of [said, guessed]) assert.ok(!html.includes(icon.heartFill), 'the heart means Want');
+  assert.match(said, /aria-labelledby="bp-styles-title">\s*<h3 id="bp-styles-title">Its style</);
+});
+
+// From 1100px the page docks beside any other, in one document: an id a
+// section shares with a view names the wrong thing (Insights' "Your styles"
+// named the section "Its style" labels) and sends refocus-by-id astray.
+test('the bottle page’s ids are its own: no view, sheet or shell part uses one', () => {
+  const root = new URL('../', import.meta.url);
+  const walk = dir => readdirSync(new URL(dir, root), { withFileTypes: true })
+    .flatMap(e => (e.isDirectory() ? walk(`${dir}${e.name}/`) : /\.(js|html)$/.test(e.name) ? [`${dir}${e.name}`] : []));
+  const files = [...walk('src/views/'), ...walk('src/app/'), ...walk('src/ui/'), 'src/ui.js', 'index.html'];
+  const idsIn = file => new Set([...readFileSync(new URL(file, root), 'utf8').matchAll(/\bid="([\w-]+)"/g)].map(m => m[1]));
+  const page = files.filter(f => /^src\/views\/bottle(-[\w-]+)?\.js$/.test(f));
+  assert.ok(page.length >= 8, page.join(', '));
+  const owner = new Map();
+  for (const file of page) for (const id of idsIn(file)) {
+    assert.ok(!owner.has(id), `${id} is in ${owner.get(id)} and ${file}`);
+    owner.set(id, file);
+  }
+  for (const file of files.filter(f => !page.includes(f))) {
+    const shared = [...idsIn(file)].filter(id => owner.has(id));
+    assert.deepEqual(shared, [], `${file} uses the bottle page’s ${shared.map(id => `${id} (${owner.get(id)})`).join(', ')}`);
+  }
 });
 
 // ---------- Smells like ----------
