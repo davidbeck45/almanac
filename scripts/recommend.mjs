@@ -678,10 +678,12 @@ async function main() {
     }
 
     // --slot packs for only days or nights; --occasion goes on every window of
-    // its slot (a work trip's days) that has no event of its own.
+    // its slot (a work trip's days) that has no event of its own. The
+    // journal's wears count against a bottle as they do for picks, so one
+    // bottle for today (--max 1) answers as Now's "Out all day?" does.
     const place = await resolvePlace();
     const windows = withEvents(await windowsAt(place, args.from, args.to, 'from', slot ? { slots: [slot] } : {}), events);
-    const trip = packTrip(fragrances, windows, { max, occasionOf: tripOccasion(occasion, slot) });
+    const trip = packTrip(fragrances, windows, { max, occasionOf: tripOccasion(occasion, slot), history });
     const weather = w => ({ source: w.typical ? 'typical' : 'forecast', feelsF: Math.round(w.feelsF), humidity: Math.round(w.humidity), dewF: Math.round(w.dewF), condition: w.condition, rainChance: w.pop });
     if (args.json) {
       console.log(JSON.stringify({

@@ -425,6 +425,19 @@ test('--pack takes a trip-wide occasion onto its slot, and --slot packs for days
   assert.ok(nights.plan.length === 3 && nights.plan.every(p => p.slot === 'night'));
 });
 
+test('--pack counts the journal’s wears: one bottle for the day gives way to last night’s, as Now’s "Out all day?" does', async () => {
+  const day = dayISO(1);
+  const pack = (...more) => run('--pack', '--loc', '40.7,-74', '--from', day, '--to', day, '--max', '1', '--json', ...more);
+  const plain = JSON.parse((await pack()).stdout);
+  assert.equal(plain.bottles.length, 1, plain.text);
+  const worn = fragrances.find(f => f.name === plain.bottles[0].name);
+  const token = journalToken([{ id: String(worn.id), date: dayISO(0), slot: 'night', occasion: 'daily' }], [], {}, { todayISO: dayISO(0) });
+  const after = await pack('--journal', token);
+  assert.equal(after.status, 0, after.stderr);
+  const out = JSON.parse(after.stdout);
+  assert.ok(out.bottles.length === 1 && out.bottles[0].name !== worn.name, out.text);
+});
+
 test('--pack and --date stop on bad dates before any request', () => {
   for (const [args, message] of [
     [['--pack', '--loc', '40.7,-74', '--from', dayISO(1)], /--pack needs --from and --to/],
