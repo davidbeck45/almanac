@@ -814,3 +814,39 @@ button.trip-cell:active { transform: scale(0.98); }
 .trip-sk-bags .sk { height: 120px; border-radius: var(--r-inset); }
 .trip-sk .sk-line.w40 { margin-bottom: var(--s-3); }
 .trip-sk-row { height: 40px; margin-top: var(--s-2); border-radius: var(--r-control); }
+
+/* A trip under way, on Now: its day's packed bottles over Now's own card,
+   a row each on phones, side by side once the column has room. */
+.trip-now .section-head .btn svg { width: 14px; height: 14px; }
+.trip-now-picks { display: grid; gap: var(--s-2); }
+/* Side by side, a short name's pick stands as tall as a long one's. */
+.trip-now-picks > li { display: grid; }
+.trip-now-pick {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  min-height: var(--hit);
+  padding: var(--s-2) var(--s-3) var(--s-2) var(--s-2);
+  border-radius: var(--r-control);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  text-align: left;
+  transition: transform var(--dur-1) var(--ease-out), background-color var(--dur-2), border-color var(--dur-2);
+}
+.trip-now-pick:active { transform: scale(0.98); }
+@media (hover: hover) { .trip-now-pick:hover { border-color: var(--border-strong); background: var(--surface-3); } }
+.trip-now-pick.worn { border-color: color-mix(in srgb, var(--positive) 45%, transparent); }
+.trip-now-pick img { width: 44px; height: 54px; object-fit: contain; filter: var(--drop-small); }
+.trip-now-text { display: grid; min-width: 0; }
+.trip-now-text b { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-family: var(--display); font-size: var(--fs-headline); line-height: var(--lh-headline); font-style: italic; font-weight: 600; }
+.trip-now-when, .trip-now-note { display: flex; align-items: center; gap: var(--s-1); min-width: 0; color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 500; }
+.trip-now-when svg { width: 13px; height: 13px; flex: none; color: var(--ambient); }
+.trip-now-pick.worn .trip-now-when svg { color: var(--positive); }
+.trip-now-note svg { width: 12px; height: 12px; flex: none; color: var(--ambient); }
+/* A pick's height: its photo, padding and border. */
+.trip-now-sk { height: calc(54px + 2 * var(--s-2) + 2px); border-radius: var(--r-control); }
+@container page (min-width: 560px) {
+  .trip-now-picks { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-3); }
+}

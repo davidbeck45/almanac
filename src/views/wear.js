@@ -596,7 +596,7 @@ function guard() {
   return null;
 }
 
-function nowPane() {
+function nowPane(app) {
   const blocked = guard();
   if (blocked) return blocked;
   // A forecast without hours for either window (a model gap): nothing to rank yet.
@@ -609,7 +609,10 @@ function nowPane() {
   // with it: none once he's wearing one.
   const ties = planTies(todayPlan(), { history: state.history })[slots.findIndex(p => p.win === win)] ?? [];
   const ask = nowQuestion(pick, worn);
+  // A trip under way: its day above, from the bottles packed (wear/trip.js).
+  const away = trip.tripToday(app);
   return `${banner()}
+    ${away ? trip.tripNowHTML(away, { worn: wornId }) : ''}
     <section class="card slot" aria-labelledby="slot-title">
       ${slotHeadHTML(win, nowHour(), { id: 'slot-title' })}
       <div class="now-picks">
@@ -712,7 +715,7 @@ export const wear = {
   label: 'Wear',
   icon: 'wear',
   panes: [
-    { id: 'now', label: 'Now', title: () => 'Now', heading: () => `What to wear in ${place()}`, render: nowPane },
+    { id: 'now', label: 'Now', title: () => 'Now', heading: () => `What to wear in ${place()}`, render: nowPane, after: app => trip.freshenTripToday(app) },
     { id: 'week', label: 'Week', title: () => 'Week', heading: () => `The week ahead in ${place()}`, render: weekPane, after: weekAfter },
     {
       id: 'occasion',

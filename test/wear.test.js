@@ -956,6 +956,92 @@ test('Not now waves a question off for good; a bottle with his own nudges isn’
   assert.ok(!('y' in loadAsked()) && !('z' in loadAsked()));
 });
 
+test('a trip under way puts its day above Now: today’s and tonight’s packed bottles, opening in the trip’s windows', () => {
+  const { state, draw } = nowOnToday();
+  const today = state.wx.todayISO;
+  const windows = week(state.forecast).flatMap(d => [d.day, d.night].filter(Boolean));
+  const at = (from, to) => ({ ...saved, fromISO: from, toISO: to, windows: windows.filter(w => w.dateISO >= from && w.dateISO <= to), events: [] });
+  const keep = t => { trip.saveTrip(t); trip.forgetTrip(); };
+  try {
+    // Not begun, or over: nothing on Now.
+    keep(at(shiftISO(today, 1), shiftISO(today, 4)));
+    assert.equal(trip.tripToday(), null);
+    assert.ok(!draw().includes('trip-now'));
+    keep({ ...at(today, shiftISO(today, 3)), fromISO: shiftISO(today, -4), toISO: shiftISO(today, -1) });
+    assert.equal(trip.tripToday(), null);
+
+    // Under way, with a formal night tonight.
+    keep({ ...at(today, shiftISO(today, 3)), fromISO: shiftISO(today, -2), events: [{ dateISO: today, slot: 'night', occasion: 'formal' }] });
+    const t = trip.tripToday();
+    assert.deepEqual([t.day, t.days], [3, 6]);
+    const packed = packTrip(app.rankedFragrances(), withEvents(trip.loadTrip().windows, [{ dateISO: today, slot: 'night', occasion: occasionById('formal') }]), { max: 3 });
+    assert.equal(t.bottles, packed.bottles.length);
+    assert.deepEqual(t.picks.map(p => [p.window.slot, p.pick.id]), packed.plan.filter(p => p.window.dateISO === today).map(p => [p.window.slot, p.pick.id]), 'as the Trip pane packs');
+    const night = t.picks.find(p => p.window.slot === 'night');
+    assert.equal(night.occasion.id, 'formal');
+    // Each window's context is stored for the bottle page, which can log the wear there.
+    const ctx = state.contexts[`trip:${today}:night`];
+    assert.equal(ctx.occasion.id, 'formal');
+    assert.ok(ctx.entries.has(night.pick.id));
+    const model = bottleModel({ dest: 'bottle', arg: night.pick.id, query: { ctx: `trip:${today}:night` } });
+    assert.equal(model.ctx, `trip:${today}:night`);
+    assert.equal(model.canWear, app.canWear(ctx.win), 'Wear this as for Now’s window');
+
+    const html = draw();
+    assert.ok(html.indexOf('class="card trip-now"') > -1 && html.indexOf('class="card trip-now"') < html.indexOf('class="card slot"'), 'above Now’s own card');
+    assert.match(html, /<h2 id="trip-now-title">.*<\/h2>/s, 'its own heading, the trip’s place escaped');
+    assert.ok(html.includes('Day 3 of 6, from the ') && html.includes(' bottles you packed'));
+    assert.match(html, /<a class="btn secondary compact" href="#\/wear\/trip">Trip plan/);
+    assert.ok(html.includes(`data-action="open" data-ctx="trip:${today}:night" data-id="${esc(night.pick.id)}" aria-label="${esc(`Tonight: ${night.pick.name}, for formal wear`)}"`));
+    assert.ok(html.includes('For formal wear</small>'));
+    // Now's own ranking stays the whole wardrobe's.
+    assert.equal(state.contexts[app.nowSlot().win.slot].ranked.length, app.rankedFragrances().length);
+
+    // Worn from the trip's window: it says so.
+    state.history = [{ id: night.pick.id, date: today, slot: 'night', occasion: 'formal' }];
+    assert.match(draw(), /class="trip-now-pick worn"[^>]*aria-label="[^"]*, wearing"/);
+  } finally {
+    localStorage.removeItem('scentcast.trip');
+    trip.forgetTrip();
+    state.history = [];
+  }
+});
+
+test('a long trip packs after Now paints, its rows holding the card’s place until then', async () => {
+  const { state, draw } = nowOnToday();
+  const today = state.wx.todayISO;
+  const windows = week(state.forecast).flatMap(d => [d.day, d.night].filter(Boolean));
+  const pair = ['day', 'night'].map(slot => windows.find(w => w.slot === slot));
+  // Past the Trip pane's 1,000 bottle-windows packed at once.
+  const days = Math.ceil(1001 / (2 * app.rankedFragrances().length)) + 1;
+  const long = Array.from({ length: days }, (_, i) => pair.map(w => ({ ...w, dateISO: shiftISO(today, i - 1) }))).flat();
+  const frames = [];
+  const raf = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = cb => frames.push(cb);
+  state.route = null;
+  try {
+    trip.saveTrip({ ...saved, fromISO: long[0].dateISO, toISO: long.at(-1).dateISO, windows: long, events: [] });
+    trip.forgetTrip();
+    const ui = {};
+    const waiting = trip.tripToday(ui);
+    assert.deepEqual([waiting.day, waiting.picks, waiting.slots], [2, null, 2]);
+    const html = clean(trip.tripNowHTML(waiting), 'trip on Now, packing');
+    assert.match(html, /role="status" aria-busy="true"><span class="visually-hidden">Planning today’s bottles…<\/span>(<span class="sk trip-now-sk"><\/span>){2}<\/div>/);
+    assert.ok(html.includes(`Day 2 of ${days}<`) && !html.includes('you packed'), 'no count before it’s packed');
+    assert.ok(draw().includes('trip-now-sk'), 'on Now');
+    assert.equal(frames.length, 1);
+    frames[0]();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const done = trip.tripToday(ui);
+    assert.deepEqual(done.picks.map(p => p.window.slot), ['day', 'night']);
+    assert.ok(!draw().includes('trip-now-sk'));
+  } finally {
+    globalThis.requestAnimationFrame = raf;
+    localStorage.removeItem('scentcast.trip');
+    trip.forgetTrip();
+  }
+});
+
 test('a plan link shows what it would plan, in the plan’s words, and plans nothing until asked', () => {
   const { state } = app;
   const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });

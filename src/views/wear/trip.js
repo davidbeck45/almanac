@@ -9,6 +9,8 @@
 // count change, and refreshes its weather when it's hours old. A trip under
 // way keeps its start and the weather saved for the days gone by (the
 // forecast has no past days); its events and its end can still change.
+// While a trip is under way, Now shows its day above Now's own picks
+// (tripToday, tripNowHTML): today's and tonight's packed bottles.
 import { packTrip, withEvents } from '../../pack.js';
 import { rank, daysBetween } from '../../engine.js';
 import { tripWindows, forecastError } from '../../weather.js';
@@ -430,7 +432,7 @@ function packFor(trip, app) {
       if (queued !== job) return;
       queued = null;
       packNow(trip, frags);
-      if (onTrip() && ui.saved === trip) repaint(app);
+      if ((onTrip() || onNow()) && ui.saved === trip) repaint(app);
     }));
   }
   return null;
@@ -528,6 +530,7 @@ async function pack(app) {
 }
 
 const onTrip = () => state.route?.dest === 'wear' && state.route.pane === 'trip';
+const onNow = () => state.route?.dest === 'wear' && state.route.pane === 'now';
 
 function finish(app, trip) {
   saveTrip(trip);
@@ -548,15 +551,16 @@ function finish(app, trip) {
 // device's date it was saved (not UTC's, a day ahead by evening in the Americas).
 export const staleNote = fetchedAt => `Couldn’t update the weather, so this plan uses what was saved ${shortDate(deviceToday(new Date(fetchedAt)))}.`;
 
-// A saved trip's weather, hours old, fetched again while it shows (from
-// today on: the days gone by keep theirs).
+// A saved trip's weather, hours old, fetched again while it shows, on this
+// pane or on Now while it's under way (from today on: the days gone by keep theirs).
 export async function freshenTrip(app) {
   const trip = savedTrip();
   const today = todayISO();
   if (!trip || ui.busy || ui.updating || trip.toISO < today || Date.now() - trip.fetchedAt < REFRESH_AFTER || ui.refreshed === trip.fetchedAt) return;
   ui.refreshed = trip.fetchedAt;
   ui.updating = true;
-  repaint(app);
+  // Only the pane says it's updating; Now draws again once it's in.
+  if (onTrip()) repaint(app);
   try {
     const windows = await windowsFor(trip, trip, today);
     // A new bottle count meanwhile keeps the new weather; new dates don't.
@@ -569,7 +573,83 @@ export async function freshenTrip(app) {
     ui.note = staleNote(trip.fetchedAt);
   }
   ui.updating = false;
-  if (onTrip()) repaint(app);
+  if (onTrip() || onNow()) repaint(app);
+}
+
+// ---------- On Now ----------
+// On a trip Now still ranks the whole wardrobe (at home's weather, unless
+// the place moved too), so most windows it picks a bottle left at home. The
+// trip's day goes above it: the packed picks for today's windows, as the
+// Trip pane plans them, each opening its bottle page in the trip's window
+// (`trip:<date>:<slot>`), where Wear this logs it.
+
+const underWay = (trip, today) => Boolean(trip) && trip.fromISO <= today && today <= trip.toISO;
+
+/**
+ * The saved trip's day while it's under way: { trip, day, days, bottles:
+ * how many are packed, picks: today's plan entries in time order, each
+ * with its context key `ctx` }; null when there's no trip, it's over or not
+ * begun, or its weather has no window today. Packs as the pane does
+ * (packFor: after a frame for a big list, `picks: null` and `slots`, today's
+ * windows' count, meanwhile, and Now draws again once it's in), and stores
+ * today's windows' ranked contexts, with the trip's place, so a wear logged
+ * from them is logged there.
+ */
+export function tripToday(app = null, today = todayISO()) {
+  const trip = savedTrip();
+  if (!underWay(trip, today)) return null;
+  const slots = trip.windows.filter(w => w.dateISO === today).length;
+  if (!slots) return null;
+  const base = { trip, day: daysBetween(trip.fromISO, today) + 1, days: tripDays(trip) };
+  const result = packFor(trip, app);
+  if (!result) return { ...base, bottles: null, picks: null, slots };
+  for (const [key, win, occasion, ranked] of memo.contexts) {
+    if (win.dateISO === today) storeContext(key, win, occasion, ranked, { place: trip.place });
+  }
+  const picks = result.plan.filter(p => p.window.dateISO === today).map(p => ({ ...p, ctx: ctxKey(p.window) }));
+  return picks.length ? { ...base, bottles: result.bottles.length, picks } : null;
+}
+
+/** Forget the trip read from the device and its plan (tests; the page reads it once). */
+export function forgetTrip() {
+  ui.saved = undefined;
+  memo = null;
+}
+
+/** Freshens the saved trip's weather (freshenTrip) from Now, while it's under way. */
+export function freshenTripToday(app) {
+  if (underWay(savedTrip(), todayISO())) freshenTrip(app);
+}
+
+/**
+ * The trip's day on Now (tripToday's answer): where, which day of how
+ * many, and today's and tonight's packed bottles, each opening its page in
+ * the trip's window. `worn(win)`: the id worn in a window, or null.
+ */
+export function tripNowHTML({ trip, day, days, bottles, picks, slots }, { worn = () => null } = {}) {
+  const pickHTML = p => {
+    const f = p.pick, w = p.window, o = p.occasion;
+    const when = w.slot === 'night' ? 'Tonight' : 'Today';
+    const wearing = worn(w) === f.id;
+    const note = wearing ? 'Wearing' : o ? `For ${o.phrase ?? o.label.toLowerCase()}` : f.brand;
+    const spoken = [`${when}: ${f.name}`, o && `for ${o.phrase ?? o.label.toLowerCase()}`, wearing && 'wearing'].filter(Boolean).join(', ');
+    return `<li><button class="trip-now-pick${wearing ? ' worn' : ''}" data-action="open" data-ctx="${esc(p.ctx)}" data-id="${esc(f.id)}" aria-label="${esc(spoken)}">
+      ${img(f)}
+      <span class="trip-now-text">
+        <small class="trip-now-when">${wearing ? icon.check : slotIcon(w.slot)}${esc(when)}</small>
+        <b class="clamp">${esc(f.name)}</b>
+        <small class="trip-now-note">${o && !wearing ? icon[o.icon] ?? '' : ''}${esc(note)}</small>
+      </span>
+    </button></li>`;
+  };
+  // Still packing (a big list): rows that hold the card's height until it's in.
+  const list = picks ? `<ul class="trip-now-picks">${picks.map(pickHTML).join('')}</ul>`
+    : `<div class="trip-now-picks" role="status" aria-busy="true"><span class="visually-hidden">Planning today’s bottles…</span>${'<span class="sk trip-now-sk"></span>'.repeat(slots)}</div>`;
+  const sub = `Day ${day} of ${days}${picks ? `, from the ${plural(bottles, 'bottle')} you packed` : ''}`;
+  return `<section class="card trip-now" aria-labelledby="trip-now-title">
+    ${sectionHead(`${icon.suitcase}${esc(trip.place.name)}`, `<a class="btn secondary compact" href="#/wear/trip">Trip plan ${icon.chevron}</a><p>${esc(sub)}</p>`, { id: 'trip-now-title' })}
+    ${list}
+  </section>`;
 }
 
 onPlace('trip', place => {
