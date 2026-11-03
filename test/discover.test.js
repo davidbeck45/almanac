@@ -112,11 +112,17 @@ test('style lists lean the way the wardrobe does', () => {
   // Beside Intimate only men's bottles that wear close come in: Bvlgari Pour Homme, not Invictus.
   assert.ok(masculine(lists[1]).length >= 2 && lists[1].every(p => p.close), names(lists[1]).join());
   assert.ok(['Dior Homme 2020', 'Narciso Rodriguez for Him Bleu Noir Eau de Parfum'].every(n => names(lists[0]).includes(n)), names(lists[0]).join());
-  // Twins fold under the one nearer his lean: Narciso Rodriguez For Him Intense, not If You Musk.
+  // Twins fold under the one nearer his lean: Narciso Rodriguez For Him Intense, not If You Musk (a mist,
+  // so only when mists are let in).
   assert.ok(names(lists[0]).includes('Narciso Rodriguez For Him Eau de Parfum Intense'), names(lists[0]).join());
-  // Brooke's gourmand wardrobe leans feminine, and so do her lists; a lean filter overrides either.
+  const intense = moreOfStyles(['skin'], ctx, { k: 12, filters: { mists: true } }).find(p => p.record.name === 'Narciso Rodriguez For Him Eau de Parfum Intense');
+  assert.ok(intense?.alike?.some(r => r.name === 'If You Musk'), intense?.alike?.map(r => r.name).join());
+  // Brooke's gourmand wardrobe leans feminine, and so do her lists: one men's bottle of her nine is a share
+  // of 1.5 in 10.5, two of twelve picks (For Him Intense and Bleu Noir), fewer than his. A lean filter
+  // overrides either.
   const hers = discoverContext(pool, brooke, { styles, records: ctx.records });
-  assert.ok(masculine(moreOfStyles(['skin'], hers, { k: 12 })).length <= 1);
+  const herSkin = masculine(moreOfStyles(['skin'], hers, { k: 12 }));
+  assert.ok(herSkin.length <= 2 && herSkin.length < masculine(lists[0]).length, names(herSkin).join());
   assert.ok(moreOfStyles(['skin'], ctx, { k: 12, filters: { lean: 'feminine' } }).every(p => genderLean(p.record) <= -0.25));
 });
 
@@ -359,8 +365,10 @@ test('filters hold', () => {
 
 test('body mists come up only when asked for', () => {
   const isMist = p => p.record.extras.flags.includes('mist');
+  // His own styles too: Bath & Body Works' If You Musk, a mist its page never names, led them.
   const lists = filters => [
     moreOfStyles(['vanilla', 'gourmand'], ctx, { k: 40, filters }), moreLike([owned('Cream Velvet')], ctx, { k: 40, filters }),
+    moreOfStyles(DEMO_LIKED, ctx, { k: 40, filters }),
     searchNotes('vanilla musk', ctx, filters, { k: 40 }).results, searchNotes('strawberry', ctx, filters, { k: 40 }).results,
   ].flat();
   assert.ok(!lists({}).some(isMist), lists({}).filter(isMist).map(p => p.record.name).join());

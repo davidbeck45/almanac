@@ -517,6 +517,10 @@ test('the buy check knows what he likes: more of a style he’s thin on is good,
   assert.equal(check(loft, { liked: ['intimate'] }).verdict, 'Covered');
   const open = buyCheck(loft, gapContext({ owned: wardrobe, records, byId, mists: true }), { liked: ['intimate'] });
   assert.deepEqual([open.verdict, open.reasons[0]], ['Good', 'More of the close-wearing scents you like: you own 2.']);
+  // Nor If You Musk, a Bath & Body Works mist whose page never says so: the house is enough.
+  const musk = check(named('If You Musk', 'Bath & Body Works'));
+  assert.equal(musk.verdict, 'Covered');
+  assert.ok(musk.reasons.includes('It’s a body mist: lighter and shorter-lived than a perfume.'), musk.reasons.join(' | '));
   // A skin scent reviewers warn about is risky, not good, when only its style speaks for it.
   const mkk = check(named('Muscs Koublai Khan', 'Serge Lutens'));
   assert.equal(mkk.verdict, 'Risky');

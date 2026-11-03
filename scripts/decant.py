@@ -66,7 +66,8 @@ only what it needs:
   30%+ of them hate or 85%+ love, or more than 5 whatever the spread);
   polarizing (hate share in the pool's top tenth); mist (a body or hair mist,
   body spray or splash, by its name, description or the AI summary: "Book
-  Loft Fine Fragrance Mist by", "impressive longevity for a body mist").
+  Loft Fine Fragrance Mist by", "impressive longevity for a body mist"; or
+  by its house, MIST_HOUSES, unless its name calls it a perfume).
   `slugs` lists the page
   slugs slug_of() can't derive; `license`.
 - pool-notes.json: `no`, row for row with the pool: each bottle's 8 strongest
@@ -205,21 +206,43 @@ FLAG_TEXT = {
 # The Go Spray, Bon Parfumeur's 801 sea spray) or "brume" (Guerlain's Brume
 # d'Automne): a name counts when it says what kind ("All-Over Spray", "Very
 # Cool Spray", "Brume Soyeuse pour le Corps", "Brume de Bain"). A plain
-# "spray" in a description is its atomizer.
+# "spray" in a description is its atomizer; its last words can name the one
+# format ("available as a 250 ml Fragrance Body Mist", "… Body Fragrance Mist").
 MIST_KIND = r"(?:(?:fine )?fragrance|body|hair|body and hair|skin|perfume|perfumed|scented)"
 MIST_NAME = re.compile(rf"\b(?:{MIST_KIND} (?:mist|spray|splash)|hair perfume|(?:all[- ]over|very cool|aroma|body (?:&|and) soul|splash fresh) spray"
                        rf"|brume (?:\w+ )?(?:corps|cheveux|parfum[ée]e|de bain|soyeuse|d['’]oreiller|fra[iî]ch(?:e|eur)|paillet[ée]e))\b", re.I)
 MIST_DESC = re.compile(rf"\b(?:fine )?fragrance mist by\b|\bbody (?:mist|spray|splash) by\b|\bthis [\w\s'-]{{0,25}}?\b{MIST_KIND} (?:mist|spray|splash)\b"
                        rf"|\bis an? [\w\s,-]{{0,60}}?\b(?:body|hair|body and hair) (?:mist|spray|splash)\b"
-                       r"|\bavailable (?:only )?as (?:an? )?[\d\s,.]*(?:ml )?(?:perfumed )?(?:body|fragrance) (?:mist|spray)\.?\s*$", re.I)
+                       r"|\bavailable (?:only )?as (?:an? )?[\d\s,.]*(?:ml )?(?:perfumed )?(?:(?:hair (?:&|and) )?body |fragrance ){1,2}(?:mist|spray)\.?\s*$", re.I)
 MIST_AI = re.compile(r"\b(?:for|from) (?:a|an) (?:\w+ )?(?:(?:body|fragrance|hair|aromatherapy) (?:mist|spray|splash)|mist|splash)\b|\bin mist form\b"
                      r"|\bthan (?:typical|other|most|basic|usual|regular|standard) (?:\w+ )?(?:body )?mists\b", re.I)
+# Houses whose pages are nearly all mists, though few say so. Of the pool
+# bottles the rules above leave unflagged, 43 of Bath & Body Works' 45 are its
+# Fine Fragrance Mists (If You Musk, Warm Vanilla Sugar) and 11 of Sol de
+# Janeiro's 12 its Perfume Mists (the Cheirosas). A bottle of theirs is a mist
+# unless its name calls it a perfume (Tropidelic Eau de Parfum, SOL Cheirosa
+# '62 Eau de Parfum, Marble Cologne; not a Cologne Mist) or it's for men, which
+# at Bath & Body Works is a cologne (Bourbon, Coffee & Whiskey, the other two).
+# Not Victoria's Secret, Phlur or Ellis Brooklyn: their perfumes rarely say so
+# either (Bombshell, Missing Person, Myth), and they're most of what's left
+# (about a third of Victoria's Secret's 41 are Fragrance Mists, Love Spell and
+# Bare Vanilla among them; none of the other two's 31).
+MIST_HOUSES = {"Bath & Body Works", "Sol de Janeiro"}
+PERFUME_NAME = re.compile(r"\b(?:EDP|EDT|eau de (?:parfum|toilette|cologne)|parfum|perfume|cologne|extrait)\b", re.I)
 
 
 def is_mist(r: dict) -> bool:
     ai = (r.get("ai_summary") or {})
     points = [x["text"] for x in ai.get("pros", []) + ai.get("cons", []) if x["up_votes"] >= x["down_votes"]]
-    return bool(MIST_NAME.search(r["name"]) or MIST_DESC.search(r.get("description") or "") or any(MIST_AI.search(t) for t in points))
+    return bool(MIST_NAME.search(r["name"]) or MIST_DESC.search(r.get("description") or "") or any(MIST_AI.search(t) for t in points)
+                or house_mist(r))
+
+
+def house_mist(r: dict) -> bool:
+    """A MIST_HOUSES bottle that its name doesn't call a perfume (a "Mist" in it always counts), nor a men's cologne."""
+    name = r["name"]
+    return r["brand"] in MIST_HOUSES and (bool(re.search(r"\bmist\b", name, re.I))
+                                          or not (PERFUME_NAME.search(name) or r.get("gender") == "male"))
 
 
 # Reach: how much a bottle's fans also like the pool's REACH_TOP most-owned

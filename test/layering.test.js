@@ -56,6 +56,24 @@ test('notes map to accord families, specific names first', () => {
   assert.deepEqual(unmapped, [], 'every note in the data has a family');
 });
 
+test('nearly every note in the suggestion pool has a family too', () => {
+  // A bottle added to Mine or opened from Discover layers by its notes as well. Of the pool's
+  // 68,743 strongest-8 note slots, 1,010 had no family in October 2026 and 152 (0.22%) now.
+  const { notes, no } = JSON.parse(readFileSync(new URL('../data/fragrantica/pool-notes.json', import.meta.url)));
+  const known = notes.map(n => noteFamily(n) !== null);
+  let slots = 0, missing = 0;
+  for (const row of no) {
+    for (let j = 0; j < row.length; j += 2, slots++) missing += known[row[j] >> 2] ? 0 : 1;
+  }
+  assert.ok(missing / slots < 0.003, `${missing} of ${slots} pool note slots have no family: add rules to the end of NOTE_FAMILIES`);
+  // The leftovers' rules, and names Fragrantica spells its own way.
+  for (const [name, want] of [['Creme Brulee', 'caramel'], ['Night blooming Cereus', 'white floral'], ['Copaiba balm', 'balsamic'],
+    ['Cade oil', 'leather'], ['Shiso', 'herbal'], ['Malt', 'nutty'], ['Tequila', 'whiskey'], ['Spruce', 'woody'], ['Skin', 'musky'],
+    ['Acácia', 'floral'], ['Marshamallow', 'sweet'], ['Cinammon', 'warm spicy'], ['White Tabacco', 'tobacco']]) {
+    assert.equal(noteFamily(name), want, name);
+  }
+});
+
 test('notes between families count toward each, the main one most', () => {
   assert.deepEqual(noteFamilies('Labdanum').map(([f]) => f), ['balsamic', 'amber']);
   assert.deepEqual(noteFamilies('Ambroxan').map(([f]) => f), ['amber', 'woody', 'musky']);
