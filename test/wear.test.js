@@ -9,7 +9,7 @@ import { setSkin, loadSkin, loadAsked, markAsked } from '../src/skin.js';
 import { planTies, rankedTies, whenOf, TIE_OCCASIONS, TIE_POINTS } from '../src/contrast.js';
 import { summarize, week } from '../src/weather.js';
 import { renderScene } from '../src/scene.js';
-import { shiftISO, toggleWear, wornIn, loadHistory } from '../src/history.js';
+import { shiftISO, toggleWear, wornIn, loadHistory, wearStamp } from '../src/history.js';
 import * as wear from '../src/views/wear.js';
 import * as wardrobe from '../src/views/wardrobe.js';
 import * as trip from '../src/views/wear/trip.js';
@@ -782,6 +782,90 @@ test('a morning not logged: Now offers to log it once the day has rolled over, a
     wardrobe.actions['journal-log']({ dataset: { date: day } }, ui);
     assert.equal(state.sheet.slot, 'night');
   } finally {
+    Object.assign(state, { history: [], sheet: null, route: null });
+  }
+});
+
+test('the log sheet sets the window’s wear to the bottle chosen, never undoing one another tab logged since it was drawn', () => {
+  const { state } = app;
+  const realDoc = globalThis.document;
+  globalThis.document = { activeElement: null, getElementById: () => null, querySelector: () => null };
+  Object.assign(state, { demo: { fetched: today, fragrances }, forecast, wx, loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], sheet: null, route: null });
+  let toast = '';
+  const ui = { openSheet(s) { state.sheet = s; }, render() {}, closeSheet() { state.sheet = null; }, showToast(html) { toast = html.replace(/<[^>]+>/g, ''); } };
+  const [a, b, c] = fragrances.slice(2, 5);
+  const open = () => wardrobe.actions['journal-log']({ dataset: { date: today, slot: 'day' } }, ui);
+  // `drawn`: whether the sheet drew the row as the window's wear.
+  const pick = (f, drawn = false) => wardrobe.actions['journal-log-pick']({ dataset: { id: f.id }, getAttribute: k => (k === 'aria-disabled' && drawn ? 'true' : null) }, ui);
+  const clear = f => wardrobe.actions['journal-log-clear']({ dataset: { slot: 'day', id: f.id } }, ui);
+  const stored = () => wornIn(loadHistory(), today, 'day')?.id ?? null;
+  try {
+    // Open on this morning with nothing logged; another tab then logs A.
+    open();
+    toggleWear(a.id, today, 'day', state.loc, 'daily');
+    pick(a);
+    assert.equal(stored(), a.id, 'chosen again, it stays logged');
+    assert.equal(toast, esc(`${a.name} was already logged for today.`));
+    assert.equal(state.history[0]?.id, a.id, 'the page reads the journal again');
+    assert.equal(state.sheet, null);
+    // Another bottle takes its place, and says so.
+    open();
+    pick(b);
+    assert.equal(stored(), b.id);
+    assert.equal(toast, esc(`Logged ${b.name} for today, in place of ${a.name}.`));
+    // A row drawn as the wear: nothing to do while it is one, logged again once another tab cleared it.
+    open();
+    toast = '';
+    pick(b, true);
+    assert.deepEqual([stored(), toast, state.sheet?.kind], [b.id, '', 'journal-log']);
+    toggleWear(b.id, today, 'day');
+    pick(b, true);
+    assert.deepEqual([stored(), toast], [b.id, esc(`Logged ${b.name} for today.`)]);
+    // Clear clears only the wear it was drawn for.
+    open();
+    toggleWear(c.id, today, 'day'); // another tab changes the morning to C
+    clear(b);
+    assert.equal(stored(), c.id, 'C stays');
+    assert.equal(state.sheet.said, `Nothing cleared: ${c.name} is logged for today now.`);
+    toggleWear(c.id, today, 'day'); // and clears it
+    clear(c);
+    assert.equal(state.sheet.said, `${c.name} was already cleared from today.`);
+    toggleWear(c.id, today, 'day');
+    clear(c);
+    assert.deepEqual([stored(), state.sheet.said], [null, `Cleared ${c.name} from today.`]);
+  } finally {
+    globalThis.document = realDoc;
+    Object.assign(state, { history: [], sheet: null, route: null });
+  }
+});
+
+test('a wear logged after the fact goes where it was worn: on the saved trip’s place on its days, else where the window’s wear was', () => {
+  const { state } = app;
+  const miami = { name: 'Miami', region: 'Florida', lat: 25.7617, lon: -80.1918 };
+  Object.assign(state, { demo: { fetched: today, fragrances }, forecast, wx, loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], sheet: null, route: null });
+  const ui = { openSheet(s) { state.sheet = s; }, render() {}, closeSheet() { state.sheet = null; }, showToast() {} };
+  const log = (dateISO, slot, f) => {
+    wardrobe.actions['journal-log']({ dataset: { date: dateISO, slot } }, ui);
+    wardrobe.actions['journal-log-pick']({ dataset: { id: f.id }, getAttribute: () => null }, ui);
+    return wornIn(loadHistory(), dateISO, slot);
+  };
+  const at = h => [h.lat, h.lon];
+  // A trip to Miami under way since yesterday.
+  trip.saveTrip({ ...saved, place: miami, fromISO: shiftISO(today, -1), events: [] });
+  trip.forgetTrip();
+  try {
+    // Now's "Wore something this morning?" opens the sheet on today's daytime.
+    assert.deepEqual(at(log(today, 'day', fragrances[2])), [25.76, -80.19], 'this morning, in Miami');
+    assert.deepEqual(at(log(shiftISO(today, -1), 'night', fragrances[3])), [25.76, -80.19], 'the trip’s first night');
+    assert.deepEqual(at(log(shiftISO(today, -2), 'day', fragrances[4])), [40.7, -74], 'the day before it, home');
+    // Worn in Chicago from the Occasion pane, changed on the calendar: still Chicago, with its weather.
+    const stamp = wearStamp(wx.day);
+    toggleWear(fragrances[5].id, shiftISO(today, -3), 'night', { lat: 41.88, lon: -87.63 }, 'casual', stamp);
+    const h = log(shiftISO(today, -3), 'night', fragrances[6]);
+    assert.deepEqual([h.id, ...at(h), h.wx, h.occasion], [fragrances[6].id, 41.88, -87.63, stamp.wx, 'casual']);
+  } finally {
+    localStorage.removeItem('scentcast.trip');
+    trip.forgetTrip();
     Object.assign(state, { history: [], sheet: null, route: null });
   }
 });

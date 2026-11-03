@@ -8,7 +8,7 @@ import { SEASONS } from '../engine.js';
 import { setHidden } from '../hidden.js';
 import { saveMine, shareURL, localMatches, nameMatches, importLines, MAX_IMPORT_LINES } from '../collections.js';
 import { customRecord, MAX_CUSTOM_ACCORDS } from '../custom.js';
-import { clearHistory, journalExport, journalToken, journalStats, toggleWear, wornIn, shiftISO } from '../history.js';
+import { clearHistory, journalExport, journalToken, journalStats, toggleWear, wornIn, shiftISO, loadHistory } from '../history.js';
 import { loadSkin } from '../skin.js';
 import { esc, plural, shortDate, weekdayShort, relativeDay, accordLabel, toastName } from '../ui.js';
 import {
@@ -20,6 +20,7 @@ import {
 } from '../app/state.js';
 import { warmPool } from '../app/pool.js';
 import { whenPhrase } from './wear/when.js';
+import { loadTrip } from './wear/trip.js';
 import { liveHTML, say, speak } from './wardrobe/parts.js';
 import * as insights from './wardrobe/insights.js';
 import * as wishlist from './wardrobe/wishlist.js';
@@ -495,7 +496,7 @@ export function logSheetHTML({ dateISO, slot, filter = '', said = '' }, { bottle
   const nameOf = w => w.f?.name ?? 'A bottle from another list';
   const logged = ['day', 'night'].filter(k => worn[k]).map(k => `<li class="log-worn-item">
       <span class="log-slot">${slotIcon(k)}</span><span class="row-text"><b>${esc(nameOf(worn[k]))}</b><small>${k === 'day' ? 'Day' : 'Night'}</small></span>
-      <button class="btn tertiary compact" data-action="journal-log-clear" data-slot="${k}">Clear<span class="visually-hidden">: ${esc(nameOf(worn[k]))} ${SLOT_WORDS[k]}</span></button>
+      <button class="btn tertiary compact" data-action="journal-log-clear" data-slot="${k}" data-id="${esc(worn[k].id)}">Clear<span class="visually-hidden">: ${esc(nameOf(worn[k]))} ${SLOT_WORDS[k]}</span></button>
     </li>`).join('');
   const q = filter.trim().toLowerCase();
   let shown = 0;
@@ -538,6 +539,14 @@ function logSheet(s) {
     return h ? { id: h.id, f: findRecord(h.id) } : null;
   };
   return logSheetHTML(s, { bottles: logOrder(activeFragrances(), lastWorn), worn: { day: wearOn('day'), night: wearOn('night') }, lastWorn, todayISO: today });
+}
+
+// Where a wear logged after the fact was worn: on the saved trip's place on
+// a day the trip covers (Now's "Wore something this morning?" sits under its
+// card while it's under way), else at home.
+function wornAt(dateISO) {
+  const trip = loadTrip();
+  return trip && trip.fromISO <= dateISO && dateISO <= trip.toISO ? trip.place : state.loc;
 }
 
 // Filters the log sheet's rows in place, so typing keeps focus, and says how
@@ -1019,27 +1028,53 @@ export const actions = {
     redrawSheet(app, { slot: el.dataset.value, said: '' });
   },
   // Logged after the fact: no live window, so no weather or pick to stamp
-  // and no use (it counts as untagged); the place is home's. The sheet
-  // closes on the calendar, now showing it.
+  // and no use (it counts as untagged), on the place it was worn (wornAt;
+  // one that replaces a wear keeps that one's, toggleWear). It sets the
+  // window's wear to the bottle chosen, read from the journal as stored:
+  // another tab may have logged it since the sheet was drawn (a storage
+  // event leaves an open sheet as it is), and toggling would clear it, as
+  // Wear this checks (wearSettled). The sheet closes on the calendar, now
+  // showing it, and the toast says what changed.
   'journal-log-pick'(el, app) {
     const s = state.sheet;
-    if (s?.kind !== 'journal-log' || el.getAttribute('aria-disabled') === 'true') return;
-    const f = findRecord(el.dataset.id);
-    state.history = toggleWear(el.dataset.id, s.dateISO, s.slot, state.loc);
+    if (s?.kind !== 'journal-log') return;
+    const id = el.dataset.id;
+    state.history = loadHistory();
+    const was = wornIn(state.history, s.dateISO, s.slot);
+    // Drawn as the window's wear, and still it.
+    if (was?.id === id && el.getAttribute('aria-disabled') === 'true') return;
+    if (was?.id !== id) state.history = toggleWear(id, s.dateISO, s.slot, wornAt(s.dateISO));
     app.render();
     app.closeSheet();
-    app.showToast(`<span>${esc(`Logged ${toastName(f?.name ?? 'it')} for ${loggedWhen(s.dateISO, s.slot, todayISO())}.`)}</span>`);
+    const name = toastName(findRecord(id)?.name ?? '');
+    const when = loggedWhen(s.dateISO, s.slot, todayISO());
+    const text = was?.id === id ? `${name || 'It'} was already logged for ${when}.`
+      : `Logged ${name || 'it'} for ${when}${was ? `, in place of ${toastName(findRecord(was.id)?.name ?? 'a bottle from another list')}` : ''}.`;
+    app.showToast(`<span>${esc(text)}</span>`);
   },
-  // Clear stays in the sheet, to log another in its place. Focus goes to the
-  // other wear's Clear, else to the window's toggle.
+  // Clear stays in the sheet, to log another in its place. It clears only
+  // the wear it was drawn for, as the journal stores it: another tab may
+  // have cleared the window or logged another bottle since, which the sheet
+  // then shows and says. Focus goes to the other wear's Clear, else to the
+  // window's toggle; with another bottle left in the window, to its Clear.
   'journal-log-clear'(el, app) {
     const s = state.sheet;
-    const h = s?.kind === 'journal-log' ? wornIn(state.history, s.dateISO, el.dataset.slot) : null;
-    if (!h) return;
-    state.history = toggleWear(h.id, s.dateISO, h.slot);
-    s.said = `Cleared ${findRecord(h.id)?.name ?? 'it'} from ${loggedWhen(s.dateISO, h.slot, todayISO())}.`;
+    if (s?.kind !== 'journal-log') return;
+    const { slot, id } = el.dataset;
+    state.history = loadHistory();
+    const h = wornIn(state.history, s.dateISO, slot);
+    const other = h && h.id !== id;
+    const when = loggedWhen(s.dateISO, slot, todayISO());
+    if (h && !other) {
+      state.history = toggleWear(id, s.dateISO, slot);
+      s.said = `Cleared ${findRecord(id)?.name ?? 'it'} from ${when}.`;
+    } else {
+      s.said = other ? `Nothing cleared: ${findRecord(h.id)?.name ?? 'a bottle from another list'} is logged for ${when} now.`
+        : `${findRecord(id)?.name ?? 'That wear'} was already cleared from ${when}.`;
+    }
     app.render();
-    focusInSheet({ force: document.activeElement?.matches('#sheet .sheet-close') }, '[data-action="journal-log-slot"][aria-pressed="true"]');
+    focusInSheet({ force: other || document.activeElement?.matches('#sheet .sheet-close') },
+      other && `[data-action="journal-log-clear"][data-slot="${slot}"]`, '[data-action="journal-log-slot"][aria-pressed="true"]');
     speak(document.getElementById('sheet'));
   },
   'journal-clear'(el, app) {

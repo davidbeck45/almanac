@@ -252,8 +252,9 @@ test('the log sheet names the day, its wears with Clear, and the bottles most re
   const html = sheet({}, { day: { id: mango.id, f: mango }, night: { id: aventus.id, f: aventus } });
   assert.match(html, /<h2 id="log-title" class="sheet-title">Sat, Oct 31<\/h2>/);
   assert.match(html, /data-action="journal-log-slot" data-value="night" aria-pressed="true"/);
-  assert.match(html, /<b>Mango Sticky Rice<\/b><small>Day<\/small><\/span>\s*<button class="btn tertiary compact" data-action="journal-log-clear" data-slot="day">Clear<span class="visually-hidden">: Mango Sticky Rice by day<\/span>/);
-  assert.match(html, /data-action="journal-log-clear" data-slot="night">Clear<span class="visually-hidden">: Aventus at night/);
+  // Each Clear carries the wear it was drawn for, so it never clears one another tab logged since.
+  assert.match(html, /<b>Mango Sticky Rice<\/b><small>Day<\/small><\/span>\s*<button class="btn tertiary compact" data-action="journal-log-clear" data-slot="day" data-id="128201">Clear<span class="visually-hidden">: Mango Sticky Rice by day<\/span>/);
+  assert.match(html, /data-action="journal-log-clear" data-slot="night" data-id="9828">Clear<span class="visually-hidden">: Aventus at night/);
   assert.match(html, /<p class="list-title" id="log-list-title">What you wore at night<\/p>/);
   // The night's bottle is marked, and logging it again does nothing.
   assert.match(html, /data-id="9828" aria-disabled="true">[^]*?<small>Logged at night<\/small>/);

@@ -143,6 +143,22 @@ test('a wear that replaces another in its window keeps the pick shown before eit
   assert.deepEqual(loadHistory(), log);
 }));
 
+test('a wear corrected after the fact keeps where the window was worn, with its weather', () => withStore(() => {
+  const miami = { lat: 25.7617, lon: -80.1918 }, home = { lat: 40.71, lon: -74.01 };
+  const stamp = wearStamp({ feelsF: 69.8, dewF: 59, humidity: 67, pop: 4, code: 3 });
+  toggleWear('a', '2026-11-02', 'night', miami, 'daily', stamp); // from the trip's card
+  // Changed on Worn's calendar, which was handed home's place.
+  let [entry] = toggleWear('b', '2026-11-02', 'night', home);
+  assert.deepEqual(entry, { id: 'b', date: '2026-11-02', slot: 'night', lat: 25.76, lon: -80.19, occasion: 'daily', wx: stamp.wx });
+  // Worn from a live window: that window's place.
+  [entry] = toggleWear('c', '2026-11-02', 'night', home, 'daily', stamp);
+  assert.deepEqual([entry.lat, entry.lon], [40.71, -74.01]);
+  // One from before wears kept a place takes the place given.
+  toggleWear('d', '2026-11-01', 'day');
+  [entry] = toggleWear('e', '2026-11-01', 'day', miami).filter(h => h.date === '2026-11-01');
+  assert.deepEqual([entry.lat, entry.lon], [25.76, -80.19]);
+}));
+
 test('the export carries ratings when there are some, and older files still read', () => {
   const skin = { 31861: { rating: 5, longevity: 1, sillage: 0, updated: '2026-10-01' } };
   const data = journalExport(history, null, new Set(), { nowISO: '2026-10-03T12:00:00Z', skin });
