@@ -11,6 +11,7 @@ import { ACCORDS } from '../src/accords.js';
 import { insightsSkeletonHTML } from '../src/views/wardrobe/insights.js';
 import { wishlistHTML } from '../src/views/wardrobe/wishlist.js';
 import { liveHTML } from '../src/views/wardrobe/parts.js';
+import { state } from '../src/app/state.js';
 
 const bottle = (id, name, brand) => ({ id, name, brand, accords: { woody: 80 } });
 const aventus = bottle('9828', 'Aventus', 'Creed');
@@ -243,6 +244,58 @@ test('arrow keys step through the calendar’s days, a week up or down, never pa
   assert.equal(wardrobe.calendarStep('Enter', 10, today), null);
 });
 
+test('the calendar keeps one tab stop, on the day focus came back to', () => {
+  // As drawn: today the stop. Then focus lands on Sat, Oct 31, as it does
+  // coming back from logging a wear there, which every draw gives -1.
+  const days = ['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02'].map(date => ({ date, tabIndex: date === '2026-11-02' ? 0 : -1 }));
+  const stops = () => days.filter(d => d.tabIndex === 0).map(d => d.date);
+  wardrobe.calendarStop(days, days[1]);
+  assert.deepEqual(stops(), ['2026-10-31']);
+  wardrobe.calendarStop(days, days[0]);
+  assert.deepEqual(stops(), ['2026-10-30']);
+});
+
+test('the log sheet’s filter says how many bottles are left, or that none match, past a Clear’s message', t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const realDoc = globalThis.document;
+  // The sheet as drawn: its status line empty, with nothing to say yet.
+  const draw = (say = '') => ({ id: 'log-live', dataset: { say }, textContent: '' });
+  let live = draw();
+  const rows = ['cream velvet xerjoff', 'liam lattafa', 'aventus creed'].map(name => ({ dataset: { name }, hidden: false }));
+  const sheet = { querySelectorAll: sel => (sel === '[data-say]' ? [live] : []) };
+  globalThis.document = {
+    activeElement: null,
+    getElementById: id => (id === 'log-live' ? live : id === 'sheet' ? sheet : null),
+    querySelector: sel => (sel === '#sheet .log-empty' ? { hidden: true } : null),
+    querySelectorAll: sel => (sel === '#sheet .log-rows li[data-name]' ? rows : []),
+  };
+  const ui = { openSheet(s) { state.sheet = s; } };
+  const type = value => {
+    wardrobe.fields['journal-log-filter']({ value });
+    t.mock.timers.tick(400);
+    t.mock.timers.tick(150);
+    return live.textContent;
+  };
+  try {
+    wardrobe.actions['journal-log']({ dataset: { date: '2026-10-31', slot: 'day' } }, ui);
+    assert.equal(type('cream'), '1 bottle');
+    assert.equal(state.sheet.said, '1 bottle', 'a redraw keeps it, unsaid');
+    assert.equal(type('zzzz'), 'No bottles match');
+    // A Clear's message in the line: the count still takes its place.
+    live = draw('Cleared Liam from Sat, Oct 31.');
+    live.textContent = live.dataset.say;
+    assert.equal(type(''), '3 bottles');
+    // Opened again, the same filter is said again.
+    state.sheet = null;
+    live = draw();
+    wardrobe.actions['journal-log']({ dataset: { date: '2026-10-31', slot: 'day' } }, ui);
+    assert.equal(type('cream'), '1 bottle');
+  } finally {
+    globalThis.document = realDoc;
+    state.sheet = null;
+  }
+});
+
 test('the log sheet names the day, its wears with Clear, and the bottles most recently worn first', () => {
   const bottles = [aventus, mango, ...many];
   const lastWorn = new Map([[mango.id, '2026-11-01'], [aventus.id, '2026-10-20'], ['3', '2026-10-31']]);
@@ -252,8 +305,9 @@ test('the log sheet names the day, its wears with Clear, and the bottles most re
   const html = sheet({}, { day: { id: mango.id, f: mango }, night: { id: aventus.id, f: aventus } });
   assert.match(html, /<h2 id="log-title" class="sheet-title">Sat, Oct 31<\/h2>/);
   assert.match(html, /data-action="journal-log-slot" data-value="night" aria-pressed="true"/);
-  assert.match(html, /<b>Mango Sticky Rice<\/b><small>Day<\/small><\/span>\s*<button class="btn tertiary compact" data-action="journal-log-clear" data-slot="day">Clear<span class="visually-hidden">: Mango Sticky Rice by day<\/span>/);
-  assert.match(html, /data-action="journal-log-clear" data-slot="night">Clear<span class="visually-hidden">: Aventus at night/);
+  // Each Clear carries the wear it was drawn for, so it never clears one another tab logged since.
+  assert.match(html, /<b>Mango Sticky Rice<\/b><small>Day<\/small><\/span>\s*<button class="btn tertiary compact" data-action="journal-log-clear" data-slot="day" data-id="128201">Clear<span class="visually-hidden">: Mango Sticky Rice by day<\/span>/);
+  assert.match(html, /data-action="journal-log-clear" data-slot="night" data-id="9828">Clear<span class="visually-hidden">: Aventus at night/);
   assert.match(html, /<p class="list-title" id="log-list-title">What you wore at night<\/p>/);
   // The night's bottle is marked, and logging it again does nothing.
   assert.match(html, /data-id="9828" aria-disabled="true">[^]*?<small>Logged at night<\/small>/);
