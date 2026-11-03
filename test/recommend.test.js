@@ -321,7 +321,7 @@ test('--events stops on a window the plan doesn\'t cover, and on a mode that doe
   for (const [args, message] of [
     [['--loc', '40.7,-74', '--week', '--events', `${dayISO(9)} night formal`], /^--events: \S+ is outside the week ahead \(/],
     [['--loc', '40.7,-74', '--events', `${dayISO(9)} night formal`], /is outside the week ahead/],
-    [['--loc', '40.7,-74', '--week', '--slot', 'day', '--events', `${dayISO(2)} night formal`], /^--events: the Formal on \S+ is at night, and --slot day plans days only/],
+    [['--loc', '40.7,-74', '--week', '--slot', 'day', '--events', `${dayISO(2)} night formal`], /^--events: formal wear on \w{3}, \w{3} \d+ is at night, and --slot day plans days only/],
     [['--loc', '40.7,-74', '--week', '--occasion', 'date', '--events', `${dayISO(2)} office`], /--occasion date plans nights only/],
     [['--loc', '40.7,-74', '--date', dayISO(2), '--events', `${dayISO(3)} night formal`], /isn't the --date/],
     [['--loc', '40.7,-74', '--week', '--events', `${dayISO(-3)} night formal`], /has passed/],
@@ -392,7 +392,8 @@ test('--pack and --date stop on bad dates before any request', () => {
     [['--pack', '--loc', '40.7,-74', '--from', dayISO(1), '--to', dayISO(40)], /up to 31 days/],
     [['--pack', '--loc', '40.7,-74', '--from', dayISO(1), '--to', dayISO(2), '--max', '9'], /--max takes 1 to 6/],
     [['--pack', '--loc', '40.7,-74', '--from', dayISO(1), '--to', dayISO(2), '--events', `${dayISO(9)} night date`], /outside the trip/],
-    [['--pack', '--loc', '40.7,-74', '--from', dayISO(1), '--to', dayISO(2), '--slot', 'day', '--events', `${dayISO(1)} formal`], /--slot day packs for days only/],
+    [['--pack', '--loc', '40.7,-74', '--from', dayISO(1), '--to', dayISO(2), '--slot', 'day', '--events', `${dayISO(1)} formal`], /^--events: formal wear on \w{3}, \w{3} \d+ is at night, and --slot day packs for days only/],
+    [['--pack', '--loc', '40.7,-74', '--from', dayISO(1), '--to', dayISO(2), '--slot', 'night', '--events', `${dayISO(1)} office`], /^--events: the office on \w{3}, \w{3} \d+ is by day, and --slot night packs for nights only/],
     [['--pack', '--from', dayISO(1), '--to', dayISO(2)], /--pack needs a place/],
     [['--loc', '40.7,-74', '--date', '2026-02-30'], /--date takes a date like/],
     [['--loc', '40.7,-74', '--date', dayISO(2), '--week'], /leave out --week/],

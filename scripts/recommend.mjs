@@ -205,6 +205,9 @@ export function parseEvents(text) {
   return events;
 }
 
+// "formal wear on Sat, Nov 7 is at night": an event's slot, for a plan of the other.
+const eventWhen = e => `${e.occasion.phrase ?? e.occasion.label.toLowerCase()} on ${shortDate(e.dateISO)} is ${e.slot === 'day' ? 'by day' : 'at night'}`;
+
 /**
  * --journal: the app's Copy for Claude (a token, told apart by its shape)
  * or a file holding an export or a token. -> parseJournal's shape; throws
@@ -308,7 +311,7 @@ async function main() {
     const only = args.pack ? null : slot ?? occasion?.slot;
     for (const e of events) {
       if (e.dateISO < earliest) fail(`--events: ${e.dateISO} has passed`);
-      if (only && e.slot !== only) fail(`--events: the ${e.occasion.label} on ${e.dateISO} is ${e.slot === 'day' ? 'by day' : 'at night'}, and ${slot ? `--slot ${slot}` : `--occasion ${occasion.id}`} plans ${only === 'day' ? 'days' : 'nights'} only`);
+      if (only && e.slot !== only) fail(`--events: ${eventWhen(e)}, and ${slot ? `--slot ${slot}` : `--occasion ${occasion.id}`} plans ${only === 'day' ? 'days' : 'nights'} only`);
       if (args.date && e.dateISO !== args.date) fail(`--events: ${e.dateISO} isn't the --date, ${args.date}; --date plans that day only`);
     }
   }
@@ -604,7 +607,7 @@ async function main() {
     if (!Number.isInteger(max) || max < 1 || max > 6) fail(`--max takes 1 to 6 bottles, not "${args.max}"`);
     for (const e of events) {
       if (e.dateISO < args.from || e.dateISO > args.to) fail(`--events: ${e.dateISO} is outside the trip`);
-      if (slot && e.slot !== slot) fail(`--events: the ${e.occasion.label} on ${e.dateISO} is at ${e.slot === 'day' ? 'day' : 'night'}, and --slot ${slot} packs for ${slot === 'day' ? 'days' : 'nights'} only`);
+      if (slot && e.slot !== slot) fail(`--events: ${eventWhen(e)}, and --slot ${slot} packs for ${slot === 'day' ? 'days' : 'nights'} only`);
     }
 
     // --slot packs for only days or nights; --occasion goes on every window of
