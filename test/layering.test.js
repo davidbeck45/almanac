@@ -177,6 +177,23 @@ test('tea dries out vanilla, iris takes oud, and two aquatics only double up', (
   assert.ok(!layerPair(WOODY, marine2).reasons.some(r => /aquatics/.test(r.text)));
 });
 
+test('"Both lean" names a family each bottle leans toward, not a trace of one', () => {
+  // Liquid Brun and Vintage Radio "both leaned citrus", 6% and 7% of their profiles, seventh in each.
+  const top3 = (f, family) => Object.entries(layerProfile(f).profile).sort((x, y) => y[1] - x[1]).slice(0, 3).some(([k]) => k === family);
+  let said = 0;
+  for (const list of [wardrobe, catalog]) {
+    for (const f of list) {
+      for (const p of layerPicks(f, list, 5)) {
+        const lean = p.reasons.find(r => r.text.startsWith('Both lean '))?.text.slice('Both lean '.length);
+        if (!lean) continue;
+        said++;
+        assert.ok(top3(f, lean) && top3(p.fragrance, lean), `${f.name} + ${p.fragrance.name}: Both lean ${lean}`);
+      }
+    }
+  }
+  assert.ok(said >= 10, `said ${said} times`);
+});
+
 test('without the weather, two heavy scents take a flat penalty that a cold night lifts', () => {
   const winter = { winter: 0.5, spring: 0.1, summer: 0.05, fall: 0.35 };
   const heavy = (id, accords) => ({ ...bottle(id, accords, { base: ['Vanilla'] }), season: winter, dayNight: { day: 0.3, night: 0.7 } });
