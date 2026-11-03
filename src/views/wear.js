@@ -869,8 +869,8 @@ export const actions = {
   // window is (a trip's place or the Occasion pane's other city, else home),
   // with the use it was for (the Occasion pane's occasion, an event's on a
   // trip, else 'daily'), which the gap finder's "How you wear" counts, and the
-  // window's weather and the pick the list showed (wearStamp), which
-  // journal-check reads in place of the archive's.
+  // window's weather (unless it's typical weather) and the pick the list
+  // showed (wearStamp), which journal-check reads in place of the archive's.
   wear(el, app) {
     const ctx = state.contexts[el.dataset.ctx];
     if (!ctx) return;
