@@ -162,11 +162,9 @@ const LONDON = typical([
 const wornEveryDay = out => out.bottles.filter(b => [...new Set(out.plan.map(p => p.window.dateISO))]
   .every(d => out.plan.some(p => p.window.dateISO === d && p.pick === b.record))).map(b => b.record.name);
 
-// Ten sweltering July days, 91–95 by day and 77–81 at night. (Two degrees
-// milder, since Jean Lowe Summer Vibes and the accord refit with its Sun Song,
-// resting Supremacy's nights gains only one: that plan stands, as Cancún's.)
+// Ten hot July days, 88–92 by day and 76–80 at night.
 const SUMMER = Array.from({ length: 10 }, (_, i) => shift('2026-07-10', i))
-  .flatMap((d, i) => [win(d, 'day', 93 + ((i * 7) % 5) - 2, 71, { lat: 40 }), win(d, 'night', 79 + ((i * 7) % 5) - 2, 69, { lat: 40 })]);
+  .flatMap((d, i) => [win(d, 'day', 90 + ((i * 7) % 5) - 2, 70, { lat: 40 }), win(d, 'night', 78 + ((i * 7) % 5) - 2, 68, { lat: 40 })]);
 const sameSet = (out, set) => set.length === out.bottles.length && set.every(f => out.bottles.some(b => b.record.id === f.id));
 
 test('a long trip wears no bottle every day when another set plans nearly as well and rests it', () => {
@@ -229,6 +227,40 @@ test('a bottle you rate 2★ or lower stays home unless nothing else suits a win
   const pair = applySkin([summer, night], { [night.id]: { rating: 1 } });
   const forced = packTrip(pair, MIXED);
   assert.ok(forced.bottles.some(b => b.record.id === night.id), forced.text);
+});
+
+test('a window nothing packed suits names the best bottle you don’t dislike, and the one you do only when nothing else suits it', () => {
+  // Every bottle rated 1★ in turn beside each pair of the others, one bottle packed for a hot day
+  // and a cold night. Where the 1★ one still tops a window nothing packed suits, a bottle he likes
+  // within reach of it is named, as room for one more would pack it; the 1★ one only where it's
+  // the one fit, saying so.
+  const days = MIXED.slice(0, 2);
+  let liked = 0, only = 0, example = null;
+  for (const loathed of fragrances) {
+    const others = fragrances.filter(f => f !== loathed);
+    for (let j = 0; j < others.length; j++) for (let k = j + 1; k < others.length; k++) {
+      const list = applySkin([loathed, others[j], others[k]], { [loathed.id]: { rating: 1 } });
+      const out = packTrip(list, days, { max: 1 });
+      for (const u of out.uncovered) {
+        const ranked = rank(list, u.window, u.window.slot, { todayISO: u.window.dateISO, holdBack: false });
+        const suits = ranked.filter(r => r.fragrance.id !== loathed.id && r.score >= ranked[0].score - PLAN_MARGIN);
+        if (ranked[0].fragrance.id === loathed.id && suits.length) {
+          liked++;
+          assert.equal(u.best.id, suits[0].fragrance.id, out.text);
+          assert.equal(u.score, suits[0].score);
+          example ??= { out, name: suits[0].fragrance.name };
+        } else {
+          assert.equal(u.best.id, ranked[0].fragrance.id, out.text);
+          if (u.best.id === loathed.id) {
+            only++;
+            assert.match(out.text, new RegExp(`; ${loathed.name} would be, if there’s room, though you rate it 1★\\.`), out.text);
+          }
+        }
+      }
+    }
+  }
+  assert.ok(liked > 10 && only > 100, `${liked} with a liked bottle in reach, ${only} with only the 1★ one`);
+  assert.match(example.out.text, new RegExp(`; ${example.name} would be, if there’s room\.$`), example.out.text);
 });
 
 test('an occasion on several days reads once, with its dates', () => {
