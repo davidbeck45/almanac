@@ -3,7 +3,7 @@
 // picks for one date and slot anywhere. packTrip is pure; picksFor and
 // tripPlan fetch the weather (src/weather.js).
 import { rank, daysBetween, PLAN_MARGIN, isDisliked, ROTATION_PENALTY } from './engine.js';
-import { tripWindows } from './weather.js';
+import { tripWindows, tripWeather } from './weather.js';
 
 const SHORT_DATE = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 const shortDate = iso => SHORT_DATE.format(new Date(`${iso}T12:00:00Z`));
@@ -347,14 +347,16 @@ function packText(bottles, plan, uncovered, wins, full, variety) {
 /**
  * Ranked picks for one date and slot at any place: the forecast's window, or
  * typical weather past the forecast. The slot defaults to the occasion's,
- * else day. -> { window, ranked }, or null when no weather came back.
+ * else day. `nudge` only on the place's own today (tripWeather's, not the
+ * device's): the journal can't say what will be idle by a later date.
+ * -> { window, ranked, todayISO }, or null when no weather came back.
  * `refusePast` throws for a date gone by at the place, as tripWindows'.
  */
 export async function picksFor(frags, { place, dateISO, slot = null, occasion = null, history = [], nudge = false, refusePast = false }) {
   const at = slot ?? occasion?.slot ?? 'day';
-  const [win] = await tripWindows(place, dateISO, dateISO, { slots: [at], refusePast });
+  const { windows: [win], todayISO } = await tripWeather(place, dateISO, dateISO, { slots: [at], refusePast });
   if (!win) return null;
-  return { window: win, ranked: rank(frags, win, at, { occasion, history, todayISO: dateISO, nudge }) };
+  return { window: win, ranked: rank(frags, win, at, { occasion, history, todayISO: dateISO, nudge: nudge && dateISO <= todayISO }), todayISO };
 }
 
 /**

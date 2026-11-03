@@ -423,7 +423,18 @@ export function typicalWindow(climate, dateISO, slot) {
  * by at the place (the forecast's own date, which can be a day off the
  * device's), before asking the archive for a day that's over.
  */
-export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'], nowMs = Date.now(), refusePast = false, timeoutMs = TRIP_TIMEOUT } = {}) {
+export async function tripWindows(loc, fromISO, toISO, opts = {}) {
+  return (await tripWeather(loc, fromISO, toISO, opts)).windows;
+}
+
+/**
+ * tripWindows with the place's own date: { windows, todayISO }, by the
+ * forecast's clock when the dates reach into it, else by placeDate's
+ * reckoning (a day off there changes nothing said of dates a week or more
+ * out). What's "tonight", or today's for the rotation nudge, goes by it, not
+ * by the device's date: late evening in Chicago it's tomorrow in London.
+ */
+export async function tripWeather(loc, fromISO, toISO, { slots = ['day', 'night'], nowMs = Date.now(), refusePast = false, timeoutMs = TRIP_TIMEOUT } = {}) {
   const dates = [];
   for (let d = fromISO; d <= toISO; d = shiftDays(d, 1)) dates.push(d);
   const found = new Map();
@@ -434,6 +445,7 @@ export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'
   // alone, barely ahead of typical weather, so a trip within them that the
   // forecast refuses (a 429 day) takes typical weather rather than failing.
   const today = placeDate(loc, nowMs);
+  let todayISO = today;
   if (fromISO <= shiftDays(today, FORECAST_DAYS - 1)) {
     let forecast = null;
     try {
@@ -442,7 +454,7 @@ export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'
       if (fromISO < shiftDays(today, FORECAST_DAYS - 2)) throw err;
     }
     if (forecast) {
-      const { todayISO } = clock(forecast, nowMs);
+      ({ todayISO } = clock(forecast, nowMs));
       if (refusePast && fromISO < todayISO) {
         throw Object.assign(new Error(`${fromISO} has passed there; it's ${todayISO}`), { past: true, today: todayISO });
       }
@@ -459,7 +471,7 @@ export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'
     const climate = await fetchTypical(loc, missing[0], missing.at(-1), { nowMs, timeoutMs });
     for (const d of missing) for (const s of slots) if (!found.get(key(d, s))) found.set(key(d, s), typicalWindow(climate, d, s));
   }
-  return dates.flatMap(d => slots.map(s => found.get(key(d, s))).filter(Boolean));
+  return { windows: dates.flatMap(d => slots.map(s => found.get(key(d, s))).filter(Boolean)), todayISO };
 }
 
 // The place's wall clock at nowMs, by its forecast's UTC offset: today's and

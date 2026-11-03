@@ -49,7 +49,7 @@ import { DEFAULT_HIDDEN } from '../src/hidden.js';
 import { readJournal, isJournalToken, journalFreshness, occasionCounts } from '../src/history.js';
 import { normalize } from '../src/collections.js';
 import { excluding } from '../src/pool-tasks.js';
-import { fetchForecast, summarize, week, tripWindows, forecastError } from '../src/weather.js';
+import { fetchForecast, summarize, week, tripWindows, tripWeather, forecastError } from '../src/weather.js';
 import { searchCities } from '../src/location.js';
 import { STYLES, STYLE_STRONG, WEARS_CLOSE, styleById, styleScores, topOf, shownOf, leanOf, closeOf, styleMix } from '../src/scent-styles.js';
 import { fragranticaLibrary, loadPool, fromPool, loadPoolStyles, loadAbout } from '../src/fragrantica.js';
@@ -964,23 +964,23 @@ async function main() {
   // rotation nudge only for today, as the app's Occasion pane has it: the
   // journal can't say what will be idle by a later date, and planned alone,
   // night after night, each date would nudge the same bottle. What the plan
-  // saves for an event is said from today ("on Saturday night").
+  // saves for an event is said from today ("on Saturday night"). Today is
+  // the place's own (tripWeather's, as picksFor reads it), not this
+  // machine's: late evening here it can be tomorrow there.
   if (args.date) {
     const wanted = slot ?? occasion?.slot;
-    const opts = { history, nudge: nudge && args.date <= today, nowISO: today };
-    let result, windows;
+    let result, windows, todayISO;
     try {
-      if (events.length) windows = await tripWindows(place, args.date, args.date, { refusePast: true, ...(wanted && { slots: [wanted] }) });
-      else {
-        result = wanted
-          ? [await picksFor(fragrances, { place, dateISO: args.date, slot: wanted, occasion, ...opts, refusePast: true })].filter(Boolean)
-            .map(({ window: win, ranked }) => ({ win, ranked, pick: ranked[0] }))
-          : planWindows(fragrances, await tripWindows(place, args.date, args.date, { refusePast: true }), opts);
+      if (wanted && !events.length) {
+        result = [await picksFor(fragrances, { place, dateISO: args.date, slot: wanted, occasion, history, nudge, refusePast: true })].filter(Boolean)
+          .map(({ window: win, ranked }) => ({ win, ranked, pick: ranked[0] }));
+      } else {
+        ({ windows, todayISO } = await tripWeather(place, args.date, args.date, { refusePast: true, ...(wanted && { slots: [wanted] }) }));
       }
     } catch (err) {
       weatherFailed(err, place, 'date', args.date);
     }
-    if (windows?.length) result = planWindows(fragrances, onWindows(windows, `--date ${args.date}`), { occasion, ...opts });
+    if (windows?.length) result = planWindows(fragrances, onWindows(windows, `--date ${args.date}`), { occasion, history, nudge: nudge && args.date <= todayISO, nowISO: todayISO });
     if (!result?.length) fail(`No weather came back for ${args.date}`);
     const typical = result.some(r => r.win.typical);
     const ties = tiesOf(result, !wanted || events.length > 0);
