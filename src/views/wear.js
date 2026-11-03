@@ -11,7 +11,7 @@ import { sprayGuide } from '../spray.js';
 import { planTies, rankedTies, tieLine, contrast } from '../contrast.js';
 import { setSkin, loadSkin, loadAsked, markAsked, wasAsked } from '../skin.js';
 import { theme } from '../theme.js';
-import { toggleWear, wornIn, journalStats, shiftISO, wearSettled, loadHistory } from '../history.js';
+import { toggleWear, wearStamp, wornIn, journalStats, journalFreshness, shiftISO, wearSettled, loadHistory } from '../history.js';
 import { routeHash } from '../app/router.js';
 import { esc, temp, deg, plural, shortDate, weekdayShort, windowRange, feelWords, displayReasons, moveText, listLabel } from '../ui.js';
 import {
@@ -264,6 +264,20 @@ function alsoHTML(ranked, pick, ctx, worn, label, { tags = false } = {}) {
     <h3 class="also-title">Also good ${esc(label)}</h3>
     ${shelfHTML(rest, ctx, { wornId: worn, tagOf })}
   </div>`;
+}
+
+// Once the day window has rolled over (Now's Day is tomorrow's) with nothing
+// logged for this morning, a quiet line that opens Worn's log sheet for it:
+// a wear missed there lets the evening's and tomorrow's picks repeat it. Only
+// for someone keeping the journal (a wear in rotation's reach, RECENT_DAYS),
+// and after Now's own question, if it has one.
+export function missedHTML(todayISO) {
+  return `<p class="log-missed">${icon.journal}<span>Wore something this morning?</span><button class="link-btn" data-action="journal-log" data-date="${esc(todayISO)}" data-slot="day">Log it<span class="visually-hidden">: what you wore today</span></button></p>`;
+}
+function missedMorning() {
+  const today = state.wx?.todayISO;
+  return Boolean(today && state.wx.day && state.wx.day.dateISO !== today && !wornIn(state.history, today, 'day')
+    && journalFreshness(state.history, today).recent);
 }
 
 // ---------- Asking once ----------
@@ -547,6 +561,7 @@ function nowPane() {
         ${other ? nextWindowHTML(other, wornId(other.win), nowHour()) : ''}
       </div>
       ${ask.below}
+      ${!ask.inPick && !ask.below && missedMorning() ? missedHTML(state.wx.todayISO) : ''}
       ${alsoHTML(ranked, pick, win.slot, worn, win.slot === 'day' ? 'by day' : 'tonight', { tags: true })}
     </section>
     ${journalTeaser()}`;
@@ -589,7 +604,7 @@ function occasionPane(app, route) {
   // can't say what will have been worn by then, and a wedding wants the best.
   // A window here planned for this occasion ranks as the plan ranks it (the best for it).
   const planned = !when.when.place && eventAt(win)?.occasion === occasion.id;
-  const ranked = rankContext('occ', win, occasion, { nudge: Boolean(ev.here), event: planned });
+  const ranked = rankContext('occ', win, occasion, { nudge: Boolean(ev.here), event: planned, place: when.when.place });
   const worn = wornId(win);
   // A nudged pick isn't the best for it (that one leads Also good).
   const kicker = ranked[0].nudged ? 'Due a wear' : `Best for ${phraseOf(occasion)}`;
@@ -711,9 +726,12 @@ export const actions = {
   ...trip.actions,
   ...when.actions,
   ...pickers.actions,
-  // Logs (or clears) a wear for the window of the list it's in, with the use
-  // it was for (the Occasion pane's occasion, an event's on a trip, else
-  // 'daily'), which the gap finder's "How you wear" counts.
+  // Logs (or clears) a wear for the window of the list it's in, where that
+  // window is (a trip's place or the Occasion pane's other city, else home),
+  // with the use it was for (the Occasion pane's occasion, an event's on a
+  // trip, else 'daily'), which the gap finder's "How you wear" counts, and the
+  // window's weather and the pick the list showed (wearStamp), which
+  // journal-check reads in place of the archive's.
   wear(el, app) {
     const ctx = state.contexts[el.dataset.ctx];
     if (!ctx) return;
@@ -726,7 +744,7 @@ export const actions = {
       state.history = loadHistory();
       return app.keepingFocus(el, '#app', app.render);
     }
-    state.history = toggleWear(el.dataset.id, ctx.win.dateISO, ctx.win.slot, state.loc, ctx.occasion?.id ?? 'daily');
+    state.history = toggleWear(el.dataset.id, ctx.win.dateISO, ctx.win.slot, ctx.place ?? state.loc, ctx.occasion?.id ?? 'daily', wearStamp(ctx.win, ctx.pick?.fragrance.id));
     if (wornIn(state.history, ctx.win.dateISO, ctx.win.slot)) navigator.vibrate?.(12);
     app.keepingFocus(el, '#app', app.render);
   },

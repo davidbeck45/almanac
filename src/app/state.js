@@ -3,7 +3,7 @@
 // in the dataset. No DOM here, so views and tests import it in Node; the
 // shell (src/app/shell.js) renders and handles events.
 import { rank, rankEvent, planWindows } from '../engine.js';
-import { planTies } from '../contrast.js';
+import { planTies, TIE_POINTS } from '../contrast.js';
 import { week, wxAt, standIn, cachedForecast, forecastError, clock, WINDOWS } from '../weather.js';
 import { loadLocation } from '../location.js';
 import { loadHistory, wornIn, journalStats, journalCalendar, occasionCounts } from '../history.js';
@@ -14,7 +14,7 @@ import { loadMine, saveMine, loadActive, saveActive, localMatches } from '../col
 import { fragranticaLibrary } from '../fragrantica.js';
 import { onPoolRecords } from './pool.js';
 import { setHidden } from '../hidden.js';
-import { setUnits } from '../ui.js';
+import { setUnits, matchPct } from '../ui.js';
 import { setTheme } from '../theme.js';
 
 const PREFS_KEY = 'scentcast.prefs';
@@ -243,13 +243,15 @@ export function addToMine(record) {
 // ranked[0]), which a bottle page measures itself against; a trip's packs
 // from its own bottles and carries none. The Week's carry its `ties` too
 // (planTies'), which lead the pick's page's shelf, since its board names them
-// without a link.
+// without a link. A list ranked for somewhere other than home (a trip, the
+// Occasion pane's other city) carries its `place`, where a wear logged from
+// it happened.
 
 const SLOT_ORDER = { day: 0, night: 1 };
 export const byTime = (a, b) => a.dateISO.localeCompare(b.dateISO) || SLOT_ORDER[a.slot] - SLOT_ORDER[b.slot];
 
-export function storeContext(key, win, occasion, ranked, { event = Boolean(win.occasion), pick = null, ties = [] } = {}) {
-  state.contexts[key] = { win, occasion, ranked, event, pick, ties, entries: new Map(ranked.map(r => [r.fragrance.id, r])) };
+export function storeContext(key, win, occasion, ranked, { event = Boolean(win.occasion), pick = null, ties = [], place = null } = {}) {
+  state.contexts[key] = { win, occasion, ranked, event, pick, ties, place, entries: new Map(ranked.map(r => [r.fragrance.id, r])) };
 }
 
 // Rankings put a bottle left on the shelf a month first when it's within
@@ -257,11 +259,12 @@ export function storeContext(key, win, occasion, ranked, { event = Boolean(win.o
 // Only for a window you're about to wear in: `nudge: false` for a later date
 // or another place, where the journal can't say what's idle then. A window
 // planned for this occasion (`event`) ranks as the plan ranks it (rankEvent:
-// the best for it, recent wears or not), so the two agree.
-export function rankContext(key, win, occasion, { nudge = true, event = false } = {}) {
+// the best for it, recent wears or not), so the two agree. `place`: where
+// the window is, when it isn't home.
+export function rankContext(key, win, occasion, { nudge = true, event = false, place = null } = {}) {
   const ranked = event ? rankEvent(rankedFragrances(), win, occasion)
     : rank(rankedFragrances(), win, win.slot, { occasion, history: state.history, todayISO: win.dateISO, nudge });
-  storeContext(key, win, occasion, ranked, { event, pick: ranked[0] ?? null });
+  storeContext(key, win, occasion, ranked, { event, pick: ranked[0] ?? null, place });
   return ranked;
 }
 
@@ -434,6 +437,28 @@ export function wearInfo(id) {
   return { count: stats.wears, last: stats.lastWorn.get(id) ?? null };
 }
 
+/**
+ * When this week a bottle would suit, from the Week's own plan (computeWeek's
+ * days): { kind: 'planned', win, ctx } for the first window it's the pick
+ * of, else { kind: 'suits', … } for the first whose pick it comes within
+ * TIE_POINTS of (its displayed match, as toss-ups count) and that has no
+ * wear logged (the choice is made), else { kind: 'none' }: this week's
+ * weather isn't its.
+ */
+export function dustWhen(id, days) {
+  const windows = days.flatMap(d => [d.day, d.night]).filter(Boolean);
+  const at = (kind, p) => ({ kind, win: p.win, ctx: p.ctx });
+  const planned = windows.find(p => p.pick.fragrance.id === id);
+  if (planned) return at('planned', planned);
+  const suits = windows.find(p => {
+    const entry = !wornIn(state.history, p.win.dateISO, p.win.slot) && p.ranked.find(r => r.fragrance.id === id);
+    return entry && matchPct(p.pick) - matchPct(entry) <= TIE_POINTS;
+  });
+  return suits ? at('suits', suits) : { kind: 'none' };
+}
+
+// Gathering dust says when this week each idle bottle would suit
+// (`when`, dustWhen), once the forecast is in; null before.
 export function journalData() {
   const today = todayISO();
   const stats = journalStats(state.history, today, DUSTY_AFTER_DAYS);
@@ -442,7 +467,13 @@ export function journalData() {
     .filter(d => !d.last || d.last < stats.since)
     .sort((a, b) => (a.last ?? '').localeCompare(b.last ?? ''))
     .slice(0, 6);
-  return { stats, dusty, todayISO: today, calendar: journalCalendar(state.history, today, 5) };
+  const days = dusty.length && state.forecast && state.wx ? computeWeek() : null;
+  return {
+    stats,
+    dusty: dusty.map(d => ({ ...d, when: days ? dustWhen(d.f.id, days) : null })),
+    todayISO: today,
+    calendar: journalCalendar(state.history, today, 5),
+  };
 }
 
 // ---------- Finding bottles ----------

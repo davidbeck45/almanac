@@ -1,24 +1,25 @@
 // Wardrobe: the bottles you own (rotation switches, which list is ranked,
 // adding and sharing), the ones you want (src/views/wardrobe/wishlist.js),
 // what you wore (the journal), and Insights: what the wardrobe still needs
-// (src/views/wardrobe/insights.js). Also the add, paste and add-it-yourself
-// sheets. Styles: src/css/wardrobe.css.
+// (src/views/wardrobe/insights.js). Also the add, paste, add-it-yourself and
+// log-a-wear sheets. Styles: src/css/wardrobe.css.
 import { ACCORDS } from '../accords.js';
 import { SEASONS } from '../engine.js';
 import { setHidden } from '../hidden.js';
 import { saveMine, shareURL, localMatches, nameMatches, importLines, MAX_IMPORT_LINES } from '../collections.js';
 import { customRecord, MAX_CUSTOM_ACCORDS } from '../custom.js';
-import { clearHistory, journalExport, journalToken } from '../history.js';
+import { clearHistory, journalExport, journalToken, journalStats, toggleWear, wornIn, shiftISO } from '../history.js';
 import { loadSkin } from '../skin.js';
-import { esc, plural, shortDate, relativeDay, accordLabel, toastName } from '../ui.js';
+import { esc, plural, shortDate, weekdayShort, relativeDay, accordLabel, toastName } from '../ui.js';
 import {
-  icon, img, messageHTML, rowHTML, switchHTML, segHTML, sheetFrame, sharedBannerHTML, accordColor, sectionHead,
+  icon, img, slotIcon, messageHTML, rowHTML, switchHTML, segHTML, sheetFrame, sharedBannerHTML, accordColor, sectionHead,
 } from '../ui/components.js';
 import {
   state, activeFragrances, hiddenIn, viewingDemo, knownBottles, findRecord, journalData, library, findBottles,
-  fullRecords, collectionLabel, deviceToday, sourceRecords, updateMine,
+  fullRecords, collectionLabel, deviceToday, todayISO, sourceRecords, updateMine,
 } from '../app/state.js';
 import { warmPool } from '../app/pool.js';
+import { whenPhrase } from './wear/when.js';
 import { liveHTML, say, speak } from './wardrobe/parts.js';
 import * as insights from './wardrobe/insights.js';
 import * as wishlist from './wardrobe/wishlist.js';
@@ -130,14 +131,65 @@ function watchFilter() {
 // ---------- Worn (the journal) ----------
 
 /**
+ * A calendar day as its button names it: the day, and what was worn when
+ * ("Sat, Oct 31: Mango Sticky Rice by day, Aventus at night"; "Yesterday,
+ * Nov 1: nothing logged"). A day ahead says only its date.
+ */
+export function calendarLabel(c, resolve, todayISO) {
+  if (c.future) return shortDate(c.dateISO);
+  const worn = ['day', 'night'].filter(k => c[k]).map(k => `${resolve(c[k].id)?.name ?? 'a bottle from another list'} ${SLOT_WORDS[k]}`);
+  return `${logDayTitle(c.dateISO, todayISO)}: ${worn.length ? worn.join(', ') : 'nothing logged'}`;
+}
+
+// Arrow keys move between the calendar's days, a week up or down, Home and
+// End to the ends of its row; never past today. -> the cell's index, or
+// null for a key it doesn't take. `last`: today's index.
+const CAL_STEPS = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
+export function calendarStep(key, i, last) {
+  const to = key in CAL_STEPS ? i + CAL_STEPS[key] : key === 'Home' ? i - (i % 7) : key === 'End' ? i - (i % 7) + 6 : null;
+  return to === null ? null : Math.max(0, Math.min(last, to));
+}
+
+let calendarWatched = false;
+function watchCalendar() {
+  if (calendarWatched || typeof document === 'undefined') return;
+  calendarWatched = true;
+  document.addEventListener('keydown', calendarKeys);
+}
+function calendarKeys(e) {
+  const from = e.target.closest?.('.calendar button.cal-cell');
+  if (!from || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  const days = [...from.parentElement.querySelectorAll('.cal-cell')];
+  const last = days.findLastIndex(d => d.matches('button'));
+  const to = calendarStep(e.key, days.indexOf(from), last);
+  if (to === null) return;
+  e.preventDefault();
+  from.tabIndex = -1;
+  days[to].tabIndex = 0;
+  days[to].focus();
+}
+
+/** When this week a bottle gathering dust would suit (src/app/state.js dustWhen), in a few words. */
+export function dustWhenText(when, todayISO) {
+  if (when.kind === 'none') return 'Not this week’s weather';
+  const at = whenPhrase(when.win, todayISO);
+  return when.kind === 'planned' ? `Week’s pick for ${at}` : `Would suit ${at}`;
+}
+
+/**
  * The journal. It keeps every wear on this device, whichever list was ranked;
- * Gathering dust reads the ranked list's rotation. `list`: that list's name,
- * given when the month's wears include bottles outside it, so both say so.
+ * Gathering dust reads the ranked list's rotation, and once the forecast is
+ * in says when this week each bottle would suit (`when`), opening its page in
+ * that window's list. `list`: that list's name, given when the month's wears
+ * include bottles outside it, so both say so.
  */
 export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confirmClear = false, list = null } = {}) {
   if (!stats.wears && !stats.lastWorn.size) {
     return messageHTML({ glyph: icon.journal, title: 'Nothing logged yet', body: 'Choose Wear this on a pick and it shows up here, on a calendar with your most-worn bottles.',
-      action: '<a class="btn primary" href="#/wear/now"><span>See today’s picks</span></a>' });
+      action: `<div class="message-actions">
+        <a class="btn primary" href="#/wear/now"><span>See today’s picks</span></a>
+        <button class="btn secondary" data-action="journal-log" data-date="${esc(todayISO)}">${icon.plus}Log a wear</button>
+      </div>` });
   }
   const top = stats.top.map(([id, n]) => [resolve(id), n]).filter(([f]) => f).slice(0, 5);
   const most = top[0];
@@ -153,26 +205,31 @@ export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confir
     const day = +c.dateISO.slice(8, 10);
     // The day and what was worn, said in full for screen readers (the grid
     // shows a number and photos).
-    const label = worn.length ? `${shortDate(c.dateISO)}: ${worn.map(f => f.name).join(', ')}` : shortDate(c.dateISO);
+    const label = calendarLabel(c, resolve, todayISO);
     // The 1st names its month ("Oct 1"; "Oct" alone in a phone's narrowest cells).
     const date = day === 1 ? `<span class="cal-mon">${esc(shortDate(c.dateISO).split(' ')[0])}</span><span class="cal-day"> 1</span>` : day;
-    return `<span class="cal-cell${c.future ? ' future' : ''}${c.dateISO === todayISO ? ' today' : ''}${worn.length ? ' has' : ''}${day === 1 ? ' first' : ''}" title="${esc(label)}">
-      <small aria-hidden="true">${date}</small><span class="visually-hidden">${esc(label)}</span>
-      <span class="cal-bottles">${worn.map(f => img(f)).join('')}</span>
-    </span>`;
+    const today = c.dateISO === todayISO;
+    const cls = `cal-cell${c.future ? ' future' : ''}${today ? ' today' : ''}${worn.length ? ' has' : ''}${day === 1 ? ' first' : ''}`;
+    const inner = `<small aria-hidden="true">${date}</small><span class="visually-hidden">${esc(label)}</span>
+      <span class="cal-bottles">${worn.map(f => img(f)).join('')}</span>`;
+    // Today and the days gone by open the log sheet, for a wear not logged at
+    // the time; days ahead can't be worn yet. One stop in the tab order,
+    // today, and arrow keys move between the days (calendarKeys).
+    return c.future ? `<span class="${cls}" title="${esc(label)}">${inner}</span>`
+      : `<button type="button" class="${cls}" data-action="journal-log" data-date="${esc(c.dateISO)}" title="${esc(label)}" tabindex="${today ? 0 : -1}"${today ? ' aria-current="date"' : ''}>${inner}</button>`;
   }).join('');
   const mostList = top.length
     ? `<ul class="rank-list">${top.map(([f, n]) => `<li>${img(f)}<span class="row-text"><b>${esc(f.name)}</b><small>${esc(f.brand)}</small></span>
         <span class="rank-bar"><span style="width:${((n / peak) * 100).toFixed(0)}%"></span></span><span class="rank-n">${n}×</span></li>`).join('')}</ul>`
     : '<p class="muted small">Nothing logged in the last 30 days.</p>';
   const dustList = dusty.length
-    ? `<ul class="dust-list">${dusty.map(({ f, last }) => `<li><button data-action="open" data-ctx="" data-id="${esc(f.id)}">${img(f)}<span><b>${esc(f.name)}</b><small>${last ? `Last worn ${esc(relativeDay(last, todayISO))}` : 'Not worn yet'}</small></span></button></li>`).join('')}</ul>`
+    ? `<ul class="dust-list">${dusty.map(({ f, last, when }) => `<li><button data-action="open" data-ctx="${esc(when?.ctx ?? '')}" data-id="${esc(f.id)}">${img(f)}<span><b>${esc(f.name)}</b><small>${last ? `Last worn ${esc(relativeDay(last, todayISO))}` : 'Not worn yet'}</small>${when ? `<small class="dust-when${when.kind === 'none' ? '' : ' on'}">${esc(dustWhenText(when, todayISO))}</small>` : ''}</span></button></li>`).join('')}</ul>`
     : '<p class="muted small">Every bottle in rotation got worn this month. Nice.</p>';
   return `<section class="card journal" aria-labelledby="journal-title">
     ${sectionHead('Last 30 days', '', { id: 'journal-title' })}
     ${list ? '<p class="muted small journal-scope">Every wear logged on this device, from any list.</p>' : ''}
     ${tiles}
-    <section><h3>Calendar</h3><div class="calendar">${weekdays}${cells}</div></section>
+    <section><h3>Calendar</h3><p class="muted small cal-hint">Choose a day to log a wear you didn’t at the time.</p><div class="calendar">${weekdays}${cells}</div></section>
     <section><h3>Most worn</h3>${mostList}</section>
     <section><h3>Gathering dust</h3>${list ? `<p class="muted small journal-scope">From ${esc(list)}: in rotation, not worn in 30 days.</p>` : ''}${dustList}</section>
     <div class="action-row end">
@@ -180,7 +237,7 @@ export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confir
       <button class="btn secondary" data-action="journal-claude">${icon.paste}Copy for Claude</button>
       <button class="btn ${confirmClear ? 'secondary danger' : 'tertiary'}" data-action="journal-clear">${icon.remove}${confirmClear ? 'Press again to clear' : 'Clear history'}</button>
     </div>
-    <p class="muted small">Logged with “Wear this”. History stays on this device; Export saves it as a file, and Copy for Claude copies your last ten days, stars and switched-off bottles (no places) for Claude’s picks.</p>
+    <p class="muted small">Logged with “Wear this”, or on the calendar. History stays on this device; Export saves it as a file, and Copy for Claude copies your last ten days, stars and switched-off bottles (no places) for Claude’s picks.</p>
   </section>`;
 }
 
@@ -209,7 +266,7 @@ export const wardrobe = {
     wishlist.wishlistPaneDef,
     {
       id: 'worn', label: 'Worn', title: () => 'Worn', heading: () => 'Wear journal',
-      render: wornPane, after: () => warmPool(),
+      render: wornPane, after() { watchCalendar(); warmPool(); },
     },
     insights.insightsPaneDef,
   ],
@@ -398,11 +455,111 @@ export function shareSheetHTML({ url, name = '', copied = false, claude = false 
       </div>`);
 }
 
+// ---------- Logging a wear after the fact ----------
+
+const SLOT_WORDS = { day: 'by day', night: 'at night' };
+
+/** A day gone by as the log names it: "Today, Nov 2", "Yesterday, Nov 1", "Sat, Oct 31". */
+export function logDayTitle(dateISO, todayISO) {
+  const day = dateISO === todayISO ? 'Today' : dateISO === shiftISO(todayISO, -1) ? 'Yesterday' : weekdayShort(dateISO);
+  return `${day}, ${shortDate(dateISO)}`;
+}
+
+/** A window gone by in a sentence: "today", "tonight", "yesterday", "last night", "Sat, Oct 31", "Sat night, Oct 31". */
+export function loggedWhen(dateISO, slot, todayISO) {
+  const night = slot === 'night';
+  if (dateISO === todayISO) return night ? 'tonight' : 'today';
+  if (dateISO === shiftISO(todayISO, -1)) return night ? 'last night' : 'yesterday';
+  return `${weekdayShort(dateISO)}${night ? ' night' : ''}, ${shortDate(dateISO)}`;
+}
+
+// The bottles to log, most recently worn first (then by name), as the sheet
+// lists them. `lastWorn`: id -> the date of its latest wear.
+export function logOrder(bottles, lastWorn) {
+  return [...bottles].sort((a, b) => (lastWorn.get(b.id) ?? '').localeCompare(lastWorn.get(a.id) ?? '') || a.name.localeCompare(b.name));
+}
+
+/**
+ * Log a wear on a day gone by or today, for one not logged at the time
+ * (Worn's calendar; Now's "Wore something this morning?"): which window, the
+ * day's wears with Clear, and the switched-on bottles to choose from with a
+ * filter. s = { dateISO, slot, filter, said: what the status line last
+ * said }. `bottles` in logOrder; `worn`: { day, night }, each { id, f: its
+ * record or null } or null; `lastWorn`: id -> date; `todayISO`.
+ */
+export function logSheetHTML({ dateISO, slot, filter = '', said = '' }, { bottles, worn, lastWorn, todayISO }) {
+  const seg = segHTML(['day', 'night'].map(k => ({ value: k, label: k === 'day' ? 'Day' : 'Night', icon: slotIcon(k), on: k === slot })), { action: 'journal-log-slot', label: 'When you wore it', cls: 'wide' });
+  const nameOf = w => w.f?.name ?? 'A bottle from another list';
+  const logged = ['day', 'night'].filter(k => worn[k]).map(k => `<li class="log-worn-item">
+      <span class="log-slot">${slotIcon(k)}</span><span class="row-text"><b>${esc(nameOf(worn[k]))}</b><small>${k === 'day' ? 'Day' : 'Night'}</small></span>
+      <button class="btn tertiary compact" data-action="journal-log-clear" data-slot="${k}">Clear<span class="visually-hidden">: ${esc(nameOf(worn[k]))} ${SLOT_WORDS[k]}</span></button>
+    </li>`).join('');
+  const q = filter.trim().toLowerCase();
+  let shown = 0;
+  const rows = bottles.map(f => {
+    const name = `${f.name} ${f.brand}`.toLowerCase();
+    const hit = !q || name.includes(q);
+    if (hit) shown++;
+    const on = worn[slot]?.id === f.id;
+    const last = lastWorn.get(f.id);
+    const meta = on ? `Logged ${SLOT_WORDS[slot]}` : [f.brand, last && `worn ${relativeDay(last, todayISO)}`].filter(Boolean).join(' · ');
+    return `<li class="row" data-name="${esc(name)}"${hit ? '' : ' hidden'}><button class="row-main log-pick" data-action="journal-log-pick" data-id="${esc(f.id)}"${on ? ' aria-disabled="true"' : ''}>
+        ${img(f)}<span class="row-text"><b>${esc(f.name)}</b><small>${esc(meta)}</small></span>${on ? `<span class="check on" aria-hidden="true">${icon.check}</span>` : ''}
+      </button></li>`;
+  }).join('');
+  const search = bottles.length > 8
+    ? `<label class="filter">${icon.search}<input type="search" id="log-filter" data-field="journal-log-filter" placeholder="Filter ${bottles.length} bottles" value="${esc(filter)}" autocomplete="off" aria-label="Filter bottles"></label>`
+    : '';
+  return sheetFrame('log-title', `
+      <h2 id="log-title" class="sheet-title">${esc(logDayTitle(dateISO, todayISO))}</h2>
+      <p class="muted lede">Log what you wore that you didn’t at the time, and picks give it a rest.</p>
+      ${seg}
+      ${logged ? `<ul class="log-worn" aria-label="Logged">${logged}</ul>` : ''}
+      <p class="list-title" id="log-list-title">What you wore ${SLOT_WORDS[slot]}</p>
+      ${search}
+      ${bottles.length ? `<ul class="rows log-rows" aria-labelledby="log-list-title">${rows}</ul><p class="muted small log-empty"${shown || !q ? ' hidden' : ''}>No bottles match.</p>`
+        : '<p class="muted small">Every bottle is switched off. Turn some back on in Owned to log them.</p>'}
+      ${liveHTML('log-live', said)}
+      <div class="sheet-bar">
+        <button class="btn secondary" data-action="close-sheet">Done</button>
+      </div>`);
+}
+
+// The log sheet from the journal: the bottles switched on in the list being
+// ranked, and what the day has logged from any list.
+function logSheet(s) {
+  const today = todayISO();
+  const { lastWorn } = journalStats(state.history, today);
+  const wearOn = k => {
+    const h = wornIn(state.history, s.dateISO, k);
+    return h ? { id: h.id, f: findRecord(h.id) } : null;
+  };
+  return logSheetHTML(s, { bottles: logOrder(activeFragrances(), lastWorn), worn: { day: wearOn('day'), night: wearOn('night') }, lastWorn, todayISO: today });
+}
+
+// Filters the log sheet's rows in place, so typing keeps focus, and says how
+// many are left once typing pauses.
+let logSaid = null;
+function filterLog() {
+  const q = (state.sheet?.filter ?? '').trim().toLowerCase();
+  const rows = document.querySelectorAll('#sheet .log-rows li[data-name]');
+  let shown = 0;
+  rows.forEach(li => {
+    li.hidden = Boolean(q) && !li.dataset.name.includes(q);
+    if (!li.hidden) shown++;
+  });
+  const empty = document.querySelector('#sheet .log-empty');
+  if (empty) empty.hidden = shown > 0 || !q;
+  clearTimeout(logSaid);
+  logSaid = setTimeout(() => say('log-live', shown ? plural(shown, 'bottle') : 'No bottles match'), 400);
+}
+
 export const sheets = {
   add: s => addSheetHTML(s, new Set(state.mine.records.map(r => r.id))),
   'share-link': shareSheetHTML,
   import: s => importSheetHTML(s, MAX_IMPORT_LINES),
   custom: s => customSheetHTML(s, MAX_CUSTOM_ACCORDS),
+  'journal-log': logSheet,
   ...insights.sheets,
 };
 
@@ -846,6 +1003,42 @@ export const actions = {
       document.getElementById('share-url')?.select();
     }
   },
+  // A day on Worn's calendar, or Now's "Wore something this morning?": the
+  // log sheet for it, on the window asked for, else the first with nothing
+  // logged. Never a day ahead.
+  'journal-log'(el, app) {
+    const { date: dateISO, slot } = el.dataset;
+    if (!dateISO || dateISO > todayISO()) return;
+    const empty = ['day', 'night'].find(k => !wornIn(state.history, dateISO, k)) ?? 'day';
+    app.openSheet({ kind: 'journal-log', dateISO, slot: slot === 'day' || slot === 'night' ? slot : empty, filter: '', said: '' });
+  },
+  'journal-log-slot'(el, app) {
+    redrawSheet(app, { slot: el.dataset.value, said: '' });
+  },
+  // Logged after the fact: no live window, so no weather or pick to stamp
+  // and no use (it counts as untagged); the place is home's. The sheet
+  // closes on the calendar, now showing it.
+  'journal-log-pick'(el, app) {
+    const s = state.sheet;
+    if (s?.kind !== 'journal-log' || el.getAttribute('aria-disabled') === 'true') return;
+    const f = findRecord(el.dataset.id);
+    state.history = toggleWear(el.dataset.id, s.dateISO, s.slot, state.loc);
+    app.render();
+    app.closeSheet();
+    app.showToast(`<span>${esc(`Logged ${toastName(f?.name ?? 'it')} for ${loggedWhen(s.dateISO, s.slot, todayISO())}.`)}</span>`);
+  },
+  // Clear stays in the sheet, to log another in its place. Focus goes to the
+  // other wear's Clear, else to the window's toggle.
+  'journal-log-clear'(el, app) {
+    const s = state.sheet;
+    const h = s?.kind === 'journal-log' ? wornIn(state.history, s.dateISO, el.dataset.slot) : null;
+    if (!h) return;
+    state.history = toggleWear(h.id, s.dateISO, h.slot);
+    s.said = `Cleared ${findRecord(h.id)?.name ?? 'it'} from ${loggedWhen(s.dateISO, h.slot, todayISO())}.`;
+    app.render();
+    focusInSheet({ force: document.activeElement?.matches('#sheet .sheet-close') }, '[data-action="journal-log-slot"][aria-pressed="true"]');
+    speak(document.getElementById('sheet'));
+  },
   'journal-clear'(el, app) {
     if (state.armed !== 'journal-clear') {
       state.armed = 'journal-clear';
@@ -885,6 +1078,11 @@ export const fields = {
   'import-text'(el) { if (state.sheet?.kind === 'import') state.sheet.text = el.value; },
   'custom-name'(el) { if (state.sheet?.kind === 'custom') state.sheet.name = el.value; },
   'custom-brand'(el) { if (state.sheet?.kind === 'custom') state.sheet.brand = el.value; },
+  'journal-log-filter'(el) {
+    if (state.sheet?.kind !== 'journal-log') return;
+    state.sheet.filter = el.value;
+    filterLog();
+  },
 };
 
 // Once it's typed: without the spaces at its ends.

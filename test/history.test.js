@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   journalStats, journalCalendar, journalExport, toggleWear, parseJournal, occasionCounts, loadHistory,
   journalToken, journalFromToken, readJournal, isJournalToken, journalFreshness, RECENT_DAYS, shiftISO,
+  wearStamp, stampedWindow,
 } from '../src/history.js';
 import { ROTATION_PENALTY } from '../src/engine.js';
 import { windowOn, week } from '../src/weather.js';
@@ -77,6 +78,70 @@ test('a wear logged for an occasion keeps it, and wears count per use', () => {
   assert.deepEqual(occasionCounts(log, '2026-09-30'), { date: 1, office: 2 });
   assert.deepEqual(occasionCounts([]), {});
 });
+
+// A stand-in localStorage for `fn`, for toggleWear's reads of what it saved.
+function withStore(fn) {
+  const real = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const store = new Map();
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)) } });
+  try {
+    return fn(store);
+  } finally {
+    if (real) Object.defineProperty(globalThis, 'localStorage', real);
+    else delete globalThis.localStorage;
+  }
+}
+
+test('a wear logged from a live window keeps its weather and the pick shown, and reads back as the window', () => {
+  const win = { slot: 'night', dateISO: '2026-10-02', feelsF: 51.237, dewF: 44.06, humidity: 71.4, pop: 35, code: 61, condition: 'Light rain', category: 'rain', hiF: 60, loF: 50 };
+  const stamp = wearStamp(win, 70748);
+  assert.deepEqual(stamp, { wx: { f: 51.2, d: 44.1, h: 71, p: 35, c: 61 }, pick: '70748' });
+  assert.deepEqual(wearStamp(win), { wx: stamp.wx }, 'a trip’s list has no pick');
+  const [entry] = toggleWear('a', '2026-10-02', 'night', { lat: 40.71283, lon: -74.00597 }, 'daily', stamp);
+  assert.deepEqual(entry, { id: 'a', date: '2026-10-02', slot: 'night', lat: 40.71, lon: -74.01, occasion: 'daily', ...stamp });
+  assert.ok(JSON.stringify(stamp).length <= 64, 'small: a year of wears carries about 45 KB of them');
+  const back = stampedWindow(entry, 40.71);
+  assert.deepEqual({ ...back, date: back.date.toISOString().slice(0, 10) }, {
+    slot: 'night', dateISO: '2026-10-02', date: '2026-10-02', lat: 40.71, feelsF: 51.2, dewF: 44.1, humidity: 71, pop: 35, code: 61, condition: 'Light rain', category: 'rain',
+  });
+  assert.equal(stampedWindow({ id: 'a', date: '2026-10-02', slot: 'day' }), null, 'a wear from before stamps');
+  assert.equal(stampedWindow({ id: 'a', date: '2026-10-02', slot: 'day', wx: { f: 'warm', d: 40, h: 50, c: 0 } }), null, 'a stamp in another shape');
+});
+
+test('the export carries the stamps and Copy for Claude leaves them out', () => {
+  const stamped = history.map((h, i) => ({ ...h, ...wearStamp({ feelsF: 60 + i, dewF: 50, humidity: 70, pop: 10, code: 3 }, 'p') }));
+  const data = parseJournal(JSON.parse(JSON.stringify(journalExport(stamped, null, new Set(), { nowISO: '2026-10-03T12:00:00Z' }))));
+  assert.deepEqual(data.history, stamped);
+  assert.equal(stampedWindow(data.history[0], 40).feelsF, 60);
+  assert.equal(parseJournal({ app: 'scentcast-journal', history: [{ ...stamped[0], pick: 70748 }] }).history[0].pick, '70748', 'ids as strings');
+  const plain = journalToken(history, [], {}, { todayISO: '2026-10-03' });
+  assert.equal(journalToken(stamped, [], {}, { todayISO: '2026-10-03' }), plain);
+});
+
+test('a wear that replaces another in its window keeps the pick shown before either, and the log stays newest first', () => withStore(() => {
+  const stamp = pick => wearStamp({ feelsF: 70, dewF: 55, humidity: 60, pop: 0, code: 1 }, pick);
+  toggleWear('a', '2026-10-02', 'day', null, 'formal', stamp('a'));
+  // Wear this on another bottle: the window's pick had become the wear.
+  let [entry] = toggleWear('b', '2026-10-02', 'day', null, 'formal', stamp('b'));
+  assert.deepEqual([entry.id, entry.pick], ['b', 'a']);
+  // Corrected after the fact (no stamp), it keeps the window's weather and use too.
+  [entry] = toggleWear('c', '2026-10-02', 'day', null, null);
+  assert.deepEqual([entry.id, entry.pick, entry.wx, entry.occasion], ['c', 'a', stamp('a').wx, 'formal']);
+  // Cleared, then logged after the fact: no stamp, untagged.
+  assert.equal(toggleWear('c', '2026-10-02', 'day').length, 0);
+  [entry] = toggleWear('c', '2026-10-02', 'day', null, null);
+  assert.deepEqual(Object.keys(entry), ['id', 'date', 'slot']);
+  // Worn from a list: the pick shown is the list's own again.
+  assert.equal(toggleWear('c', '2026-10-02', 'day').length, 0);
+  assert.equal(toggleWear('b', '2026-10-02', 'day', null, 'daily', stamp('d'))[0].pick, 'd');
+  // A forgotten day goes in its place: newest first, a night before its day.
+  toggleWear('e', '2026-09-30', 'day');
+  toggleWear('f', '2026-10-03', 'night');
+  toggleWear('g', '2026-09-30', 'night');
+  const log = toggleWear('h', '2026-10-03', 'day');
+  assert.deepEqual(log.map(h => `${h.date} ${h.slot} ${h.id}`), ['2026-10-03 night f', '2026-10-03 day h', '2026-10-02 day b', '2026-09-30 night g', '2026-09-30 day e']);
+  assert.deepEqual(loadHistory(), log);
+}));
 
 test('the export carries ratings when there are some, and older files still read', () => {
   const skin = { 31861: { rating: 5, longevity: 1, sillage: 0, updated: '2026-10-01' } };

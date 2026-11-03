@@ -452,7 +452,7 @@ export function renderTrip(app = null) {
   const result = packFor(trip, app);
   const shown = result ?? (sameDates(memo?.trip, trip) ? memo.result : null);
   if (!shown) return head + skeleton('Planning what to pack…');
-  for (const [key, win, occasion, ranked] of memo.contexts) storeContext(key, win, occasion, ranked);
+  for (const [key, win, occasion, ranked] of memo.contexts) storeContext(key, win, occasion, ranked, { place: memo.trip.place });
   return `${head}
     <div class="trip-out${result ? '' : ' refreshing'}"${result ? '' : ' aria-busy="true"'}>${tripPackHTML(shown, trip, { canShare: canShare() })}${tripPlanHTML(shown, { today })}</div>`;
 }

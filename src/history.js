@@ -1,6 +1,10 @@
 // Wear log: one entry per (date, slot), newest first. Feeds rotation, and
 // (exported) shows how the engine's picks match what was actually worn, so
-// it keeps a year and where each wear happened, to about a kilometer.
+// it keeps a year, where each wear happened, to about a kilometer, and for a
+// wear logged from a live window the weather it was logged in and the pick
+// shown (wearStamp).
+import { describe } from './wmo.js';
+
 const KEY = 'scentcast.history';
 const MAX_ENTRIES = 730;
 
@@ -8,7 +12,7 @@ const MAX_ENTRIES = 730;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const isWear = h => Boolean(h) && typeof h === 'object' && h.id != null && h.id !== ''
   && typeof h.date === 'string' && ISO_DATE.test(h.date) && !Number.isNaN(Date.parse(h.date)) && (h.slot === 'day' || h.slot === 'night');
-const wearsOf = list => (Array.isArray(list) ? list.filter(isWear).map(h => ({ ...h, id: String(h.id) })) : []);
+const wearsOf = list => (Array.isArray(list) ? list.filter(isWear).map(h => ({ ...h, id: String(h.id), ...(h.pick != null && { pick: String(h.pick) }) })) : []);
 // A planned event as src/events.js keeps one ({ dateISO, slot, occasion id });
 // whether the app has the occasion is for the reader to check.
 const isEvent = e => Boolean(e) && typeof e === 'object' && typeof e.dateISO === 'string' && ISO_DATE.test(e.dateISO)
@@ -32,21 +36,65 @@ export function wornIn(history, dateISO, slot) {
   return history.find(h => h.date === dateISO && h.slot === slot) ?? null;
 }
 
+const round1 = x => Math.round(x * 10) / 10;
 const round2 = x => Math.round(x * 100) / 100;
+
+/**
+ * What a wear logged from a live window keeps of it (toggleWear's `stamp`),
+ * so a check reads the weather and pick he saw rather than rebuilding them
+ * from the archive: `wx`, the window's feels-like and dew point (°F, to a
+ * tenth), humidity and rain chance (whole percents) and WMO code, and
+ * `pick`, the id of the bottle the list showed as its pick (none for a
+ * trip's). About 60 characters a wear.
+ */
+export function wearStamp(win, pickId = null) {
+  return {
+    wx: { f: round1(win.feelsF), d: round1(win.dewF), h: Math.round(win.humidity), p: Math.round(win.pop ?? 0), c: win.code },
+    ...(pickId != null && { pick: String(pickId) }),
+  };
+}
+
+/**
+ * The window a stamped wear was logged in, as the engine reads one (the
+ * fields src/weather.js's windows rank on), at latitude `lat` (where it was
+ * worn); null for a wear without a stamp, or with one in another shape.
+ */
+export function stampedWindow(h, lat = null) {
+  const wx = h?.wx;
+  if (!wx || ![wx.f, wx.d, wx.h].every(Number.isFinite) || !Number.isInteger(wx.c)) return null;
+  const { code, label, category } = describe(wx.c);
+  return {
+    slot: h.slot, dateISO: h.date, date: new Date(`${h.date}T12:00:00`), lat,
+    feelsF: wx.f, dewF: wx.d, humidity: wx.h, pop: Number.isFinite(wx.p) ? wx.p : 0, code, condition: label, category,
+  };
+}
 
 // Toggle: logging the same bottle again for the same slot clears it. A wear
 // keeps the use it was logged for, for occasionCounts: an occasion id from
-// the Occasion tab, 'daily' from Today and the Week.
-export function toggleWear(id, dateISO, slot, where = null, occasion = null) {
+// the Occasion tab, 'daily' from Today and the Week, none for one logged
+// after the fact (Worn's calendar), and its `stamp` (wearStamp) when it was
+// logged from a live window. One that replaces another in its window keeps
+// that one's pick (once a wear is logged, the window's pick is that wear,
+// planWindows, no longer the one shown) and, logged after the fact, its
+// weather and use, which were the same window's (a bottle corrected for
+// Saturday's formal night was still worn for it). The log stays newest
+// first, so a wear logged for an earlier day goes in its place.
+export function toggleWear(id, dateISO, slot, where = null, occasion = null, stamp = null) {
   const history = loadHistory();
   const current = wornIn(history, dateISO, slot);
   const rest = history.filter(h => !(h.date === dateISO && h.slot === slot));
+  const wx = stamp?.wx ?? current?.wx;
+  const pick = current ? current.pick : stamp?.pick;
+  const use = occasion ?? current?.occasion;
   const entry = {
     id, date: dateISO, slot,
     ...(where && { lat: round2(where.lat), lon: round2(where.lon) }),
-    ...(occasion && { occasion: String(occasion) }),
+    ...(use && { occasion: String(use) }),
+    ...(wx && { wx }),
+    ...(pick != null && { pick }),
   };
-  const next = current?.id === id ? rest : [entry, ...rest];
+  const at = rest.findIndex(h => h.date < dateISO || (h.date === dateISO && slot === 'night'));
+  const next = current?.id === id ? rest : at < 0 ? [...rest, entry] : [...rest.slice(0, at), entry, ...rest.slice(at)];
   save(next);
   return next;
 }

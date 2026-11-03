@@ -3,22 +3,25 @@
 //   node scripts/journal-check.mjs almanac-journal-2026-10-03.json [--fit] [--json]
 //
 // Takes the file from the wear journal's Export button. For each logged wear
-// it looks up that window's weather where it was worn (Open-Meteo's archive,
-// or its forecast API for the last few days the archive lacks), ranks the
+// it reads that window's weather where it was worn: as the app stamped it
+// when the wear was logged from a live window (src/history.js wearStamp),
+// else from Open-Meteo's archive, or its forecast API for the last few days
+// the archive lacks. It ranks the
 // wardrobe the app was choosing from (the demo minus the device's hidden
 // bottles, with the export's own ratings and skin nudges) for the occasion
 // it was logged for, with the earlier wears as rotation, and reports where
 // the worn bottle landed. Wears of bottles outside the demo are skipped, and
 // so are wears whose weather couldn't load (counted). --fit adds the
 // thermostat: the feels-like offset that best explains what was worn, by
-// day and night and over the wears that weren't the top pick, to tell
-// whether he runs warm or cold (only a report: nothing applies it yet).
+// day and night and over the wears that weren't the top pick (the pick the
+// app showed, where the wear recorded it), to tell whether he runs warm or
+// cold (only a report: nothing applies it yet).
 // Weather data by Open-Meteo.com (CC BY 4.0).
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { rank } from '../src/engine.js';
 import { windowOn, forecastError, requestError } from '../src/weather.js';
-import { parseJournal } from '../src/history.js';
+import { parseJournal, stampedWindow } from '../src/history.js';
 import { occasionById } from '../src/occasions.js';
 import { applySkin } from '../src/skin.js';
 
@@ -76,7 +79,8 @@ const placeOf = (journal, h) => (h.lat !== undefined ? { lat: h.lat, lon: h.lon 
 // The wears a check can rank, each with what the app was choosing from: the
 // demo minus the device's hidden bottles (the worn one always in), with the
 // export's ratings and skin nudges, for the occasion it was logged for, the
-// earlier wears as rotation. Counts the ones it can't in `skipped`.
+// earlier wears as rotation, and the window's weather as the wear's stamp
+// has it, else windowFor's. Counts the ones it can't in `skipped`.
 function* rankable(journal, demo, windowFor, skipped) {
   // The app keeps ids as strings (main.js, history.js); data/collection.json has numbers.
   const bottles = applySkin(demo.map(f => (typeof f.id === 'string' ? f : { ...f, id: String(f.id) })), journal.skin ?? {});
@@ -88,7 +92,7 @@ function* rankable(journal, demo, windowFor, skipped) {
     if (!worn) { skipped.notInDemo++; continue; }
     const at = placeOf(journal, h);
     if (!at) { skipped.noPlace++; continue; }
-    const win = windowFor(h, at);
+    const win = stampedWindow(h, at.lat) ?? windowFor(h, at);
     if (!win) { skipped.noWeather++; continue; }
     const pool = bottles.filter(f => !hidden.has(f.id) || f === worn);
     const occasion = h.occasion && h.occasion !== 'daily' ? occasionById(h.occasion) ?? null : null;
@@ -100,8 +104,10 @@ function* rankable(journal, demo, windowFor, skipped) {
  * Where each wear's bottle landed, ranked as the app would have: the demo
  * minus the device's hidden bottles, with the export's ratings and skin
  * nudges, for the occasion the wear was logged for (Occasion's list; Today
- * and the Week log 'daily'), the earlier wears as rotation.
- * journal: parseJournal's shape. windowFor(wear, place) -> weather window or null.
+ * and the Week log 'daily'), the earlier wears as rotation. `shown` is the
+ * pick the app showed, when the wear recorded it.
+ * journal: parseJournal's shape. windowFor(wear, place) -> weather window or
+ * null, for wears without a stamp.
  * -> { rows, skipped }
  */
 export function rankWears(journal, demo, windowFor) {
@@ -113,6 +119,7 @@ export function rankWears(journal, demo, windowFor) {
     rows.push({
       date: h.date, slot: h.slot, occasion: occasion?.id ?? null, feelsF: Math.round(win.feelsF), dewF: Math.round(win.dewF), condition: win.condition,
       worn: worn.name, rank: at1, of: ranked.length, tier: entry.tier, top: ranked[0].fragrance.name,
+      shown: h.pick != null ? pool.find(f => f.id === h.pick)?.name ?? null : null,
       reasons: entry.reasons.map(r => `${r.tone === 'good' ? '+' : '-'} ${r.text}`),
     });
   }
@@ -133,9 +140,10 @@ const LR_HALF_95 = 1.92;
 export const FIT_MIN_WEARS = 10;
 
 /**
- * Each rankable wear's scores at every offset: { slot, top (the pick at
- * Δ = 0, as rankWears' rank 1), worn, scores: [offset][bottle] }, bottles
- * by their index in the wear's own pool.
+ * Each rankable wear's scores at every offset: { slot, top (the pick the
+ * app showed, where the wear recorded it, else the pick at Δ = 0, as
+ * rankWears' rank 1), worn, scores: [offset][bottle] }, bottles by their
+ * index in the wear's own pool.
  */
 export function wearChoices(journal, demo, windowFor, offsets = FIT_OFFSETS) {
   const out = [], skipped = { notInDemo: 0, noPlace: 0, noWeather: 0 };
@@ -147,7 +155,8 @@ export function wearChoices(journal, demo, windowFor, offsets = FIT_OFFSETS) {
       for (const r of d ? rank(pool, { ...win, feelsF: win.feelsF + d }, h.slot, opts) : base) row[index.get(r.fragrance)] = r.score;
       return row;
     });
-    const top = index.get(base[0].fragrance);
+    const shown = h.pick != null ? pool.find(f => f.id === h.pick) : null;
+    const top = index.get(shown ?? base[0].fragrance);
     out.push({ slot: h.slot, top, worn: index.get(worn), scores });
   }
   return { choices: out, skipped };
@@ -248,9 +257,12 @@ function fitReading(f) {
     : `You reach for what it picks on days about ${-f.offset}°F colder: you run cold, or like it richer than the crowd.`;
 }
 
+// `shownPct`: of the wears that recorded the pick the app showed
+// (`shownWears`), the share that wore it.
 export function summarizeRows(rows, skipped) {
   const mean = xs => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
   const share = pred => rows.length ? Math.round((100 * rows.filter(pred).length) / rows.length) : 0;
+  const shown = rows.filter(r => r.shown);
   return {
     wears: rows.length,
     skipped,
@@ -259,6 +271,8 @@ export function summarizeRows(rows, skipped) {
     topPickPct: share(r => r.rank === 1),
     tierSPct: share(r => r.tier === 'S'),
     tierSorAPct: share(r => r.tier === 'S' || r.tier === 'A'),
+    shownWears: shown.length,
+    shownPct: shown.length ? Math.round((100 * shown.filter(r => r.shown === r.worn).length) / shown.length) : null,
   };
 }
 
@@ -281,11 +295,11 @@ async function main() {
   if (!journal) fail(`${file} isn't an Almanac journal export (the wear journal's Export button)`);
   const demo = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url))).fragrances;
 
-  // One weather fetch per place, covering its wears.
+  // One weather fetch per place, covering its wears the app didn't stamp.
   const places = new Map();
   for (const h of journalWears(journal)) {
     const at = placeOf(journal, h);
-    if (!at) continue;
+    if (!at || stampedWindow(h)) continue;
     const key = `${at.lat},${at.lon}`;
     const p = places.get(key) ?? { ...at, from: h.date, to: h.date };
     if (h.date < p.from) p.from = h.date;
@@ -310,7 +324,9 @@ async function main() {
   }
   for (const r of rows) {
     const occasion = r.occasion ? ` · ${occasionById(r.occasion).label}` : '';
-    console.log(`${r.date} ${r.slot.padEnd(5)} ${String(r.feelsF).padStart(3)}°F dew ${String(r.dewF).padStart(2)}  ${r.worn.padEnd(24)} #${r.rank}/${r.of} ${r.tier}${r.rank > 1 ? `   (top: ${r.top})` : ''}${occasion}`);
+    // What it was against: the pick shown when the wear recorded it, else rank's top.
+    const against = r.shown ? (r.shown !== r.worn ? `   (shown: ${r.shown})` : r.rank > 1 ? '   (the pick shown)' : '') : r.rank > 1 ? `   (top: ${r.top})` : '';
+    console.log(`${r.date} ${r.slot.padEnd(5)} ${String(r.feelsF).padStart(3)}°F dew ${String(r.dewF).padStart(2)}  ${r.worn.padEnd(24)} #${r.rank}/${r.of} ${r.tier}${against}${occasion}`);
   }
   const s = summary;
   if (!s.wears) {
@@ -319,6 +335,7 @@ async function main() {
   }
   console.log(`\n${s.wears} wears checked (skipped: ${s.skipped.notInDemo} outside the demo, ${s.skipped.noPlace} without a place, ${s.skipped.noWeather} without weather)`);
   console.log(`worn bottle's average rank ${s.meanRank} (random would be ${s.randomMeanRank}); the top pick ${s.topPickPct}% of the time, S tier ${s.tierSPct}%, S or A ${s.tierSorAPct}%`);
+  if (s.shownWears) console.log(`the pick the app showed ${s.shownPct}% of the time, over the ${s.shownWears} wears that recorded it`);
   if (!fit) return;
   console.log('\nThermostat: the feels-like offset that best explains what you wore');
   console.log(`  every wear          ${fitText(fit.all)}`);

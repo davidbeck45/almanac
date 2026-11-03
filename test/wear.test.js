@@ -6,16 +6,17 @@ import { rank, PLAN_MARGIN } from '../src/engine.js';
 import { OCCASIONS, occasionById } from '../src/occasions.js';
 import { sprayGuide } from '../src/spray.js';
 import { setSkin, loadSkin, loadAsked, markAsked } from '../src/skin.js';
-import { planTies, rankedTies, whenOf, TIE_OCCASIONS } from '../src/contrast.js';
+import { planTies, rankedTies, whenOf, TIE_OCCASIONS, TIE_POINTS } from '../src/contrast.js';
 import { summarize, week } from '../src/weather.js';
 import { renderScene } from '../src/scene.js';
 import { shiftISO, toggleWear, wornIn, loadHistory } from '../src/history.js';
 import * as wear from '../src/views/wear.js';
+import * as wardrobe from '../src/views/wardrobe.js';
 import * as trip from '../src/views/wear/trip.js';
 import * as when from '../src/views/wear/when.js';
 import { placeSheetHTML, datePillHTML } from '../src/views/wear/pickers.js';
 import { wxIconFor } from '../src/ui/components.js';
-import { esc } from '../src/ui.js';
+import { esc, matchPct } from '../src/ui.js';
 import * as app from '../src/app/state.js';
 import { bottleModel } from '../src/views/bottle.js';
 import { syntheticForecast } from './fixtures.js';
@@ -230,11 +231,14 @@ test('a trip under way keeps its start: events and the end can still change', ()
   assert.match(summary, new RegExp(`typical weather from ${trip.datesText(shiftISO(today, 2), shiftISO(today, 2))}\\.`));
 });
 
-test('a trip under way updates from the form: the open event is added, the days gone keep their weather, and a date changed mid-fetch isn’t saved', async () => {
+test('a trip under way updates from the form: the open event is added, the days gone keep their weather, and a date changed mid-fetch isn’t saved', async t => {
   // The pane's handlers with no page: the shell's calls do nothing, and the
-  // weather comes from the synthetic forecast a moment later.
+  // weather comes from the synthetic forecast a moment later. Noon there, so
+  // tonight can still be worn.
+  t.mock.timers.enable({ apis: ['Date'], now: nowMs });
   const { state } = app;
   const live = syntheticForecast(10, { start: new Date(Date.now() - 4 * 3600e3 - 86_400_000).toISOString().slice(0, 10) });
+  state.forecast = live;
   state.wx = summarize(live);
   const today = state.wx.todayISO;
   state.demo = { fetched: today, fragrances };
@@ -278,7 +282,15 @@ test('a trip under way updates from the form: the open event is added, the days 
     await trip.forms['trip-pack'](null, ui);
     assert.equal(asked.length, 0);
     assert.deepEqual(trip.loadTrip().events.map(e => `${e.dateISO} ${e.slot} ${e.occasion}`), [`${today} night formal`, `${shiftISO(today, 1)} night date`]);
+    // Its plan's lists are in Lisbon: a wear logged from tonight's is Lisbon's.
+    trip.renderTrip();
+    const tonight = state.contexts[`trip:${today}:night`];
+    assert.equal(tonight.place.name, 'Lisbon');
+    state.history = [];
+    wear.actions.wear({ dataset: { ctx: `trip:${today}:night`, id: tonight.ranked[0].fragrance.id } }, { keepingFocus() {} });
+    assert.deepEqual([state.history[0].lat, state.history[0].lon, state.history[0].occasion], [38.7, -9.1, 'formal']);
   } finally {
+    state.history = [];
     globalThis.fetch = realFetch;
     globalThis.document = realDoc;
     state.route = null;
@@ -645,6 +657,151 @@ test('Wear this in a tab drawn before another tab logged the same wear keeps it'
   // From there the button says Wearing, and a tap clears it as ever.
   wear.actions.wear({ dataset: { ctx: 'day', id } }, ui);
   assert.equal(wornIn(loadHistory(), today, 'day'), null);
+});
+
+test('a wear keeps the weather it was logged in and the pick its list showed', t => {
+  const { state } = app;
+  // Noon on the fixture's first day, so both windows can still be worn.
+  t.mock.timers.enable({ apis: ['Date'], now: nowMs });
+  Object.assign(state, { forecast, wx });
+  state.loc = { name: 'Here', lat: 40.7, lon: -74 };
+  state.history = [];
+  const formal = occasionById('formal');
+  const ranked = rank(fragrances, wx.night, 'night', { occasion: formal });
+  app.storeContext('occ', wx.night, formal, ranked, { pick: ranked[0] });
+  const ui = { keepingFocus() {}, render() {} };
+  wear.actions.wear({ dataset: { ctx: 'occ', id: ranked[3].fragrance.id } }, ui);
+  const [entry] = state.history;
+  assert.equal(entry.pick, ranked[0].fragrance.id);
+  assert.deepEqual(entry.wx, { f: Math.round(wx.night.feelsF * 10) / 10, d: Math.round(wx.night.dewF * 10) / 10, h: Math.round(wx.night.humidity), p: wx.night.pop, c: wx.night.code });
+  // A trip's list has no pick of its own: the weather alone, and the trip's place.
+  app.storeContext('trip:x', wx.day, null, rank(fragrances, wx.day, 'day'), { place: { name: 'Miami', lat: 25.7617, lon: -80.1918 } });
+  wear.actions.wear({ dataset: { ctx: 'trip:x', id: fragrances[1].id } }, ui);
+  const day = state.history.find(h => h.slot === 'day');
+  assert.ok(day.wx && !('pick' in day));
+  assert.deepEqual([day.lat, day.lon], [25.76, -80.19], 'where the trip is, not home');
+  assert.deepEqual([entry.lat, entry.lon], [40.7, -74], 'a list at home logs home');
+  state.history = [];
+});
+
+test('a wear from the Occasion card in another city logs that city', async t => {
+  const { state } = app;
+  // Noon at home, so today's window can still be worn.
+  t.mock.timers.enable({ apis: ['Date'], now: nowMs });
+  const start = new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10);
+  const live = syntheticForecast(8, { start });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ ...syntheticForecast(8, { start: shiftISO(start, -1) }), utc_offset_seconds: -4 * 3600 }) });
+  Object.assign(state, { demo: { fetched: start, fragrances }, forecast: live, wx: summarize(live), loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], occasionSlot: null, route: null });
+  when.when.place = { name: 'Chicago', region: 'Illinois', lat: 41.88, lon: -87.63 };
+  try {
+    const pane = wear.wear.panes.find(p => p.id === 'occasion');
+    const route = { dest: 'wear', pane: 'occasion', arg: 'casual' };
+    pane.render({}, route);
+    for (let i = 0; i < 50 && when.eventWindow('day').status === 'loading'; i++) await new Promise(r => setTimeout(r, 5));
+    pane.render({}, route);
+    const ctx = state.contexts.occ;
+    assert.equal(ctx.place, when.when.place);
+    wear.actions.wear({ dataset: { ctx: 'occ', id: ctx.ranked[0].fragrance.id } }, { keepingFocus() {}, render() {} });
+    assert.deepEqual([state.history[0].lat, state.history[0].lon], [41.88, -87.63]);
+  } finally {
+    globalThis.fetch = realFetch;
+    when.when.place = null;
+    state.history = [];
+  }
+});
+
+test('a morning not logged: Now offers to log it once the day has rolled over, and the log sheet counts it for rotation', () => {
+  const { state } = app;
+  // 7 pm there: Now's Day is tomorrow's.
+  const evening = summarize(forecast, Date.parse('2026-09-28T23:00:00Z'));
+  const day = evening.todayISO;
+  assert.notEqual(evening.day.dateISO, day);
+  Object.assign(state, { demo: { fetched: day, fragrances }, forecast, wx: evening, loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], slot: null, sheet: null, route: { dest: 'wear', pane: 'now' } });
+  const now = () => {
+    app.computeToday();
+    return wear.wear.panes.find(p => p.id === 'now').render({}, state.route);
+  };
+  try {
+    assert.ok(!now().includes('log-missed'), 'not for someone who keeps no journal');
+    state.history = [{ id: fragrances[5].id, date: shiftISO(day, -10), slot: 'night' }];
+    assert.ok(!now().includes('log-missed'), 'nor for one who stopped logging, past rotation’s reach');
+    // Yesterday's bottle with no nudges of his own: Now asks how it wore, and the line waits its turn.
+    state.history = [{ id: fragrances[5].id, date: shiftISO(day, -1), slot: 'night' }];
+    assert.ok(now().includes('data-kind="skin"'), 'Now’s question');
+    assert.ok(!now().includes('log-missed'), 'one question at a time');
+    state.history = [{ id: fragrances[5].id, date: shiftISO(day, -2), slot: 'night' }];
+    assert.match(now(), /<p class="log-missed">.*<span>Wore something this morning\?<\/span><button class="link-btn" data-action="journal-log" data-date="2026-09-28" data-slot="day">Log it/s);
+    // Log it: the sheet opens on this morning; never on a day ahead.
+    let toast = '';
+    const ui = { openSheet(s) { state.sheet = s; }, render() { app.computeToday(); }, closeSheet() { state.sheet = null; }, showToast(html) { toast = html; } };
+    wardrobe.actions['journal-log']({ dataset: { date: shiftISO(day, 1) } }, ui);
+    assert.equal(state.sheet, null);
+    wardrobe.actions['journal-log']({ dataset: { date: day, slot: 'day' } }, ui);
+    assert.deepEqual(state.sheet, { kind: 'journal-log', dateISO: day, slot: 'day', filter: '', said: '' });
+    // Tonight's pick, worn this morning after all.
+    const tonight = state.today.night.pick.fragrance;
+    wardrobe.actions['journal-log-pick']({ dataset: { id: tonight.id }, getAttribute: () => null }, ui);
+    assert.equal(state.sheet, null, 'logged: the sheet closes');
+    assert.match(toast, new RegExp(`Logged ${tonight.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} for today\\.`));
+    assert.deepEqual(state.history[0], { id: tonight.id, date: day, slot: 'day', lat: 40.7, lon: -74 }, 'no window to stamp, no use: untagged');
+    const entry = state.today.night.ranked.find(r => r.fragrance.id === tonight.id);
+    assert.ok(entry.parts.rotation > 0, 'tonight gives it a rest');
+    assert.notEqual(state.today.night.pick.fragrance.id, tonight.id);
+    assert.ok(!now().includes('log-missed'), 'the morning is logged');
+    // A day with its daytime logged opens on its night.
+    wardrobe.actions['journal-log']({ dataset: { date: day } }, ui);
+    assert.equal(state.sheet.slot, 'night');
+  } finally {
+    Object.assign(state, { history: [], sheet: null, route: null });
+  }
+});
+
+test('Gathering dust reads the Week’s own plan: a bottle planned on it, else one within a point of a pick, else none', () => {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  const wxNow = summarize(live);
+  Object.assign(state, { demo: { fetched: wxNow.todayISO, fragrances }, forecast: null, wx: null, loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [] });
+  try {
+    // Never worn, every bottle gathers dust; before the forecast, nothing to say of when.
+    assert.ok(app.journalData().dusty.every(d => d.when === null));
+    Object.assign(state, { forecast: live, wx: wxNow });
+    const { dusty } = app.journalData();
+    const windows = app.computeWeek().flatMap(d => [d.day, d.night]).filter(Boolean);
+    assert.ok(dusty.length && dusty.some(d => d.when.kind === 'planned'), dusty.map(d => d.when.kind).join(' '));
+    for (const { f, when } of dusty) {
+      const first = windows.find(p => p.pick.fragrance.id === f.id);
+      const close = windows.find(p => { const e = p.ranked.find(r => r.fragrance.id === f.id); return matchPct(p.pick) - matchPct(e) <= TIE_POINTS; });
+      const expected = first ? ['planned', first.ctx] : close ? ['suits', close.ctx] : ['none', undefined];
+      assert.deepEqual([when.kind, when.ctx], expected, f.name);
+    }
+    // A pick's own bottle reads as planned, from the dust list's own pure reading too.
+    const pick = windows[1].pick.fragrance;
+    assert.deepEqual(app.dustWhen(pick.id, app.computeWeek()).kind, 'planned');
+  } finally {
+    Object.assign(state, { forecast: null, wx: null, history: [] });
+  }
+});
+
+test('when a bottle gathering dust would suit: its first window as the Week’s pick, else within a point of one with nothing logged', () => {
+  const { state } = app;
+  const entry = (id, score) => ({ fragrance: { id }, score });
+  const slot = (dateISO, slotName, pick, ranked) => ({ win: { dateISO, slot: slotName }, ctx: `w:${dateISO}:${slotName}`, pick: entry(pick, ranked[pick]), ranked: Object.entries(ranked).map(([id, sc]) => entry(id, sc)) });
+  const days = [
+    { day: slot('2026-11-02', 'day', 'a', { a: 0.9, b: 0.893, c: 0.7 }), night: slot('2026-11-02', 'night', 'a', { a: 0.88, b: 0.86, c: 0.8 }) },
+    { day: null, night: slot('2026-11-03', 'night', 'c', { c: 0.8, b: 0.795 }) },
+  ];
+  try {
+    state.history = [];
+    assert.deepEqual(app.dustWhen('c', days), { kind: 'planned', win: days[1].night.win, ctx: 'w:2026-11-03:night' });
+    assert.deepEqual(app.dustWhen('b', days), { kind: 'suits', win: days[0].day.win, ctx: 'w:2026-11-02:day' }, '89 against 90: as good');
+    // A wear logged today: that choice is made, so the next window that close.
+    state.history = [{ id: 'a', date: '2026-11-02', slot: 'day' }];
+    assert.equal(app.dustWhen('b', days).ctx, 'w:2026-11-03:night');
+    assert.deepEqual(app.dustWhen('x', days), { kind: 'none' });
+  } finally {
+    state.history = [];
+  }
 });
 
 test('Now’s cards read in the order they’re drawn, and only the window has a heading', () => {
