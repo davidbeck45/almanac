@@ -1,5 +1,6 @@
 // Settings (#/settings, behind the gear): location, units, theme, which list
-// is ranked and sharing it, the journal export, and where the data comes
+// is ranked and sharing it, the journal's export and Copy for Claude (its
+// handlers are Worn's, src/views/wardrobe.js), and where the data comes
 // from. Also the location sheet. Styles: src/css/shell.css (.set-*).
 import { loadRecent, deviceLocation, searchCities } from '../location.js';
 import { theme } from '../theme.js';
@@ -56,6 +57,7 @@ export function settingsHTML({ loc, units, themeName, stillSky = false, active, 
     `)}
     ${group('Wear journal', `
       ${row(`<a class="set-link" href="#/wardrobe/worn">${plural(wears, 'wear')} logged</a>`, `<button class="btn tertiary compact" data-action="journal-export" ${wears ? '' : 'disabled'}>${icon.download}Export</button>`, { note: 'Stays on this device' })}
+      ${row('For Claude’s picks', `<button class="btn tertiary compact" data-action="journal-claude">${icon.paste}Copy for Claude</button>`, { note: 'Recent wears and stars' })}
     `)}
     ${group('About', `<p class="set-credits">${credits}</p><p class="set-credits">Almanac picks from your own bottles with the weather, time of day and occasion. Everything you add stays on this device.</p>`)}`;
 }

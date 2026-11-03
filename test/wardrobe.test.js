@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as wardrobe from '../src/views/wardrobe.js';
+import * as settings from '../src/views/settings.js';
 import { localMatches } from '../src/collections.js';
 import { ACCORDS } from '../src/accords.js';
 import { insightsSkeletonHTML } from '../src/views/wardrobe/insights.js';
@@ -122,7 +123,26 @@ test('the journal says it covers every list when the ranked one isn’t all it h
   assert.match(mixed, /<h3>Gathering dust<\/h3><p class="muted small journal-scope">From Mine: in rotation, not worn in 30 days\.<\/p>/);
   assert.ok(!wardrobe.wornHTML(data, resolve).includes('journal-scope'), 'one list: nothing to say');
   assert.match(wardrobe.wornHTML(data, resolve, { confirmClear: true }), /Press again to clear/, 'no Tap on a desktop');
-  assert.match(wardrobe.wornHTML(data, resolve), /data-action="journal-export">.*Export<\/button>\s*<button class="btn secondary" data-action="journal-claude">.*Copy for Claude<\/button>/, 'beside Export');
+  // Copy for Claude heads the card, where a phone's first screen shows it (at
+  // the foot it was a screen and a half down); Export and Clear stay there.
+  const worn = wardrobe.wornHTML(data, resolve);
+  assert.match(worn, /<header class="section-head"><h2 id="journal-title">Last 30 days<\/h2><button class="btn secondary compact" data-action="journal-claude">.*Copy for Claude<\/button>\s*<p>Copies your last ten days, stars and switched-off bottles for Claude’s picks \(no places\)\.<\/p><\/header>/s);
+  assert.equal((worn.match(/data-action="journal-claude"/g) ?? []).length, 1);
+  assert.ok(worn.indexOf('journal-claude') < worn.indexOf('class="stat-tiles"'));
+  assert.match(worn, /data-action="journal-export">.*Export<\/button>\s*<button class="btn tertiary" data-action="journal-clear">/s);
+});
+
+test('Settings copies the journal for Claude too, beside its export, with or without wears', () => {
+  const base = { loc: { name: 'Here' }, units: 'F', themeName: 'default', active: 'demo', mineCount: 0, shared: null, on: 1, total: 1, updated: '', stale: false, credits: '' };
+  for (const wears of [0, 66]) {
+    const html = settings.settingsHTML({ ...base, wears });
+    const journal = html.slice(html.indexOf('id="set-wear-journal"'), html.indexOf('id="set-about"'));
+    assert.match(journal, /data-action="journal-export"/);
+    assert.match(journal, /For Claude’s picks<small>Recent wears and stars<\/small>[^]*<button class="btn tertiary compact" data-action="journal-claude">.*Copy for Claude<\/button>/);
+    assert.ok(!/data-action="journal-claude"[^>]*disabled/.test(journal), 'its stars and hidden bottles count without a wear');
+  }
+  // The handler is Worn's: action names are global, so one does for both.
+  assert.equal(typeof wardrobe.actions['journal-claude'], 'function');
 });
 
 test('the accord chips are one Tab stop, and a chosen chip says its rank in words', () => {
