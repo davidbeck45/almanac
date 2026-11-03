@@ -21,7 +21,7 @@ import { askPool } from './pool.js';
 import { loadWants, hasWant, setWant } from '../wishlist.js';
 import {
   state, computeToday, sourceRecords, knownBottles, library, setActive as chooseList, viewingDemo,
-  addToMine as addRecord, markBottlesLoaded, loadBottles, keepBottles, loadFullRecord, retryClimate,
+  addToMine as addRecord, markBottlesLoaded, loadBottles, keepBottles, loadFullRecord, retryClimate, reloadStored,
 } from './state.js';
 import { watchVersion } from './version.js';
 import {
@@ -109,8 +109,9 @@ function setActive(active) {
 }
 
 function addToMine(record) {
-  addRecord(record);
+  const added = addRecord(record);
   if (state.shared) closeShared();
+  return added;
 }
 
 // The list "I own it" moved away from, for the toast's way back.
@@ -154,8 +155,9 @@ function listBack() {
 // focused control, replaced, hands focus to its successor, else to the
 // nearest one like it left in its list (a bottle hidden from a shelf); with
 // none (a button that became a tag, a banner that went), focus goes to the
-// top of the region it was in, never to the page's body.
-function render() {
+// top of the region it was in, never to the page's body. `sheet: false`
+// leaves an open sheet as it is (another tab saved: someone may be typing).
+function render({ sheet = true } = {}) {
   const focused = document.activeElement;
   const seen = inSight(focused);
   const region = focused?.closest?.('#sheet, #bottle, #app');
@@ -165,7 +167,7 @@ function render() {
   renderNav();
   renderPage();
   renderBottle();
-  if (state.sheet) renderSheet({ keepScroll: true });
+  if (state.sheet && sheet) renderSheet({ keepScroll: true });
   if (focused && focused !== document.body && !focused.isConnected && !refocusNear(focused, scope, { reveal: seen })) {
     const fallback = { '#sheet': '#sheet .sheet-close', '#bottle': '#bottle .bp-close' }[scope] ?? '#page-title';
     $(fallback)?.focus({ preventScroll: true });
@@ -852,6 +854,22 @@ function listen() {
     retryClimate();
     if (state.route?.dest === 'bottle') retryBottle();
     if (bottlesFailed) retryBottles();
+  });
+
+  // Another tab saved what this one shows (Mine, switched-off bottles, the
+  // journal, plans, ratings, prefs): read it all again and draw it, once a
+  // frame, and in a hidden tab once it's in sight (it runs no frames). An
+  // open sheet stays as it is, and focus where it was (render). The
+  // forecast and climate another tab fetched are caches: nothing to draw.
+  let elsewhere = 0;
+  const cacheKeys = ['scentcast.weather', 'scentcast.climate'];
+  window.addEventListener('storage', e => {
+    if (e.key !== null && (!e.key.startsWith('scentcast.') || cacheKeys.includes(e.key))) return;
+    elsewhere ||= requestAnimationFrame(() => {
+      elsewhere = 0;
+      reloadStored();
+      render({ sheet: false });
+    });
   });
 
   document.addEventListener('visibilitychange', () => {

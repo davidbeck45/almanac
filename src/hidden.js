@@ -26,13 +26,16 @@ function read(key) {
 
 // { hidden, shown }: the device's own hides, and the defaults it turned back
 // on. Before the split, one stored list held the defaults too; a default in it
-// was still hidden, and one missing from it had been switched on.
+// was still hidden, and one missing from it had been switched on. Since the
+// split, a default among the device's own hides is one hidden in someone's
+// own or shared list, and it stays hidden there.
 export function loadHidden() {
   try {
     const stored = read(KEY) ?? [];
     let shown = read(SHOWN_KEY);
-    if (shown === null && localStorage.getItem(KEY) !== null) shown = DEFAULT_HIDDEN.filter(id => !stored.includes(id));
-    return { hidden: new Set(stored.filter(id => !isDefault(id))), shown: new Set(shown ?? []) };
+    const unsplit = shown === null && localStorage.getItem(KEY) !== null;
+    if (unsplit) shown = DEFAULT_HIDDEN.filter(id => !stored.includes(id));
+    return { hidden: new Set(unsplit ? stored.filter(id => !isDefault(id)) : stored), shown: new Set(shown ?? []) };
   } catch {
     return { hidden: new Set(), shown: new Set() };
   }
@@ -54,7 +57,10 @@ export function hiddenFor({ hidden, shown }, isDemo) {
 
 // Hides or shows a bottle in one list and saves. A default switched in the
 // demo only moves it in or out of `shown`, so it never leaks into other lists.
+// It starts from what's stored: another open tab may have switched bottles
+// since `state` was read, and saving this tab's sets would switch them back.
 export function setHidden(state, id, hide, isDemo) {
+  Object.assign(state, loadHidden());
   if (isDemo && isDefault(id)) {
     if (hide) {
       state.shown.delete(id);

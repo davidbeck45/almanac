@@ -16,7 +16,7 @@ import {
 } from '../ui/components.js';
 import {
   state, activeFragrances, hiddenIn, viewingDemo, knownBottles, findRecord, journalData, library, findBottles,
-  fullRecords, collectionLabel, deviceToday, sourceRecords,
+  fullRecords, collectionLabel, deviceToday, sourceRecords, updateMine,
 } from '../app/state.js';
 import { warmPool } from '../app/pool.js';
 import { liveHTML, say, speak } from './wardrobe/parts.js';
@@ -662,27 +662,32 @@ export const actions = {
     app.keepingFocus(el, '#app', app.render);
   },
   // Focus moves on to the next bottle in the list (else the one before,
-  // else Add bottles), so Tab carries on from where it was.
+  // else Add bottles), so Tab carries on from where it was. It comes out of
+  // Mine as stored (updateMine), so a bottle another tab added stays.
   remove(el, app) {
-    const index = state.mine.records.findIndex(r => r.id === el.dataset.id);
-    if (index < 0) return;
+    if (!state.mine.records.some(r => r.id === el.dataset.id)) return;
     const rows = [...document.querySelectorAll('.owned-list li[data-name]')].filter(li => !li.hidden);
     const at = rows.indexOf(el.closest('li'));
     const next = (rows[at + 1] ?? rows[at - 1])?.querySelector('.row-main')?.dataset.id;
-    const [removed] = state.mine.records.splice(index, 1);
-    saveMine(state.mine);
-    state.lastRemoved = { record: removed, index };
+    let removed = null, index = -1;
+    updateMine(mine => {
+      index = mine.records.findIndex(r => r.id === el.dataset.id);
+      if (index >= 0) [removed] = mine.records.splice(index, 1);
+    });
     app.render();
     focusOwned(next);
+    if (!removed) return; // another tab took it out first: nothing to undo
+    state.lastRemoved = { record: removed, index };
     app.showToast(`<span>${esc(toastName(removed.name))} removed</span><button class="btn primary compact" data-action="undo-remove">Undo</button>`);
   },
   // The Undo button goes with its toast: focus goes to the bottle that came back.
   'undo-remove'(el, app) {
     if (!state.lastRemoved) return;
     const { record, index } = state.lastRemoved;
-    state.mine.records.splice(index, 0, record);
+    updateMine(mine => {
+      if (!mine.records.some(r => r.id === record.id)) mine.records.splice(index, 0, record);
+    });
     state.lastRemoved = null;
-    saveMine(state.mine);
     app.render();
     focusOwned(record.id);
     app.hideToast();
@@ -734,10 +739,8 @@ export const actions = {
     } catch (err) {
       return redrawSheet(app, { error: err.message }, '#import-title');
     }
-    // Counts what went in, not what was ticked.
-    const before = state.mine.records.length;
-    picked.forEach(app.addToMine);
-    const added = state.mine.records.length - before;
+    // Counts what went in, not what was ticked (nor what another tab added).
+    const added = picked.filter(record => app.addToMine(record)).length;
     const said = added ? `Added ${plural(added, 'bottle')}` : 'Nothing new to add';
     // Lines past the first round come back in the box for the next.
     if (rest) {
@@ -874,8 +877,7 @@ export const fields = {
   },
   // Kept as typed, so a render mid-word (the forecast landing) keeps it.
   'mine-name'(el) {
-    state.mine.name = el.value.slice(0, 40);
-    saveMine(state.mine);
+    updateMine(mine => { mine.name = el.value.slice(0, 40); });
   },
   // Kept in state as typed, so a render (coming back to the tab, the forecast
   // landing, tapping an accord) redraws the sheet without wiping it.
@@ -888,7 +890,6 @@ export const fields = {
 // Once it's typed: without the spaces at its ends.
 export const changes = {
   'mine-name'(el) {
-    state.mine.name = el.value.trim().slice(0, 40);
-    saveMine(state.mine);
+    updateMine(mine => { mine.name = el.value.trim().slice(0, 40); });
   },
 };

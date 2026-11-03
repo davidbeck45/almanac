@@ -23,16 +23,44 @@ const DUSTY_AFTER_DAYS = 30;
 const FAHRENHEIT_REGIONS = ['US', 'LR', 'MM', 'BS', 'BZ', 'KY', 'PW', 'FM', 'MH'];
 
 export function loadPrefs() {
-  try { return JSON.parse(localStorage.getItem(PREFS_KEY)) ?? {}; } catch { return {}; }
+  try {
+    const prefs = JSON.parse(localStorage.getItem(PREFS_KEY));
+    return prefs && typeof prefs === 'object' && !Array.isArray(prefs) ? prefs : {};
+  } catch {
+    return {};
+  }
 }
 
+// The prefs as this tab holds them, in the shape they're stored.
+const prefsHeld = () => ({
+  occasion: state.occasion, units: state.units, theme: savedTheme ?? undefined, preferValue: state.preferValue, likedStyles: state.likedStyles,
+  stillSky: state.stillSky || undefined,
+});
+// The prefs this tab last read or saved. Another open tab saves its own, so
+// a save writes only what changed here since over what's stored: a style
+// liked there and a theme picked here both stay.
+let prefsSeen = {};
+
 export function savePrefs() {
-  try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({
-      occasion: state.occasion, units: state.units, theme: savedTheme ?? undefined, preferValue: state.preferValue, likedStyles: state.likedStyles,
-      stillSky: state.stillSky || undefined,
-    }));
-  } catch {}
+  const held = prefsHeld();
+  const next = loadPrefs();
+  for (const [key, value] of Object.entries(held)) {
+    if (JSON.stringify(value) !== JSON.stringify(prefsSeen[key])) next[key] = value;
+  }
+  prefsSeen = held;
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify(next)); } catch {}
+}
+
+// What the state takes from stored prefs: at load, and again when another
+// tab saves them (reloadStored).
+function fromPrefs(prefs) {
+  return {
+    units: prefs.units === 'C' || prefs.units === 'F' ? prefs.units : defaultUnits(),
+    occasion: prefs.occasion ?? 'casual',
+    preferValue: typeof prefs.preferValue === 'boolean' ? prefs.preferValue : null,
+    likedStyles: Array.isArray(prefs.likedStyles) ? prefs.likedStyles.filter(s => typeof s === 'string') : null,
+    stillSky: prefs.stillSky === true,
+  };
 }
 
 // The theme Settings saved, apart from the one showing: a link's ?theme=
@@ -51,6 +79,7 @@ function defaultUnits() {
 }
 
 const prefs = loadPrefs();
+const stored = fromPrefs(prefs);
 export const state = {
   demo: null, // { fetched, fragrances } from data/collection.json
   catalog: [], // data/catalog.json: other people's bottles, scraped with Parfumo's ratings
@@ -67,8 +96,8 @@ export const state = {
   route: null, // the parsed route on screen (src/app/router.js)
   base: null, // the page under a bottle page: the last route that wasn't one
   from: null, // the route before the page under it last changed (a bottle page: the compare page's Back goes there)
-  units: prefs.units === 'C' || prefs.units === 'F' ? prefs.units : defaultUnits(),
-  occasion: prefs.occasion ?? 'casual',
+  units: stored.units,
+  occasion: stored.occasion,
   occasionSlot: null,
   slot: null, // the window Now shows ('day' | 'night'); null = the next one
   history: loadHistory(),
@@ -87,16 +116,16 @@ export const state = {
   aboutFailed: new Set(),
   // "Prefer great value" as set (true / false; setPreferValue), or null for the
   // wardrobe's default. Pool questions send it (poolInputs).
-  preferValue: typeof prefs.preferValue === 'boolean' ? prefs.preferValue : null,
+  preferValue: stored.preferValue,
   // The scent styles someone says they like (style ids, src/scent-styles.js),
   // picked on Insights' style mix; [] when they unpicked every one; null
   // until they pick, when David's wardrobe starts on DEMO_LIKED and anyone
   // else's on what most of its bottles lean toward (likedStyles in
   // src/discover.js). setLikedStyles.
-  likedStyles: Array.isArray(prefs.likedStyles) ? prefs.likedStyles.filter(s => typeof s === 'string') : null,
+  likedStyles: stored.likedStyles,
   // Settings › Animate the sky switched off: the weather scene holds still
   // (the shell sets .still-sky on <html>; base.css).
-  stillSky: prefs.stillSky === true,
+  stillSky: stored.stillSky,
   // Discover's search: `draft` is the field as typed, `query` what was last
   // searched; `offline` the library's error when only local matches came back.
   discover: { draft: null, query: '', results: null, busy: false, error: '', offline: '' },
@@ -109,6 +138,7 @@ export const state = {
 setUnits(state.units);
 const shownTheme = setTheme(prefs.theme);
 savedTheme = typeof prefs.theme === 'string' ? shownTheme : null;
+prefsSeen = prefsHeld();
 
 // ---------- Collections ----------
 
@@ -180,13 +210,27 @@ export function setActive(active) {
   saveActive(active);
 }
 
+/**
+ * Changes Mine as it's stored now, and saves it: another open tab may have
+ * changed it since this one read it, and saving this tab's copy over it
+ * would undo that. `change(mine)` edits it in place.
+ */
+export function updateMine(change) {
+  state.mine = loadMine();
+  change(state.mine);
+  saveMine(state.mine);
+}
+
+// -> whether it's new to Mine.
 export function addToMine(record) {
-  if (!state.mine.records.some(r => r.id === record.id)) {
-    state.mine.records = [...state.mine.records, record];
-    saveMine(state.mine);
-  }
-  if (state.hiding.hidden.has(record.id)) setHidden(state.hiding, record.id, false, false);
+  let added = false;
+  updateMine(mine => {
+    added = !mine.records.some(r => r.id === record.id);
+    if (added) mine.records = [...mine.records, record];
+  });
+  setHidden(state.hiding, record.id, false, false);
   if (state.active !== 'mine') setActive('mine');
+  return added;
 }
 
 // ---------- Ranked contexts ----------
@@ -490,4 +534,33 @@ export async function poolInputs() {
     shares: sharesFrom(loadUses(), occasionCounts(state.history)),
     preferValue: state.preferValue,
   };
+}
+
+// ---------- Another tab ----------
+// Every open tab shares localStorage. Each change starts from what's stored
+// (updateMine, setHidden, savePrefs, and the journal, plans, ratings and
+// wants as they save), so one tab never saves its old copy over another's
+// change; and when another tab saves, the shell reads it all again here.
+
+// Prefs saved by another tab, into this one: the theme only when the one
+// saved changed, so a link's ?theme= keeps showing for its visit.
+function applyPrefs(prefs) {
+  Object.assign(state, fromPrefs(prefs));
+  setUnits(state.units);
+  if (typeof prefs.theme === 'string' && prefs.theme !== savedTheme) savedTheme = setTheme(prefs.theme);
+  globalThis.document?.documentElement.classList.toggle('still-sky', state.stillSky);
+  prefsSeen = prefsHeld();
+}
+
+/**
+ * Reads again what another tab may have saved (the shell calls it on a
+ * storage event): Mine, the switched-off bottles, the journal, plans and
+ * prefs. Ratings, wants and "How you wear" are read as they're drawn.
+ */
+export function reloadStored() {
+  state.mine = loadMine();
+  state.hiding = loadHidden();
+  state.history = loadHistory();
+  state.events = loadEvents();
+  applyPrefs(loadPrefs());
 }

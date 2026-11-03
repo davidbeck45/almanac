@@ -9,7 +9,7 @@ import { setSkin, loadSkin, loadAsked, markAsked } from '../src/skin.js';
 import { planTies, rankedTies, whenOf, TIE_OCCASIONS } from '../src/contrast.js';
 import { summarize, week } from '../src/weather.js';
 import { renderScene } from '../src/scene.js';
-import { shiftISO } from '../src/history.js';
+import { shiftISO, toggleWear, wornIn, loadHistory } from '../src/history.js';
 import * as wear from '../src/views/wear.js';
 import * as trip from '../src/views/wear/trip.js';
 import * as when from '../src/views/wear/when.js';
@@ -612,6 +612,24 @@ test('a wear from the Occasion pane keeps its occasion; from Now, daily', () => 
   const byslot = Object.fromEntries(state.history.filter(h => h.date === today).map(h => [h.slot, h]));
   assert.equal(byslot.night.occasion, 'formal');
   assert.equal(byslot.day.occasion, 'daily');
+});
+
+test('Wear this in a tab drawn before another tab logged the same wear keeps it', () => {
+  const { state } = app;
+  state.loc = { name: 'Here', lat: 40.7, lon: -74 };
+  app.storeContext('day', wx.day, null, rank(fragrances, wx.day, 'day'));
+  state.history = [];
+  const id = fragrances[3].id;
+  toggleWear(id, today, 'day'); // the other tab
+  let drawn = 0;
+  const ui = { keepingFocus(el, scope, fn) { fn(); }, render() { drawn++; } };
+  wear.actions.wear({ dataset: { ctx: 'day', id } }, ui);
+  assert.equal(wornIn(loadHistory(), today, 'day')?.id, id, 'still logged');
+  assert.equal(app.wornId(wx.day), id, 'and this tab reads it');
+  assert.equal(drawn, 1);
+  // From there the button says Wearing, and a tap clears it as ever.
+  wear.actions.wear({ dataset: { ctx: 'day', id } }, ui);
+  assert.equal(wornIn(loadHistory(), today, 'day'), null);
 });
 
 test('Now’s cards read in the order they’re drawn, and only the window has a heading', () => {
