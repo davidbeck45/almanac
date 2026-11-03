@@ -258,13 +258,15 @@ test('Settings can hold the sky still, and the location sheet stays in reach whi
   const base = { loc: { name: 'Here' }, units: 'F', themeName: 'default', active: 'demo', mineCount: 0, shared: null, on: 1, total: 1, wears: 0, updated: '', stale: false, credits: '' };
   assert.match(settings.settingsHTML(base), /role="switch" aria-checked="true" data-action="sky-motion"/);
   assert.match(settings.settingsHTML({ ...base, stillSky: true }), /role="switch" aria-checked="false" data-action="sky-motion"/);
-  assert.match(settings.settingsHTML(base), /Animate the sky<small>Stars, rain and smoke move<\/small>/);
+  assert.match(settings.settingsHTML(base), /Animate the sky<small id="sky-note">Stars, rain and smoke move<\/small>/);
+  assert.match(settings.settingsHTML(base), /data-action="sky-motion"[^>]* aria-describedby="sky-note">/, 'its note describes it');
   assert.ok(!settings.settingsHTML(base).includes('aria-disabled="true"><span></span>'), 'free to change');
-  // Reduce Motion holds the sky still whatever it says, so it shows off, locked, and says why.
+  // Reduce Motion holds the sky still whatever it says, so it shows off, locked, and says why,
+  // to a screen reader too: its note is the switch's description.
   for (const stillSky of [false, true]) {
     const held = settings.settingsHTML({ ...base, stillSky, deviceStill: true });
-    assert.match(held, /role="switch" aria-checked="false" data-action="sky-motion" data-id="sky" aria-label="Animate the sky" aria-disabled="true">/);
-    assert.match(held, /Animate the sky<small>Held still by Reduce Motion<\/small>/);
+    assert.match(held, /role="switch" aria-checked="false" data-action="sky-motion" data-id="sky" aria-label="Animate the sky" aria-disabled="true" aria-describedby="sky-note">/);
+    assert.match(held, /Animate the sky<small id="sky-note">Held still by Reduce Motion<\/small>/);
   }
   // A tap on it changes nothing, so the setting keeps for when Reduce Motion goes off.
   let drawn = 0;
