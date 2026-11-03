@@ -371,17 +371,20 @@ function nowQuestion(pick, worn) {
 // ---------- Week ----------
 
 // A window's pick: the bottle with its time of day as a badge on the photo,
+// how the window feels (what the plan picked for, as Trip's day by day
+// shows it: the day's high and low are the air's, and a windy afternoon
+// feels well under its high),
 // and marks for a logged wear, for a window planned for an occasion ("For
 // formal wear" in a row, "Formal" in the board's narrow columns) and for a
 // bottle the rotation nudge brought back ("Not worn in 34 days" in a row,
 // "34 days" under the clock in the columns), else for one that has equals
 // (`ties`, planTies'): "+2 as good" in a row and in the columns alike (a
 // name kept four letters in the columns, so the count is the one wording
-// both hold); the board's note explains them, the tooltip and label name
-// them with their tags, and the pick's page leads its shelf with them
-// (shelfOf). An occasion in the board's narrow columns, where
-// "Date Night" and "Night Out" didn't fit beside their glyphs (the cell's
-// tooltip says it whole).
+// both hold, and the columns drop its glyph for the room); the board's note
+// explains them, the tooltip and label name them with their tags, and the
+// pick's page leads its shelf with them (shelfOf). An occasion in the
+// board's narrow columns, where "Date Night" and "Night Out" didn't fit
+// beside their glyphs (the cell's tooltip says it whole).
 const COLUMN_LABEL = { date: 'Date', nightout: 'Out' };
 export function weekPick(p, slot, dayName) {
   if (!p) return `<span class="wk-pick empty"><span class="wk-slot">${slotIcon(slot)}</span><span class="wk-none">Done for today</span></span>`;
@@ -392,7 +395,9 @@ export function weekPick(p, slot, dayName) {
   const short = p.pick.parts?.unworn ? 'Unworn' : plural(p.pick.parts?.idle ?? 0, 'day');
   const names = ties.map(t => t.entry.fragrance.name);
   const equals = names.length ? `${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0]} suit${names.length > 1 ? '' : 's'} it as well` : '';
-  const spoken = [`${dayName} ${slot === 'day' ? 'daytime' : 'night'}: ${f.name}`, o && `for ${phraseOf(o)}`, p.worn && 'wearing', nudge, equals].filter(Boolean).join(', ');
+  const feels = p.win?.feelsF;
+  const felt = Number.isFinite(feels) ? `<span class="wk-feels">${deg(feels)}</span>` : '';
+  const spoken = [`${dayName} ${slot === 'day' ? 'daytime' : 'night'}: ${f.name}`, felt && `feels ${deg(feels)}`, o && `for ${phraseOf(o)}`, p.worn && 'wearing', nudge, equals].filter(Boolean).join(', ');
   const mark = o ? `<small class="wk-mark wk-event">${icon[o.icon] ?? icon.calendar}<span class="wk-long">${esc(`For ${phraseOf(o)}`)}</span><span class="wk-short">${esc(COLUMN_LABEL[o.id] ?? o.label)}</span></small>`
     : nudge ? `<small class="wk-mark wk-nudge">${icon.clock}<span class="wk-long">${esc(nudge)}</span><span class="wk-short">${esc(short)}</span></small>`
       : ties.length ? `<small class="wk-mark wk-tie">${icon.compare}<span>+${names.length} as good</span></small>` : '';
@@ -400,7 +405,7 @@ export function weekPick(p, slot, dayName) {
   return `<button class="wk-pick${p.worn ? ' worn' : ''}${o ? ' event' : ''}" data-action="open" data-ctx="${esc(p.ctx)}" data-id="${esc(f.id)}" aria-label="${esc(spoken)}"${tip ? ` title="${esc(tip)}"` : ''}>
     ${img(f)}
     <span class="wk-slot">${p.worn ? icon.check : slotIcon(slot)}</span>
-    <span class="wk-text"><b>${esc(f.name)}</b>${mark}</span>
+    <span class="wk-text"><b>${esc(f.name)}</b>${mark}</span>${felt}
   </button>`;
 }
 
@@ -422,7 +427,7 @@ export function weekHTML(days) {
       <div class="wk-wx">${wxIcon(d.category, d.condition)}<span class="wk-temps"><b>${deg(d.hiF)}</b><small>${deg(d.loF)}</small></span>${d.pop >= 30 ? `<span class="wk-pop">${d.pop}%<span class="visually-hidden"> chance of</span> rain</span>` : '<span class="wk-pop" aria-hidden="true">&nbsp;</span>'}</div>
       <div class="wk-picks">${weekPick(d.day, 'day', d.name)}${weekPick(d.night, 'night', d.name)}</div>
     </li>`).join('');
-  const how = repeats(days) ? 'Planned against the forecast.' : 'Planned against the forecast so nothing repeats back to back.';
+  const how = repeats(days) ? 'Planned against how each day and night will feel.' : 'Planned against how each day and night will feel, so nothing repeats back to back.';
   return `<section class="card week" aria-labelledby="week-title">
     ${sectionHead(`${icon.calendar}The week ahead`, `<p>${how} Open a bottle to see why.</p>${planned ? `<p class="wk-legend">${icon.calendar}<span>What you planned gets its best bottle, and the days before leave it be.</span></p>` : ''}${nudged ? `<p class="wk-legend">${icon.clock}<span>A bottle you haven’t worn in a while gets a turn.</span></p>` : ''}${tied ? `<p class="wk-legend">${icon.compare}<span>Bottles that suit a window just as well as its pick.</span></p>` : ''}`, { id: 'week-title' })}
     <ol class="wk-list${nudged || planned || tied ? ' marked' : ''}" style="--days:${days.length}">${rows}</ol>

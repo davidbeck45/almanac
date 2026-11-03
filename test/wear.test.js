@@ -288,11 +288,33 @@ test('the week board promises no repeats only when there are none, and says rain
   const same = days.map(d => ({ ...d, day: d.day && pickOf(one, 'a'), night: d.night && pickOf(one, 'b') }));
   const html = wear.weekHTML(same);
   assert.ok(!/repeats/.test(html), 'a list of one can’t keep that promise');
-  assert.match(html, /Planned against the forecast\. Open a bottle to see why\./);
+  assert.match(html, /Planned against how each day and night will feel\. Open a bottle to see why\./);
   // Rain: the chance and the word, the whole phrase for screen readers.
   const wet = wear.weekHTML(varied.map((d, n) => ({ ...d, pop: n === 1 ? 87 : 10 })));
   assert.match(wet, /<span class="wk-pop">87%<span class="visually-hidden"> chance of<\/span> rain<\/span>/);
   assert.equal((wet.match(/% rain|chance of/g) ?? []).length, 1, 'only on the rainy day');
+});
+
+test('each of the Week’s picks says how its window feels, what the plan picked for, beside the day’s high and low', () => {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  Object.assign(state, { demo: { fetched: today, fragrances }, forecast: live, wx: summarize(live), loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], occasionSlot: null });
+  const days = app.computeWeek();
+  const board = clean(wear.weekHTML(days), 'week');
+  const slots = days.flatMap(d => [d.day, d.night]).filter(Boolean);
+  assert.ok(slots.length > 7);
+  for (const p of slots) {
+    const cell = wear.weekPick(p, p.win.slot, 'Friday');
+    const feels = `${Math.round(p.win.feelsF)}°`;
+    assert.ok(cell.includes(`<span class="wk-feels">${feels}</span>`), `${p.win.dateISO} ${p.win.slot}: its window's ${feels}`);
+    assert.match(cell, new RegExp(`aria-label="Friday (daytime|night): [^"]+, feels ${feels}`), 'said after the name, as Trip says it');
+  }
+  // The day's air high and low stay in the date column.
+  for (const d of days) assert.ok(board.includes(`<b>${Math.round(d.hiF)}°</b><small>${Math.round(d.loF)}°</small>`));
+  assert.match(board, /Planned against how each day and night will feel/);
+  // A window without a reading (a pick handed in bare) shows none.
+  const bare = wear.weekPick({ ...slots[0], win: undefined }, 'day', 'Friday');
+  assert.ok(!bare.includes('wk-feels') && !bare.includes('feels'));
 });
 
 test('the Week counts a window’s equals under its pick, “+2 as good” in a row and the columns alike, and names them in its tooltip and label', () => {
@@ -322,7 +344,11 @@ test('the Week counts a window’s equals under its pick, “+2 as good” in a 
   assert.match(cell(two), /<small class="wk-mark wk-tie">.*<span>\+2 as good<\/span><\/small>/s);
   assert.match(cell(one), /<small class="wk-mark wk-tie">.*<span>\+1 as good<\/span><\/small>/s);
   assert.ok(!/wk-long|wk-short/.test(cell(two).match(/<small class="wk-mark wk-tie">.*<\/small>/s)[0]), 'no wording for one layout only');
-  assert.ok(cell(two).includes(`aria-label="${esc(`Friday ${two.win.slot === 'day' ? 'daytime' : 'night'}: ${two.pick.fragrance.name}, ${first} and ${second} suit it as well`)}"`));
+  // A column holds the 64px it takes only without its glyph (it was "+2 as go…" at every width).
+  const css = readFileSync(new URL('../src/css/wear.css', import.meta.url), 'utf8');
+  const columns = [...css.matchAll(/@container page \(min-width: 700px\) \{([\s\S]*?)\n\}/g)].map(m => m[1]).find(b => b.includes('.wk-list'));
+  assert.match(columns, /\.wk-tie svg \{ display: none; \}/);
+  assert.ok(cell(two).includes(`aria-label="${esc(`Friday ${two.win.slot === 'day' ? 'daytime' : 'night'}: ${two.pick.fragrance.name}, feels ${Math.round(two.win.feelsF)}°, ${first} and ${second} suit it as well`)}"`));
   assert.match(cell(two), / title="[^"]+ suit [^"]+ just as well\."/, 'the tooltip has their tags');
   // An event's mark says what it's for instead; a worn window has none.
   assert.ok(!cell({ ...two, win: { ...two.win, occasion: occasionById('formal') } }).includes('wk-tie'));
