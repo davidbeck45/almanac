@@ -114,6 +114,15 @@ test('a bottle worn on every window of the trip is named by the slot packTrip sa
   assert.match(notice(null), /every day, by day or night\. .* a break/);
 });
 
+test('a window nothing packed suits names the bottle packTrip does, and says when you rate it low', () => {
+  const [a, b] = fragrances, [w] = tripWindows;
+  const notice = best => trip.tripPackHTML({ ...packed, uncovered: [{ window: w, occasion: null, best, score: 0.8 }] }, saved);
+  const named = f => esc(f.name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  assert.match(notice(a), new RegExp(`Not quite covered\\.</b> [^<]+: <b>${named(a)}</b> would suit it better\\.</p>`));
+  assert.match(notice({ ...b, personal: { rating: 1 } }), new RegExp(`<b>${named(b)}</b> would suit it better, though you rate it\u00a01★\\.</p>`));
+  assert.match(notice({ ...b, personal: { rating: 3 } }), new RegExp(`<b>${named(b)}</b> would suit it better\\.</p>`));
+});
+
 test('the empty trip explains itself in one sentence, and never promises a count packTrip doesn’t keep', () => {
   const html = trip.tripFormHTML({ place: null, fromISO: today, toISO: shiftISO(today, 3), events: [], max: 3 }, { today });
   assert.match(html, /<p>Pick a place and dates, and get the fewest bottles that cover every day and night there\.<\/p>/);

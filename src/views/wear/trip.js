@@ -10,7 +10,7 @@
 // way keeps its start and the weather saved for the days gone by (the
 // forecast has no past days); its events and its end can still change.
 import { packTrip, withEvents } from '../../pack.js';
-import { rank, daysBetween } from '../../engine.js';
+import { rank, daysBetween, isDisliked } from '../../engine.js';
 import { tripWindows, forecastError } from '../../weather.js';
 import { OCCASIONS, occasionById } from '../../occasions.js';
 import { shiftISO } from '../../history.js';
@@ -280,7 +280,9 @@ function noticesHTML(result, max) {
     const byBest = new Map();
     for (const u of result.uncovered) byBest.set(u.best, [...(byBest.get(u.best) ?? []), u]);
     const when = u => `${windowName(u.window.dateISO, u.window.slot)}${u.occasion ? ` (${u.occasion.label.toLowerCase()})` : ''}`;
-    const lines = [...byBest].map(([best, us]) => `${esc(listOf(us.map(when)))}: <b>${esc(best.name)}</b> would suit ${us.length > 1 ? 'them' : 'it'} better.`);
+    // packTrip names one you dislike only where nothing else would do, and so does this (the stars kept on the line with "it").
+    const though = best => (isDisliked(best) ? `, though you rate it\u00a0${best.personal.rating}★` : '');
+    const lines = [...byBest].map(([best, us]) => `${esc(listOf(us.map(when)))}: <b>${esc(best.name)}</b> would suit ${us.length > 1 ? 'them' : 'it'} better${though(best)}.`);
     out.push(`<div class="trip-notice"><p><b>Not quite covered.</b> ${lines.join(' ')}</p>${more}</div>`);
   }
   if (result.variety) {

@@ -188,7 +188,13 @@ export function packTrip(frags, windows, { max = 3, occasionOf = win => win.occa
     return { record: f, covers, wears: picked.length, why: why.filter(Boolean).join('; ') };
   });
 
-  const uncovered = plan.filter(p => !p.covered).map(p => ({ window: p.window, occasion: p.occasion, best: p.top.record, score: p.top.score }));
+  // A window nothing packed suits names the bottle that would: the best you don't dislike within
+  // reach of its top, as room for one more would pack, else the top itself, the only fit there is.
+  const uncovered = rows.flatMap((row, w) => {
+    if (plan[w].covered) return [];
+    const best = row.ranked.find(r => !isDisliked(r.fragrance) && within(row, r.fragrance.id)) ?? row.top;
+    return [{ window: row.win, occasion: row.occasion, best: best.fragrance, score: best.score }];
+  });
   return { bottles, plan, uncovered, variety, text: packText(bottles, plan, uncovered, wins, packed.length >= max, variety) };
 }
 
@@ -317,7 +323,9 @@ function packText(bottles, plan, uncovered, wins, full, variety) {
   const missing = new Map();
   for (const u of uncovered) missing.set(u.best, [...(missing.get(u.best) ?? []), u.window]);
   for (const [best, missed] of missing) {
-    out.push(`Nothing packed is quite right for ${windowsPhrase(missed, wins, { the: true })}; ${best.name} would be${full ? ', if there’s room' : ''}.`);
+    // One you dislike is named only where nothing else would do, and says so.
+    const though = isDisliked(best) ? `, though you rate it ${best.personal.rating}★` : '';
+    out.push(`Nothing packed is quite right for ${windowsPhrase(missed, wins, { the: true })}; ${best.name} would be${full ? ', if there’s room' : ''}${though}.`);
   }
   if (variety) {
     // By what it's worn for: "every night … a night off", or by day and night alike "a break".
