@@ -500,6 +500,22 @@
   .wk-pick.empty { grid-template-columns: 1fr; min-height: 104px; place-content: center; }
 }
 
+/* A plan link's events over the Week, each in the plan's words, until he
+   says Plan them or Not now. One that takes the place of his own plan is
+   marked in words and in the accent; one gone by or planned already fades. */
+.plan-link-list { display: grid; gap: var(--s-1); }
+.plan-link-item { display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: center; gap: var(--s-3); padding: var(--s-1) var(--s-2); border-radius: var(--r-control); background: var(--surface-2); border: 1px solid var(--border-subtle); }
+.plan-link-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-round); background: color-mix(in srgb, var(--ambient) 12%, transparent); color: var(--ambient); }
+.plan-link-icon svg { width: 18px; height: 18px; }
+.plan-link-text { display: grid; min-width: 0; }
+.plan-link-text b { font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 600; }
+.plan-link-text small { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.plan-link-item.replaces small { color: var(--ambient); font-weight: 600; }
+.plan-link-item.done .plan-link-text b { color: var(--text-secondary); font-weight: 500; }
+.plan-link-item.done .plan-link-icon { background: var(--fill-faint); color: var(--text-tertiary); }
+.plan-link-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-top: var(--s-4); }
+.plan-link-actions .btn svg { width: 16px; height: 16px; }
+
 /* ---------- Occasions ---------- */
 
 .occasions {

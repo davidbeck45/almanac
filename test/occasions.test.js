@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { OCCASIONS, OCCASION_SCALE, occasionById } from '../src/occasions.js';
+import { OCCASIONS, OCCASION_SCALE, occasionById, findOccasion } from '../src/occasions.js';
 import { fitOccasionScale } from '../scripts/fit-occasions.mjs';
 import { ACCORDS } from '../src/accords.js';
 import { occasionRaw } from '../src/engine.js';
@@ -51,4 +51,13 @@ test('an aquatic suits the office better than a boozy leather, on accords alone'
 test('the occasion scale is fitted to these profiles and this dataset', () => {
   const { scale } = fitOccasionScale();
   assert.deepEqual(OCCASION_SCALE, scale, 'run `node scripts/fit-occasions.mjs --write`');
+});
+
+test('occasions resolve by id or label, any case or spacing', () => {
+  assert.equal(findOccasion('date').id, 'date');
+  assert.equal(findOccasion('Date Night').id, 'date');
+  assert.equal(findOccasion('night out').id, 'nightout');
+  assert.equal(findOccasion('CASUAL').id, 'casual');
+  assert.equal(findOccasion('Everyday').id, 'casual', 'its old name');
+  assert.equal(findOccasion('evening'), null);
 });

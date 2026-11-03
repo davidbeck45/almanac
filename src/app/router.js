@@ -1,5 +1,5 @@
 // Hash routes, so deep links and Back work without a server:
-//   #/wear/now | week | occasion[/<id>] | trip
+//   #/wear/now | week[?plan=…] | occasion[/<id>] | trip
 //   #/wardrobe/owned | wishlist | worn | insights
 //   #/discover[?q=…&styles=…&seeds=…&…] (a bottle's style links: ?styles=<id>,<id>)
 //   #/bottle/<id>[?ctx=<context key>]
@@ -17,8 +17,9 @@ const LEGACY_VIEWS = { today: '#/wear/now', week: '#/wear/week', occasion: '#/we
 // Discover keeps its search, its lists and their filters in the URL
 // (src/views/discover/query.js reads and writes them).
 const DISCOVER_KEYS = ['q', 'by', 'tab', 'styles', 'mode', 'seeds', 'season', 'time', 'lean', 'longevity', 'projection', 'safe', 'discontinued', 'mists'];
-// The query keys each kind of route keeps.
-const QUERY_KEYS = { bottle: ['ctx'], discover: DISCOVER_KEYS };
+// The query keys each kind of route keeps (a pane's under 'dest/pane'): the
+// Week's `plan` is a plan link's events to confirm (src/events.js parseEventText).
+const QUERY_KEYS = { bottle: ['ctx'], discover: DISCOVER_KEYS, 'wear/week': ['plan'] };
 // The panes that take an argument, and which ones they know: an unknown one
 // is dropped, so the shell rewrites the URL to the pane alone.
 const PANE_ARGS = { 'wear/occasion': id => Boolean(occasionById(id)) };
@@ -35,7 +36,8 @@ export function parseRoute(hash, panes) {
   const parts = path.split('/').filter(Boolean).map(decode);
   const [dest, first = null, second = null] = parts;
   const params = new URLSearchParams(search);
-  const query = Object.fromEntries((QUERY_KEYS[dest] ?? []).filter(k => params.get(k)).map(k => [k, params.get(k)]));
+  const keep = key => Object.fromEntries((QUERY_KEYS[key] ?? []).filter(k => params.get(k)).map(k => [k, params.get(k)]));
+  const query = keep(dest);
   if (dest === 'bottle' && first) return { dest, pane: null, arg: first, query };
   if (dest === 'settings') return { dest, pane: null, arg: null, query: {} };
   // Up to three bottles side by side; the order they were picked in.
@@ -45,7 +47,7 @@ export function parseRoute(hash, panes) {
   if (!list.length) return { dest, pane: null, arg: null, query };
   const pane = list.includes(first) ? first : list[0];
   const arg = pane === first && second && PANE_ARGS[`${dest}/${pane}`]?.(second) ? second : null;
-  return { dest, pane, arg, query };
+  return { dest, pane, arg, query: keep(`${dest}/${pane}`) };
 }
 
 // Colons (dataset and context keys) and commas (the compare page's ids) read as they are.
@@ -57,8 +59,8 @@ export const compareIds = arg => [...new Set(String(arg ?? '').split(',').map(s 
 /** The canonical hash for a route: parseRoute(routeHash(r)) gives r back. */
 export function routeHash({ dest, pane = null, arg = null, query = {} }) {
   const path = [dest, pane, arg].filter(x => x !== null && x !== undefined && x !== '').map(part).join('/');
-  // Lists stay readable (?styles=skin,clean): a comma needs no escaping in a query.
-  const qs = new URLSearchParams(Object.entries(query).filter(([, v]) => v)).toString().replace(/%2C/gi, ',');
+  // Lists stay readable (?styles=skin,clean, ?plan=…;…): a comma or a semicolon needs no escaping in a query.
+  const qs = new URLSearchParams(Object.entries(query).filter(([, v]) => v)).toString().replace(/%2C/gi, ',').replace(/%3B/gi, ';');
   return `#/${path}${qs ? `?${qs}` : ''}`;
 }
 

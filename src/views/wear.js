@@ -12,15 +12,16 @@ import { planTies, rankedTies, tieLine, contrast } from '../contrast.js';
 import { setSkin, loadSkin, loadAsked, markAsked, wasAsked } from '../skin.js';
 import { theme } from '../theme.js';
 import { toggleWear, wornIn, journalStats, shiftISO } from '../history.js';
-import { routeHash } from '../app/router.js';
-import { esc, temp, deg, plural, shortDate, weekdayShort, windowRange, feelWords, displayReasons, moveText, listLabel } from '../ui.js';
+import { parseEventText } from '../events.js';
+import { routeHash, go } from '../app/router.js';
+import { esc, cap, temp, deg, plural, shortDate, weekdayShort, windowRange, feelWords, displayReasons, moveText, listLabel } from '../ui.js';
 import {
   icon, img, slotIcon, wxIcon, wxIconFor, messageHTML, skeletonHTML, reasonsList, chips, matchBadge, shelfHTML,
   wearButton, segHTML, starsHTML, sharedBannerHTML, accordColor, sectionHead,
 } from '../ui/components.js';
 import {
   state, savePrefs, activeFragrances, sourceRecords, rankedFragrances, nowSlot, todaySlots, todayPlan, computeToday, computeWeek,
-  rankContext, canWear, wornId, nowHour, findRecord, eventAt, setEvent,
+  rankContext, canWear, wornId, nowHour, findRecord, eventAt, setEvent, todayISO,
 } from '../app/state.js';
 import * as trip from './wear/trip.js';
 import * as when from './wear/when.js';
@@ -429,6 +430,83 @@ export function weekHTML(days) {
   </section>`;
 }
 
+// ---------- A plan from a link ----------
+// After reading David's calendar, Claude sends a link that opens the Week
+// with the plans it found (#/wear/week?plan=2026-11-07+night+formal;…, the
+// CLI's --events grammar: src/events.js parseEventText). Nothing is planned
+// until he says so: a card over the Week lists them in the plan's own words,
+// marking one that would take the place of a plan he made, with Plan them
+// and Not now. Either takes the plan out of the URL.
+
+/**
+ * The route's plan link as the card lists it: { items: [{ dateISO, slot,
+ * occasion, past, was: the occasion planned on that window already, or
+ * null }] } in time order, { error: true } when it doesn't read, or null
+ * when there's none.
+ */
+export function linkedPlan(route, today = todayISO()) {
+  const text = route?.query?.plan;
+  if (!text || text === answeredUnder) return null;
+  let events;
+  try {
+    events = parseEventText(text);
+  } catch {
+    return { error: true, items: [] };
+  }
+  if (!events.length) return null;
+  const items = events.map(e => ({ ...e, past: e.dateISO < today, was: occasionById(eventAt(e)?.occasion) ?? null }))
+    .sort((a, b) => a.dateISO.localeCompare(b.dateISO) || (a.slot === 'night') - (b.slot === 'night'));
+  return { items };
+}
+
+// The events a plan link would set: not gone by, not planned so already.
+export const planToSet = plan => plan.items.filter(i => !i.past && i.was?.id !== i.occasion.id);
+
+/** The card over the Week that asks before a plan link plans anything (linkedPlan's answer). */
+export function planLinkHTML(plan, today) {
+  const card = (title, sub, body, actions) => `<section class="card plan-link" aria-labelledby="plan-link-title">
+    ${sectionHead(`${icon.calendar}${esc(title)}`, `<p>${esc(sub)}</p>`, { id: 'plan-link-title' })}
+    ${body}
+    <div class="plan-link-actions">${actions}</div>
+  </section>`;
+  const ok = '<button class="btn secondary compact" data-action="plan-link-skip">OK</button>';
+  if (plan.error) return card('Couldn’t read this plan', 'The link’s plan doesn’t make sense, so nothing was planned.', '', ok);
+  const fresh = planToSet(plan);
+  const rows = plan.items.map(i => {
+    const mark = i.past ? 'Gone by' : i.was?.id === i.occasion.id ? 'Planned already' : i.was ? `In place of ${phraseOf(i.was)}` : '';
+    const done = i.past || i.was?.id === i.occasion.id;
+    // One gone by in eventPhrase's words for a far date ("tonight" is today's).
+    const said = i.past ? `${phraseOf(i.occasion)} on ${i.slot === 'night' ? 'the night of ' : ''}${shortDate(i.dateISO)}` : eventPhrase(i, today);
+    return `<li class="plan-link-item${done ? ' done' : ''}${i.was && !done ? ' replaces' : ''}"><span class="plan-link-icon">${icon[i.occasion.icon] ?? icon.calendar}</span><span class="plan-link-text"><b>${esc(cap(said))}</b>${mark ? `<small>${esc(mark)}</small>` : ''}</span></li>`;
+  }).join('');
+  const list = `<ul class="plan-link-list">${rows}</ul>`;
+  if (!fresh.length) return card('Nothing new to plan', 'Everything in this link is planned already or has gone by.', list, ok);
+  const one = fresh.length === 1;
+  return card(one ? 'Plan this?' : `Plan these ${fresh.length}?`, 'From a link you opened. Nothing is planned until you say so.', list,
+    `<button class="btn primary compact" data-action="plan-link-apply">${icon.check}Plan ${one ? 'it' : 'them'}</button><button class="btn tertiary compact" data-action="plan-link-skip">Not now</button>`);
+}
+
+// The link's plan, answered: out of the Week's URL (in place, as Discover
+// keeps its lists' queries), so a reload or Back doesn't ask again. Answered
+// with a bottle page docked beside the Week, the URL is the bottle's and the
+// Week's entry under it keeps the plan: it goes once Back comes onto it
+// (the Week's `after`), unasked.
+let answeredUnder = null;
+function dropPlan() {
+  const page = state.base;
+  if (!page?.query?.plan) return;
+  if (state.route !== page) answeredUnder = page.query.plan;
+  page.query = {};
+  if (state.route === page && globalThis.location) go(routeHash(page), { replace: true });
+}
+
+/** The Week drawn: a plan answered under a bottle page leaves the URL once the Week's is back. */
+export function weekAfter(app, route) {
+  if (!answeredUnder || route?.query?.plan !== answeredUnder || state.route !== route) return;
+  answeredUnder = null;
+  dropPlan();
+}
+
 // ---------- Occasion controls ----------
 
 // A radio group: one tab stop, arrow keys move the choice (the shell's
@@ -612,8 +690,12 @@ function showChosenOccasion() {
   strip.scrollLeft += by;
 }
 
-function weekPane() {
-  return guard() ?? banner() + weekHTML(computeWeek());
+function weekPane(app, route) {
+  const plan = linkedPlan(route);
+  const card = plan ? planLinkHTML(plan, todayISO()) : '';
+  const blocked = guard();
+  if (blocked) return card + blocked;
+  return banner() + card + weekHTML(computeWeek());
 }
 
 // Packing for a trip (wear/trip.js): no forecast of your own needed, only bottles.
@@ -631,7 +713,7 @@ export const wear = {
   icon: 'wear',
   panes: [
     { id: 'now', label: 'Now', title: () => 'Now', heading: () => `What to wear in ${place()}`, render: nowPane },
-    { id: 'week', label: 'Week', title: () => 'Week', heading: () => `The week ahead in ${place()}`, render: weekPane },
+    { id: 'week', label: 'Week', title: () => 'Week', heading: () => `The week ahead in ${place()}`, render: weekPane, after: weekAfter },
     {
       id: 'occasion',
       label: 'Occasion',
@@ -766,6 +848,30 @@ export const actions = {
     if (!globalThis.document || el.isConnected) return;
     const next = document.querySelector(kind === 'stars' ? '#app .pick .wear-btn' : '#app .also .shelf-item') ?? document.querySelector('#app .pick .wear-btn');
     if (next) app.refocus(next, '#app', { reveal: seen });
+  },
+  // A plan link's Plan them: each event still to come on its window (one
+  // there already gives way), then the Week shows them, focus on the first
+  // (the page's heading when it's past the forecast, or the Week's still
+  // loading).
+  'plan-link-apply'(el, app) {
+    const plan = linkedPlan(state.base);
+    if (!plan || plan.error) return;
+    const today = todayISO();
+    const set = planToSet(plan);
+    for (const e of set) setEvent(e.dateISO, e.slot, e.occasion.id);
+    dropPlan();
+    app.render();
+    const doc = globalThis.document;
+    const first = (set[0] && doc?.querySelector(`#app .wk-pick[data-ctx="w:${set[0].dateISO}:${set[0].slot}"]`)) ?? doc?.querySelector('#page-title');
+    first?.focus({ preventScroll: true });
+    first?.scrollIntoView?.({ block: 'nearest' });
+    const said = set.map(e => eventPhrase(e, today));
+    app.showToast(`<span>${esc(`Planned ${said.length > 1 ? `${said.slice(0, -1).join(', ')} and ${said.at(-1)}` : said[0]}.`)}</span>`);
+  },
+  // Not now (or OK): nothing planned, and the card goes.
+  'plan-link-skip'(el, app) {
+    dropPlan();
+    app.render();
   },
   // Now's Day/Night toggle in the hero.
   slot(el, app) {

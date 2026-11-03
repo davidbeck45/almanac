@@ -2,7 +2,7 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { packTrip, withEvents } from '../src/pack.js';
-import { rank, PLAN_MARGIN } from '../src/engine.js';
+import { rank, PLAN_MARGIN, eventPhrase } from '../src/engine.js';
 import { OCCASIONS, occasionById } from '../src/occasions.js';
 import { sprayGuide } from '../src/spray.js';
 import { setSkin, loadSkin, loadAsked, markAsked } from '../src/skin.js';
@@ -15,7 +15,7 @@ import * as trip from '../src/views/wear/trip.js';
 import * as when from '../src/views/wear/when.js';
 import { placeSheetHTML, datePillHTML } from '../src/views/wear/pickers.js';
 import { wxIconFor } from '../src/ui/components.js';
-import { esc } from '../src/ui.js';
+import { esc, cap, shortDate } from '../src/ui.js';
 import * as app from '../src/app/state.js';
 import { bottleModel } from '../src/views/bottle.js';
 import { syntheticForecast } from './fixtures.js';
@@ -954,4 +954,82 @@ test('Not now waves a question off for good; a bottle with his own nudges isn’
   localStorage.setItem('scentcast.asked', JSON.stringify({ ...JSON.parse(localStorage.getItem('scentcast.asked')), y: { stars: 3 }, z: 'no' }));
   assert.deepEqual(loadAsked().x, { skin: '2026-10-02' });
   assert.ok(!('y' in loadAsked()) && !('z' in loadAsked()));
+});
+
+test('a plan link shows what it would plan, in the plan’s words, and plans nothing until asked', () => {
+  const { state } = app;
+  const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
+  const wx = summarize(live);
+  const today = wx.todayISO;
+  Object.assign(state, { demo: { fetched: today, fragrances }, forecast: live, wx, loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], slot: null });
+  const [sat, mon] = [shiftISO(today, 3), shiftISO(today, 5)];
+  const route = plan => ({ dest: 'wear', pane: 'week', arg: null, query: { plan } });
+  const pane = wear.wear.panes.find(p => p.id === 'week');
+  const toasts = [];
+  const ui = { render() { app.computeToday(); }, showToast(html) { toasts.push(html); } };
+  app.setEvent(sat, 'night', 'date');
+  try {
+    const text = `${mon} office; ${shiftISO(today, -2)} night formal;${sat} night formal`;
+    const link = route(text);
+    const plan = wear.linkedPlan(link);
+    assert.deepEqual(plan.items.map(i => [i.dateISO, i.slot, i.occasion.id, i.past, i.was?.id ?? null]),
+      [[shiftISO(today, -2), 'night', 'formal', true, null], [sat, 'night', 'formal', false, 'date'], [mon, 'day', 'office', false, null]], 'in time order');
+    const html = clean(pane.render({}, link), 'Week with a plan link');
+    assert.ok(html.indexOf('class="card plan-link"') < html.indexOf('class="card week"'), 'over the Week');
+    assert.match(html, /Plan these 2\?/);
+    assert.ok(html.includes(`<b>${cap(eventPhrase({ dateISO: sat, slot: 'night', occasion: occasionById('formal') }, today))}</b><small>In place of a date</small>`));
+    // Gone by, in the words eventPhrase has for a far date: "tonight" would be today's.
+    assert.ok(html.includes(`<b>Formal wear on the night of ${shortDate(shiftISO(today, -2))}</b><small>Gone by</small>`));
+    assert.match(html, /data-action="plan-link-apply">.*Plan them<\/button><button class="btn tertiary compact" data-action="plan-link-skip">Not now<\/button>/s);
+    assert.equal(app.eventAt({ dateISO: sat, slot: 'night' }).occasion, 'date', 'nothing planned by opening it');
+    assert.equal(app.eventAt({ dateISO: mon, slot: 'day' }), null);
+
+    // Not now: nothing planned, and the link's plan leaves the URL.
+    state.base = state.route = route(text);
+    wear.actions['plan-link-skip']({}, ui);
+    assert.deepEqual(state.base.query, {});
+    assert.equal(app.eventAt({ dateISO: mon, slot: 'day' }), null);
+    assert.ok(!pane.render({}, state.base).includes('plan-link'));
+
+    // Plan them: each still to come, one there already giving way.
+    state.base = state.route = route(text);
+    wear.actions['plan-link-apply']({}, ui);
+    assert.equal(app.eventAt({ dateISO: sat, slot: 'night' }).occasion, 'formal');
+    assert.equal(app.eventAt({ dateISO: mon, slot: 'day' }).occasion, 'office');
+    assert.ok(!state.events.some(e => e.dateISO < today));
+    assert.deepEqual(state.base.query, {});
+    assert.match(toasts.at(-1), /^<span>Planned formal wear (on \w+day night|tomorrow night) and the office on \w+day\.<\/span>$/);
+    const board = pane.render({}, state.base);
+    assert.ok(!board.includes('plan-link'));
+    assert.match(board, /aria-label="[^"]+ night: [^"]+, for formal wear"/, 'the Week plans around it');
+
+    // Answered with a bottle page docked beside the Week: Back onto the
+    // Week's entry, which still has the plan, doesn't ask again, and the
+    // Week drops it from the URL.
+    for (const e of [...state.events]) app.setEvent(e.dateISO, e.slot, null);
+    state.base = route(`${mon} office`);
+    state.route = { dest: 'bottle', pane: null, arg: '1', query: { ctx: 'w:x' } };
+    wear.actions['plan-link-skip']({}, ui);
+    const back = state.base = state.route = route(`${mon} office`);
+    assert.ok(!pane.render({}, back).includes('plan-link'));
+    pane.after({}, back);
+    assert.deepEqual(back.query, {});
+    assert.match(pane.render({}, route(`${mon} office`)), /Plan this\?/, 'once only: the link opened again asks');
+    app.setEvent(sat, 'night', 'formal');
+    app.setEvent(mon, 'day', 'office');
+
+    // Opened again: nothing new; a link that doesn't read says so, and plans nothing.
+    const again = pane.render({}, route(text));
+    assert.match(again, /Nothing new to plan/);
+    assert.ok(again.includes('<small>Planned already</small>') && !again.includes('plan-link-apply'));
+    const bad = clean(pane.render({}, route('next saturday: a wedding')), 'bad plan link');
+    assert.match(bad, /Couldn’t read this plan/);
+    assert.ok(!bad.includes('plan-link-apply'));
+    assert.equal(wear.linkedPlan({ dest: 'wear', pane: 'week', query: {} }), null);
+    // Its words escaped like the rest.
+    assert.ok(!wear.planLinkHTML({ items: [{ dateISO: sat, slot: 'night', occasion: { ...occasionById('formal'), phrase: EVIL }, past: false, was: null }] }, today).includes(EVIL));
+  } finally {
+    for (const e of [...state.events]) app.setEvent(e.dateISO, e.slot, null);
+    state.base = state.route = null;
+  }
 });

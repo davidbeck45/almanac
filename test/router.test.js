@@ -58,6 +58,16 @@ test('routes round-trip, ids and queries escaped', () => {
   assert.ok(!routeHash({ dest: 'bottle', arg: 'a/b?c' }).includes('?c'), 'an id can’t break out into the query');
 });
 
+test('the Week keeps a plan link’s events in its query, readable, and no other pane does', () => {
+  const link = '#/wear/week?plan=2026-11-07+night+formal;2026-11-03+night+date';
+  assert.deepEqual(parse(link), { dest: 'wear', pane: 'week', arg: null, query: { plan: '2026-11-07 night formal;2026-11-03 night date' } });
+  assert.equal(routeHash(parse(link)), link, 'spaces as +, the semicolons as they are');
+  assert.equal(routeHash(parse('#/wear/week?plan=2026-11-07%20night%20formal%3B2026-11-03%20date')), '#/wear/week?plan=2026-11-07+night+formal;2026-11-03+date');
+  assert.equal(routeHash(parse('#/wear/now?plan=2026-11-07+formal')), '#/wear/now');
+  assert.equal(routeHash(parse('#/wear?plan=2026-11-07+formal')), '#/wear/now', 'the default pane isn’t the Week');
+  assert.equal(routeHash(parse('#/wear/week?plan=')), '#/wear/week');
+});
+
 test('the old ?view= shortcuts open the same panes', () => {
   const at = q => legacyHash(new URLSearchParams(q));
   assert.equal(at('view=today'), '#/wear/now');

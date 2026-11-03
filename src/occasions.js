@@ -164,6 +164,13 @@ export const OCCASIONS = [
 
 export const occasionById = id => OCCASIONS.find(o => o.id === id);
 
+const squash = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
+/** An occasion by id, label or a former label, any case or spacing ("date", "Date Night", "night out", "everyday"), or null. */
+export function findOccasion(text) {
+  const q = squash(text);
+  return OCCASIONS.find(o => [o.id, o.label, ...(o.aliases ?? [])].some(n => squash(n) === q)) ?? null;
+}
+
 // The raw occasion fit (occasionRaw in src/engine.js) that reads as 0 and as 1:
 // its 2nd and 98th percentile over the dataset's 8,000 bottles with 500+
 // rating votes, never narrower than the accords' fit alone spans (Office's
