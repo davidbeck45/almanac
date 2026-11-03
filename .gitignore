@@ -6,3 +6,4 @@ node_modules/
 shots/
 .claude/*
 !.claude/skills/
+__pycache__/
