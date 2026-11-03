@@ -86,7 +86,7 @@ Stderr matters: "matches N bottles (…); using the most voted" (confirm the bra
 
 ## 5. Reply
 
-- Lead with the answer in one line: the verdict, or the two or three gaps that matter, saying "room to grow" when that's all the report finds ("nothing's missing; Date Night on mild and warm nights has the most room to grow").
+- Lead with the answer in one line: the verdict, or the two or three gaps that matter, saying "room to grow" when that's all the report finds ("nothing's missing; the office on cold days has the most room to grow").
 - Then two to four bottles in the tool's order, each with why (what it fills, or the style, from the output) and one caveat: value score, blind-buy risk and its reason, a body mist, "a clone of X" (from `smellsLike`), or few votes.
 - For a `--check`, relay the verdict and its reasons, then add what the numbers can't know: price, and whether he likes the notes.
 - Name the closest bottle he already owns for each, and when it's Covered or Redundant, say plainly that he has it covered.
