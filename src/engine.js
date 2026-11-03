@@ -416,7 +416,9 @@ const PERSONAL_PICK = [-0.11, -0.06, -0.01, 0, 0.02];
 // warm-weather night-out bottle in a third of David's, by 0.19), and any more
 // off would drop a clear only-fit out of the top 3. There its stars' term
 // grows to set it LOATHED_GAP under the best other bottle (2 points, so its
-// match never reads as a tie with the pick), above the next.
+// match reads apart from the pick's), above the next. With the next within
+// that of the best it lands between them, a point or less under the pick,
+// and its page names his rating, never a tie (contrast.js pickGapLine).
 const LOATHED_GAP = 0.02;
 // Ratings at or below this mean you'd rather not wear it: no nudges, no packing.
 export const DISLIKED = 2;

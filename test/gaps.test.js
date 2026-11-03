@@ -538,13 +538,22 @@ test('the buy check knows what he likes: more of a style he’s thin on is good,
   // Nor does his taste alone vouch for one, as suggestions leave mists out: Book Loft wears close, and
   // he likes Intimate, but it's only Good once he lets mists in.
   const loft = records.find(r => r.name === 'Book Loft');
-  assert.equal(check(loft, { liked: ['intimate'] }).verdict, 'Covered');
+  const covered = check(loft, { liked: ['intimate'] });
+  assert.equal(covered.verdict, 'Covered');
+  // Covered, it says why second, where the Wishlist's card shows it, never "More of the … you like".
+  assert.equal(covered.reasons[1], 'One of the close-wearing scents you like, but a body mist: lighter and shorter-lived than a perfume.');
   const open = buyCheck(loft, gapContext({ owned: wardrobe, records, byId, mists: true }), { liked: ['intimate'] });
   assert.deepEqual([open.verdict, open.reasons[0]], ['Good', 'More of the close-wearing scents you like: you own 2.']);
   // Nor If You Musk, a Bath & Body Works mist whose page never says so: the house is enough.
   const musk = check(named('If You Musk', 'Bath & Body Works'));
   assert.equal(musk.verdict, 'Covered');
-  assert.ok(musk.reasons.includes('It’s a body mist: lighter and shorter-lived than a perfume.'), musk.reasons.join(' | '));
+  assert.equal(musk.reasons[1], 'One of the skin scents you like, but a body mist: lighter and shorter-lived than a perfume.');
+  assert.equal(check(named('If You Musk', 'Bath & Body Works'), { liked, stated: false }).reasons[1], 'One of the skin scents you reach for, but a body mist: lighter and shorter-lived than a perfume.');
+  // In no style he likes, or one he has plenty of, it's plainly a body mist.
+  assert.equal(mist.verdict, 'Covered');
+  assert.equal(mist.reasons[1], 'It’s a body mist: lighter and shorter-lived than a perfume.');
+  assert.deepEqual(check('87258', { liked: ['vanilla'] }).reasons.slice(1), ['It’s a body mist: lighter and shorter-lived than a perfume.', 'You own 8 vanilla scents already.']);
+  for (const c of [covered, musk, mist]) assert.ok(!c.reasons.some(r => /^More of /.test(r)), c.reasons.join(' | '));
   // A skin scent reviewers warn about is risky, not good, when only its style speaks for it.
   const mkk = check(named('Muscs Koublai Khan', 'Serge Lutens'));
   assert.equal(mkk.verdict, 'Risky');

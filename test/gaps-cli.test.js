@@ -75,3 +75,16 @@ test('--check reads a number a bottle is named as its name, and id: as an id', a
   assert.equal(four.stderr.trim(), 'Reading "212" as a name (212 by Carolina Herrera (1997)).');
   assert.doesNotMatch(zero.stdout + zero.stderr, /9\.0 Zara/);
 });
+
+test('--check gives each fill the percentages --gaps and the app give it', async () => {
+  // Zenith's warm date nights over Supremacy, at 0.7646 before the plain data rounds it: 77% everywhere, not 76% in --check.
+  const [check, gaps, json] = await Promise.all([cli('--check', 'Zenith'), cli('--gaps'), cli('--check', 'Zenith', '--json')]);
+  const fills = text => text.split('\n').map(l => l.trim()).filter(l => /^[A-Z][\w ]+ on \w+ (days|nights): \d+%/.test(l));
+  const zenith = gaps.stdout.split(/\n {2}\d\. /).find(p => p.startsWith('Zenith by Riiffs'));
+  assert.ok(zenith, gaps.stdout);
+  const [theirs, ours] = [fills(zenith), fills(check.stdout)];
+  assert.ok(theirs.length >= 2, zenith);
+  for (const line of theirs) assert.ok(ours.includes(line), `${line} | --check: ${ours.join(' | ')}`);
+  const pct = x => `${Math.round(x * 100)}%`;
+  for (const f of JSON.parse(json.stdout).fills) assert.ok(ours.some(l => l.startsWith(`${f.title}: ${pct(f.to)}`) && (!f.beats || l.endsWith(`at ${pct(f.from)}`))), f.title);
+});

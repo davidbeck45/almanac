@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { contrast, tiesFor, planTies, rankedTies, tieLine, tieName, gapParts, pickGapLine, TIES_MAX, TIE_OCCASIONS } from '../src/contrast.js';
+import { contrast, tiesFor, planTies, rankedTies, tieLine, tieName, gapParts, pickGapLine, runnerUpOf, TIES_MAX, TIE_OCCASIONS } from '../src/contrast.js';
 import { heaviness } from '../src/accords.js';
-import { performanceLevel, rank } from '../src/engine.js';
+import { performanceLevel, rank, isDisliked } from '../src/engine.js';
 import { OCCASIONS, occasionById } from '../src/occasions.js';
 import { styleScores, shownOf, STYLES } from '../src/scent-styles.js';
 import { summarize } from '../src/weather.js';
@@ -182,7 +182,7 @@ test('the gap’s parts add up to the gap between the two scores, daily and for 
 });
 
 test('beside the pick: as well as it within a point, else how many points under it and the part that makes most of the gap', () => {
-  const words = /^(\d+) points under (.+?) (for .+ )?(today|tonight), mostly (the season fit|the time-of-day fit|the weather fit|the occasion fit|the rating|your rating|the heat|the cold|a recent wear)( and (the season fit|the time-of-day fit|the weather fit|the occasion fit|the rating|your rating|the heat|the cold|a recent wear))?\.$/;
+  const words = /^(\d+ points?|Just) under (.+?) (for .+ )?(today|tonight), mostly (the season fit|the time-of-day fit|the weather fit|the occasion fit|the rating|your rating|the heat|the cold|a recent wear)( and (the season fit|the time-of-day fit|the weather fit|the occasion fit|the rating|your rating|the heat|the cold|a recent wear))?\.$/;
   for (const { win, occasion, ranked } of lists) {
     const pick = ranked[0];
     assert.equal(pickGapLine(pick, pick, win, { occasion }), '', 'the pick itself');
@@ -190,14 +190,16 @@ test('beside the pick: as well as it within a point, else how many points under 
       const line = pickGapLine(e, pick, win, { occasion });
       const points = matchPct(pick) - matchPct(e);
       assert.ok(!/°|\d+ ?F\b/.test(line), line);
-      if (Math.abs(points) <= 1) {
+      // His 2★ Jake is never a toss-up: within a point it's under the pick, by his rating or not.
+      if (Math.abs(points) <= 1 && !isDisliked(e.fragrance)) {
         assert.equal(line, `Suits ${occasion ? `${occasion.phrase ?? occasion.label.toLowerCase()} ` : ''}${win.label.toLowerCase()} as well as ${pick.fragrance.name}.`);
         continue;
       }
       const m = line.match(words);
       if (pick.nudged && points < 0) continue;
       assert.ok(m, line);
-      assert.equal(Number(m[1]), points, 'points as the badges show them');
+      assert.equal(m[1] === 'Just' ? 0 : parseInt(m[1], 10), points, 'points as the badges show them');
+      assert.equal(m[1].endsWith('points'), points > 1, line);
       assert.equal(m[2], pick.fragrance.name);
       assert.equal(Boolean(m[3]), Boolean(occasion));
       // The part named first is the one that makes most of the gap.
@@ -232,4 +234,40 @@ test('above the pick, it says what chose the pick instead; a bottle saved for an
   assert.equal(pickGapLine(entry('Aristo', 0.9), pick, { ...win, label: 'Friday night' }, { occasion: occasionById('date') }), '4 points over Legacy for a date Friday night, but the plan gives Legacy a turn.');
   assert.equal(pickGapLine(null, pick, win), '');
   assert.equal(pickGapLine(over, null, win), '');
+});
+
+test('a bottle he rates 2★ or lower never suits the window as well as the pick: within a point it says how near, and that his rating keeps it under', () => {
+  const win = { feelsF: 38, dewF: 30, humidity: 47, category: 'clear', dateISO: '2026-11-05', date: new Date('2026-11-05T21:00:00'), lat: 40.7, label: 'Tonight', slot: 'night' };
+  const ranks = (loathed, ...others) => rank([{ ...named(loathed), personal: { rating: 1, longevity: 0, sillage: 0 } }, ...others.map(named)], win, 'night', { todayISO: win.dateISO });
+  // Held back under Atlantis Extrait with Essence de Blanc a point behind, Supremacy lands between them, a point under the pick.
+  const held = ranks('Supremacy', 'Atlantis', 'Essence de Blanc');
+  assert.deepEqual(held.map(r => r.fragrance.name.split(' ')[0]), ['Atlantis', 'Supremacy', 'Essence']);
+  assert.equal(rank(held.map(r => r.fragrance), win, 'night', { todayISO: win.dateISO, holdBack: false })[0].fragrance.name.split(' ')[0], 'Supremacy', 'it would lead');
+  assert.equal(matchPct(held[0]) - matchPct(held[1]), 1);
+  assert.equal(pickGapLine(held[1], held[0], win), '1 point under Atlantis Extrait tonight, mostly your rating.');
+  assert.deepEqual(tiesFor(held[0], held).map(t => t.entry.fragrance.name), ['Essence de Blanc'], 'the next a toss-up, not the 1★');
+  // At the pick's own match: just under it.
+  const close = ranks('Détour Noir', 'Sauvage', 'Aristo');
+  assert.deepEqual(close.slice(0, 2).map(r => r.fragrance.name), ['Sauvage', 'Détour Noir']);
+  assert.equal(matchPct(close[0]), matchPct(close[1]));
+  assert.equal(pickGapLine(close[1], close[0], win), 'Just under Sauvage tonight, mostly your rating.');
+  // Above a plan's pick by a point or less, it's his rating that passed it over.
+  const today = { ...wx.day, label: 'Today' };
+  assert.equal(pickGapLine(entry('Aristo', 0.866, { stars: 2 }), entry('Legacy', 0.86), today), '1 point over Legacy today, but you rate it 2★.');
+  assert.equal(pickGapLine(entry('Aristo', 0.862, { stars: 2 }), entry('Legacy', 0.86), today), 'Just over Legacy today, but you rate it 2★.');
+  assert.equal(pickGapLine(entry('Aristo', 0.862, { stars: 3 }), entry('Legacy', 0.86), today), 'Suits today as well as Legacy.');
+});
+
+test('the runner-up is the best after the pick and its ties, never one saved for an event or rated 2★ or lower', () => {
+  const ranked = [entry('Legacy', 0.885), entry('Aristo', 0.881), entry('Jake', 0.87, { stars: 1 }), entry('Cedrus Blanc', 0.86), entry('Terra', 0.85), entry('Sauvage', 0.84)];
+  ranked[3].parts.saved = { dateISO: '2026-10-31', slot: 'night', occasion: occasionById('formal') };
+  const ties = tiesFor(ranked[0], ranked);
+  assert.deepEqual(ties.map(t => t.entry.fragrance.name), ['Aristo']);
+  assert.equal(runnerUpOf(ranked[0], ranked, ties).fragrance.name, 'Terra', 'not the tie, the 1★ held back under it, or the bottle saved for Saturday');
+  assert.equal(runnerUpOf(ranked[0], ranked).fragrance.name, 'Aristo', 'without ties, the next');
+  // A plan's pick needn't lead: the runner-up can rank above it, and a 3★ counts.
+  const planned = [entry('Glorious Oud', 0.9, { stars: 3 }), entry('Legacy', 0.88)];
+  assert.equal(runnerUpOf(planned[1], planned).fragrance.name, 'Glorious Oud Royal Blanc');
+  assert.equal(runnerUpOf(ranked[0], ranked.slice(0, 1)), null);
+  assert.equal(runnerUpOf(null, ranked), null);
 });

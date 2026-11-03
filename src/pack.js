@@ -3,7 +3,7 @@
 // picks for one date and slot anywhere. packTrip is pure; picksFor and
 // tripPlan fetch the weather (src/weather.js).
 import { rank, daysBetween, PLAN_MARGIN, isDisliked, ROTATION_PENALTY } from './engine.js';
-import { tripWindows } from './weather.js';
+import { tripWindows, tripWeather } from './weather.js';
 
 const SHORT_DATE = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 const shortDate = iso => SHORT_DATE.format(new Date(`${iso}T12:00:00Z`));
@@ -116,16 +116,18 @@ const SEARCH_LIMIT = 100_000;
  * wear of the bottle worn every day is one, else null). Windows can carry an
  * occasion (`occasionOf`, default win.occasion). Wears before them
  * (`history`, the journal's) count against a bottle as rank counts them:
- * Now's "Out all day?" packs one bottle for today's two windows so.
+ * Now's "Out all day?" packs one bottle for today's two windows so, with
+ * `holdBack` too, so a window's top is what Now ranks first (never a 1★,
+ * holdBackLoathed); a trip reads the top as the best fit there is.
  * -> { bottles: [{ record, covers: [window], wears, why }],
  *      plan: [{ window, occasion, pick, score, tier, reasons, top: { record, score }, covered }],
  *      uncovered: [{ window, occasion, best, score }], variety: { add, everyDay: [record], slot } | null, text }
  */
-export function packTrip(frags, windows, { max = 3, occasionOf = win => win.occasion ?? null, history = [] } = {}) {
+export function packTrip(frags, windows, { max = 3, occasionOf = win => win.occasion ?? null, history = [], holdBack = false } = {}) {
   if (!frags.length || !windows.length) return { bottles: [], plan: [], uncovered: [], text: 'Nothing to pack for.' };
   const rows = windows.map(win => {
     const occasion = occasionOf(win);
-    const ranked = rank(frags, win, win.slot, { occasion, todayISO: win.dateISO, holdBack: false, history });
+    const ranked = rank(frags, win, win.slot, { occasion, todayISO: win.dateISO, holdBack, history });
     return { win, occasion, ranked, top: ranked[0], byId: new Map(ranked.map(r => [r.fragrance.id, r])) };
   });
   const within = (row, id) => row.byId.get(id).score >= row.top.score - PLAN_MARGIN;
@@ -345,14 +347,16 @@ function packText(bottles, plan, uncovered, wins, full, variety) {
 /**
  * Ranked picks for one date and slot at any place: the forecast's window, or
  * typical weather past the forecast. The slot defaults to the occasion's,
- * else day. -> { window, ranked }, or null when no weather came back.
+ * else day. `nudge` only on the place's own today (tripWeather's, not the
+ * device's): the journal can't say what will be idle by a later date.
+ * -> { window, ranked, todayISO }, or null when no weather came back.
  * `refusePast` throws for a date gone by at the place, as tripWindows'.
  */
 export async function picksFor(frags, { place, dateISO, slot = null, occasion = null, history = [], nudge = false, refusePast = false }) {
   const at = slot ?? occasion?.slot ?? 'day';
-  const [win] = await tripWindows(place, dateISO, dateISO, { slots: [at], refusePast });
+  const { windows: [win], todayISO } = await tripWeather(place, dateISO, dateISO, { slots: [at], refusePast });
   if (!win) return null;
-  return { window: win, ranked: rank(frags, win, at, { occasion, history, todayISO: dateISO, nudge }) };
+  return { window: win, ranked: rank(frags, win, at, { occasion, history, todayISO: dateISO, nudge: nudge && dateISO <= todayISO }), todayISO };
 }
 
 /**

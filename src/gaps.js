@@ -946,8 +946,15 @@ export function buyCheck(record, ctx, { liked = null, stated = true } = {}) {
     const why = [lowRated && ratedLine, ...risk.reasons].filter(Boolean);
     // Its warning, then what it would add: the style you like, or its fills.
     reasons.push(...(byTaste ? [why[0], tasteLine, likeLine] : [...why.slice(0, 2), fillLine ?? coveredLine]));
+  } else if (verdict === 'Covered' && mist) {
+    // A body mist says so next (the Wishlist shows two reasons): in a style
+    // you like and are thin on, it's why that style doesn't vouch (byTaste),
+    // never a line for buying it.
+    const thin = taste?.thin;
+    reasons.push(coveredLine, thin ? `One of the ${styleNoun(taste.style)} ${like}, but a body mist: lighter and shorter-lived than a perfume.` : mistLine,
+      lowRated ? ratedLine : (!thin && tasteLine) || likeLine);
   } else if (verdict === 'Covered') {
-    reasons.push(coveredLine, tasteLine ?? likeLine, lowRated ? ratedLine : mistLine ?? (tasteLine ? likeLine : (twin && !twin.owned && twin.text) || ratedLine));
+    reasons.push(coveredLine, tasteLine ?? likeLine, lowRated ? ratedLine : tasteLine ? likeLine : (twin && !twin.owned && twin.text) || ratedLine);
   } else {
     reasons.push(fillLine ?? tasteLine, fillLine ? (taste?.thin && tasteLine) || overlapLine : likeLine);
     reasons.push(mistLine || (risk.level === 'medium' && risk.reasons[0]) || leanLine || (twin && !twin.owned && twin.text) || ratedLine);

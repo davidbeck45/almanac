@@ -359,6 +359,16 @@ test('the wishlist puts the best fits first and says what each would add', async
   assert.match(card, /data-action="wish-remove"/);
 });
 
+test('a body mist on the wishlist says so in the two reasons its card shows, never selling the style it’s in', async () => {
+  const { checks: [musk] } = await ask('check', { owned, records: ['93117'], liked: discover.DEMO_LIKED, stated: true }); // If You Musk
+  assert.equal(musk.verdict, 'Covered');
+  const card = clean(wishlist.wantCardHTML({ want: { id: '93117', added: '2026-11-01' }, record: musk.record, check: musk, today: null }), 'a mist want');
+  const shown = [...card.match(/<ul class="wish-reasons">([^]*?)<\/ul>/)[1].matchAll(/<li>(.*?)<\/li>/g)].map(m => m[1]);
+  assert.equal(shown.length, 2);
+  assert.match(shown[1], /^One of the skin scents you like, but a body mist: /);
+  assert.ok(!shown.some(r => /^More of /.test(r)), shown.join(' | '));
+});
+
 test('offline, a want with nothing loaded says so plainly instead of loading forever', () => {
   const lost = { want: { id: '123', added: '2026-10-02' }, record: null, check: undefined };
   const waiting = wishlist.wantCardHTML(lost);

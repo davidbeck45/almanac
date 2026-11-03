@@ -49,16 +49,16 @@ import { DEFAULT_HIDDEN } from '../src/hidden.js';
 import { readJournal, isJournalToken, journalFreshness, occasionCounts } from '../src/history.js';
 import { normalize } from '../src/collections.js';
 import { excluding } from '../src/pool-tasks.js';
-import { fetchForecast, summarize, week, tripWindows, forecastError } from '../src/weather.js';
+import { fetchForecast, summarize, week, tripWindows, tripWeather, forecastError } from '../src/weather.js';
 import { searchCities } from '../src/location.js';
 import { STYLES, STYLE_STRONG, WEARS_CLOSE, styleById, styleScores, topOf, shownOf, leanOf, closeOf, styleMix } from '../src/scent-styles.js';
 import { fragranticaLibrary, loadPool, fromPool, loadPoolStyles, loadAbout } from '../src/fragrantica.js';
 import { applySkin } from '../src/skin.js';
 import { packTrip, withEvents, picksFor, tripOccasion } from '../src/pack.js';
 import { sprayGuide } from '../src/spray.js';
-import { tiesFor, planTies, tieName, tiesNews } from '../src/contrast.js';
+import { tiesFor, planTies, tieName, tiesNews, runnerUpOf } from '../src/contrast.js';
 import { doubles } from '../src/doubles.js';
-import { gapContext, gapReport, buyCheck, checkJSON, cellLabel, ratingText, DEFAULT_CLIMATE, USES, useLabel } from '../src/gaps.js';
+import { gapContext, gapReport, buyCheck, checkJSON, ratingText, DEFAULT_CLIMATE, USES, useLabel } from '../src/gaps.js';
 import { fetchClimate } from '../src/climate.js';
 import { parseUses, sharesFrom } from '../src/uses.js';
 import {
@@ -678,10 +678,12 @@ async function main() {
     }
 
     // --slot packs for only days or nights; --occasion goes on every window of
-    // its slot (a work trip's days) that has no event of its own.
+    // its slot (a work trip's days) that has no event of its own. The
+    // journal's wears count against a bottle as they do for picks, so one
+    // bottle for today (--max 1) answers as Now's "Out all day?" does.
     const place = await resolvePlace();
     const windows = withEvents(await windowsAt(place, args.from, args.to, 'from', slot ? { slots: [slot] } : {}), events);
-    const trip = packTrip(fragrances, windows, { max, occasionOf: tripOccasion(occasion, slot) });
+    const trip = packTrip(fragrances, windows, { max, occasionOf: tripOccasion(occasion, slot), history });
     const weather = w => ({ source: w.typical ? 'typical' : 'forecast', feelsF: Math.round(w.feelsF), humidity: Math.round(w.humidity), dewF: Math.round(w.dewF), condition: w.condition, rainChance: w.pop });
     if (args.json) {
       console.log(JSON.stringify({
@@ -818,14 +820,17 @@ async function main() {
         liked = found.ids;
       }
       const check = buyCheck(record, ctx, { liked });
+      // Its fills as the plain data has them, rounded as --gaps' and the app's
+      // are, so one fill reads the same percentage everywhere.
+      const plain = checkJSON(record, check);
       if (args.json) {
-        console.log(JSON.stringify({ climate: where, preferValue: ctx.preferValue, liked, ...checkJSON(record, check) }, null, 2));
+        console.log(JSON.stringify({ climate: where, preferValue: ctx.preferValue, liked, ...plain }, null, 2));
         return;
       }
       console.log([byLine(record), stars(record), check.value != null && `value ${check.value.toFixed(1)}`].filter(Boolean).join(' · '));
       console.log(`${check.verdict}`);
       for (const r of check.reasons) console.log(`  ${r}`);
-      if (check.fills.length) console.log(`Fills:\n${check.fills.slice(0, 5).map(f => `  ${fillLine({ ...f, title: cellLabel(f.cell) })}`).join('\n')}`);
+      if (plain.fills.length) console.log(`Fills:\n${plain.fills.slice(0, 5).map(f => `  ${fillLine(f)}`).join('\n')}`);
       // The owned bottle it's nearest, or the one voters link it to (`link`).
       if (check.overlap) {
         const o = check.overlap;
@@ -891,7 +896,8 @@ async function main() {
   // src/contrast.js: within a point of its match, not worn lately, each with
   // how it differs from the pick). A window an event is on (--events)
   // carries its occasion, and says so. The runner-up is the best after the
-  // pick and its ties, which are equal choices, not seconds.
+  // pick and its ties, which are equal choices, not seconds, and never one
+  // a tie couldn't be either: saved for a later event, or rated 2★ or lower.
   const pickJSON = (pick, ranked, win, occ = null, ties = []) => ({
     ...(win.occasion && { occasion: win.occasion.id }),
     tier: pick.tier,
@@ -900,7 +906,7 @@ async function main() {
     inspiredBy: inspiredBy(pick.fragrance),
     score: +pick.score.toFixed(3),
     reasons: pick.reasons.map(sign),
-    runnerUp: ranked.find(r => r !== pick && !ties.some(t => t.entry === r))?.fragrance.name ?? null,
+    runnerUp: runnerUpOf(pick, ranked, ties)?.fragrance.name ?? null,
     ties: ties.map(({ entry, tags }) => ({ name: entry.fragrance.name, brand: entry.fragrance.brand, score: +entry.score.toFixed(3), tags })),
     spray: sprayJSON(sprayGuide(pick.fragrance, win, win.occasion ?? occ)),
   });
@@ -961,23 +967,23 @@ async function main() {
   // rotation nudge only for today, as the app's Occasion pane has it: the
   // journal can't say what will be idle by a later date, and planned alone,
   // night after night, each date would nudge the same bottle. What the plan
-  // saves for an event is said from today ("on Saturday night").
+  // saves for an event is said from today ("on Saturday night"). Today is
+  // the place's own (tripWeather's, as picksFor reads it), not this
+  // machine's: late evening here it can be tomorrow there.
   if (args.date) {
     const wanted = slot ?? occasion?.slot;
-    const opts = { history, nudge: nudge && args.date <= today, nowISO: today };
-    let result, windows;
+    let result, windows, todayISO;
     try {
-      if (events.length) windows = await tripWindows(place, args.date, args.date, { refusePast: true, ...(wanted && { slots: [wanted] }) });
-      else {
-        result = wanted
-          ? [await picksFor(fragrances, { place, dateISO: args.date, slot: wanted, occasion, ...opts, refusePast: true })].filter(Boolean)
-            .map(({ window: win, ranked }) => ({ win, ranked, pick: ranked[0] }))
-          : planWindows(fragrances, await tripWindows(place, args.date, args.date, { refusePast: true }), opts);
+      if (wanted && !events.length) {
+        result = [await picksFor(fragrances, { place, dateISO: args.date, slot: wanted, occasion, history, nudge, refusePast: true })].filter(Boolean)
+          .map(({ window: win, ranked }) => ({ win, ranked, pick: ranked[0] }));
+      } else {
+        ({ windows, todayISO } = await tripWeather(place, args.date, args.date, { refusePast: true, ...(wanted && { slots: [wanted] }) }));
       }
     } catch (err) {
       weatherFailed(err, place, 'date', args.date);
     }
-    if (windows?.length) result = planWindows(fragrances, onWindows(windows, `--date ${args.date}`), { occasion, ...opts });
+    if (windows?.length) result = planWindows(fragrances, onWindows(windows, `--date ${args.date}`), { occasion, history, nudge: nudge && args.date <= todayISO, nowISO: todayISO });
     if (!result?.length) fail(`No weather came back for ${args.date}`);
     const typical = result.some(r => r.win.typical);
     const ties = tiesOf(result, !wanted || events.length > 0);
