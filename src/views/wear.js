@@ -1001,3 +1001,8 @@ export const forms = { ...trip.forms, ...pickers.forms };
 export const fields = { ...pickers.fields };
 export const changes = { ...trip.changes, ...when.changes };
 export const sheets = { ...pickers.sheets };
+
+// Whether a pane holds a form not saved yet (the Trip form): the shell then
+// waits for the next page change to reload into a new version, as it does
+// for an open sheet.
+export const unsaved = () => trip.tripUnsaved();

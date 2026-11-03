@@ -662,6 +662,20 @@ export function freshenTripToday(app) {
 }
 
 /**
+ * Whether the form holds a trip not planned yet: a place, dates, events or
+ * a count other than the saved trip's (or the empty form's), an event being
+ * filled in, or the weather on its way for one. Like an open sheet, it
+ * keeps a new version from reloading the page out of sight (src/app/shell.js).
+ */
+export function tripUnsaved() {
+  if (ui.busy || ui.adding) return true;
+  const trip = savedTrip();
+  if (!ui.draft || (trip && !ui.editing)) return false;
+  const asked = d => JSON.stringify([d.place?.lat, d.place?.lon, d.fromISO, d.toISO, d.max, d.events.map(e => [e.dateISO, e.slot, e.occasion])]);
+  return asked(draft()) !== asked(draftFrom(trip, todayISO()));
+}
+
+/**
  * The trip's day on Now (tripToday's answer): where, which day of how
  * many, and today's and tonight's packed bottles, each opening its page in
  * the trip's window. `worn(win)`: the id worn in a window, or null.

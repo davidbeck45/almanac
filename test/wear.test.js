@@ -1386,6 +1386,45 @@ test('a trip nine hours ahead of home reads its own day and hour: the card, its 
   }
 });
 
+test('a Trip form not planned yet keeps an outdated page from reloading out of sight, as an open sheet does', () => {
+  const realDoc = globalThis.document;
+  globalThis.document = { querySelector: () => null, getElementById: () => null, activeElement: null };
+  const page = { renderPage() {}, inSight: () => false, keepingFocus(el, scope, f) { f(); } };
+  const inForm = { closest: sel => (sel === '.trip-form' ? {} : null) };
+  try {
+    // The empty form, as it opens.
+    trip.forgetTrip();
+    trip.actions['trip-cancel'](null, page);
+    trip.renderTrip();
+    assert.equal(wear.unsaved(), false);
+    // An event being filled in, then dates of his own.
+    trip.actions['trip-ev-add'](null, page);
+    assert.equal(wear.unsaved(), true);
+    trip.actions['trip-ev-cancel'](null, page);
+    assert.equal(wear.unsaved(), false);
+    trip.changes['trip-to']({ value: shiftISO(app.todayISO(), 6) }, page);
+    assert.equal(wear.unsaved(), true);
+    // A planned trip: its plan is saved, and so is a count changed on it.
+    trip.saveTrip(saved);
+    trip.actions['trip-cancel'](null, page);
+    assert.equal(wear.unsaved(), false);
+    trip.actions['trip-max']({ dataset: { value: '4' }, closest: () => null }, page);
+    assert.equal(wear.unsaved(), false);
+    // Its form opened: only a change counts.
+    trip.actions['trip-edit'](null, page);
+    assert.equal(wear.unsaved(), false);
+    trip.actions['trip-max']({ dataset: { value: '2' }, ...inForm }, page);
+    assert.equal(wear.unsaved(), true);
+    trip.actions['trip-cancel'](null, page);
+    assert.equal(wear.unsaved(), false);
+  } finally {
+    localStorage.removeItem('scentcast.trip');
+    trip.actions['trip-cancel'](null, page);
+    trip.forgetTrip();
+    globalThis.document = realDoc;
+  }
+});
+
 test('Out all day? names one bottle that suits both of today’s windows, and only while it can', t => {
   // The morning of the fixture's first day, where the trip below is under way.
   t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-09-28T13:00:00Z') });
