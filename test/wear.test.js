@@ -614,6 +614,26 @@ test('a wear from the Occasion pane keeps its occasion; from Now, daily', () => 
   assert.equal(byslot.day.occasion, 'daily');
 });
 
+test('a wear keeps the weather it was logged in and the pick its list showed', () => {
+  const { state } = app;
+  state.loc = { name: 'Here', lat: 40.7, lon: -74 };
+  state.history = [];
+  const formal = occasionById('formal');
+  const ranked = rank(fragrances, wx.night, 'night', { occasion: formal });
+  app.storeContext('occ', wx.night, formal, ranked, { pick: ranked[0] });
+  const ui = { keepingFocus() {}, render() {} };
+  wear.actions.wear({ dataset: { ctx: 'occ', id: ranked[3].fragrance.id } }, ui);
+  const [entry] = state.history;
+  assert.equal(entry.pick, ranked[0].fragrance.id);
+  assert.deepEqual(entry.wx, { f: Math.round(wx.night.feelsF * 10) / 10, d: Math.round(wx.night.dewF * 10) / 10, h: Math.round(wx.night.humidity), p: wx.night.pop, c: wx.night.code });
+  // A trip's list has no pick of its own: the weather alone.
+  app.storeContext('trip:x', wx.day, null, rank(fragrances, wx.day, 'day'));
+  wear.actions.wear({ dataset: { ctx: 'trip:x', id: fragrances[1].id } }, ui);
+  const day = state.history.find(h => h.slot === 'day');
+  assert.ok(day.wx && !('pick' in day));
+  state.history = [];
+});
+
 test('Now’s cards read in the order they’re drawn, and only the window has a heading', () => {
   const ranked = rank(fragrances, wx.day, 'day', { history: [], todayISO: today });
   const pick = wear.pickHTML(ranked[0], 'day', null, { spray: sprayGuide(ranked[0].fragrance, wx.day) });

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rankWears, wearChoices, thermostat, fitOffset, FIT_MIN_WEARS } from '../scripts/journal-check.mjs';
-import { parseJournal, shiftISO } from '../src/history.js';
+import { parseJournal, shiftISO, wearStamp } from '../src/history.js';
 import { rank } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 
@@ -109,6 +109,44 @@ test('journal-check says what went wrong in a sentence, and skips wears whose we
   assert.equal(odd.status, 0, odd.stderr);
   assert.equal(odd.stderr, '');
   assert.match(odd.stdout, /^No wears to check/);
+});
+
+test('a wear the app stamped is ranked in the weather it was logged in, against the pick it showed, with no fetch', () => {
+  const ranked = rank(fragrances, night, 'night', { todayISO: '2026-09-28' });
+  const [top, second] = ranked.map(r => r.fragrance);
+  const stamp = wearStamp({ ...night, pop: 20, code: 0 }, second.id);
+  const journal = parseJournal({
+    app: 'scentcast-journal',
+    location: { lat: 40.71, lon: -74.01 },
+    history: [{ id: String(second.id), date: '2026-09-28', slot: 'night', lat: 40.71, lon: -74.01, ...stamp }],
+  });
+  const nowhere = () => { throw new Error('fetched'); };
+  const { rows, skipped } = rankWears(journal, fragrances, nowhere);
+  assert.deepEqual(skipped, { notInDemo: 0, noPlace: 0, noWeather: 0 });
+  assert.deepEqual([rows[0].feelsF, rows[0].dewF, rows[0].condition], [58, 46, 'Clear']);
+  assert.deepEqual([rows[0].rank, rows[0].top, rows[0].shown], [2, top.name, second.name]);
+  // The fit takes the pick shown as the one he followed, not rank's top.
+  const [choice] = wearChoices(journal, fragrances, nowhere).choices;
+  assert.equal(choice.top, choice.worn);
+});
+
+test('journal-check reads stamped wears offline, and says how often he wore the pick shown', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'almanac-'));
+  const file = join(dir, 'journal.json');
+  const top = rank(fragrances, night, 'night', { todayISO: dayISO(-3) })[0].fragrance;
+  const other = fragrances.find(f => f !== top);
+  const wears = [[-3, top], [-2, other], [-1, top]].map(([d, f]) => ({ id: String(f.id), date: dayISO(d), slot: 'night', lat: 40.71, lon: -74.01, ...wearStamp({ ...night, pop: 0, code: 0 }, top.id) }));
+  writeFileSync(file, JSON.stringify({ app: 'scentcast-journal', location: { lat: 40.71, lon: -74.01 }, history: [...wears, { id: String(top.id), date: dayISO(-4), slot: 'day' }] }));
+  const offline = run([file, '--json'], { MOCK_OFFLINE: '1' });
+  assert.equal(offline.status, 0, offline.stderr);
+  const { summary, wears: rows } = JSON.parse(offline.stdout);
+  assert.deepEqual([summary.wears, summary.skipped.noWeather], [3, 1], 'only the unstamped wear needed the archive');
+  assert.deepEqual([summary.shownWears, summary.shownPct], [3, 67]);
+  assert.equal(rows[1].shown, top.name);
+  const text = run([file], { MOCK_OFFLINE: '1' }).stdout;
+  const literal = t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  assert.match(text, new RegExp(`${literal(other.name)}.*\\(shown: ${literal(top.name)}\\)`));
+  assert.match(text, /\nthe pick the app showed 67% of the time, over the 3 wears that recorded it\n/);
 });
 
 // A year of someone choosing as if it felt `delta` °F warmer than it does,

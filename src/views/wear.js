@@ -11,7 +11,7 @@ import { sprayGuide } from '../spray.js';
 import { planTies, rankedTies, tieLine, contrast } from '../contrast.js';
 import { setSkin, loadSkin, loadAsked, markAsked, wasAsked } from '../skin.js';
 import { theme } from '../theme.js';
-import { toggleWear, wornIn, journalStats, shiftISO } from '../history.js';
+import { toggleWear, wearStamp, wornIn, journalStats, shiftISO } from '../history.js';
 import { routeHash } from '../app/router.js';
 import { esc, temp, deg, plural, shortDate, weekdayShort, windowRange, feelWords, displayReasons, moveText, listLabel } from '../ui.js';
 import {
@@ -701,11 +701,13 @@ export const actions = {
   ...pickers.actions,
   // Logs (or clears) a wear for the window of the list it's in, with the use
   // it was for (the Occasion pane's occasion, an event's on a trip, else
-  // 'daily'), which the gap finder's "How you wear" counts.
+  // 'daily'), which the gap finder's "How you wear" counts, and the window's
+  // weather and the pick the list showed (wearStamp), which journal-check
+  // reads in place of the archive's.
   wear(el, app) {
     const ctx = state.contexts[el.dataset.ctx];
     if (!ctx) return;
-    state.history = toggleWear(el.dataset.id, ctx.win.dateISO, ctx.win.slot, state.loc, ctx.occasion?.id ?? 'daily');
+    state.history = toggleWear(el.dataset.id, ctx.win.dateISO, ctx.win.slot, state.loc, ctx.occasion?.id ?? 'daily', wearStamp(ctx.win, ctx.pick?.fragrance.id));
     if (wornIn(state.history, ctx.win.dateISO, ctx.win.slot)) navigator.vibrate?.(12);
     app.keepingFocus(el, '#app', app.render);
   },
