@@ -713,6 +713,41 @@ test('a wear keeps the weather it was logged in and the pick its list showed', t
   state.history = [];
 });
 
+test('the Occasion card in another city reads that city’s today: late evening at home is tomorrow in Tokyo', async t => {
+  const { state } = app;
+  // 10:14 pm in New York (UTC-4 in the fixture), 11:14 am the next day in Tokyo.
+  const at = Date.parse('2026-09-29T02:14:00Z');
+  t.mock.timers.enable({ apis: ['Date'], now: at });
+  const home = syntheticForecast(8, { start: '2026-09-27' });
+  const tokyo = { name: 'Tokyo', region: 'Japan', lat: 35.68, lon: 139.69, timezone: 'Asia/Tokyo' };
+  const asked = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const u = new URL(String(url));
+    asked.push(u.searchParams.get('start_date'));
+    return { ok: true, status: 200, json: async () => ({ ...syntheticForecast(8, { start: '2026-09-28' }), utc_offset_seconds: 9 * 3600 }) };
+  };
+  Object.assign(state, { demo: { fetched: '2026-09-28', fragrances }, forecast: home, wx: summarize(home), loc: { name: 'Here', lat: 40.7, lon: -74 }, shared: null, active: 'demo', history: [], occasionSlot: null, route: null });
+  when.when.place = tokyo;
+  try {
+    assert.equal(state.wx.todayISO, '2026-09-28');
+    assert.equal(when.todayThere(), '2026-09-29');
+    const pane = wear.wear.panes.find(p => p.id === 'occasion');
+    const route = { dest: 'wear', pane: 'occasion', arg: 'casual' };
+    pane.render({}, route);
+    for (let i = 0; i < 50 && when.eventWindow('day').status === 'loading'; i++) await new Promise(r => setTimeout(r, 5));
+    const html = pane.render({}, route);
+    const ev = when.eventWindow('day');
+    assert.equal(ev.win.dateISO, '2026-09-29', 'Tokyo’s today, not home’s night gone by there');
+    assert.ok(!asked.some(d => d && d < '2026-09-29'), 'nothing asked for a day over in Tokyo');
+    assert.equal(app.canWear(ev.win, tokyo), true);
+    assert.match(html, /data-action="wear"/, 'Wear this, by Tokyo’s clock');
+  } finally {
+    globalThis.fetch = realFetch;
+    when.when.place = null;
+  }
+});
+
 test('a wear from the Occasion card in another city logs that city', async t => {
   const { state } = app;
   // Noon at home, so today's window can still be worn.

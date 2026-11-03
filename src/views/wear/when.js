@@ -8,7 +8,7 @@
 // shown can be planned for the occasion ("Plan it for Sat night", saved in
 // src/events.js): Now and the Week then plan around it, and the pane ranks
 // it as they do (rankEvent).
-import { tripWindows, forecastError, week } from '../../weather.js';
+import { tripWindows, forecastError, week, placeClock } from '../../weather.js';
 import { daysBetween, eventPhrase } from '../../engine.js';
 import { occasionById } from '../../occasions.js';
 import { shiftISO } from '../../history.js';
@@ -65,6 +65,11 @@ function load(key, place, dateISO, today, app) {
     .finally(() => { if (fetched.get(key) === entry && onOccasion() && app) repaint(app); });
 }
 
+// Today where the pane is: another city's own (late evening here it's
+// already tomorrow in Tokyo, where home's date is a night gone by), else
+// home's forecast's.
+export const todayThere = () => (when.place ? placeClock(when.place).todayISO : state.wx?.todayISO);
+
 /**
  * The window the Occasion pane ranks for `slot`: { status: 'ready', win,
  * here } or { status: 'loading' } or { status: 'error', error, here }.
@@ -79,7 +84,8 @@ export function eventWindow(slot, app = null) {
     return win ? { status: 'ready', win, here: true } : { status: 'error', here: true };
   }
   const place = when.place ?? state.loc;
-  const dateISO = when.dateISO ?? wx.todayISO;
+  const today = todayThere();
+  const dateISO = when.dateISO ?? today;
   if (!when.place) {
     const day = week(state.forecast, wx.at).find(d => d.dateISO === dateISO);
     const win = day?.[slot] ?? day?.day ?? day?.night;
@@ -88,7 +94,7 @@ export function eventWindow(slot, app = null) {
   const key = `${place.lat},${place.lon}|${dateISO}`;
   if (!fetched.has(key)) {
     if (!app) return { status: 'loading' };
-    load(key, place, dateISO, wx.todayISO, app);
+    load(key, place, dateISO, today, app);
   }
   const entry = fetched.get(key);
   if (entry.status !== 'ready') return entry;
@@ -176,7 +182,7 @@ export const actions = {
 
 export const changes = {
   'occ-date'(el, app) {
-    const today = state.wx?.todayISO;
+    const today = todayThere();
     if (!el.value || !today) return;
     when.dateISO = el.value <= today ? null : el.value;
     repaint(app);

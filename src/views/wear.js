@@ -705,7 +705,7 @@ const phraseOf = occasion => occasion.phrase ?? occasion.label.toLowerCase();
 function occasionHeading(route, ev = state.wx ? when.eventWindow(state.occasionSlot ?? occasionOf(route).slot) : null) {
   const occasion = occasionOf(route);
   const { dateISO, place } = when.when;
-  const today = state.wx?.todayISO;
+  const today = state.wx && when.todayThere();
   if (ev?.status === 'ready') return when.occasionTitle(occasion, ev.win, { today, place });
   if (today && (dateISO || place)) return when.occasionTitle(occasion, { dateISO: dateISO ?? today, slot: state.occasionSlot ?? occasion.slot }, { today, place });
   return `Picks for ${phraseOf(occasion)}${place ? ` in ${place.name}` : ''}`;
@@ -719,7 +719,7 @@ function occasionPane(app, route) {
   const ev = when.eventWindow(slot, app);
   // At home, the window shown can be planned for the occasion (src/events.js).
   const plan = ev.win && !when.when.place ? { occasion, win: ev.win, event: eventAt(ev.win) } : null;
-  const bar = when.whenBarHTML({ ...when.when, home: state.loc, today: state.wx.todayISO, slot: ev.win?.slot ?? slot, wx: state.wx, plan });
+  const bar = when.whenBarHTML({ ...when.when, home: state.loc, today: when.todayThere(), slot: ev.win?.slot ?? slot, wx: state.wx, plan });
   const head = `${banner()}${occasionPickerHTML(occasion.id)}${bar}`;
   if (ev.status === 'loading') return head + skeletonHTML(1);
   if (ev.status === 'error' && ev.here) return head + (state.loading ? skeletonHTML(1) : noHoursHTML());
