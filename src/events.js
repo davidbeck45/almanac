@@ -6,7 +6,11 @@
 // windows before it leave that bottle be. One event a window; dates gone by
 // drop out as the list loads. Trips keep their own events with the trip
 // (src/views/wear/trip.js), for the bottles packed.
-import { occasionById } from './occasions.js';
+//
+// Plans also come as text: the CLI's --events and the Week's plan links
+// (#/wear/week?plan=…, which Claude sends after reading the calendar) share
+// one grammar, parseEventText.
+import { OCCASIONS, occasionById, findOccasion } from './occasions.js';
 import { withEvents } from './pack.js';
 
 const KEY = 'scentcast.events';
@@ -70,3 +74,43 @@ export const eventOn = (events, { dateISO, slot }) => events.find(e => e.dateISO
 
 /** Windows with the stored events on them, as planWindows reads them (`win.occasion`, the occasion itself). */
 export const withStoredEvents = (windows, events) => withEvents(windows, events.map(e => ({ ...e, occasion: occasionById(e.occasion) })));
+
+// ---------- Plans as text ----------
+
+const SLOTS = ['day', 'night'];
+// A real calendar date: Date.parse takes Feb 30 as Mar 2.
+const isDate = s => ISO_DATE.test(s ?? '') && !Number.isNaN(Date.parse(`${s}T12:00:00Z`)) && new Date(`${s}T12:00:00Z`).toISOString().slice(0, 10) === s;
+
+/**
+ * "2026-10-20 night formal; 2026-10-21 date night" -> [{ dateISO, slot,
+ * occasion }], the occasion itself. Each is a date, then an occasion (id or
+ * label, src/occasions.js findOccasion), with an optional day or night
+ * before or after it ("formal night"); without one the occasion's own slot.
+ * One per window. Throws with a sentence for the user.
+ */
+export function parseEventText(text) {
+  const events = String(text ?? '').split(';').map(s => s.trim()).filter(Boolean).map(part => {
+    const [dateISO, ...rest] = part.split(/\s+/);
+    if (!isDate(dateISO)) throw new Error(`"${part}" doesn't start with a date (YYYY-MM-DD)`);
+    // "night out" and "date night" are occasions; "night formal" and "formal night" a slot and one.
+    let occasion = findOccasion(rest.join(' '));
+    let slot = occasion?.slot;
+    const isSlot = word => SLOTS.includes(word?.toLowerCase());
+    if (!occasion && isSlot(rest[0])) [slot, occasion] = [rest[0].toLowerCase(), findOccasion(rest.slice(1).join(' '))];
+    if (!occasion && isSlot(rest.at(-1))) [slot, occasion] = [rest.at(-1).toLowerCase(), findOccasion(rest.slice(0, -1).join(' '))];
+    if (!occasion) {
+      throw new Error(`no occasion in "${part}". Write each as DATE [day|night] OCCASION, the occasion one of: ${OCCASIONS.map(o => o.id).join(', ')}`);
+    }
+    return { dateISO, slot, occasion };
+  });
+  const seen = new Set();
+  for (const e of events) {
+    const key = `${e.dateISO} ${e.slot}`;
+    if (seen.has(key)) throw new Error(`two events on the ${e.slot} of ${e.dateISO}; give each day or night one`);
+    seen.add(key);
+  }
+  return events;
+}
+
+/** Events (the occasion itself or its id) as parseEventText reads them, in its plainest words: "2026-10-20 night formal;2026-10-21 night date". */
+export const planText = events => events.map(e => `${e.dateISO} ${e.slot} ${e.occasion?.id ?? e.occasion}`).join(';');

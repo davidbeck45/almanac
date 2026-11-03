@@ -42,7 +42,9 @@ import { readFileSync, existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { rank, planWindows, comfortRange, eventPhrase } from '../src/engine.js';
 import { layerPicks, byPick } from '../src/layering.js';
-import { OCCASIONS, occasionById } from '../src/occasions.js';
+import { OCCASIONS, occasionById, findOccasion } from '../src/occasions.js';
+import { parseEventText, planText } from '../src/events.js';
+import { routeHash } from '../src/app/router.js';
 import { DEFAULT_HIDDEN } from '../src/hidden.js';
 import { readJournal, isJournalToken, journalFreshness, occasionCounts } from '../src/history.js';
 import { normalize } from '../src/collections.js';
@@ -65,7 +67,6 @@ import {
 } from '../src/discover.js';
 
 const SLOTS = ['day', 'night'];
-const squash = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
 
 // What each mode reads, in the order main() answers them, so the first one
 // given decides (null: today's picks, the mode without a flag of its own).
@@ -144,12 +145,6 @@ function insteadOf(key, mode, name, args) {
       return mode === 'ideal' ? `${off}; it reads every temperature` : off;
     default: return MODES.some(([flag]) => flag === key) ? `${off}; ask one at a time` : off;
   }
-}
-
-/** An occasion by id, label or a former label, any case or spacing ("date", "Date Night", "night out", "everyday"), or null. */
-export function findOccasion(text) {
-  const q = squash(text);
-  return OCCASIONS.find(o => [o.id, o.label, ...(o.aliases ?? [])].some(n => squash(n) === q)) ?? null;
 }
 
 // Part of a name matches inside words from PART_MIN letters; shorter, only
@@ -256,36 +251,23 @@ const MAX_AHEAD_DAYS = 365;
 
 /**
  * --events "2026-10-20 night formal; 2026-10-21 date night" -> [{ dateISO,
- * slot, occasion }]. Each is a date, then an occasion (id or label), with an
- * optional day or night before or after it ("formal night"); without one the
- * occasion's own slot. One per window. Throws with a message for the user.
+ * slot, occasion }], read as the app reads a plan link (src/events.js
+ * parseEventText). Throws with a message for the user.
  */
 export function parseEvents(text) {
-  const events = String(text ?? '').split(';').map(s => s.trim()).filter(Boolean).map(part => {
-    const [dateISO, ...rest] = part.split(/\s+/);
-    if (!isDate(dateISO)) throw new Error(`--events: "${part}" doesn't start with a date (YYYY-MM-DD)`);
-    // "night out" and "date night" are occasions; "night formal" and "formal night" a slot and one.
-    let occasion = findOccasion(rest.join(' '));
-    let slot = occasion?.slot;
-    const isSlot = word => SLOTS.includes(word?.toLowerCase());
-    if (!occasion && isSlot(rest[0])) [slot, occasion] = [rest[0].toLowerCase(), findOccasion(rest.slice(1).join(' '))];
-    if (!occasion && isSlot(rest.at(-1))) [slot, occasion] = [rest.at(-1).toLowerCase(), findOccasion(rest.slice(0, -1).join(' '))];
-    if (!occasion) {
-      throw new Error(`--events: no occasion in "${part}". Write each as DATE [day|night] OCCASION, the occasion one of: ${OCCASIONS.map(o => o.id).join(', ')}`);
-    }
-    return { dateISO, slot, occasion };
-  });
-  const seen = new Set();
-  for (const e of events) {
-    const key = `${e.dateISO} ${e.slot}`;
-    if (seen.has(key)) throw new Error(`--events: two events on the ${e.slot} of ${e.dateISO}; give each day or night one`);
-    seen.add(key);
+  try {
+    return parseEventText(text);
+  } catch (err) {
+    throw new Error(`--events: ${err.message}`);
   }
-  return events;
 }
 
 // "formal wear on Sat, Nov 7 is at night": an event's slot, for a plan of the other.
 const eventWhen = e => `${e.occasion.phrase ?? e.occasion.label.toLowerCase()} on ${shortDate(e.dateISO)} is ${e.slot === 'day' ? 'by day' : 'at night'}`;
+
+// The app, where a plan link opens the Week to confirm --events (planLink).
+const APP_URL = 'https://davidbeck45.github.io/almanac/';
+const planLinkOf = events => `${APP_URL}${routeHash({ dest: 'wear', pane: 'week', query: { plan: planText(events) } })}`;
 
 /**
  * --journal: the app's Copy for Claude (a token, told apart by its shape)
@@ -924,6 +906,13 @@ async function main() {
   });
   const phrase = o => o.phrase ?? o.label.toLowerCase();
   const forEvent = win => (win.occasion ? `, for ${phrase(win.occasion)}` : '');
+  // The events typed with --events (the journal's are in the app already),
+  // as a link that opens the app's Week to plan them there, once he says so.
+  const typed = events.filter(e => !e.stored).sort(byTime);
+  const planLink = typed.length ? planLinkOf(typed) : null;
+  const sayPlanLink = () => {
+    if (planLink) console.log(`\nTo plan ${typed.length === 1 ? 'it' : 'them'} in the app's Week: ${planLink}`);
+  };
   // Puts --events on a plan's windows, or stops on one that isn't among
   // them: outside the dates planned (`what`), or a window already over. The
   // journal's events go only where they fit. Every event here is from this
@@ -1000,6 +989,7 @@ async function main() {
         occasion: occasion?.id ?? null,
         journal: freshness || false,
         slots: result.map((r, i) => slotJSON(r, ties[i])),
+        ...(planLink && { planLink }),
       }, null, 2));
     } else {
       console.log(`${place.name} · ${shortDate(args.date)}${typical ? ' · typical weather for the date (past the forecast)' : ''}${occasion ? ` · occasion: ${occasion.label}` : ''}`);
@@ -1008,6 +998,7 @@ async function main() {
         printSlot(r, `${win.slot === 'day' ? 'Day' : 'Night'}${forEvent(win)}: ${win.typical ? 'typically ' : ''}${win.condition.toLowerCase()}, feels ${Math.round(win.feelsF)}°F, ${Math.round(win.humidity)}% humidity${win.pop >= 30 ? (win.typical ? `, wet on ${win.pop}% of these dates in past years` : `, ${win.pop}% rain`) : ''}`, ties[i]);
       }
       sayJournal();
+      sayPlanLink();
     }
     return;
   }
@@ -1038,6 +1029,7 @@ async function main() {
           rainChance: day.pop,
           picks: slots.map(p => ({ slot: p.win.slot, feelsF: Math.round(p.win.feelsF), ...pickJSON(p.pick, p.ranked, p.win, occasion, ties.get(p)) })),
         })),
+        ...(planLink && { planLink }),
       }, null, 2));
     } else {
       console.log(`${place.name} · the week ahead${occasion ? ` · occasion: ${occasion.label}` : ''}`);
@@ -1049,6 +1041,7 @@ async function main() {
         }
       }
       sayJournal();
+      sayPlanLink();
     }
     return;
   }
@@ -1097,6 +1090,7 @@ async function main() {
       journal: freshness || false,
       slots: result.map((r, i) => slotJSON(r, ties[i])),
       ...(events.length && { events: [...result, ...ahead].filter(p => p.win.occasion).map(eventJSON) }),
+      ...(planLink && { planLink }),
     }, null, 2));
   } else {
     console.log(`${place.name} · now ${Math.round(wx.now.tempF)}°F ${wx.now.label}${occasion ? ` · occasion: ${occasion.label}` : ''}`);
@@ -1110,6 +1104,7 @@ async function main() {
       console.log(`For ${what}: ${pick.fragrance.name} (${pick.fragrance.brand})`);
     }
     sayJournal();
+    sayPlanLink();
   }
 }
 

@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadEvents, setEvent, tidyEvents, eventOn, withStoredEvents } from '../src/events.js';
+import { loadEvents, setEvent, tidyEvents, eventOn, withStoredEvents, parseEventText, planText } from '../src/events.js';
 
 // A stand-in for the browser's localStorage, fresh for each test.
 let store;
@@ -60,4 +60,26 @@ test('stored events go on a plan\'s windows as their occasions', () => {
   assert.equal(on[0], windows[0], 'a window without one stays as it was');
   assert.equal(on[1].occasion.id, 'date');
   assert.equal(on[1].occasion.label, 'Date Night');
+});
+
+test('plans as text read a date, an optional slot and an occasion, as the CLI\'s --events and the Week\'s plan links write them', () => {
+  const parse = parseEventText;
+  const [formal, date, out] = parse('2026-10-20 night formal; 2026-10-21 Date Night;2026-10-22 night out');
+  assert.deepEqual([formal.dateISO, formal.slot, formal.occasion.id], ['2026-10-20', 'night', 'formal']);
+  assert.deepEqual([date.slot, date.occasion.id], ['night', 'date']);
+  assert.deepEqual([out.slot, out.occasion.id], ['night', 'nightout'], '"night out" is the occasion, not a slot');
+  assert.equal(parse('2026-10-20 day date')[0].slot, 'day');
+  assert.deepEqual(parse(''), []);
+  assert.throws(() => parse('tuesday formal'), /^Error: "tuesday formal" doesn't start with a date/);
+  assert.throws(() => parse('2026-02-30 formal'), /doesn't start with a date/, 'a date the calendar has');
+  assert.throws(() => parse('2026-10-20 night gala'), /no occasion in "2026-10-20 night gala"\. Write each as DATE \[day\|night\] OCCASION/);
+  const [late] = parse('2026-10-15 formal night');
+  assert.deepEqual([late.slot, late.occasion.id], ['night', 'formal'], 'the slot after the occasion too');
+  assert.deepEqual([parse('2026-10-15 date night')[0].slot, parse('2026-10-15 office day')[0].occasion.id], ['night', 'office']);
+  assert.throws(() => parse('2026-10-17 night formal; 2026-10-17 date'), /two events on the night of 2026-10-17/);
+  assert.equal(parse('2026-10-17 night formal; 2026-10-17 office').length, 2, 'a day and a night');
+  // Written back in its plainest words, it reads the same, occasion objects or stored ids.
+  const text = planText([formal, date, { dateISO: '2026-10-23', slot: 'day', occasion: 'office' }]);
+  assert.equal(text, '2026-10-20 night formal;2026-10-21 night date;2026-10-23 day office');
+  assert.deepEqual(parse(text).map(e => [e.dateISO, e.slot, e.occasion.id]), [['2026-10-20', 'night', 'formal'], ['2026-10-21', 'night', 'date'], ['2026-10-23', 'day', 'office']]);
 });

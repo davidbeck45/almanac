@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { findOccasion, matchBottles, parseEvents, weatherFailure, misread, modeOf } from '../scripts/recommend.mjs';
+import { matchBottles, parseEvents, weatherFailure, misread, modeOf } from '../scripts/recommend.mjs';
 import { journalExport, journalToken, shiftISO } from '../src/history.js';
 
 const script = fileURLToPath(new URL('../scripts/recommend.mjs', import.meta.url));
@@ -17,15 +17,6 @@ const offline = (...args) => spawnSync(process.execPath, ['--import', mock, scri
 // The same, as a promise, for runs side by side.
 const run = (...args) => new Promise(resolve => {
   execFile(process.execPath, ['--import', mock, script, ...args], { encoding: 'utf8' }, (err, stdout, stderr) => resolve({ status: err ? err.code ?? 1 : 0, stdout, stderr }));
-});
-
-test('occasions resolve by id or label, any case or spacing', () => {
-  assert.equal(findOccasion('date').id, 'date');
-  assert.equal(findOccasion('Date Night').id, 'date');
-  assert.equal(findOccasion('night out').id, 'nightout');
-  assert.equal(findOccasion('CASUAL').id, 'casual');
-  assert.equal(findOccasion('Everyday').id, 'casual', 'its old name');
-  assert.equal(findOccasion('evening'), null);
 });
 
 test('bottle names match exactly first, else by part', () => {
@@ -291,20 +282,13 @@ test('a switched-off bottle still answers for --layer, --ideal and --spray, sayi
 
 const dayISO = days => new Date(Date.now() - new Date().getTimezoneOffset() * 60_000 + days * 86_400_000).toISOString().slice(0, 10);
 
-test('--events reads a date, an optional slot and an occasion', () => {
-  const [formal, date, out] = parseEvents('2026-10-20 night formal; 2026-10-21 Date Night;2026-10-22 night out');
-  assert.deepEqual([formal.dateISO, formal.slot, formal.occasion.id], ['2026-10-20', 'night', 'formal']);
-  assert.deepEqual([date.slot, date.occasion.id], ['night', 'date']);
-  assert.deepEqual([out.slot, out.occasion.id], ['night', 'nightout'], '"night out" is the occasion, not a slot');
-  assert.equal(parseEvents('2026-10-20 day date')[0].slot, 'day');
-  assert.deepEqual(parseEvents(''), []);
-  assert.throws(() => parseEvents('tuesday formal'), /doesn't start with a date/);
-  assert.throws(() => parseEvents('2026-10-20 night gala'), /no occasion in "2026-10-20 night gala"\. Write each as DATE \[day\|night\] OCCASION/);
-  const [late] = parseEvents('2026-10-15 formal night');
-  assert.deepEqual([late.slot, late.occasion.id], ['night', 'formal'], 'the slot after the occasion too');
-  assert.deepEqual([parseEvents('2026-10-15 date night')[0].slot, parseEvents('2026-10-15 office day')[0].occasion.id], ['night', 'office']);
-  assert.throws(() => parseEvents('2026-10-17 night formal; 2026-10-17 date'), /two events on the night of 2026-10-17/);
-  assert.equal(parseEvents('2026-10-17 night formal; 2026-10-17 office').length, 2, 'a day and a night');
+test('--events reads the plan grammar the app’s plan links share, and names the flag when it can’t', () => {
+  // The grammar's cases are in test/events.test.js (parseEventText).
+  const [formal, date] = parseEvents('2026-10-20 night formal; 2026-10-21 Date Night');
+  assert.deepEqual([formal.dateISO, formal.slot, formal.occasion.id, date.slot, date.occasion.id], ['2026-10-20', 'night', 'formal', 'night', 'date']);
+  assert.throws(() => parseEvents('tuesday formal'), /^Error: --events: "tuesday formal" doesn't start with a date/);
+  assert.throws(() => parseEvents('2026-10-20 night gala'), /^Error: --events: no occasion in "2026-10-20 night gala"\. Write each as DATE \[day\|night\] OCCASION/);
+  assert.throws(() => parseEvents('2026-10-17 night formal; 2026-10-17 date'), /^Error: --events: two events on the night of 2026-10-17/);
 });
 
 test('--week, --date and today\'s picks plan around --events: each takes the occasion\'s best and says so', async () => {
@@ -342,6 +326,12 @@ test('--week, --date and today\'s picks plan around --events: each takes the occ
   const now2 = cli('--loc', '40.7,-74', '--events', `${tonight} night date; ${night} night formal`);
   assert.match(now2.stdout, /\n(Tonight|Tomorrow night), for a date: /);
   assert.match(now2.stdout, /\nFor formal wear (tomorrow night|on \w+day night): /);
+  // A link to plan them in the app's Week, in time order, on every plan they're typed for.
+  const link = `https://davidbeck45.github.io/almanac/#/wear/week?plan=${night}+night+formal`;
+  for (const r of [week, today, onDate]) assert.equal(JSON.parse(r.stdout).planLink, link);
+  assert.ok(!('planLink' in JSON.parse(best.stdout)), 'none without --events');
+  assert.match(text.stdout, new RegExp(`\nTo plan it in the app's Week: ${link.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\n$`));
+  assert.match(now2.stdout, new RegExp(`To plan them in the app's Week: .+\\?plan=${tonight}\\+night\\+date;${night}\\+night\\+formal\n`));
 });
 
 test('the days and nights planned in the app come with the journal and plan like --events, left out quietly where they don\'t fit', async () => {
@@ -363,6 +353,8 @@ test('the days and nights planned in the app come with the journal and plan like
   assert.deepEqual(picks(nights).filter(p => p[3]).map(p => p.slice(0, 2).concat(p[3])), [[night, 'night', 'formal']], 'the office day isn’t a night');
   assert.equal(picks(over).find(p => p[0] === night && p[1] === 'night')[3], 'date', '--events wins on its window');
   assert.ok(JSON.parse(today.stdout).events.some(e => e.date === night && e.occasion === 'formal'), 'today’s picks name it ahead');
+  assert.ok(!('planLink' in JSON.parse(stored.stdout)), 'the app has its own plans: no link to plan them again');
+  assert.match(JSON.parse(over.stdout).planLink, new RegExp(`\\?plan=${night}\\+night\\+date$`), 'only what was typed');
 });
 
 test('--events stops on a window the plan doesn\'t cover, and on a mode that doesn\'t plan', () => {
@@ -406,6 +398,7 @@ test('--pack plans a trip: few bottles, every window, events on their night', ()
   assert.equal(out.plan.length, 8);
   assert.ok(out.plan.every(p => out.bottles.some(b => b.name === p.pick) && p.weather.source === 'forecast'));
   assert.equal(out.plan.find(p => p.date === dayISO(2) && p.slot === 'night').occasion, 'formal');
+  assert.ok(!('planLink' in out), 'a trip’s events stay with the trip: no link to plan them at home');
   assert.match(out.text, /^Pack /);
   assert.ok(out.plan.every(p => p.spray.sprays[0] >= 1 && p.spray.text));
   const text = cli('--pack', '--loc', '40.7,-74', '--from', from, '--to', to);

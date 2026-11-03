@@ -114,16 +114,18 @@ const SEARCH_LIMIT = 100_000;
  * one, and when the set packed still wears one every day, `variety` names the
  * bottle that, packed too, would rest it (`slot`: 'day' or 'night' when every
  * wear of the bottle worn every day is one, else null). Windows can carry an
- * occasion (`occasionOf`, default win.occasion).
+ * occasion (`occasionOf`, default win.occasion). Wears before them
+ * (`history`, the journal's) count against a bottle as rank counts them:
+ * Now's "Out all day?" packs one bottle for today's two windows so.
  * -> { bottles: [{ record, covers: [window], wears, why }],
  *      plan: [{ window, occasion, pick, score, tier, reasons, top: { record, score }, covered }],
  *      uncovered: [{ window, occasion, best, score }], variety: { add, everyDay: [record], slot } | null, text }
  */
-export function packTrip(frags, windows, { max = 3, occasionOf = win => win.occasion ?? null } = {}) {
+export function packTrip(frags, windows, { max = 3, occasionOf = win => win.occasion ?? null, history = [] } = {}) {
   if (!frags.length || !windows.length) return { bottles: [], plan: [], uncovered: [], text: 'Nothing to pack for.' };
   const rows = windows.map(win => {
     const occasion = occasionOf(win);
-    const ranked = rank(frags, win, win.slot, { occasion, todayISO: win.dateISO, holdBack: false });
+    const ranked = rank(frags, win, win.slot, { occasion, todayISO: win.dateISO, holdBack: false, history });
     return { win, occasion, ranked, top: ranked[0], byId: new Map(ranked.map(r => [r.fragrance.id, r])) };
   });
   const within = (row, id) => row.byId.get(id).score >= row.top.score - PLAN_MARGIN;
