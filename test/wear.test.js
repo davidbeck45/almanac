@@ -1719,7 +1719,8 @@ test('a plan link shows what it would plan, in the plan’s words, and plans not
     assert.equal(app.eventAt({ dateISO: mon, slot: 'day' }).occasion, 'office');
     assert.ok(!state.events.some(e => e.dateISO < today));
     assert.deepEqual(state.base.query, {});
-    assert.match(toasts.at(-1), /^<span>Planned formal wear (on \w+day night|tomorrow night) and the office on \w+day\.<\/span>$/);
+    // The long form, up to four lines: a week's plans don't fit two on a phone.
+    assert.match(toasts.at(-1), /^<span class="note">Planned formal wear (on \w+day night|tomorrow night) and the office on \w+day\.<\/span>$/);
     const board = pane.render({}, state.base);
     assert.ok(!board.includes('plan-link'));
     assert.match(board, /aria-label="[^"]+ night: [^"]+, for formal wear"/, 'the Week plans around it');

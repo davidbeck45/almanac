@@ -981,7 +981,7 @@ export const actions = {
     first?.focus({ preventScroll: true });
     first?.scrollIntoView?.({ block: 'nearest' });
     const said = set.map(e => eventPhrase(e, today));
-    app.showToast(`<span>${esc(`Planned ${said.length > 1 ? `${said.slice(0, -1).join(', ')} and ${said.at(-1)}` : said[0]}.`)}</span>`);
+    app.showToast(`<span class="note">${esc(`Planned ${said.length > 1 ? `${said.slice(0, -1).join(', ')} and ${said.at(-1)}` : said[0]}.`)}</span>`);
   },
   // Not now (or OK): nothing planned, and the card goes.
   'plan-link-skip'(el, app) {
