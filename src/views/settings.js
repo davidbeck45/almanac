@@ -38,11 +38,21 @@ const row = (label, control, { glyph = '', note = '' } = {}) => `<div class="set
     <span class="set-label">${glyph}<span class="set-text">${label}${note ? `<small>${note}</small>` : ''}</span></span>${control}
   </div>`;
 
-export function settingsHTML({ loc, units, themeName, stillSky = false, active, mineCount, shared, on, total, wears, updated, stale, credits }) {
+// When the forecast on screen was fetched: the time, and the day once it
+// isn't today's (a saved one can stand in for days).
+export function updatedText(fetchedAt, now = new Date()) {
+  const at = new Date(fetchedAt);
+  const sameDay = at.toDateString() === now.toDateString();
+  return at.toLocaleString([], { ...(!sameDay && { weekday: 'short' }), hour: 'numeric', minute: '2-digit' });
+}
+
+// `stale`: a saved forecast standing in, `offline` when the network was why.
+export function settingsHTML({ loc, units, themeName, stillSky = false, active, mineCount, shared, on, total, wears, updated, stale, offline = false, credits }) {
+  const age = !updated ? '' : !stale ? `Updated ${esc(updated)}` : offline ? `Offline · Updated ${esc(updated)}` : `Not updated since ${esc(updated)}`;
   return `
     ${group('Weather', `
       ${row(loc ? esc(loc.name) : 'Not set', '<button class="btn secondary compact" data-action="location">Change</button>', { glyph: icon.pin, note: loc?.region ? esc(loc.region) : '' })}
-      ${row('Forecast', '<button class="btn tertiary compact" data-action="refresh">Refresh</button>', { glyph: icon.refresh, note: updated ? `${stale ? 'Offline · ' : ''}Updated ${esc(updated)}` : '' })}
+      ${row('Forecast', '<button class="btn tertiary compact" data-action="refresh">Refresh</button>', { glyph: icon.refresh, note: age })}
     `)}
     ${group('Display', `
       ${row('Temperature', segHTML([{ value: 'F', label: '°F', on: units === 'F' }, { value: 'C', label: '°C', on: units === 'C' }], { action: 'units', label: 'Temperature units' }))}
@@ -73,8 +83,9 @@ function settingsPage() {
     on: activeFragrances().length,
     total: all.length,
     wears: state.history.length,
-    updated: state.wx ? new Date(state.wx.fetchedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '',
+    updated: state.wx ? updatedText(state.wx.fetchedAt) : '',
     stale: state.wx?.stale,
+    offline: state.wx?.offline,
     credits: creditsHTML({ fetched: state.demo?.fetched, scraped: all.some(f => !f.source) }),
   });
 }
@@ -164,11 +175,13 @@ export const actions = {
   // so focus doesn't drop out of the sheet; a second press does nothing. The
   // answer can take ten seconds and a permission prompt: by then the sheet
   // may be gone, or another open. A place still applies (setLocation leaves
-  // another sheet alone); an error only says so in this sheet.
+  // another sheet alone), unless one was picked meanwhile (a recent place, a
+  // city), which wins; an error only says so in this sheet.
   async geo(el, app) {
     if (state.sheet?.locating) return;
     app.updateSheet({ locating: true, error: '' });
     const sheet = state.sheet;
+    const before = state.loc;
     let place;
     try {
       place = await deviceLocation();
@@ -176,6 +189,7 @@ export const actions = {
       if (state.sheet === sheet) app.updateSheet({ locating: false, error: err.message });
       return;
     }
+    if (state.loc !== before) return;
     await app.setLocation(place);
   },
   async recent(el, app) {
@@ -184,7 +198,7 @@ export const actions = {
   },
   async city(el, app) {
     const r = state.sheet?.results?.[+el.dataset.value];
-    if (r) await app.setLocation({ name: r.name, region: r.region, lat: r.lat, lon: r.lon });
+    if (r) await app.setLocation({ name: r.name, region: r.region, lat: r.lat, lon: r.lon, ...(r.timezone && { timezone: r.timezone }) });
   },
   refresh: (el, app) => app.refreshWeather({ force: true }),
   units(el, app) {

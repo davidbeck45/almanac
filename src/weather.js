@@ -22,9 +22,17 @@ const FORECAST_MODELS = 2;
 const CACHE_KEY = 'scentcast.weather';
 const CACHE_VERSION = 3; // bump when the request shape changes
 const CACHE_MAX_AGE = 20 * 60 * 1000;
-// An older forecast still opens the app (under "Updating…" while a fresh one
-// loads) up to this age: it still covers today and tomorrow.
-const SHOW_STALE_FOR = 12 * 60 * 60 * 1000;
+// An older forecast still opens the app at once (under "Updating…" while a
+// fresh one loads) up to SHOW_STALE_FOR: a 7-day forecast three days old
+// still covers today and tomorrow, and the blend's error grows about half a
+// degree a day. At 12 hours, the morning's first look (yesterday's forecast,
+// a day old) waited on the network for any pick, 17–24 s on a slow day.
+// When a fresh one can't be had (offline, the daily limit, no answer), one up
+// to FALL_BACK_FOR old stands in, marked `stale` (standIn): it still holds
+// today. Past that the app says why, with Try again, rather than a page with
+// no window left to rank.
+const SHOW_STALE_FOR = 72 * 60 * 60 * 1000;
+const FALL_BACK_FOR = 5 * 24 * 60 * 60 * 1000;
 
 // How long a request to Open-Meteo may take before it's dropped and fails
 // as `timeout` (forecastError: "isn't answering"). On a slow day in October
@@ -151,7 +159,19 @@ export function cachedForecast(loc, nowMs = Date.now()) {
   return { forecast: cached.forecast, fresh: age < CACHE_MAX_AGE };
 }
 
-// Cached fetch: fresh cache wins (unless forced), network next, stale cache if offline.
+/**
+ * A saved forecast standing in for one that couldn't be had: marked `stale`,
+ * and `offline` when the request never reached the service (no status, no
+ * timeout), so the page doesn't say "Offline" on the daily limit. Null past
+ * FALL_BACK_FOR.
+ */
+export function standIn(forecast, err, nowMs = Date.now()) {
+  if (!forecast || !(nowMs - forecast.fetchedAt < FALL_BACK_FOR)) return null;
+  return { ...forecast, stale: true, offline: !err?.status && !err?.timeout };
+}
+
+// Cached fetch: fresh cache wins (unless forced), network next, the saved one
+// standing in when that fails (standIn), while it still covers today.
 export async function getForecast(loc, { force = false } = {}) {
   const key = cacheKey(loc);
   const cached = readCache();
@@ -161,7 +181,8 @@ export async function getForecast(loc, { force = false } = {}) {
     try { localStorage.setItem(CACHE_KEY, JSON.stringify({ key, forecast })); } catch {}
     return forecast;
   } catch (err) {
-    if (cached?.key === key) return { ...cached.forecast, stale: true };
+    const saved = cached?.key === key ? standIn(cached.forecast, err) : null;
+    if (saved) return saved;
     throw err;
   }
 }
@@ -292,6 +313,20 @@ const WET_MM = 1;
 const FALLING = new Set(['drizzle', 'rain', 'storm', 'snow']);
 
 const shiftDays = (iso, days) => new Date(Date.parse(`${iso}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+// A place's date before its forecast says: by its time zone, which a city
+// search gives (location.js searchCities), else by solar time at its
+// longitude three hours fast, as zones run ahead of the sun far more than
+// behind it (Spain, western China). Off by a day, that's late (a forecast
+// asked for that can't hold the date), not early, but for zones across the
+// date line (Samoa, Tonga), which a search finds.
+function placeDate({ lon, timezone }, nowMs) {
+  if (timezone) {
+    try {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(nowMs);
+    } catch {} // a zone this runtime doesn't know
+  }
+  return new Date(nowMs + (lon / 15 + 3) * 3_600_000).toISOString().slice(0, 10);
+}
 // The same month and day `years` earlier; February 29 falls back to the 28th.
 function yearsBefore(iso, years) {
   const [y, m, d] = iso.split('-').map(Number);
@@ -393,17 +428,29 @@ export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'
   for (let d = fromISO; d <= toISO; d = shiftDays(d, 1)) dates.push(d);
   const found = new Map();
   const key = (d, s) => `${d} ${s}`;
-  // The location's date can be a day off UTC's; windowOn finds what's there.
-  if (fromISO <= shiftDays(new Date(nowMs).toISOString().slice(0, 10), FORECAST_DAYS)) {
-    const forecast = await fetchForecast(loc, { days: FORECAST_DAYS, timeoutMs });
-    const { todayISO } = clock(forecast, nowMs);
-    if (refusePast && fromISO < todayISO) {
-      throw Object.assign(new Error(`${fromISO} has passed there; it's ${todayISO}`), { past: true, today: todayISO });
+  // The forecast holds the place's today and FORECAST_DAYS - 1 days after: a
+  // trip that starts past them waits on the archive alone, not on ten days of
+  // forecast first (32 s on a slow day). Its last two days are GFS and ECMWF
+  // alone, barely ahead of typical weather, so a trip within them that the
+  // forecast refuses (a 429 day) takes typical weather rather than failing.
+  const today = placeDate(loc, nowMs);
+  if (fromISO <= shiftDays(today, FORECAST_DAYS - 1)) {
+    let forecast = null;
+    try {
+      forecast = await fetchForecast(loc, { days: FORECAST_DAYS, timeoutMs });
+    } catch (err) {
+      if (fromISO < shiftDays(today, FORECAST_DAYS - 2)) throw err;
     }
-    for (const d of dates) {
-      for (const s of slots) {
-        const win = windowOn(forecast, d, s);
-        if (win && !(win.models < FORECAST_MODELS)) found.set(key(d, s), win);
+    if (forecast) {
+      const { todayISO } = clock(forecast, nowMs);
+      if (refusePast && fromISO < todayISO) {
+        throw Object.assign(new Error(`${fromISO} has passed there; it's ${todayISO}`), { past: true, today: todayISO });
+      }
+      for (const d of dates) {
+        for (const s of slots) {
+          const win = windowOn(forecast, d, s);
+          if (win && !(win.models < FORECAST_MODELS)) found.set(key(d, s), win);
+        }
       }
     }
   }
@@ -415,7 +462,9 @@ export async function tripWindows(loc, fromISO, toISO, { slots = ['day', 'night'
   return dates.flatMap(d => slots.map(s => found.get(key(d, s))).filter(Boolean));
 }
 
-function clock(forecast, nowMs) {
+// The place's wall clock at nowMs, by its forecast's UTC offset: today's and
+// tomorrow's dates and the hour (state.js canWear reads it).
+export function clock(forecast, nowMs = Date.now()) {
   const wallNow = nowMs + forecast.utc_offset_seconds * 1000;
   const nowDate = new Date(wallNow);
   return {
@@ -475,7 +524,10 @@ export function summarize(forecast, nowMs = Date.now()) {
 
   return {
     todayISO,
+    // When it was read: the app reads the Week at the same moment (state.js).
+    at: nowMs,
     stale: !!forecast.stale,
+    offline: !!forecast.offline,
     fetchedAt: forecast.fetchedAt,
     now: {
       ...reading,
@@ -488,6 +540,18 @@ export function summarize(forecast, nowMs = Date.now()) {
     day: next('day'),
     night: next('night'),
   };
+}
+
+/**
+ * What the app shows: the forecast read for nowMs (summarize), or null when
+ * it's too old to show (SHOW_STALE_FOR; FALL_BACK_FOR for one standing in,
+ * `stale`) or no longer holds the place's today, whose high and low
+ * summarize would take from its first day.
+ */
+export function wxAt(forecast, nowMs = Date.now()) {
+  if (!forecast || !(nowMs - forecast.fetchedAt < (forecast.stale ? FALL_BACK_FOR : SHOW_STALE_FOR))) return null;
+  if (!forecast.daily.time.includes(clock(forecast, nowMs).todayISO)) return null;
+  return summarize(forecast, nowMs);
 }
 
 // The forecast as days, each with whatever day and night windows are still

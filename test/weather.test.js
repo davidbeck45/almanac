@@ -1,7 +1,7 @@
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  blendModels, week, windowOn, summarize, cachedForecast, getForecast, forecastError, requestError, fetchForecast, fetchTypical,
+  blendModels, week, windowOn, summarize, wxAt, cachedForecast, getForecast, forecastError, requestError, fetchForecast, fetchTypical,
   REQUEST_TIMEOUT, TRIP_TIMEOUT,
 } from '../src/weather.js';
 import { syntheticForecast } from './fixtures.js';
@@ -66,7 +66,12 @@ test('the saved forecast opens the app: fresh as is, older dimmed while it refre
     assert.equal(cachedForecast(loc, now).fresh, true);
     save(now - 3 * 3600e3);
     assert.equal(cachedForecast(loc, now).fresh, false);
+    // The morning check finds yesterday's: it still covers today and tomorrow, so it shows at once.
     save(now - 30 * 3600e3);
+    assert.equal(cachedForecast(loc, now).fresh, false);
+    save(now - 71 * 3600e3);
+    assert.equal(cachedForecast(loc, now).fresh, false);
+    save(now - 80 * 3600e3);
     assert.equal(cachedForecast(loc, now), null);
     save(now, { lat: 1, lon: 2 });
     assert.equal(cachedForecast(loc, now), null, 'another place');
@@ -192,7 +197,9 @@ test('a hung forecast falls back on the saved one, else fails as not answering',
       store.set('scentcast.weather', JSON.stringify({ key: '3:41.88,-87.63', forecast: { ...multiModel(), fetchedAt: Date.now() - 13 * 3600e3 } }));
       const saved = getForecast(loc);
       mock.timers.tick(REQUEST_TIMEOUT);
-      assert.equal((await saved).stale, true);
+      const stale = await saved;
+      assert.equal(stale.stale, true);
+      assert.equal(stale.offline, false, 'it reached the service, which didn’t answer: not offline');
 
       store.clear();
       const none = getForecast(loc);
@@ -203,4 +210,57 @@ test('a hung forecast falls back on the saved one, else fails as not answering',
     mock.timers.reset();
     delete globalThis.localStorage;
   }
+});
+
+test('a saved forecast stands in for one that can’t be had while it still covers today, then the error says why', async () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  const real = globalThis.fetch;
+  try {
+    const loc = { lat: 41.88, lon: -87.63 };
+    const save = age => store.set('scentcast.weather', JSON.stringify({ key: '3:41.88,-87.63', forecast: { ...multiModel(), fetchedAt: Date.now() - age } }));
+    // Offline: a day-old forecast stands in, marked so.
+    globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
+    save(26 * 3600e3);
+    const offline = await getForecast(loc);
+    assert.deepEqual([offline.stale, offline.offline], [true, true]);
+    // Four days old it still does (a 7-day forecast still holds today and tomorrow)…
+    save(4 * 86_400e3);
+    assert.equal((await getForecast(loc)).stale, true);
+    // …but a week-old one has no window left: the error, not a page that never fills.
+    save(6 * 86_400e3);
+    await assert.rejects(getForecast(loc), err => forecastError(err) === 'Can’t reach the forecast. Check your connection and try again.');
+    // On a day the service refuses, the reason is the service’s, not the connection.
+    const daily = 'Daily API request limit exceeded. Please try again tomorrow.';
+    globalThis.fetch = async () => new Response(JSON.stringify({ error: true, reason: daily }), { status: 429 });
+    save(2 * 86_400e3);
+    const refused = await getForecast(loc);
+    assert.deepEqual([refused.stale, refused.offline], [true, false]);
+    save(6 * 86_400e3);
+    await assert.rejects(getForecast(loc), err => forecastError(err) === 'The forecast service’s daily limit is used up. Try again tomorrow.');
+  } finally {
+    globalThis.fetch = real;
+    delete globalThis.localStorage;
+  }
+});
+
+test('a forecast is read for the hour it is: a page left open overnight shows this morning, never last night', () => {
+  // Fetched at 6 pm on the 28th (UTC-4), opened at 8 am on the 29th: today is the 29th, and its daytime is next.
+  const forecast = { ...syntheticForecast(7), fetchedAt: Date.parse('2026-09-28T22:00:00Z') };
+  const morning = Date.parse('2026-09-29T12:00:00Z');
+  const wx = wxAt(forecast, morning);
+  assert.equal(wx.todayISO, '2026-09-29');
+  assert.deepEqual([wx.day.dateISO, wx.day.label, wx.night.label], ['2026-09-29', 'Today', 'Tonight']);
+  assert.equal(wx.at, morning, 'it says when it was read');
+  assert.deepEqual(wx, summarize(forecast, morning));
+  // Past three days it isn't shown while a new one loads…
+  assert.ok(wxAt(forecast, forecast.fetchedAt + 71 * 3600e3));
+  assert.equal(wxAt(forecast, forecast.fetchedAt + 73 * 3600e3), null);
+  // …but one standing in for a forecast that couldn't be had reads for five days,
+  assert.equal(wxAt({ ...forecast, stale: true }, forecast.fetchedAt + 4.9 * 86_400e3).stale, true);
+  assert.equal(wxAt({ ...forecast, stale: true }, forecast.fetchedAt + 5.1 * 86_400e3), null);
+  // and never once it no longer holds the place's today (its first day's high would read as today's).
+  const short = { ...syntheticForecast(2), fetchedAt: forecast.fetchedAt, stale: true };
+  assert.equal(wxAt(short, Date.parse('2026-10-01T16:00:00Z')), null);
+  assert.equal(wxAt(null), null);
 });

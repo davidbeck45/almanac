@@ -609,8 +609,11 @@ test('Occasion nudges only today here: an event on a later date gets the best fo
   }
 });
 
-test('a wear from the Occasion pane keeps its occasion; from Now, daily', () => {
+test('a wear from the Occasion pane keeps its occasion; from Now, daily', t => {
   const { state } = app;
+  // Noon on the fixture's first day, so both windows can still be worn.
+  t.mock.timers.enable({ apis: ['Date'], now: nowMs });
+  Object.assign(state, { forecast, wx });
   state.loc = { name: 'Here', lat: 40.7, lon: -74 };
   const formal = occasionById('formal');
   app.storeContext('occ', wx.night, formal, rank(fragrances, wx.night, 'night', { occasion: formal }));
@@ -711,8 +714,10 @@ test('in forced colors the chosen occasion tile keeps a ring of its own', () => 
   assert.match(forced, /\.occ\[aria-checked='true'\] \{ outline: 2px solid Highlight/);
 });
 
-test('a night planned for a date: Now and the Week plan around it, say what for, and log the wear for it', () => {
+test('a night planned for a date: Now and the Week plan around it, say what for, and log the wear for it', t => {
   const { state } = app;
+  // Noon today on the fixture's clock (UTC-4), so tonight can still be worn.
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse(`${new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10)}T16:00:00Z`) });
   const live = syntheticForecast(8, { start: new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10) });
   const wx = summarize(live);
   const today = wx.todayISO;
@@ -742,7 +747,7 @@ test('a night planned for a date: Now and the Week plan around it, say what for,
     assert.equal(plan.at(-1).pick.fragrance.id, sat.pick.fragrance.id);
     assert.ok(!planTies(plan)[plan.indexOf(night)].some(t => t.entry.fragrance.id === sat.pick.fragrance.id));
     // Now's card says what tonight is for, with a way to clear it; the Week marks the planned nights.
-    state.slot = 'night';
+    state.slot = { slot: 'night', dateISO: wx.night.dateISO };
     const now = wear.wear.panes.find(p => p.id === 'now').render({}, state.route);
     assert.match(now, /<span class="event-tag">.*<span>For a date<\/span><\/span><button class="link-btn" data-action="event-clear" data-date="[\d-]+" data-slot="night">Clear<span class="visually-hidden">: (Tonight|Tomorrow night) isn’t for a date<\/span><\/button>/s);
     const board = wear.weekHTML(days);

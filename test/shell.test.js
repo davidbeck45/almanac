@@ -383,19 +383,28 @@ test('a climate archive that fails isn’t asked again by every pool question', 
   }
 });
 
-test('Wear this is for windows dated today: at night, tomorrow’s daytime can’t be logged yet', async () => {
+test('Wear this is for windows dated today until each is over: at night, tomorrow’s daytime can’t be logged yet', async () => {
   const { state, canWear } = await import('../src/app/state.js');
   const tonight = { dateISO: '2026-10-14', slot: 'night' }, tomorrow = { dateISO: '2026-10-15', slot: 'day' };
+  const today = { dateISO: '2026-10-14', slot: 'day' };
+  // The place's wall clock, UTC-4 as its forecast says.
+  const at = hhmm => Date.parse(`2026-10-14T${hhmm}:00Z`) + 4 * 3600e3;
   try {
+    state.forecast = { utc_offset_seconds: -4 * 3600 };
+    state.wx = { todayISO: '2026-10-14' };
     // 22:49: the day window has rolled over to tomorrow's.
-    state.wx = { todayISO: '2026-10-14', day: tomorrow, night: tonight };
-    assert.equal(canWear(tonight), true);
-    assert.equal(canWear(tomorrow), false, 'Now’s Day toggle and Week’s tomorrow offer no Wear this');
-    assert.equal(canWear({ dateISO: '2026-10-16', slot: 'day' }), false);
-    state.wx = { todayISO: '2026-10-14', day: { dateISO: '2026-10-14', slot: 'day' }, night: tonight };
-    assert.equal(canWear({ dateISO: '2026-10-14', slot: 'day' }), true);
+    assert.equal(canWear(tonight, at('22:49')), true);
+    assert.equal(canWear(tomorrow, at('22:49')), false, 'Now’s Day toggle and Week’s tomorrow offer no Wear this');
+    assert.equal(canWear({ dateISO: '2026-10-16', slot: 'day' }, at('22:49')), false);
+    assert.equal(canWear(today, at('22:49')), false, 'today’s daytime is over');
+    assert.equal(canWear(today, at('16:59')), true);
+    // By the clock, not the forecast as last read: an hour turned since it was read is over still.
+    assert.equal(canWear(tonight, at('23:01')), false);
+    state.forecast = null;
+    assert.equal(canWear(tonight, at('20:00')), false, 'no forecast, no windows');
   } finally {
     state.wx = null;
+    state.forecast = null;
   }
 });
 

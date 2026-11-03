@@ -93,7 +93,7 @@ async function search(query) {
 function take(place, app) {
   const who = state.sheet?.for;
   if (!place || !takers[who]) return;
-  takers[who]({ name: place.name, region: place.region ?? '', lat: place.lat, lon: place.lon }, app);
+  takers[who]({ name: place.name, region: place.region ?? '', lat: place.lat, lon: place.lon, ...(place.timezone && { timezone: place.timezone }) }, app);
   app.renderPage();
   app.closeSheet();
 }

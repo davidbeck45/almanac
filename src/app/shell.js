@@ -4,7 +4,7 @@
 // src/views/ that exports its page or panes, templates, and maps of
 // actions, forms, fields, changes and sheets; CLAUDE.md ("Checking the UI")
 // says how to add one.
-import { summarize, getForecast, cachedForecast, forecastError } from '../weather.js';
+import { getForecast, cachedForecast, wxAt } from '../weather.js';
 import { saveLocation } from '../location.js';
 import { parseShare } from '../collections.js';
 import { fetchFragrances } from '../api.js';
@@ -22,6 +22,7 @@ import { loadWants, hasWant, setWant } from '../wishlist.js';
 import {
   state, computeToday, sourceRecords, knownBottles, library, setActive as chooseList,
   addToMine as addRecord, markBottlesLoaded, keepBottles, loadFullRecord, retryClimate,
+  readClock, hourTurned, showSaved, takeForecast, samePlace,
 } from './state.js';
 import {
   registerSheets, renderSheet, openSheet, updateSheet, closeSheet, sheetPopped, sheetEntry, replacePageURL, refocus, refocusNear, inSight,
@@ -148,16 +149,18 @@ function listBack() {
 
 // ---------- Rendering ----------
 
-// Everything on screen, again (data, weather, units or theme changed). The
-// focused control, replaced, hands focus to its successor, else to the
-// nearest one like it left in its list (a bottle hidden from a shelf); with
-// none (a button that became a tag, a banner that went), focus goes to the
-// top of the region it was in, never to the page's body.
+// Everything on screen, again (data, weather, units or theme changed), with
+// the forecast read for the hour it is (state.js readClock). The focused
+// control, replaced, hands focus to its successor, else to the nearest one
+// like it left in its list (a bottle hidden from a shelf); with none (a
+// button that became a tag, a banner that went), focus goes to the top of the
+// region it was in, never to the page's body.
 function render() {
   const focused = document.activeElement;
   const seen = inSight(focused);
   const region = focused?.closest?.('#sheet, #bottle, #app');
   const scope = region ? `#${region.id}` : '#app';
+  readClock();
   computeToday();
   renderTint();
   renderNav();
@@ -645,51 +648,49 @@ window.addEventListener('hashchange', () => sync());
 
 // The forecast boot asked for while the wardrobe loads: it doesn't need it.
 let early = null; // { loc, forecast: promise }
-const samePlace = (a, b) => a?.lat === b?.lat && a?.lon === b?.lon;
 // Past this with nothing on screen, the hero says the forecast is slow
 // (state.slow); the request gives up at REQUEST_TIMEOUT (weather.js).
 const SLOW_AFTER = 7000;
 
-// Opens on the saved forecast when there is one: fresh, it's all we need;
-// older, it shows under "Updating…", photos faded, until the new one arrives,
-// so the morning check doesn't wait on the network. Without one, a slow
-// answer says so after SLOW_AFTER, and one that never comes ends in the
-// forecast error with Try again.
+// Opens on the forecast in hand or the saved one, read for the hour it is (a
+// page left open overnight held last night's windows): fresh, it's all we
+// need; older, up to three days (src/weather.js SHOW_STALE_FOR), it shows
+// under "Updating…", photos faded, until the new one arrives, so the morning
+// check doesn't wait on the network. Without one, a slow answer says so
+// after SLOW_AFTER, and one that never comes ends in the forecast error with
+// Try again, unless a saved one up to five days old can stand in (state.js
+// takeForecast). An answer for a place picked over meanwhile is dropped.
 async function refreshWeather({ force = false } = {}) {
-  if (!state.loc) return;
-  const asked = !force && early?.loc === state.loc ? early.forecast : null;
+  const loc = state.loc;
+  if (!loc) return;
+  const asked = !force && early?.loc === loc ? early.forecast : null;
   early = null;
   state.error = null;
-  if (!state.wx && !force) {
-    const cached = cachedForecast(state.loc);
-    if (cached) {
-      state.forecast = cached.forecast;
-      state.wx = summarize(cached.forecast);
-      if (cached.fresh) return render();
-    }
-  }
+  if (showSaved() && !force) return render();
   state.loading = true;
   state.updating = Boolean(state.wx);
   state.slow = false;
   render();
   const slow = setTimeout(() => {
-    if (!state.loading || state.wx) return;
+    if (!state.loading || state.wx || !samePlace(state.loc, loc)) return;
     state.slow = true;
     render();
   }, SLOW_AFTER);
-  try {
-    state.forecast = await (asked ?? getForecast(state.loc, { force }));
-    state.wx = summarize(state.forecast);
-  } catch (err) {
-    if (state.wx) state.wx = { ...state.wx, stale: true };
-    else state.error = forecastError(err);
-  } finally {
-    clearTimeout(slow);
-    state.loading = false;
-    state.updating = false;
-    state.slow = false;
-  }
-  render();
+  const answer = await (asked ?? getForecast(loc, { force })).then(forecast => ({ forecast }), error => ({ error }));
+  clearTimeout(slow);
+  if (takeForecast(loc, answer)) render();
+}
+
+// What's on screen catches up with the clock, on coming back to the page and
+// on the hour while it stays visible: a forecast REFRESH_AFTER old, or one
+// past showing (wxAt), is asked for again (refreshWeather reads the one in
+// hand for now meanwhile); otherwise the page is drawn again, which reads it
+// for now (render). One already loading lands on its own.
+function catchUp() {
+  if (!state.loc) return;
+  if (state.loading) return render();
+  if (!state.wx || Date.now() - state.wx.fetchedAt > REFRESH_AFTER || !wxAt(state.forecast)) refreshWeather();
+  else render();
 }
 
 // A place picked here replaces one pinned by ?loc=, which would bring the
@@ -697,6 +698,7 @@ async function refreshWeather({ force = false } = {}) {
 // a late answer from "Use my location" finds open.
 async function setLocation(loc) {
   state.loc = loc;
+  state.forecast = null;
   state.wx = null;
   state.slot = null;
   saveLocation(loc);
@@ -835,17 +837,26 @@ function listen() {
   }
 
   // Back online: a bottle page that couldn't load tries again, and so does
-  // the place's climate.
+  // the place's climate, and a forecast that couldn't be had.
   window.addEventListener('online', () => {
     retryClimate();
     if (state.route?.dest === 'bottle') retryBottle();
+    if (state.loc && !state.loading && (state.error || state.wx?.stale)) refreshWeather();
   });
 
+  // Coming back to the page (a tab, a phone unlocked, Back onto it from the
+  // browser's page cache), and on the hour while it stays visible (a tab
+  // beside work, a second screen): the hour is checked each minute, as a
+  // hidden page's timers sleep.
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible' || !state.loc) return;
-    if (!state.wx || Date.now() - state.wx.fetchedAt > REFRESH_AFTER) refreshWeather();
-    else { state.wx = summarize(state.forecast); render(); }
+    if (document.visibilityState === 'visible') catchUp();
   });
+  window.addEventListener('pageshow', e => {
+    if (e.persisted) catchUp();
+  });
+  setInterval(() => {
+    if (document.visibilityState === 'visible' && hourTurned()) catchUp();
+  }, 60_000);
 
   // A bottle photo that doesn't load (offline with nothing saved, gone,
   // blocked) shows the drawn bottle, not the browser's broken-image box.
