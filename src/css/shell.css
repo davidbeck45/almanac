@@ -24,7 +24,7 @@
 
 #main { position: relative; }
 #main:focus { outline: none; }
-/* The app didn't finish loading (src/app/early.js): its message alone, clear of the top edge, with no rail beside it. */
+/* The app didn't finish loading (showUnloaded in index.html): its message alone, clear of the top edge, with no rail beside it. */
 #main > .message.unloaded { margin-top: calc(env(safe-area-inset-top) + var(--s-8)); }
 #app:has(> #nav[hidden]) { grid-template-columns: minmax(0, 1fr); }
 #main.enter .pane { animation: view-in var(--dur-3) var(--ease-out); }
