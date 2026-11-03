@@ -538,6 +538,20 @@ test('--date nudges only today: a later date ranks its best, as the app’s Occa
   assert.ok(saved.reasons.includes(`- Saved for formal wear on ${weekday} night`), saved.reasons.join('; '));
 });
 
+test('--journal’s freshness is counted from the place’s own date, as its picks are', () => {
+  // This machine at UTC-11, the place at UTC+13: a whole day ahead there.
+  const at = (...args) => spawnSync(process.execPath, ['--import', mock, script, '--loc', '40.7,-74', ...args], {
+    encoding: 'utf8', env: { ...process.env, TZ: 'Pacific/Pago_Pago', MOCK_UTC_OFFSET: '13' },
+  });
+  const there = new Date(Date.now() + 13 * 3600e3).toISOString().slice(0, 10);
+  const id = String(fragrances[0].id);
+  const token = journalToken([{ id, date: shiftISO(there, -2), slot: 'night' }], [], {}, { todayISO: there });
+  const json = at('--json', '--journal', token);
+  assert.equal(json.status, 0, json.stderr);
+  assert.deepEqual(JSON.parse(json.stdout).journal, { newest: shiftISO(there, -2), daysAgo: 2, recent: 1 });
+  assert.match(at('--journal', token).stdout, /Newest wear in the journal: .*, 2 days ago/);
+});
+
 test('--date nudges the place’s own today and says "tonight" from it, not from this machine’s date', async () => {
   // This machine at UTC-11 and the place at UTC+13, a whole day ahead, or the other way round.
   const at = (tz, hours, ...args) => new Promise(resolve => {

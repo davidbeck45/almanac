@@ -415,7 +415,13 @@ async function main() {
   // Plans say whether they counted recent wears (`journal` in the JSON: false,
   // or how current its wears are), and the text says so when they didn't, or
   // when the newest wear is days old.
-  const freshness = journal && journalFreshness(history, today);
+  // Read again by the place's own date once it's known (atPlace): late
+  // evening here it's tomorrow in London, where last night's wear is two
+  // days old, as the picks there count it.
+  let freshness = journal && journalFreshness(history, today);
+  const atPlace = dayISO => {
+    if (journal && dayISO) freshness = journalFreshness(history, dayISO);
+  };
   const journalLine = () => {
     if (!journal) return 'Not counting what you\'ve worn lately: send the app\'s Copy for Claude (Wardrobe › Worn) to fix that.';
     if (freshness.daysAgo >= 2) return `Newest wear in the journal: ${shortDate(freshness.newest)}, ${freshness.daysAgo} days ago; anything worn since isn't counted.`;
@@ -975,14 +981,16 @@ async function main() {
     let result, windows, todayISO;
     try {
       if (wanted && !events.length) {
-        result = [await picksFor(fragrances, { place, dateISO: args.date, slot: wanted, occasion, history, nudge, refusePast: true })].filter(Boolean)
-          .map(({ window: win, ranked }) => ({ win, ranked, pick: ranked[0] }));
+        const picked = await picksFor(fragrances, { place, dateISO: args.date, slot: wanted, occasion, history, nudge, refusePast: true });
+        todayISO = picked?.todayISO;
+        result = [picked].filter(Boolean).map(({ window: win, ranked }) => ({ win, ranked, pick: ranked[0] }));
       } else {
         ({ windows, todayISO } = await tripWeather(place, args.date, args.date, { refusePast: true, ...(wanted && { slots: [wanted] }) }));
       }
     } catch (err) {
       weatherFailed(err, place, 'date', args.date);
     }
+    atPlace(todayISO);
     if (windows?.length) result = planWindows(fragrances, onWindows(windows, `--date ${args.date}`), { occasion, history, nudge: nudge && args.date <= todayISO, nowISO: todayISO });
     if (!result?.length) fail(`No weather came back for ${args.date}`);
     const typical = result.some(r => r.win.typical);
@@ -1010,6 +1018,7 @@ async function main() {
   }
 
   const forecast = await forecastFor(place);
+  atPlace(summarize(forecast).todayISO);
 
   // A plan for the week: day and night, or only the occasion's (or --slot's) windows.
   if (args.week) {
