@@ -348,6 +348,9 @@ test('the Week counts a window’s equals under its pick, “+2 as good” in a 
   const css = readFileSync(new URL('../src/css/wear.css', import.meta.url), 'utf8');
   const columns = [...css.matchAll(/@container page \(min-width: 700px\) \{([\s\S]*?)\n\}/g)].map(m => m[1]).find(b => b.includes('.wk-list'));
   assert.match(columns, /\.wk-tie svg \{ display: none; \}/);
+  // So does a 320px phone's row beside the window's feels-like (71px), where the marks take the columns' words.
+  const narrow = css.match(/@media \(max-width: 374px\) \{([\s\S]*?)\n\}/)[1];
+  assert.ok(narrow.includes('.wk-pick {') && narrow.includes('.wk-tie svg { display: none; }') && narrow.includes('.wk-mark .wk-short { display: inline; }'));
   assert.ok(cell(two).includes(`aria-label="${esc(`Friday ${two.win.slot === 'day' ? 'daytime' : 'night'}: ${two.pick.fragrance.name}, feels ${Math.round(two.win.feelsF)}°, ${first} and ${second} suit it as well`)}"`));
   assert.match(cell(two), / title="[^"]+ suit [^"]+ just as well\."/, 'the tooltip has their tags');
   // An event's mark says what it's for instead; a worn window has none.

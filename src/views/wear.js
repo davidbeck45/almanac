@@ -373,14 +373,14 @@ function nowQuestion(pick, worn) {
 // A window's pick: the bottle with its time of day as a badge on the photo,
 // how the window feels (what the plan picked for, as Trip's day by day
 // shows it: the day's high and low are the air's, and a windy afternoon
-// feels well under its high),
-// and marks for a logged wear, for a window planned for an occasion ("For
-// formal wear" in a row, "Formal" in the board's narrow columns) and for a
-// bottle the rotation nudge brought back ("Not worn in 34 days" in a row,
-// "34 days" under the clock in the columns), else for one that has equals
-// (`ties`, planTies'): "+2 as good" in a row and in the columns alike (a
-// name kept four letters in the columns, so the count is the one wording
-// both hold, and the columns drop its glyph for the room); the board's note
+// feels well under its high), and marks for a logged wear, for a window
+// planned for an occasion ("For formal wear" in a row, "Formal" in the
+// board's narrow columns) and for a bottle the rotation nudge brought back
+// ("Not worn in 34 days" in a row, "34 days" under the clock in the
+// columns), else for one that has equals (`ties`, planTies'): "+2 as good"
+// in a row and in the columns alike (a name kept four letters in the
+// columns, so the count is the one wording both hold, and the columns and a
+// 320px phone's rows drop its glyph for the room); the board's note
 // explains them, the tooltip and label name them with their tags, and the
 // pick's page leads its shelf with them (shelfOf). An occasion in the
 // board's narrow columns, where "Date Night" and "Night Out" didn't fit

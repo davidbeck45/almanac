@@ -463,6 +463,11 @@
   .wk-pick { grid-template-columns: 26px minmax(0, 1fr) auto; }
   .wk-pick img { width: 22px; height: 28px; }
   .wk-slot { left: calc(var(--s-2) + 15px); }
+  /* Beside the feels-like a 320px phone leaves the marks 71px: they take
+     the columns' words ("+2 as good" without its glyph, "Unworn"). */
+  .wk-tie svg { display: none; }
+  .wk-mark .wk-long { display: none; }
+  .wk-mark .wk-short { display: inline; }
 }
 /* Room for the whole week side by side: a column a day, the day's pick
    over the night's. */
