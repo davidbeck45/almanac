@@ -26,16 +26,16 @@ Names take part of a name in any case, with or without accents; add the brand wh
 
 ## 2. Set who's asking
 
-These change the answer, so settle them before running:
+These change the answer, so settle them before running. A flag the command doesn't read stops it with a sentence saying what to do instead ("--occasion doesn't apply to --gaps; say how often you dress for it with --uses …"): do that, rather than dropping the flag.
 
 - **Wardrobe.** His is the default; `--demo` only when he asks what a first-time visitor would see.
 - **Switched-off bottles.** Pass the ones he mentions with `--exclude "Name,Name"`.
 - **Journal.** When he pastes the app's Copy for Claude (a token starting `scj1.`) or sends his export (`almanac-journal-<date>.json`), add `--journal <token or file>` to every command: it carries his stars, switched-off bottles and the occasions he wears.
 - **How he wears.** When he names an occasion, or the answer hinges on one, pass `--uses` (to `--check` too): Formal and Date Night settle most of `--gaps`' list. Ask when you can't tell.
-- **Climate.** Pass `--city "<city>"` when he gives a place. `climate` in the JSON (in `--gaps`' text, its first line) names the climate the answer is for; when it isn't his place (Open-Meteo's archive failed, and stderr says "using the default climate"), tell him.
+- **Climate.** Pass `--city "<city>"` to `--gaps` and `--check` when he gives a place (the lists don't read the weather: use `--season` and `--slot`). `climate` in the JSON (in `--gaps`' text, its first line) names the climate the answer is for; when it isn't his place (Open-Meteo's archive failed, and stderr says "using the default climate"), tell him.
 - **Value.** Keep "Prefer great value" on: he buys clones. `--no-value` when he says money's no object or asks for designer or niche picks.
 - **Taste.** `--check` judges against his liked styles; add `--style "<styles>"` when he names others.
-- **Lean and mists.** `--lean masculine|unisex|feminine` when he asks for one; `--mists` when he asks for body mists.
+- **Lean and mists.** `--lean masculine|unisex|feminine` (the lists only) when he asks for one; `--mists` when he asks for body mists.
 - **Filters** for `--style`, `--more-like` and `--notes`: `--season` and `--slot` as he asks; `--min-value 3.8` for value picks only; `--min-rating 4.2` for crowd favorites, or lower to let in a classic. `--top N` sets how many (default 10; `--gaps` 5).
 
 ## 3. Chain commands
