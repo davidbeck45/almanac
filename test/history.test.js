@@ -106,6 +106,12 @@ test('a wear logged from a live window keeps its weather and the pick shown, and
   });
   assert.equal(stampedWindow({ id: 'a', date: '2026-10-02', slot: 'day' }), null, 'a wear from before stamps');
   assert.equal(stampedWindow({ id: 'a', date: '2026-10-02', slot: 'day', wx: { f: 'warm', d: 40, h: 50, c: 0 } }), null, 'a stamp in another shape');
+  // Typical weather (a trip's day past the forecast) is an average of past
+  // years, not the weather it was worn in: no stamp, so the check reads the archive's.
+  const typical = { ...win, typical: true, samples: 21 };
+  assert.deepEqual(wearStamp(typical, 70748), { pick: '70748' });
+  assert.deepEqual(wearStamp(typical), {});
+  assert.equal(stampedWindow({ id: 'a', date: '2026-10-02', slot: 'night', ...wearStamp(typical) }), null);
 });
 
 test('the export carries the stamps and Copy for Claude leaves them out', () => {

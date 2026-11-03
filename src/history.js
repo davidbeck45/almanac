@@ -45,11 +45,14 @@ const round2 = x => Math.round(x * 100) / 100;
  * from the archive: `wx`, the window's feels-like and dew point (°F, to a
  * tenth), humidity and rain chance (whole percents) and WMO code, and
  * `pick`, the id of the bottle the list showed as its pick (none for a
- * trip's). About 60 characters a wear.
+ * trip's). About 60 characters a wear. A window of typical weather (a
+ * trip's day past the forecast, its weather not yet fetched again) is an
+ * average of past years, not the weather it was worn in: no `wx`, so the
+ * check reads the archive's.
  */
 export function wearStamp(win, pickId = null) {
   return {
-    wx: { f: round1(win.feelsF), d: round1(win.dewF), h: Math.round(win.humidity), p: Math.round(win.pop ?? 0), c: win.code },
+    ...(!win.typical && { wx: { f: round1(win.feelsF), d: round1(win.dewF), h: Math.round(win.humidity), p: Math.round(win.pop ?? 0), c: win.code } }),
     ...(pickId != null && { pick: String(pickId) }),
   };
 }

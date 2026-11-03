@@ -923,10 +923,11 @@ export async function boot({ early: asked = null } = {}) {
     history.replaceState(null, '', url);
   }
   listen();
-  // Out of sight, an outdated page reloads, unless a sheet is open: someone
+  // Out of sight, an outdated page reloads, unless a sheet is open or a pane
+  // holds a form not saved yet (a view's `unsaved`: the Trip form): someone
   // may be halfway through it, and the next page change reloads instead.
   outdated = watchVersion(navigator.serviceWorker, document, {
-    reload: () => { if (!state.sheet) location.reload(); },
+    reload: () => { if (!state.sheet && !VIEWS.some(view => view.unsaved?.())) location.reload(); },
   });
   statusNode(); // there before anything is said in it
   const first = parseRoute(location.hash || HOME, PANES);

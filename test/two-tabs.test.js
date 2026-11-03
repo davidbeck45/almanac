@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { loadHidden, setHidden, hiddenFor } from '../src/hidden.js';
 import { loadHistory, toggleWear, wearSettled } from '../src/history.js';
 import { setEvent } from '../src/events.js';
+import { syntheticForecast } from './fixtures.js';
 
 // Two tabs open on one device: two copies of the app's state over the one
 // localStorage, each read when its tab opened.
@@ -92,4 +93,45 @@ test('a wear button drawn before another tab logged that wear finds it done', ()
   const wearing = loadHistory();
   toggleWear('7', '2026-11-02', 'night'); // the other tab clears it
   assert.equal(wearSettled(wearing, '7', '2026-11-02', 'night'), true, 'Wearing: cleared already, so it mustn’t log it again');
+});
+
+test('a tab shows the trip another tab saved, and refreshing its weather never saves an older trip over it', async t => {
+  // Noon on Nov 2; a Lisbon trip under way, its weather 7 hours old (Now
+  // fetches it again past 6). The forecast answers a moment after it's asked.
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-02T12:00:00Z') });
+  const forecast = { ...syntheticForecast(12, { start: '2026-10-31' }), utc_offset_seconds: 0 };
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    await new Promise(r => setTimeout(r, 10));
+    return { ok: true, status: 200, json: async () => forecast };
+  };
+  const a = await import(`../src/views/wear/trip.js?tab=${++opened}`), b = await import(`../src/views/wear/trip.js?tab=${++opened}`);
+  const days = (from, to) => forecast.daily.time.filter(d => d >= from && d <= to).flatMap(d => ['day', 'night'].map(slot => ({ slot, dateISO: d, feelsF: 60, label: d })));
+  const lisbon = { place: { name: 'Lisbon', region: 'PT', lat: 38.72, lon: -9.14, timezone: 'Europe/Lisbon' }, fromISO: '2026-11-01', toISO: '2026-11-04', events: [], max: 3, windows: days('2026-11-01', '2026-11-04'), fetchedAt: Date.now() - 7 * 3600e3 };
+  const page = { renderPage() {}, inSight: () => false, keepingFocus(el, scope, f) { f(); } };
+  const stored = () => a.loadTrip();
+  try {
+    a.saveTrip(lisbon);
+    assert.equal(a.tripHeading(), 'Packing for Lisbon');
+    assert.equal(b.tripHeading(), 'Packing for Lisbon');
+    // Tab B takes a fourth bottle while tab A's refresh is out: the new
+    // weather goes into the trip as B left it.
+    const refresh = a.freshenTrip(page);
+    b.actions['trip-max']({ dataset: { value: '4' }, closest: () => null }, page);
+    await refresh;
+    assert.equal(stored().max, 4, 'B’s count stays');
+    assert.equal(stored().fetchedAt, Date.now(), 'with A’s weather');
+    assert.ok(stored().windows.filter(w => w.dateISO >= '2026-11-02').every(w => w.feelsF === 72 || w.feelsF === 55), 'from the forecast');
+    // Tab B re-plans for Rome: tab A shows Rome, and its refresh of Lisbon,
+    // out when B saved, saves nothing.
+    t.mock.timers.setTime(Date.now() + 7 * 3600e3);
+    const late = a.freshenTrip(page);
+    b.saveTrip({ ...lisbon, place: { name: 'Rome', region: 'IT', lat: 41.9, lon: 12.5, timezone: 'Europe/Rome' }, fromISO: '2026-11-02', fetchedAt: Date.now() });
+    assert.equal(a.tripHeading(), 'Packing for Rome');
+    await late;
+    assert.equal(stored().place.name, 'Rome');
+    assert.equal(stored().max, 3);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

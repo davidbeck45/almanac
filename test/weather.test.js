@@ -2,7 +2,7 @@ import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   blendModels, week, windowOn, summarize, wxAt, cachedForecast, getForecast, forecastError, requestError, fetchForecast, fetchTypical,
-  REQUEST_TIMEOUT, TRIP_TIMEOUT,
+  clock, placeClock, windowOpen, REQUEST_TIMEOUT, TRIP_TIMEOUT,
 } from '../src/weather.js';
 import { syntheticForecast } from './fixtures.js';
 
@@ -263,4 +263,33 @@ test('a forecast is read for the hour it is: a page left open overnight shows th
   const short = { ...syntheticForecast(2), fetchedAt: forecast.fetchedAt, stale: true };
   assert.equal(wxAt(short, Date.parse('2026-10-01T16:00:00Z')), null);
   assert.equal(wxAt(null), null);
+});
+
+test('a place’s clock without its forecast reads its time zone, else the sun at its longitude, and says which windows are still open', () => {
+  // 9 pm on Nov 2 in New York is 11 am on Nov 3 in Tokyo.
+  const now = Date.parse('2026-11-03T02:00:00Z');
+  const read = ({ hour, todayISO, tomorrowISO }) => ({ hour, todayISO, tomorrowISO });
+  const tokyo = { lat: 35.68, lon: 139.69, timezone: 'Asia/Tokyo' };
+  assert.deepEqual(read(placeClock(tokyo, now)), { hour: 11, todayISO: '2026-11-03', tomorrowISO: '2026-11-04' });
+  assert.deepEqual(read(placeClock({ lat: 40.71, lon: -74.01, timezone: 'America/New_York' }, now)), { hour: 21, todayISO: '2026-11-02', tomorrowISO: '2026-11-03' });
+  assert.equal(placeClock({ lon: 85.32, timezone: 'Asia/Kathmandu' }, now).hour, 7, 'a zone three quarters off the hour');
+  assert.equal(placeClock({ lon: -74, timezone: 'America/New_York' }, Date.parse('2026-07-03T02:00:00Z')).hour, 22, 'summer time');
+  // As the place's forecast reads it, offset and all.
+  const forecast = { utc_offset_seconds: 9 * 3600, latitude: 35.68 };
+  assert.deepEqual(placeClock(tokyo, now), (({ lat, ...rest }) => rest)(clock(forecast, now)));
+  // Without a zone, or one this runtime doesn't know: solar time, which runs
+  // a little behind most zones' clocks (Tokyo's sun is 19 minutes ahead).
+  for (const place of [{ lon: 139.69 }, { lon: 139.69, timezone: 'Nowhere/Atlantis' }]) {
+    assert.deepEqual(read(placeClock(place, now)), { hour: 11, todayISO: '2026-11-03', tomorrowISO: '2026-11-04' }, JSON.stringify(place));
+  }
+  assert.deepEqual(read(placeClock({ lon: -0.13 }, now)), { hour: 1, todayISO: '2026-11-03', tomorrowISO: '2026-11-04' });
+  // A window is open while it's dated today there and its hours haven't ended.
+  const at = placeClock(tokyo, now);
+  assert.equal(windowOpen({ dateISO: '2026-11-03', slot: 'day' }, at), true);
+  assert.equal(windowOpen({ dateISO: '2026-11-03', slot: 'night' }, at), true);
+  assert.equal(windowOpen({ dateISO: '2026-11-02', slot: 'night' }, at), false, 'home’s today, over there');
+  assert.equal(windowOpen({ dateISO: '2026-11-04', slot: 'day' }, at), false, 'tomorrow’s');
+  const evening = placeClock(tokyo, Date.parse('2026-11-03T10:30:00Z'));
+  assert.equal(windowOpen({ dateISO: '2026-11-03', slot: 'day' }, evening), false, '7:30 pm: the day is over');
+  assert.equal(windowOpen({ dateISO: '2026-11-03', slot: 'night' }, evening), true);
 });

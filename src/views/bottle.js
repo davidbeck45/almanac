@@ -266,7 +266,7 @@ export function bottleModel(route) {
     inMine: state.mine.records.some(r => r.id === f.id),
     active,
     worn: win ? wornId(win) : null,
-    canWear: Boolean(win) && active && canWear(win),
+    canWear: Boolean(win) && active && canWear(win, ctx.place),
     wears: wearInfo(f.id),
     todayISO: todayISO(),
     // The rest of the list's best, led on the pick's own page by the ties

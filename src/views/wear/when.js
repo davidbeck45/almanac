@@ -43,8 +43,9 @@ export function whenPhrase(win, today) {
 export const occasionTitle = (occasion, win, { today, place = null }) =>
   `${occasion.label} · ${whenPhrase(win, today)}${place ? ` in ${place.name}` : ''}`;
 
-// Fetched windows say Today and Tomorrow like the app's own.
-function relabel(win, today) {
+// Fetched windows say Today and Tomorrow like the app's own (a trip's too:
+// trip.js).
+export function relabel(win, today) {
   const days = daysBetween(today, win.dateISO);
   const night = win.slot === 'night';
   if (days === 0) return { ...win, label: night ? 'Tonight' : 'Today' };

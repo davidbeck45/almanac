@@ -10,16 +10,19 @@
 // way keeps its start and the weather saved for the days gone by (the
 // forecast has no past days); its events and its end can still change.
 // While a trip is under way, Now shows its day above Now's own picks
-// (tripToday, tripNowHTML): today's and tonight's packed bottles.
+// (tripToday, tripNowHTML): today's and tonight's packed bottles. Its windows
+// are dated in the trip's own day, so whatever asks which is today reads
+// the trip's clock (src/weather.js placeClock), not home's.
 import { packTrip, withEvents } from '../../pack.js';
 import { rank, daysBetween, isDisliked } from '../../engine.js';
-import { tripWindows, forecastError } from '../../weather.js';
+import { tripWindows, forecastError, placeClock, placeDate, windowOpen } from '../../weather.js';
 import { OCCASIONS, occasionById } from '../../occasions.js';
 import { shiftISO } from '../../history.js';
 import { esc, cap, deg, plural, shortDate, weekdayShort } from '../../ui.js';
 import { icon, img, wxIconFor, slotIcon, segHTML, sectionHead, reasonsList } from '../../ui/components.js';
 import { state, rankedFragrances, storeContext, todayISO, deviceToday, byTime } from '../../app/state.js';
 import { datePillHTML, onPlace, samePlace, repaint } from './pickers.js';
+import { relabel } from './when.js';
 
 const KEY = 'scentcast.trip';
 // As the CLI (scripts/recommend.mjs --pack): up to 31 days, within a year.
@@ -48,19 +51,30 @@ export function datesText(fromISO, toISO) {
 }
 const tripDays = t => daysBetween(t.fromISO, t.toISO) + 1;
 const datesOf = t => Array.from({ length: Math.max(0, tripDays(t)) }, (_, i) => shiftISO(t.fromISO, i));
+// The trip's today, by its place's clock: its windows are dated in its day.
+const todayThere = (trip, nowMs = Date.now()) => placeClock(trip.place, nowMs).todayISO;
 
 // ---------- The saved trip ----------
 
-/**
- * The last trip: { place: { name, region, lat, lon }, fromISO, toISO,
- * events: [{ dateISO, slot, occasion: id }], max, windows, fetchedAt }, its
- * windows as tripWindows gave them (each `date` revived). Null when there's
- * none or it doesn't read: no window left that packTrip can rank, or no
- * time it was fetched.
- */
-export function loadTrip() {
+// The trip as the device holds it, as text; null when there's none.
+function storedText() {
   try {
-    const t = JSON.parse(localStorage.getItem(KEY));
+    return localStorage.getItem(KEY);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The last trip: { place: { name, region, lat, lon, timezone? }, fromISO,
+ * toISO, events: [{ dateISO, slot, occasion: id }], max, windows, fetchedAt },
+ * its windows as tripWindows gave them (each `date` revived). Null when
+ * there's none or it doesn't read: no window left that packTrip can rank,
+ * or no time it was fetched. `text`: the stored trip, read already.
+ */
+export function loadTrip(text = storedText()) {
+  try {
+    const t = JSON.parse(text);
     const iso = x => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x);
     const slot = x => x === 'day' || x === 'night';
     if (!t || !Number.isFinite(t.place?.lat) || !Number.isFinite(t.place?.lon) || !iso(t.fromISO) || !iso(t.toISO) || !Array.isArray(t.windows)) return null;
@@ -68,7 +82,10 @@ export function loadTrip() {
     const fetchedAt = Number(t.fetchedAt);
     if (!windows.length || !(fetchedAt > 0)) return null;
     return {
-      place: { name: String(t.place.name ?? 'Trip'), region: String(t.place.region ?? ''), lat: t.place.lat, lon: t.place.lon },
+      place: {
+        name: String(t.place.name ?? 'Trip'), region: String(t.place.region ?? ''), lat: t.place.lat, lon: t.place.lon,
+        ...(typeof t.place.timezone === 'string' && { timezone: t.place.timezone }),
+      },
       fromISO: t.fromISO,
       toISO: t.toISO,
       events: (Array.isArray(t.events) ? t.events : []).filter(e => iso(e?.dateISO) && slot(e.slot) && occasionById(e.occasion)),
@@ -372,7 +389,8 @@ const skeleton = (text = 'Checking the weather there…') => `<div class="stack 
 // ---------- The pane ----------
 
 const ui = {
-  saved: undefined, // the packed trip (loadTrip), read on first use
+  saved: undefined, // the packed trip (loadTrip, savedTrip)
+  text: null, // the device's copy of it, as text, when it was read or saved
   draft: null, // the form: { place, fromISO, toISO, events, max, auto }
   editing: false, // the form open over a packed trip
   adding: null, // an event being added: { dateISO, slot, occasion }
@@ -383,10 +401,19 @@ const ui = {
   refreshed: null, // the fetchedAt a refresh was last tried for
 };
 
+// The packed trip, read again once the device's copy changes (another tab
+// saved its own), so this tab never shows, or saves over, a trip changed
+// since; else the one read, so its plan stays packed.
 const savedTrip = () => {
-  if (ui.saved === undefined) ui.saved = loadTrip();
+  const text = storedText();
+  if (ui.saved === undefined || text !== ui.text) Object.assign(ui, { saved: loadTrip(text), text });
   return ui.saved;
 };
+// Saves the trip as this tab's own.
+function keep(trip) {
+  saveTrip(trip);
+  Object.assign(ui, { saved: trip, text: storedText() });
+}
 
 // `auto`: the default dates, from that day, until someone picks their own.
 function draftFrom(trip, today) {
@@ -447,16 +474,18 @@ export function renderTrip(app = null) {
   const today = todayISO();
   const form = (packedAlready, editing) => tripFormHTML(draft(), { today, busy: ui.busy, error: ui.error, adding: ui.adding, editing, packed: packedAlready, startedOn: trip?.fromISO });
   if (!trip) return form(false, false) + (ui.busy ? skeleton() : '');
-  const head = ui.editing ? form(true, true) : tripSummaryHTML(trip, { today, note: ui.note, updating: ui.updating });
+  // The plan reads the trip's own today; the form, home's.
+  const there = todayThere(trip);
+  const head = ui.editing ? form(true, true) : tripSummaryHTML(trip, { today: there, note: ui.note, updating: ui.updating });
   if (ui.busy) return head + skeleton();
   // Packing again (another bottle count, a new rating): the last plan for
   // the same place and dates stays, dimmed, until the new one is in.
   const result = packFor(trip, app);
   const shown = result ?? (sameDates(memo?.trip, trip) ? memo.result : null);
   if (!shown) return head + skeleton('Planning what to pack…');
-  for (const [key, win, occasion, ranked] of memo.contexts) storeContext(key, win, occasion, ranked, { place: memo.trip.place });
+  for (const [key, win, occasion, ranked] of memo.contexts) storeContext(key, relabel(win, there), occasion, ranked, { place: memo.trip.place });
   return `${head}
-    <div class="trip-out${result ? '' : ' refreshing'}"${result ? '' : ' aria-busy="true"'}>${tripPackHTML(shown, trip, { canShare: canShare() })}${tripPlanHTML(shown, { today })}</div>`;
+    <div class="trip-out${result ? '' : ' refreshing'}"${result ? '' : ' aria-busy="true"'}>${tripPackHTML(shown, trip, { canShare: canShare() })}${tripPlanHTML(shown, { today: there })}</div>`;
 }
 
 // An event filled in but not added yet counts: Plan adds it first. One
@@ -470,11 +499,12 @@ function commitAdding() {
   ui.adding = null;
 }
 
-// The weather for a trip's dates: fetched from today on, with the saved
-// trip's own windows for the days gone by when it's the same place (the
-// forecast has none for them; another place gets typical weather there).
-async function windowsFor(ask, old, today) {
-  const start = later(ask.fromISO, today);
+// The weather for a trip's dates: fetched from today there on (placeDate,
+// never early: a day gone by there would get typical weather), with the
+// saved trip's own windows for the days gone by when it's the same place
+// (the forecast has none for them; another place gets typical weather there).
+async function windowsFor(ask, old) {
+  const start = later(ask.fromISO, placeDate(ask.place));
   const kept = old && samePlace(old.place, ask.place) ? old.windows.filter(w => w.dateISO >= ask.fromISO && w.dateISO < start) : [];
   const fresh = await tripWindows(ask.place, start > ask.fromISO && !kept.length ? ask.fromISO : start, ask.toISO);
   return fresh.length ? [...kept, ...fresh].sort(byTime) : [];
@@ -517,7 +547,7 @@ async function pack(app) {
   sk?.focus({ preventScroll: true });
   sk?.scrollIntoView({ block: 'nearest', behavior: scrolling() });
   try {
-    const windows = await windowsFor(ask, old, today);
+    const windows = await windowsFor(ask, old);
     if (mine !== packSeq) return;
     if (!windows.length) throw Object.assign(new Error('no windows'), { status: 'empty' });
     finish(app, { ...ask, windows, fetchedAt: Date.now() });
@@ -535,8 +565,8 @@ const onTrip = () => state.route?.dest === 'wear' && state.route.pane === 'trip'
 const onNow = () => state.route?.dest === 'wear' && state.route.pane === 'now';
 
 function finish(app, trip) {
-  saveTrip(trip);
-  Object.assign(ui, { saved: trip, busy: false, editing: false, adding: null, error: '', note: '', draft: draftFrom(trip, todayISO()) });
+  keep(trip);
+  Object.assign(ui, { busy: false, editing: false, adding: null, error: '', note: '', draft: draftFrom(trip, todayISO()) });
   if (!onTrip()) return;
   app.renderPage();
   // The plan's head takes focus, so a screen reader hears where it went.
@@ -557,18 +587,19 @@ export const staleNote = fetchedAt => `Couldn’t update the weather, so this pl
 // pane or on Now while it's under way (from today on: the days gone by keep theirs).
 export async function freshenTrip(app) {
   const trip = savedTrip();
-  const today = todayISO();
-  if (!trip || ui.busy || ui.updating || trip.toISO < today || Date.now() - trip.fetchedAt < REFRESH_AFTER || ui.refreshed === trip.fetchedAt) return;
+  if (!trip || ui.busy || ui.updating || trip.toISO < todayThere(trip) || Date.now() - trip.fetchedAt < REFRESH_AFTER || ui.refreshed === trip.fetchedAt) return;
   ui.refreshed = trip.fetchedAt;
   ui.updating = true;
   // Only the pane says it's updating; Now draws again once it's in.
   if (onTrip()) repaint(app);
   try {
-    const windows = await windowsFor(trip, trip, today);
-    // A new bottle count meanwhile keeps the new weather; new dates don't.
-    if (windows.length && sameDates(ui.saved, trip)) {
-      ui.saved = { ...ui.saved, windows, fetchedAt: Date.now() };
-      saveTrip(ui.saved);
+    const windows = await windowsFor(trip, trip);
+    // Into the trip as the device holds it now, which this tab or another
+    // may have changed meanwhile: a new bottle count or new events keep the
+    // new weather; a new place or dates don't.
+    const now = savedTrip();
+    if (windows.length && sameDates(now, trip)) {
+      keep({ ...now, windows, fetchedAt: Date.now() });
       ui.note = '';
     }
   } catch {
@@ -581,38 +612,44 @@ export async function freshenTrip(app) {
 // ---------- On Now ----------
 // On a trip Now still ranks the whole wardrobe (at home's weather, unless
 // the place moved too), so most windows it picks a bottle left at home. The
-// trip's day goes above it: the packed picks for today's windows, as the
-// Trip pane plans them, each opening its bottle page in the trip's window
-// (`trip:<date>:<slot>`), where Wear this logs it.
+// trip's day goes above it: the packed picks for the windows of the trip's
+// today still to come, as the Trip pane plans them, each opening its bottle
+// page in the trip's window (`trip:<date>:<slot>`), where Wear this logs it.
+// Its day and hour are the trip's (placeClock): in Tokyo, home's evening is
+// tomorrow morning.
 
 const underWay = (trip, today) => Boolean(trip) && trip.fromISO <= today && today <= trip.toISO;
 
 /**
- * The saved trip's day while it's under way: { trip, day, days, bottles:
- * how many are packed, picks: today's plan entries in time order, each
- * with its context key `ctx` }; null when there's no trip, it's over or not
- * begun, or its weather has no window today. Packs as the pane does
- * (packFor: after a frame for a big list, `picks: null` and `slots`, today's
+ * The saved trip's day while it's under way there: { trip, day, days,
+ * bottles: how many are packed, picks: the plan entries of the windows of
+ * its today that haven't ended there, in time order, each with its context
+ * key `ctx` }; null when there's no trip or no bottle, it's over or not
+ * begun, or none of its today's windows is left. Packs as the pane does
+ * (packFor: after a frame for a big list, `picks: null` and `slots`, those
  * windows' count, meanwhile, and Now draws again once it's in), and stores
- * today's windows' ranked contexts, with the trip's place, so a wear logged
- * from them is logged there.
+ * its today's ranked contexts, with the trip's place, so a wear logged from
+ * them is logged there, labelled Today and Tonight as the card says.
  */
-export function tripToday(app = null, today = todayISO()) {
+export function tripToday(app = null, nowMs = Date.now()) {
   const trip = savedTrip();
+  if (!trip || !rankedFragrances().length) return null;
+  const at = placeClock(trip.place, nowMs);
+  const today = at.todayISO;
   if (!underWay(trip, today)) return null;
-  const slots = trip.windows.filter(w => w.dateISO === today).length;
+  const slots = trip.windows.filter(w => windowOpen(w, at)).length;
   if (!slots) return null;
   const base = { trip, day: daysBetween(trip.fromISO, today) + 1, days: tripDays(trip) };
   const result = packFor(trip, app);
   if (!result) return { ...base, bottles: null, picks: null, slots };
   for (const [key, win, occasion, ranked] of memo.contexts) {
-    if (win.dateISO === today) storeContext(key, win, occasion, ranked, { place: trip.place });
+    if (win.dateISO === today) storeContext(key, relabel(win, today), occasion, ranked, { place: trip.place });
   }
-  const picks = result.plan.filter(p => p.window.dateISO === today).map(p => ({ ...p, ctx: ctxKey(p.window) }));
+  const picks = result.plan.filter(p => windowOpen(p.window, at)).map(p => ({ ...p, ctx: ctxKey(p.window) }));
   return picks.length ? { ...base, bottles: result.bottles.length, picks } : null;
 }
 
-/** Forget the trip read from the device and its plan (tests; the page reads it once). */
+/** Forget the trip read from the device and its plan (tests). */
 export function forgetTrip() {
   ui.saved = undefined;
   memo = null;
@@ -620,7 +657,22 @@ export function forgetTrip() {
 
 /** Freshens the saved trip's weather (freshenTrip) from Now, while it's under way. */
 export function freshenTripToday(app) {
-  if (underWay(savedTrip(), todayISO())) freshenTrip(app);
+  const trip = savedTrip();
+  if (trip && underWay(trip, todayThere(trip))) freshenTrip(app);
+}
+
+/**
+ * Whether the form holds a trip not planned yet: a place, dates, events or
+ * a count other than the saved trip's (or the empty form's), an event being
+ * filled in, or the weather on its way for one. Like an open sheet, it
+ * keeps a new version from reloading the page out of sight (src/app/shell.js).
+ */
+export function tripUnsaved() {
+  if (ui.busy || ui.adding) return true;
+  const trip = savedTrip();
+  if (!ui.draft || (trip && !ui.editing)) return false;
+  const asked = d => JSON.stringify([d.place?.lat, d.place?.lon, d.fromISO, d.toISO, d.max, d.events.map(e => [e.dateISO, e.slot, e.occasion])]);
+  return asked(draft()) !== asked(draftFrom(trip, todayISO()));
 }
 
 /**
@@ -716,10 +768,7 @@ export const actions = {
     if (!BOTTLE_CHOICES.includes(max)) return;
     draft().max = max;
     const trip = savedTrip();
-    if (trip && !el.closest('.trip-form')) {
-      ui.saved = { ...trip, max };
-      saveTrip(ui.saved);
-    }
+    if (trip && !el.closest('.trip-form')) keep({ ...trip, max });
     app.keepingFocus(el, '#app', app.renderPage);
   },
   // A new event starts on the first free night still to come.
@@ -759,7 +808,7 @@ export const actions = {
   async 'trip-copy'(el, app) {
     const trip = savedTrip();
     if (!trip) return;
-    const ok = await copyText(packingText(packNow(trip), trip, { today: todayISO() }));
+    const ok = await copyText(packingText(packNow(trip), trip, { today: todayThere(trip) }));
     const instead = canShare() ? 'Try Share instead.' : 'Select the plan and copy it yourself.';
     app.showToast(ok ? '<span>Packing list copied</span>' : `<span class="note">This browser won’t let the page copy. ${instead}</span>`, { tone: ok ? 'success' : 'error' });
   },
@@ -767,7 +816,7 @@ export const actions = {
     const trip = savedTrip();
     if (!trip) return;
     try {
-      await navigator.share({ title: `Packing for ${trip.place.name}`, text: packingText(packNow(trip), trip, { today: todayISO() }) });
+      await navigator.share({ title: `Packing for ${trip.place.name}`, text: packingText(packNow(trip), trip, { today: todayThere(trip) }) });
     } catch (err) {
       if (err?.name !== 'AbortError') app.showToast('<span>Couldn’t open sharing. Copy the list instead.</span>', { tone: 'error' });
     }
