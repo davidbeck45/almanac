@@ -72,6 +72,12 @@ test('nearly every note in the suggestion pool has a family too', () => {
     ['Acácia', 'floral'], ['Marshamallow', 'sweet'], ['Cinammon', 'warm spicy'], ['White Tabacco', 'tobacco']]) {
     assert.equal(noteFamily(name), want, name);
   }
+  // A note named for a fabric, a candle or skin it isn't, from bottles past the pool: Horse skin is a hide, Corn Silk
+  // a green, Bushman Candle a resinous plant, Candlenut a nut, Timbersilk a woody molecule, Tuberolide a creamy lactone.
+  for (const [name, want] of [['Horse skin', 'leather'], ['Corn Silk', 'green'], ['Bushman Candle', 'balsamic'], ['Candlenut', 'nutty'],
+    ['Timbersilk™', 'woody'], ['Tuberolide', 'white floral'], ['Soapwort', 'floral'], ['Candle Wax', 'powdery'], ['Silk', 'musky']]) {
+    assert.equal(noteFamily(name), want, name);
+  }
 });
 
 test('notes between families count toward each, the main one most', () => {
