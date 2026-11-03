@@ -473,7 +473,7 @@ test('casual reads like daily picks with a tilt: winter bottles on a cold day, n
   const casual = occasionById('casual');
   const cold = { feelsF: 20, humidity: 60, dewF: 12, category: 'clear', date: JAN, dateISO: '2027-01-15', lat: 40 };
   for (const slot of ['day', 'night']) {
-    // Casual's leader is among the day's best 3, or tied with its third (Terra, 0.0004 behind Rifaaqat).
+    // Casual's leader is among the day's best 3, or tied with its third (the third and fourth sit 0.0004 apart).
     const ranked = rank(fragrances, cold, slot), top = names(rank(fragrances, cold, slot, { occasion: casual }).slice(0, 5));
     const daily = names(ranked.filter(r => r.score >= ranked[2].score - 0.001));
     assert.ok(daily.includes(top[0]), `${slot}: ${top[0]} leads Casual, the day's best are ${daily.join(', ')}`);

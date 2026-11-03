@@ -15,7 +15,7 @@ const mildDay = (dateISO = TODAY, slot = 'day') => ({
 });
 const reasons = entry => entry.reasons.map(r => r.text);
 // The bottle left unworn: S on the mild day, a close second to its pick.
-const IDLE = 'Cedrus Blanc';
+const IDLE = 'Meant To Be Seen';
 
 // A journal begun `start`, every bottle last worn `recent` (past the rotation
 // tail, not yet neglected) except those in `last` ({ name: date | null }).
