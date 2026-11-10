@@ -6,6 +6,10 @@
 import { ACCORDS } from '../accords.js';
 import { SEASONS } from '../engine.js';
 import { setHidden } from '../hidden.js';
+import { matchPct } from '../ui.js';
+import { nowSlot, savePrefs } from '../app/state.js';
+import { rank } from '../engine.js';
+import { applySkin } from '../skin.js';
 import { saveMine, shareURL, localMatches, nameMatches, importLines, MAX_IMPORT_LINES } from '../collections.js';
 import { customRecord, MAX_CUSTOM_ACCORDS } from '../custom.js';
 import { clearHistory, journalExport, journalToken, journalStats, toggleWear, wornIn, shiftISO, loadHistory } from '../history.js';
@@ -30,21 +34,118 @@ import * as wishlist from './wardrobe/wishlist.js';
 
 // ---------- Owned ----------
 
-function ownedRow(f, { hidden, removable }) {
+/**
+ * The orders Owned shows a list in (the device remembers one,
+ * state.ownedSort): by brand, by how each bottle ranks for the window Now
+ * shows, most recently worn first (Worn's Gathering dust has the idle ones;
+ * "Worn lately" says which end leads),
+ * or your stars, highest first. `said` is the status line's word for it.
+ */
+export const OWNED_SORTS = [
+  { id: 'brand', label: 'Brand A–Z', said: 'Sorted by brand' },
+  { id: 'fit', label: 'Fits now', said: 'Sorted by how they fit now' },
+  { id: 'worn', label: 'Worn lately', said: 'Sorted by most recently worn' },
+  { id: 'stars', label: 'Your stars', said: 'Sorted by your stars' },
+];
+
+const byBrandName = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
+const starsOf = (skin, f) => skin?.[String(f.id)]?.rating ?? null;
+// "today", "tonight", "tomorrow night": the window as Now's lists say it.
+const windowWord = win => win.label.toLowerCase();
+
+/**
+ * What a list has to sort by: `fit`, Now's window as planned ({ win, ranked,
+ * pick }, with `out`, the bottles switched off as they'd rank there; null
+ * without a forecast), `lastWorn` (id -> date, the journal's) and `skin`
+ * (your ratings). -> the sorts to offer, each { id, label, said,
+ * off }: Brand and Fits now always, Fits now `off` with why when it can't
+ * rank (no forecast, or no bottle switched on), Worn lately and Your stars
+ * only when a bottle in the list has a wear or stars.
+ */
+export function ownedSorts(list, { fit = null, lastWorn = new Map(), skin = {}, hidden = new Set() } = {}) {
+  const why = fit ? null : list.some(f => !hidden.has(f.id)) ? 'needs the forecast' : 'no bottles in picks';
+  return OWNED_SORTS.filter(s => s.id === 'brand' || s.id === 'fit'
+    || (s.id === 'worn' ? list.some(f => lastWorn.has(String(f.id))) : list.some(f => starsOf(skin, f))))
+    .map(s => ({ ...s, off: s.id === 'fit' ? why : null, ...(s.id === 'fit' && fit && { said: `Sorted by how they fit ${windowWord(fit.win)}` }) }));
+}
+
+/**
+ * The list in a sort's order, a new array. Brand order (brand, then name)
+ * breaks every tie, and is what a sort the list can't offer falls back on.
+ * Fits now: Now's pick, then the window's ranking, a bottle switched off
+ * standing where its own score would put it (`fit.out`; under the pick, and
+ * last without one), so a switch leaves its row where it was. Worn lately:
+ * the newest wear first, never worn last. Your stars: rated first, highest
+ * first.
+ */
+export function sortOwned(list, sort, { fit = null, lastWorn = new Map(), skin = {} } = {}) {
+  const out = [...list].sort((a, b) => byBrandName.compare(a.brand ?? '', b.brand ?? '') || byBrandName.compare(a.name ?? '', b.name ?? ''));
+  const by = key => out.map((f, i) => [key(f), i, f]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(e => e[2]);
+  if (sort === 'fit' && fit) {
+    const pick = fit.pick ? String(fit.pick.fragrance.id) : null;
+    const shown = [...(fit.pick ? [fit.pick] : []), ...fit.ranked.filter(r => String(r.fragrance.id) !== pick)];
+    const place = new Map(shown.map((r, i) => [String(r.fragrance.id), i]));
+    for (const o of fit.out ?? []) {
+      const under = shown.findIndex((r, i) => i > 0 && r.score < o.score);
+      // Just above the first bottle it outscores; the better of two there first.
+      place.set(String(o.fragrance.id), (under < 0 ? shown.length : under) - 0.5 - 0.4 * Math.max(0, Math.min(1, o.score)));
+    }
+    return by(f => place.get(String(f.id)) ?? Infinity);
+  }
+  if (sort === 'worn') return by(f => (lastWorn.has(String(f.id)) ? -Date.parse(lastWorn.get(String(f.id))) : Infinity));
+  if (sort === 'stars') return by(f => -(starsOf(skin, f) ?? 0));
+  return out;
+}
+
+/**
+ * The fact a row shows beside its brand, matching the sort: { text, tone }
+ * or null. Fits now: its match for the window in Now's words ("87%
+ * tonight"), a bottle switched off saying so beside the match it would have
+ * ("84% tonight · left out"; "Left out of picks" without one). Worn lately:
+ * "Worn 3 days ago", "Not worn yet". Your stars: "4★", "Not rated". In brand
+ * order only your stars, where you gave some.
+ */
+export function ownedFact(f, sort, { fit = null, lastWorn = new Map(), skin = {}, todayISO = null } = {}) {
+  const stars = starsOf(skin, f);
+  if (sort === 'fit' && fit) {
+    const of = list => list?.find(r => String(r.fragrance.id) === String(f.id));
+    const pick = of(fit.pick ? [fit.pick] : []);
+    const entry = pick ?? of(fit.ranked);
+    if (entry) return { text: `${matchPct(entry)}% ${windowWord(fit.win)}${pick ? ' · Now’s pick' : ''}`, tone: pick ? 'lead' : '' };
+    const out = of(fit.out);
+    return { text: out ? `${matchPct(out)}% ${windowWord(fit.win)} · left out` : 'Left out of picks', tone: 'none' };
+  }
+  if (sort === 'worn') {
+    const last = lastWorn.get(String(f.id));
+    return last && todayISO ? { text: `Worn ${relativeDay(last, todayISO)}`, tone: '' } : { text: 'Not worn yet', tone: 'none' };
+  }
+  if (stars) return { text: `${stars}★`, tone: 'stars', spoken: `You rate it ${plural(stars, 'star')}` };
+  return sort === 'stars' ? { text: 'Not rated', tone: 'none' } : null;
+}
+
+function ownedRow(f, { hidden, removable, fact = null }) {
   const on = !hidden.has(f.id);
   const trailing = `${removable ? `<button class="icon-btn ghosted" data-action="remove" data-id="${esc(f.id)}" aria-label="Remove ${esc(f.name)}">${icon.remove}</button>` : ''}
     ${switchHTML({ on, label: `Include ${f.name} in picks`, action: 'rotation', id: f.id })}`;
-  return rowHTML(f, { meta: esc(f.brand), open: { ctx: '' }, trailing, cls: on ? '' : 'off', attrs: ` data-name="${esc(`${f.name} ${f.brand}`.toLowerCase())}"` });
+  // The brand gives way before the fact does: one line, whatever the sort.
+  const said = fact?.spoken ? `<span aria-hidden="true">${esc(fact.text)}</span><span class="visually-hidden">${esc(fact.spoken)}</span>` : esc(fact?.text);
+  const meta = fact ? `<span class="own-brand">${esc(f.brand)}</span><span class="own-fact${fact.tone ? ` ${fact.tone}` : ''}">${said}</span>` : esc(f.brand);
+  return rowHTML(f, { meta, open: { ctx: '' }, trailing, cls: `${on ? '' : 'off'}${fact ? ' has-fact' : ''}`, attrs: ` data-name="${esc(`${f.name} ${f.brand}`.toLowerCase())}"` });
 }
 
 /**
  * The owned list. tab: 'demo' | 'mine' | null (a shared link is open, and
  * its list shows). hidden: the ids switched off in that list. confirm: Save
- * as mine is waiting for its second tap.
+ * as mine is waiting for its second tap. sort: the order asked for (an id of
+ * OWNED_SORTS; one the list can't offer shows brand order), read with `fit`,
+ * `lastWorn`, `skin` and `todayISO` (ownedSorts, sortOwned, ownedFact).
  */
-export function ownedHTML({ tab, demo, mine, shared, hidden, filter = '', confirm = false }) {
+export function ownedHTML({ tab, demo, mine, shared, hidden, filter = '', confirm = false, sort = 'brand', fit = null, lastWorn = new Map(), skin = {}, todayISO = null }) {
   const list = shared ? shared.records : tab === 'mine' ? mine.records : demo;
   const on = list.filter(f => !hidden.has(f.id)).length;
+  const by = { fit, lastWorn, skin, todayISO, hidden };
+  const sorts = list.length > 1 ? ownedSorts(list, by) : [];
+  const shown = sorts.find(s => s.id === sort && !s.off)?.id ?? 'brand';
   const switcher = segHTML([
     { value: 'demo', label: 'David’s wardrobe', on: tab === 'demo' },
     { value: 'mine', label: `Mine · ${mine.records.length}`, on: tab === 'mine' },
@@ -66,14 +167,19 @@ export function ownedHTML({ tab, demo, mine, shared, hidden, filter = '', confir
         <input type="text" data-field="mine-name" value="${esc(mine.name)}" placeholder="e.g. Alex" maxlength="40" autocomplete="off">
       </label>`
     : '';
-  // The filter sticks under the sub-navigation while the list scrolls.
+  // The filter and the sort stick under the sub-navigation while the list
+  // scrolls. A sort that can't rank yet says why in its own option.
   const search = list.length > 8
-    ? `<div class="owned-filter"><label class="filter">${icon.search}<input type="search" data-field="collection-filter" placeholder="Filter ${list.length} bottles" value="${esc(filter)}" autocomplete="off" aria-label="Filter bottles"></label></div>`
+    ? `<label class="filter">${icon.search}<input type="search" data-field="collection-filter" placeholder="Filter ${list.length} bottles" value="${esc(filter)}" autocomplete="off" aria-label="Filter bottles"></label>`
     : '';
+  const sorter = sorts.length
+    ? `<label class="owned-sort"><span class="visually-hidden">Sort bottles</span><select data-field="owned-sort">${sorts.map(s => `<option value="${s.id}"${s.id === shown ? ' selected' : ''}${s.off ? ' disabled' : ''}>${esc(s.off ? `${s.label} (${s.off})` : s.label)}</option>`).join('')}</select>${icon.chevron}</label>`
+    : '';
+  const bar = search || sorter ? `<div class="owned-filter">${search}${sorter}</div>` : '';
   const body = list.length
-    ? `<p class="muted list-note">${on} of ${list.length} in rotation. Switch a bottle off to leave it out of picks on this device.</p>${search}
-       <ul class="rows owned-list">${list.map(f => ownedRow(f, { hidden, removable: tab === 'mine' && !shared })).join('')}</ul>
-       <p class="muted small filter-empty" hidden>No bottles match.</p>${search ? '<p class="visually-hidden" role="status" id="owned-live"></p>' : ''}`
+    ? `<p class="muted list-note">${on} of ${list.length} in rotation. Switch a bottle off to leave it out of picks on this device.</p>${bar}
+       <ul class="rows owned-list">${sortOwned(list, shown, by).map(f => ownedRow(f, { hidden, removable: tab === 'mine' && !shared, fact: ownedFact(f, shown, by) })).join('')}</ul>
+       <p class="muted small filter-empty" hidden>No bottles match.</p>${bar ? '<p class="visually-hidden" role="status" id="owned-live"></p>' : ''}`
     : messageHTML({ glyph: icon.bottle, title: 'No bottles yet', body: 'Search for what you own, or paste a list.' });
   return `${shared ? sharedBannerHTML(shared, mine.records.length, { confirm }) : ''}
     <section class="card owned" aria-labelledby="owned-title">
@@ -86,6 +192,20 @@ export function ownedHTML({ tab, demo, mine, shared, hidden, filter = '', confir
     </section>`;
 }
 
+// What the list on screen has to sort by: Now's window as planned, the
+// journal's last wears up to Worn's today, and the device's ratings. The
+// bottles switched off are scored for that window as rank() scores any
+// bottle there (their stars and recent wears counted, no plan around them),
+// so Fits now can stand each where it would rank; not for a window planned
+// for an occasion, which ranks its own way (rankEvent).
+const ownedBy = () => {
+  const today = wornToday(), skin = loadSkin(), now = nowSlot();
+  const hidden = hiddenIn(viewingDemo());
+  const off = now && !now.win.occasion ? sourceRecords().filter(f => hidden.has(f.id)) : [];
+  const out = off.length ? rank(applySkin(off, skin), now.win, now.win.slot, { history: state.history, todayISO: now.win.dateISO, holdBack: false }) : [];
+  return { fit: now && { win: now.win, ranked: now.ranked, pick: now.pick, out }, lastWorn: journalStats(state.history, today).lastWorn, skin, todayISO: today };
+};
+
 function ownedPane() {
   return ownedHTML({
     tab: state.shared ? null : state.active,
@@ -95,6 +215,8 @@ function ownedPane() {
     hidden: hiddenIn(viewingDemo()),
     filter: state.ownedFilter ?? '',
     confirm: state.armed === 'shared-save',
+    sort: state.ownedSort,
+    ...ownedBy(),
   });
 }
 
@@ -1321,5 +1443,17 @@ export const fields = {
 export const changes = {
   'mine-name'(el) {
     updateMine(mine => { mine.name = el.value.trim().slice(0, 40); });
+  },
+  // Owned's order, remembered on the device. Focus stays on the select, and
+  // the status line says the new order.
+  'owned-sort'(el, app) {
+    const sort = OWNED_SORTS.find(s => s.id === el.value);
+    if (!sort || el.selectedOptions[0]?.disabled) return;
+    state.ownedSort = sort.id;
+    savePrefs();
+    app.keepingFocus(el, '#app', app.renderPage);
+    const said = ownedSorts(sourceRecords(), { ...ownedBy(), hidden: hiddenIn(viewingDemo()) }).find(s => s.id === sort.id)?.said ?? sort.said;
+    clearTimeout(filterSaid);
+    say('owned-live', said);
   },
 };
