@@ -129,6 +129,14 @@ test('a pick that isn’t first in its list names the bottles above it, each wit
     }
   }
   assert.ok(turns > 0 && saved > 0, `${turns} gave the pick a turn, ${saved} saved`);
+  // A wear logged for the window is its pick wherever it ranks: the first three above it say so, not all twenty.
+  const low = plan[1].ranked.at(-4).fragrance;
+  const history = [{ id: low.id, date: plan[1].win.dateISO, slot: plan[1].win.slot }];
+  const worn = planWindows(fragrances, windows.slice(0, 2), { history, nowISO: today })[1];
+  const w = whyWindow(low, worn, { history, todayISO: today });
+  assert.deepEqual([w.isPick, w.rank > 4, w.ahead.length, w.gap.line], [true, true, 3, 'It\'s the pick for tonight.']);
+  assert.deepEqual(w.ahead.map(a => a.name), worn.ranked.slice(0, 3).map(r => r.fragrance.name));
+  for (const a of w.ahead) assert.match(a.line, new RegExp(`^\\d+ points? over ${low.name} tonight, but you’re wearing ${low.name}\\.$`), a.line);
 });
 
 test('--why is a mode of its own: it reads a window’s flags and stops on the rest with a sentence', async () => {

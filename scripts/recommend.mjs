@@ -1335,6 +1335,10 @@ const WHY_INSTEAD = {
   top: '--top doesn\'t apply to --why, which answers for one bottle; today\'s picks with --top N give the first N with their reasons',
 };
 
+// The most bottles above a pick that its answer names (a wear logged for the
+// window can rank anywhere in its list).
+const AHEAD_MAX = 3;
+
 /**
  * --why for one window of a plan ({ win, ranked, pick }: planWindows', or a
  * list ranked alone with its top as the pick): where bottle `f` stands in it
@@ -1348,8 +1352,8 @@ const WHY_INSTEAD = {
  * displayed match sits under the pick's. `parts`: Why's bars (each fit as a
  * percent) with the share of the score each weighs. `notes`: what the heat,
  * the cold or a recent wear took off, and a bottle saved for an event.
- * `ahead`: for a pick that isn't first in its list, the bottles above it,
- * each with why it gave way. No temperature in any of it but `window`.
+ * `ahead`: for a pick that isn't first in its list, the bottles above it
+ * (the first AHEAD_MAX), each with why it gave way. No temperature in any of it but `window`.
  */
 export function whyWindow(f, { win, ranked, pick }, { occasion = null, history = [], todayISO = win.dateISO } = {}) {
   const occ = win.occasion ?? occasion ?? null;
@@ -1362,7 +1366,7 @@ export function whyWindow(f, { win, ranked, pick }, { occasion = null, history =
   const beside = e => pickGapLine(e, pick, win, { occasion: occ, worn });
   // A bottle saved for an event has no line beside the pick: its own note says why it gave way.
   const kept = e => whyNotes(e, win, { occasion: occ, todayISO }).find(n => n.key === 'saved')?.text ?? '';
-  const ahead = isPick ? ranked.slice(0, at).map(r => ({ name: r.fragrance.name, line: beside(r) || kept(r) })).filter(a => a.line) : [];
+  const ahead = isPick ? ranked.slice(0, at).map(r => ({ name: r.fragrance.name, line: beside(r) || kept(r) })).filter(a => a.line).slice(0, AHEAD_MAX) : [];
   return {
     window: { label: win.label, date: win.dateISO, slot: win.slot, feelsF: Math.round(win.feelsF), humidity: Math.round(win.humidity), dewF: Math.round(win.dewF), condition: win.condition, rainChance: win.pop, ...(win.typical && { typical: true }) },
     occasion: occ?.id ?? null,
