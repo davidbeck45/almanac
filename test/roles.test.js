@@ -6,7 +6,7 @@ import { loadPool, fromPool } from '../src/fragrantica.js';
 import { gapContext, gapReport } from '../src/gaps.js';
 import { applySkin } from '../src/skin.js';
 import { sharesFrom, parseUses } from '../src/uses.js';
-import { ROLES, WORKHORSE_SHARE, bottleRoles, rolesJSON, roleLine, shareText } from '../src/roles.js';
+import { ROLES, WORKHORSE_SHARE, SPECIALIST_SHARE, WIDE_LEAD, bottleRoles, rolesJSON, roleLine, shareText } from '../src/roles.js';
 import { handlePool, newPoolCache } from '../src/pool-tasks.js';
 import { rolesHTML } from '../src/views/wardrobe/insights.js';
 
@@ -101,6 +101,15 @@ test('David’s wardrobe: workhorses lead a large share, and the bottles daily p
   const backups = roles.bottles.filter(b => b.role === 'backup');
   assert.equal(backups[0].bottle.name, 'Glorious Oud Royal Blanc', 'the backup least in the mix leads the list of what could go');
   assert.equal(backups.at(-1).bottle.name, 'Terra');
+  // A lead that seldom comes up, a point ahead, isn't a specialist's: Sauvage's one is about four nights a year.
+  const sauvage = roles.bottles.find(b => b.bottle.name === 'Sauvage');
+  assert.equal(sauvage.role, 'backup');
+  assert.ok(sauvage.leadShare > 0 && sauvage.leadShare < SPECIALIST_SHARE);
+  assert.match(sauvage.text, /^Leads 1% of what you wear: Casual on mild nights\. That comes up rarely, and .+ is 1 point behind\.$/);
+  // However rare, a wide lead is: Vintage Radio is the one real pick for the outdoors in the cold.
+  const radio = roles.bottles.find(b => b.bottle.name === 'Vintage Radio');
+  assert.ok(radio.leadShare < SPECIALIST_SHARE && radio.leads[0].lead >= WIDE_LEAD);
+  assert.equal(radio.text, 'Leads 1% of what you wear: Outdoors on cold days (6 points ahead of Cedrus Blanc).');
   // The short forms a card shows beside the name and under it.
   const detour = roles.bottles.find(b => b.bottle.name === 'Détour Noir');
   assert.equal(detour.headline, 'Leads 20%');
@@ -214,7 +223,7 @@ test('Insights’ card groups the bottles by role, a few to a group, each row op
   for (const m of html.matchAll(/--lead:([\d.]+);--mix:([\d.]+)/g)) assert.ok(+m[1] <= +m[2] + 1e-9 && +m[2] <= 1, m[0]);
   // A role shown whole lists every bottle and offers the way back.
   const open = rolesHTML(plain, { open: new Set(['backup']) });
-  assert.equal(rows(open), 3 + 3 + 9 + 1);
+  assert.equal(rows(open), 3 + 3 + 11 + 1);
   assert.match(open, /data-value="backup"[^>]*aria-expanded="true">[^]*?Show fewer/);
   assert.ok(!/°|\d\s*F\b|undefined|NaN/.test(open), 'no temperature, nothing unfilled');
   // Bottles that cover nothing close the card; with no roles there is no card.

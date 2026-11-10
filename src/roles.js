@@ -15,15 +15,21 @@ export const WORKHORSE_SHARE = 0.05;
 // A lead of a point or more is a real one: under it the next best is a
 // toss-up (TIE_POINTS in src/contrast.js), and the bottle could go unmissed.
 export const CLEAR_LEAD = 0.01;
-// Past this the next best is "well behind" and the text counts the points.
-const WIDE_LEAD = 0.03;
+// A specialist's leads matter: a point or more ahead on average over this
+// share of what you wear or more (Sauvage's one lead, Casual on mild nights,
+// comes up on under 1% of David's wears: about four nights a year)…
+export const SPECIALIST_SHARE = 0.01;
+// …or, however rare, this far ahead in a situation that comes up (MIN_WEIGHT):
+// the one real pick there, as Vintage Radio is for the outdoors in the cold.
+// The text counts the points of a lead this wide.
+export const WIDE_LEAD = 0.03;
 // Situations a line names before "and N more".
 const NAMED = 3;
 
 export const ROLES = [
   { id: 'workhorse', label: 'Workhorse', plural: 'Workhorses', blurb: 'The best you own for a large share of what you wear.' },
   { id: 'specialist', label: 'Specialist', plural: 'Specialists', blurb: 'The clear pick for a few situations.' },
-  { id: 'backup', label: 'Backup', plural: 'Backups', blurb: 'In the mix, never clearly first. The least called for come first: they’d go unmissed.' },
+  { id: 'backup', label: 'Backup', plural: 'Backups', blurb: 'In the mix, seldom or never first. The least called for come first: they’d go unmissed.' },
   { id: 'bench', label: 'On the bench', plural: 'On the bench', blurb: 'In the mix for nothing you wear.' },
 ];
 export const roleById = id => ROLES.find(r => r.id === id);
@@ -72,7 +78,8 @@ const named = (runs, note = null) => {
 // A bottle's role from what it leads and where it's within reach.
 function roleOf(b) {
   if (b.leadShare >= WORKHORSE_SHARE) return 'workhorse';
-  if (b.leadShare > 0 && b.loss / b.leadShare >= CLEAR_LEAD) return 'specialist';
+  const clear = b.leadShare >= SPECIALIST_SHARE && b.loss / b.leadShare >= CLEAR_LEAD;
+  if (clear || b.leads.some(s => s.lead >= WIDE_LEAD && s.weight >= MIN_WEIGHT)) return 'specialist';
   return b.mixShare > 0 ? 'backup' : 'bench';
 }
 
@@ -96,7 +103,10 @@ function wordsOf(b) {
   const clear = b.leads.reduce((a, r) => (r.weight * r.lead > a.weight * a.lead ? r : a));
   const wide = b.role !== 'backup' && clear.lead >= WIDE_LEAD && clear.next ? clear : null;
   const inline = wide && b.leads.indexOf(wide) < NAMED;
-  const tail = b.role === 'backup' ? (top.next ? ` ${top.next.name} is right behind, so little would be lost without it.` : '')
+  // A backup that leads: by a hair, or something that seldom comes up.
+  const spare = !top.next ? '' : top.lead < CLEAR_LEAD ? ` ${top.next.name} is right behind, so little would be lost without it.`
+    : ` That comes up rarely, and ${top.next.name} is ${points(top.lead)} behind.`;
+  const tail = b.role === 'backup' ? spare
     : wide ? (inline ? '' : ` For ${wide.title} it's ${points(wide.lead)} ahead of ${wide.next.name}.`)
       : clear.lead < CLEAR_LEAD && top.next ? ` ${top.next.name} is right behind.` : '';
   const detail = `${named(b.leads, inline ? { run: wide, text: `${points(wide.lead)} ahead of ${wide.next.name}` } : null)}.${tail}`;
