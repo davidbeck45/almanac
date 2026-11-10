@@ -35,6 +35,7 @@ export function loadPrefs() {
 const prefsHeld = () => ({
   occasion: state.occasion, units: state.units, theme: savedTheme ?? undefined, preferValue: state.preferValue, likedStyles: state.likedStyles,
   stillSky: state.stillSky || undefined,
+  wornSpan: state.wornSpan === 30 ? undefined : state.wornSpan,
 });
 // The prefs this tab last read or saved. Another open tab saves its own, so
 // a save writes only what changed here since over what's stored: a style
@@ -60,6 +61,7 @@ function fromPrefs(prefs) {
     preferValue: typeof prefs.preferValue === 'boolean' ? prefs.preferValue : null,
     likedStyles: Array.isArray(prefs.likedStyles) ? prefs.likedStyles.filter(s => typeof s === 'string') : null,
     stillSky: prefs.stillSky === true,
+    wornSpan: prefs.wornSpan === 90 || prefs.wornSpan === 365 ? prefs.wornSpan : 30,
   };
 }
 
@@ -126,6 +128,8 @@ export const state = {
   // Settings › Animate the sky switched off: the weather scene holds still
   // (the shell sets .still-sky on <html>; base.css).
   stillSky: stored.stillSky,
+  // How far back Worn's tiles and Most worn read: 30, 90 or 365 days (setWornSpan).
+  wornSpan: stored.wornSpan,
   // Discover's search: `draft` is the field as typed, `query` what was last
   // searched; `offline` the library's error when only local matches came back.
   discover: { draft: null, query: '', results: null, busy: false, error: '', offline: '' },
@@ -476,6 +480,12 @@ export function journalData(today = todayISO()) {
     todayISO: today,
     calendar: journalCalendar(state.history, today, 5),
   };
+}
+
+/** Worn's span for its tiles and Most worn (30, 90 or 365 days), saved in prefs. */
+export function setWornSpan(days) {
+  state.wornSpan = days === 90 || days === 365 ? days : 30;
+  savePrefs();
 }
 
 // ---------- Finding bottles ----------

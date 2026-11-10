@@ -21,6 +21,7 @@ import {
 } from '../app/state.js';
 import { warmPool } from '../app/pool.js';
 import { whenPhrase } from './wear/when.js';
+import { setWornSpan } from '../app/state.js';
 import { loadTrip } from './wear/trip.js';
 import { liveHTML, say, speak } from './wardrobe/parts.js';
 import * as insights from './wardrobe/insights.js';
@@ -132,6 +133,83 @@ function watchFilter() {
 
 // ---------- Worn (the journal) ----------
 
+// How far back the tiles and Most worn read (state.wornSpan, saved with the
+// prefs): its days, its segment's label, the card's heading and how many
+// bottles Most worn lists, a few more for a longer span.
+export const SPANS = [
+  { days: 30, label: '30 days', title: 'Last 30 days', rows: 5 },
+  { days: 90, label: '90 days', title: 'Last 90 days', rows: 6 },
+  { days: 365, label: 'Year', title: 'Last 12 months', rows: 8 },
+];
+export const spanOf = days => SPANS.find(s => s.days === days) ?? SPANS[0];
+
+const CAL_WEEKS = 5;
+const YEAR_DAYS = 365; // what the journal keeps
+const weekdayOf = iso => new Date(`${iso}T12:00:00Z`).getUTCDay();
+const daysFrom = (from, to) => Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000);
+
+/**
+ * The calendar `page` pages back from the one today is on (0, the journal's
+ * journalCalendar): five weeks, Sunday first, each day { dateISO, future,
+ * day, night } with its wears.
+ */
+export function calendarPage(history, todayISO, page = 0) {
+  const start = shiftISO(todayISO, -weekdayOf(todayISO) - 7 * (CAL_WEEKS * (page + 1) - 1));
+  return Array.from({ length: CAL_WEEKS }, (_, w) => Array.from({ length: 7 }, (_, d) => {
+    const dateISO = shiftISO(start, w * 7 + d);
+    return { dateISO, future: dateISO > todayISO, day: wornIn(history, dateISO, 'day'), night: wornIn(history, dateISO, 'night') };
+  }));
+}
+
+/**
+ * How many pages back the calendar turns: to the page the journal's first
+ * wear is on, at most the one a year back (what the journal keeps); 0 when
+ * every wear is on today's page.
+ */
+export function calendarPages(history, todayISO) {
+  const floor = shiftISO(todayISO, -(YEAR_DAYS - 1));
+  let first = todayISO;
+  for (const h of history) if (h.date < first) first = h.date;
+  const lastDay = shiftISO(todayISO, 6 - weekdayOf(todayISO));
+  return Math.floor(daysFrom(first < floor ? floor : first, lastDay) / (7 * CAL_WEEKS));
+}
+
+/** A calendar page's days in words ("Sep 6 – Oct 10"), up to today on the page it's on. */
+export function calendarRange(calendar, todayISO) {
+  const days = calendar.flat();
+  if (!days.length) return '';
+  const last = days.at(-1).dateISO;
+  return `${shortDate(days[0].dateISO)} – ${shortDate(last > todayISO ? todayISO : last)}`;
+}
+
+/** What turning to a page says to screen readers: its days and how much they hold. */
+export function calendarSaid(calendar, todayISO) {
+  const wears = calendar.flat().reduce((n, c) => n + (c.day ? 1 : 0) + (c.night ? 1 : 0), 0);
+  return `Calendar, ${calendarRange(calendar, todayISO)}: ${wears ? `${plural(wears, 'wear')} logged` : 'nothing logged'}.`;
+}
+
+/**
+ * Wears a calendar month over the last `days` days up to today, oldest
+ * first: [{ month: 'YYYY-MM', wears, bottles: distinct ones }], a month with
+ * none included. The first and last are the part of theirs the span covers.
+ */
+export function wearsByMonth(history, todayISO, days) {
+  const since = shiftISO(todayISO, -(days - 1));
+  const months = new Map();
+  for (let m = since.slice(0, 7); m <= todayISO.slice(0, 7);) {
+    months.set(m, { month: m, wears: 0, ids: new Set() });
+    const [y, mo] = m.split('-').map(Number);
+    m = mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, '0')}`;
+  }
+  for (const h of history) {
+    if (h.date > todayISO || h.date < since) continue;
+    const at = months.get(h.date.slice(0, 7));
+    at.wears++;
+    at.ids.add(h.id);
+  }
+  return [...months.values()].map(({ month, wears, ids }) => ({ month, wears, bottles: ids.size }));
+}
+
 /**
  * A calendar day as its button names it: the day, and what was worn when
  * ("Sat, Oct 31: Mango Sticky Rice by day, Aventus at night"; "Yesterday,
@@ -195,10 +273,14 @@ export function dustWhenText(when, todayISO) {
  * The journal. It keeps every wear on this device, whichever list was ranked;
  * Gathering dust reads the ranked list's rotation, and once the forecast is
  * in says when this week each bottle would suit (`when`), opening its page in
- * that window's list. `list`: that list's name, given when the month's wears
- * include bottles outside it, so both say so.
+ * that window's list. `list`: that list's name, given when the span's wears
+ * include bottles outside it, so both say so. The tiles and Most worn read
+ * `stats` over `span` days (SPANS; `months`, wearsByMonth's, for a longer
+ * one's By month), Gathering dust stays the last 30 days', and the calendar
+ * is page `page` of `pages` back (calendarPage), with Earlier and Later
+ * once the journal reaches past today's.
  */
-export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confirmClear = false, list = null } = {}) {
+export function wornHTML({ stats, calendar, dusty, todayISO, span = 30, page = 0, pages = 0, months = null }, resolve, { confirmClear = false, list = null } = {}) {
   if (!stats.wears && !stats.lastWorn.size) {
     return messageHTML({ glyph: icon.journal, title: 'Nothing logged yet', body: 'Choose Wear this on a pick and it shows up here, on a calendar with your most-worn bottles.',
       action: `<div class="message-actions">
@@ -206,7 +288,8 @@ export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confir
         <button class="btn secondary" data-action="journal-log" data-date="${esc(todayISO)}">${icon.plus}Log a wear</button>
       </div>` });
   }
-  const top = stats.top.map(([id, n]) => [resolve(id), n]).filter(([f]) => f).slice(0, 5);
+  const { title, rows } = spanOf(span);
+  const top = stats.top.map(([id, n]) => [resolve(id), n]).filter(([f]) => f).slice(0, rows);
   const most = top[0];
   const peak = most?.[1] ?? 1;
   const tiles = `<div class="stat-tiles">
@@ -214,7 +297,26 @@ export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confir
     <div class="stat"><b>${stats.bottles}</b><span>bottles</span></div>
     <div class="stat wide">${most ? `${img(most[0])}<span><b class="name">${esc(most[0].name)}</b><span>most worn · ${most[1]}×</span></span>` : '<span><b class="name">—</b><span>most worn</span></span>'}</div>
   </div>`;
+  // A longer span by month: a bar a month, its wears over it, said in full
+  // (with its distinct bottles) for screen readers and on hover.
+  const most1 = Math.max(1, ...(months ?? []).map(m => m.wears));
+  const monthBars = months?.length > 1
+    ? `<section aria-labelledby="worn-months-title"><h3 id="worn-months-title">By month</h3><ul class="month-bars">${months.map(m => {
+      const name = shortDate(`${m.month}-01`).split(' ')[0];
+      const label = `${name}: ${m.wears ? `${plural(m.wears, 'wear')}, ${plural(m.bottles, 'bottle')}` : 'nothing logged'}`;
+      return `<li title="${esc(label)}"><span class="visually-hidden">${esc(label)}</span><b aria-hidden="true">${m.wears || ''}</b><span class="month-bar" aria-hidden="true"><span style="height:${((m.wears / most1) * 100).toFixed(0)}%"></span></span><small aria-hidden="true">${esc(name)}</small></li>`;
+    }).join('')}</ul></section>`
+    : '';
+  const spans = segHTML(SPANS.map(s => ({ value: s.days, label: s.label, on: s.days === span })), { action: 'journal-span', label: 'Look back', cls: 'journal-span' });
   const weekdays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => `<span class="cal-dow" aria-hidden="true">${d}</span>`).join('');
+  // The calendar's one stop in the tab order: today, or on an earlier page
+  // its last day.
+  const stop = calendar.flat().findLast(c => !c.future)?.dateISO;
+  const range = calendarRange(calendar, todayISO);
+  const turn = (to, label, on) => `<button class="btn secondary compact" data-action="journal-page" data-value="${to}"${on ? '' : ' disabled'}>${to === 'earlier' ? `${icon.back}${label}` : `${label}${icon.chevron}`}</button>`;
+  const pager = pages > 0
+    ? `<div class="cal-pager" role="group" aria-label="Calendar pages">${turn('earlier', 'Earlier', page < pages)}${turn('later', 'Later', page > 0)}</div>`
+    : '';
   const cells = calendar.flat().map(c => {
     const worn = [c.day, c.night].map(h => h && resolve(h.id)).filter(Boolean);
     const day = +c.dateISO.slice(8, 10);
@@ -228,15 +330,15 @@ export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confir
     const inner = `<small aria-hidden="true">${date}</small><span class="visually-hidden">${esc(label)}</span>
       <span class="cal-bottles">${worn.map(f => img(f)).join('')}</span>`;
     // Today and the days gone by open the log sheet, for a wear not logged at
-    // the time; days ahead can't be worn yet. One stop in the tab order,
-    // today, and arrow keys move between the days (calendarKeys).
+    // the time; days ahead can't be worn yet. One stop in the tab order
+    // (`stop`), and arrow keys move between the days (calendarKeys).
     return c.future ? `<span class="${cls}" title="${esc(label)}">${inner}</span>`
-      : `<button type="button" class="${cls}" data-action="journal-log" data-date="${esc(c.dateISO)}" title="${esc(label)}" tabindex="${today ? 0 : -1}"${today ? ' aria-current="date"' : ''}>${inner}</button>`;
+      : `<button type="button" class="${cls}" data-action="journal-log" data-date="${esc(c.dateISO)}" title="${esc(label)}" tabindex="${c.dateISO === stop ? 0 : -1}"${today ? ' aria-current="date"' : ''}>${inner}</button>`;
   }).join('');
   const mostList = top.length
     ? `<ul class="rank-list">${top.map(([f, n]) => `<li>${img(f)}<span class="row-text"><b>${esc(f.name)}</b><small>${esc(f.brand)}</small></span>
         <span class="rank-bar"><span style="width:${((n / peak) * 100).toFixed(0)}%"></span></span><span class="rank-n">${n}×</span></li>`).join('')}</ul>`
-    : '<p class="muted small">Nothing logged in the last 30 days.</p>';
+    : `<p class="muted small">Nothing logged in the ${title.toLowerCase()}.</p>`;
   const dustList = dusty.length
     ? `<ul class="dust-list">${dusty.map(({ f, last, when }) => `<li><button data-action="open" data-ctx="${esc(when?.ctx ?? '')}" data-id="${esc(f.id)}">${img(f)}<span><b>${esc(f.name)}</b><small>${last ? `Last worn ${esc(relativeDay(last, todayISO))}` : 'Not worn yet'}</small>${when ? `<small class="dust-when${when.kind === 'none' ? '' : ' on'}">${esc(dustWhenText(when, todayISO))}</small>` : ''}</span></button></li>`).join('')}</ul>`
     : '<p class="muted small">Every bottle in rotation got worn this month. Nice.</p>';
@@ -245,10 +347,15 @@ export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confir
   const claude = `<button class="btn secondary compact" data-action="journal-claude">${icon.paste}Copy for Claude</button>
     <p>Copies your last ten days, stars and switched-off bottles for Claude’s picks (no places).</p>`;
   return `<section class="card journal" aria-labelledby="journal-title">
-    ${sectionHead('Last 30 days', claude, { id: 'journal-title' })}
+    ${sectionHead(title, claude, { id: 'journal-title' })}
     ${list ? '<p class="muted small journal-scope">Every wear logged on this device, from any list.</p>' : ''}
+    ${spans}
     ${tiles}
-    <section><h3>Calendar</h3><p class="muted small cal-hint">Choose a day to log a wear you didn’t at the time.</p><div class="calendar">${weekdays}${cells}</div></section>
+    ${monthBars}
+    <section aria-labelledby="worn-cal-title">
+      <header class="cal-head"><h3 id="worn-cal-title">Calendar${range ? `<small class="cal-range"><span class="visually-hidden">, </span>${esc(range)}</small>` : ''}</h3>${pager}</header>
+      <p class="muted small cal-hint">Choose a day to log a wear you didn’t at the time.</p><div class="calendar">${weekdays}${cells}</div>
+    </section>
     <section><h3>Most worn</h3>${mostList}</section>
     <section><h3>Gathering dust</h3>${list ? `<p class="muted small journal-scope">From ${esc(list)}: in rotation, not worn in 30 days.</p>` : ''}${dustList}</section>
     <div class="action-row end">
@@ -259,9 +366,29 @@ export function wornHTML({ stats, calendar, dusty, todayISO }, resolve, { confir
   </section>`;
 }
 
-// The list being ranked, named when the month's wears reach past it.
+// How many pages back the calendar is turned, for the visit: re-renders and
+// Back keep it, a new visit starts on today's.
+let wornPage = 0;
+
+// Worn as its pane draws it: the span's stats over journalData's (whose own
+// are Gathering dust's 30 days), the calendar's page, and the list being
+// ranked, named when the span's wears reach past it.
+function wornData() {
+  const today = wornToday();
+  const data = journalData(today);
+  const { days } = spanOf(state.wornSpan);
+  const stats = days === 30 ? data.stats : journalStats(state.history, today, days);
+  const pages = calendarPages(state.history, today);
+  wornPage = Math.min(wornPage, pages);
+  return {
+    ...data, stats, span: days, pages, page: wornPage,
+    calendar: wornPage ? calendarPage(state.history, today, wornPage) : data.calendar,
+    months: days > 30 ? wearsByMonth(state.history, today, days) : null,
+  };
+}
+
 function wornPane() {
-  const data = journalData(wornToday());
+  const data = wornData();
   const ranked = new Set(sourceRecords().map(f => f.id));
   const mixed = data.stats.top.some(([id]) => !ranked.has(id));
   const list = !mixed ? null : state.shared ? collectionLabel() : state.active === 'mine' ? 'Mine' : 'David’s wardrobe';
@@ -1112,6 +1239,29 @@ export const actions = {
     focusInSheet({ force: other || document.activeElement?.matches('#sheet .sheet-close') },
       other && `[data-action="journal-log-clear"][data-slot="${slot}"]`, '[data-action="journal-log-slot"][aria-pressed="true"]');
     speak(document.getElementById('sheet'));
+  },
+  // 30 days, 90 days or a year for Worn's tiles, By month and Most worn,
+  // kept on the device. Focus stays on the segment chosen, and the status
+  // line says what the span holds.
+  'journal-span'(el, app) {
+    setWornSpan(Number(el.dataset.value));
+    app.keepingFocus(el, '#app', app.renderPage);
+    const { stats, span } = wornData();
+    app.announce(`${spanOf(span).title}: ${stats.wears ? `${plural(stats.wears, 'wear')}, ${plural(stats.bottles, 'bottle')}` : 'nothing logged'}.`);
+  },
+  // Earlier and Later turn Worn's calendar a page (five weeks) through the
+  // journal, as far back as its first wear and never ahead of today's page.
+  // Focus stays on the one used; at its end, where it's switched off, the
+  // other takes it rather than the body.
+  'journal-page'(el, app) {
+    const today = wornToday();
+    const to = Math.max(0, Math.min(calendarPages(state.history, today), wornPage + (el.dataset.value === 'earlier' ? 1 : -1)));
+    if (to === wornPage) return;
+    wornPage = to;
+    const held = document.activeElement === el;
+    app.keepingFocus(el, '#app', app.renderPage);
+    if (held && !document.activeElement?.closest?.('.cal-pager')) document.querySelector('#main .cal-pager button:not(:disabled)')?.focus({ preventScroll: true });
+    app.announce(calendarSaid(wornData().calendar, today));
   },
   'journal-clear'(el, app) {
     if (state.armed !== 'journal-clear') {

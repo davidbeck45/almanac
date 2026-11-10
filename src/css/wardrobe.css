@@ -76,6 +76,30 @@
 .stat .name { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
 .stat.wide > span > span { color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
 
+/* How far back the tiles and Most worn read: over the tiles it changes. */
+.journal .journal-span { margin-bottom: var(--s-3); }
+
+/* A longer span by month: a bar a month on one baseline, its wears over it.
+   Thirteen of them share a phone's column, so there a month goes by its
+   initial (its name is in the bar's label). */
+.month-bars { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--s-1); }
+.month-bars li { display: grid; grid-template-rows: var(--lh-caption) 56px var(--lh-caption); justify-items: center; gap: var(--s-0); min-width: 0; }
+.month-bars b { color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; font-variant-numeric: tabular-nums; }
+.month-bar { display: flex; align-items: flex-end; overflow: hidden; width: 100%; max-width: 40px; border-radius: var(--r-thumb); background: var(--fill-faint); }
+.month-bar span { display: block; width: 100%; border-radius: var(--r-thumb); background: linear-gradient(0deg, color-mix(in srgb, var(--ambient) 55%, transparent), var(--ambient)); }
+.month-bars small { overflow: hidden; max-width: 100%; color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); white-space: nowrap; }
+@container page (max-width: 480px) {
+  .month-bars li:nth-last-child(n + 8) ~ li small, .month-bars li:nth-last-child(n + 8) small { width: 1ch; }
+}
+
+/* The calendar's head: the days on its page under the title, Earlier and
+   Later beside it, on a line of their own where the two don't fit. */
+.cal-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2) var(--s-3); margin-bottom: var(--s-3); }
+.journal .cal-head h3 { margin-bottom: 0; }
+.cal-range { display: block; color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 400; font-variant-numeric: tabular-nums; }
+.cal-pager { display: flex; gap: var(--s-2); }
+.cal-pager .btn { padding: 0 var(--s-3); }
+
 /* minmax(0, …): a column narrower than its label shrinks, never the page wider. */
 .calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--s-1); }
 .cal-dow { padding-bottom: var(--s-0); color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; text-align: center; }
