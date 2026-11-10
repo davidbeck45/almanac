@@ -19,7 +19,7 @@ import { routeHash, go } from '../app/router.js';
 import { esc, cap, temp, deg, plural, shortDate, weekdayShort, windowRange, feelWords, displayReasons, moveText, ratedText, listLabel } from '../ui.js';
 import {
   icon, img, slotIcon, wxIcon, wxIconFor, messageHTML, skeletonHTML, reasonsList, chips, matchBadge, shelfHTML,
-  wearButton, segHTML, starsHTML, sharedBannerHTML, accordColor, sectionHead,
+  wearButton, segHTML, starsHTML, sharedBannerHTML, accordColor, sectionHead, sheetFrame,
 } from '../ui/components.js';
 import {
   state, savePrefs, activeFragrances, sourceRecords, rankedFragrances, nowSlot, todaySlots, todayPlan, computeToday, computeWeek,
@@ -456,9 +456,67 @@ export function weekHTML(days) {
     </li>`).join('');
   const how = repeats(days) ? 'Planned against how each day and night will feel.' : 'Planned against how each day and night will feel, so nothing repeats back to back.';
   return `<section class="card week" aria-labelledby="week-title">
-    ${sectionHead(`${icon.calendar}The week ahead`, `<p>${how} Open a bottle to see why.</p>${planned ? `<p class="wk-legend">${icon.calendar}<span>What you planned gets its best bottle, and the days before leave it be.</span></p>` : ''}${nudged ? `<p class="wk-legend">${icon.clock}<span>A bottle you haven’t worn in a while gets a turn.</span></p>` : ''}${tied ? `<p class="wk-legend">${icon.compare}<span>Bottles that suit a window just as well as its pick.</span></p>` : ''}`, { id: 'week-title' })}
+    ${sectionHead(`${icon.calendar}The week ahead`, `${weekPlanButton}<p>${how} Open a bottle to see why.</p>${planned ? `<p class="wk-legend">${icon.calendar}<span>What you planned gets its best bottle, and the days before leave it be.</span></p>` : ''}${nudged ? `<p class="wk-legend">${icon.clock}<span>A bottle you haven’t worn in a while gets a turn.</span></p>` : ''}${tied ? `<p class="wk-legend">${icon.compare}<span>Bottles that suit a window just as well as its pick.</span></p>` : ''}`, { id: 'week-title' })}
     <ol class="wk-list${nudged || planned || tied ? ' marked' : ''}" style="--days:${days.length}">${rows}</ol>
   </section>`;
+}
+
+// ---------- Planning the week ----------
+// The Week's own way to say what a day or night is for. The Occasion pane's
+// "Plan it" plans one window, a pane away from where the plan shows, and
+// only Now could clear one (today's): here a sheet holds a choice for every
+// window the Week shows, saved as it's made (src/app/state.js setEvent, one
+// event a window), so a plan is made, changed and cleared where it's seen.
+
+const weekPlanButton = `<button class="btn tertiary compact wk-plan" data-action="week-plan" aria-label="Plan a day or night for an occasion">${icon.plus}Plan</button>`;
+
+/**
+ * The Week's days as the plan sheet lists them: { dateISO, name, isToday,
+ * day, night }, a slot being the id of the occasion planned there, '' with
+ * none, or null once the window is over (the Week shows it no longer). A
+ * day with both over is left out. `planned`: win => the event on it.
+ */
+export function weekPlanRows(days, planned) {
+  const at = (d, slot) => (d[slot] ? planned({ dateISO: d.dateISO, slot })?.occasion ?? '' : null);
+  return days.filter(d => d.day || d.night)
+    .map(d => ({ dateISO: d.dateISO, name: d.name, isToday: !!d.isToday, day: at(d, 'day'), night: at(d, 'night') }));
+}
+
+/** "Plan the week": a choice per day and night. `said`: what the last choice did. */
+export function weekPlanSheetHTML(rows, { said = '' } = {}) {
+  const choice = (r, slot) => {
+    const now = r[slot];
+    if (now === null) return '<span class="wkp-over">Over</span>';
+    const label = `${r.isToday ? 'Today' : r.name}, ${slot === 'day' ? 'daytime' : 'night'}`;
+    const options = [{ id: '', label: 'No plan' }, ...OCCASIONS].map(o => `<option value="${esc(o.id)}"${o.id === now ? ' selected' : ''}>${esc(o.label)}</option>`).join('');
+    return `<label class="trip-select"><span class="visually-hidden">${esc(label)}</span><select class="${now ? 'on' : ''}" data-field="week-plan-set" data-date="${esc(r.dateISO)}" data-slot="${slot}">${options}</select>${icon.chevron}</label>`;
+  };
+  const list = rows.map(r => `<div class="wkp-row${r.isToday ? ' today' : ''}">
+      <div class="wkp-date"><b>${esc(r.isToday ? 'Today' : weekdayShort(r.dateISO))}</b><small>${esc(shortDate(r.dateISO))}</small></div>
+      ${choice(r, 'day')}${choice(r, 'night')}
+    </div>`).join('');
+  return sheetFrame('week-plan-title', `
+    <h2 id="week-plan-title" class="sheet-title">Plan the week</h2>
+    <p class="muted small">Say what a day or night is for. It gets that occasion’s best bottle, and the days before leave the bottle be.</p>
+    <div class="wkp" role="group" aria-labelledby="week-plan-title">
+      <div class="wkp-head" aria-hidden="true"><span></span><span>${icon.sun}Day</span><span>${icon.moon}Night</span></div>
+      ${list}
+    </div>
+    <p class="wkp-said" role="status" id="week-plan-live">${esc(said)}</p>
+    <p class="muted small">A date further out is planned from Occasion, under “When and where?”.</p>
+    <div class="sheet-bar"><button class="btn primary" data-action="close-sheet">Done</button></div>`);
+}
+
+/**
+ * What a choice in the sheet did, as a sentence: "Planned: a date on Friday
+ * night, with Infini Rose." (`pick`: the bottle the Week now gives the
+ * window), or "No plan for a date on Friday night any more." `was`: the
+ * occasion planned there before, if any. '' when nothing changed.
+ */
+export function weekPlanSaid({ dateISO, slot }, occasion, was, todayISO, pick = null) {
+  if ((occasion?.id ?? null) === (was?.id ?? null)) return '';
+  if (!occasion) return `No plan for ${eventPhrase({ dateISO, slot, occasion: was }, todayISO)} any more.`;
+  return `Planned: ${eventPhrase({ dateISO, slot, occasion }, todayISO)}${pick ? `, with ${pick.name}` : ''}.`;
 }
 
 // ---------- A plan from a link ----------
@@ -910,6 +968,10 @@ export const actions = {
   },
   // Now's "For a date · Clear": the window back to everyday picks. Focus
   // goes on to the card's Details.
+  // The Week's Plan: a sheet with a choice for each day and night it shows.
+  'week-plan'(el, app) {
+    app.openSheet({ kind: 'week-plan' });
+  },
   'event-clear'(el, app) {
     const { date: dateISO, slot } = el.dataset;
     const win = todaySlots().find(p => p.win.dateISO === dateISO && p.win.slot === slot)?.win;
@@ -1010,8 +1072,30 @@ export const actions = {
 
 export const forms = { ...trip.forms, ...pickers.forms };
 export const fields = { ...pickers.fields };
-export const changes = { ...trip.changes, ...when.changes };
-export const sheets = { ...pickers.sheets };
+export const changes = {
+  ...trip.changes,
+  ...when.changes,
+  // Plan the week: a choice saves as it's made and the Week behind the sheet
+  // plans around it. The sheet stays as drawn, so its select keeps focus,
+  // and its status line says what the choice did.
+  'week-plan-set'(el, app) {
+    const { date: dateISO, slot } = el.dataset;
+    const occasion = occasionById(el.value) ?? null;
+    const was = occasionById(eventAt({ dateISO, slot })?.occasion) ?? null;
+    setEvent(dateISO, slot, occasion?.id ?? null);
+    el.classList.toggle('on', !!occasion);
+    app.render({ sheet: false });
+    const pick = occasion && computeWeek().find(d => d.dateISO === dateISO)?.[slot]?.pick.fragrance;
+    const said = weekPlanSaid({ dateISO, slot }, occasion, was, state.wx?.todayISO ?? todayISO(), pick || null);
+    if (state.sheet?.kind === 'week-plan') state.sheet.said = said;
+    const live = globalThis.document?.querySelector('#week-plan-live');
+    if (live) live.textContent = said;
+  },
+};
+export const sheets = {
+  ...pickers.sheets,
+  'week-plan': s => (state.forecast && state.wx ? weekPlanSheetHTML(weekPlanRows(computeWeek(), eventAt), { said: s.said ?? '' }) : null),
+};
 
 // Whether a pane holds a form not saved yet (the Trip form): the shell then
 // waits for the next page change to reload into a new version, as it does

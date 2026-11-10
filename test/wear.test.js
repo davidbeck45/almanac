@@ -1798,3 +1798,48 @@ test('a plan link opened after one of today’s windows has ended calls it gone 
     state.base = state.route = null;
   }
 });
+
+// ---------- Planning the week from the Week ----------
+
+test('the Week’s Plan sheet has a choice for every window it shows, and none for one that’s over', () => {
+  const days = [
+    { dateISO: '2026-11-09', name: 'Monday', isToday: true, day: null, night: { win: {} } },
+    { dateISO: '2026-11-10', name: 'Tuesday', day: { win: {} }, night: { win: {} } },
+    { dateISO: '2026-11-11', name: 'Wednesday', day: { win: {} }, night: { win: {} } },
+  ];
+  const events = [{ dateISO: '2026-11-10', slot: 'night', occasion: 'date' }];
+  const planned = win => events.find(e => e.dateISO === win.dateISO && e.slot === win.slot) ?? null;
+  const rows = wear.weekPlanRows(days, planned);
+  assert.deepEqual(rows.map(r => [r.dateISO, r.day, r.night]), [['2026-11-09', null, ''], ['2026-11-10', '', 'date'], ['2026-11-11', '', '']]);
+  const html = wear.weekPlanSheetHTML(rows);
+  assert.equal(html.match(/<select /g).length, 5, 'this morning is over: no choice for it');
+  assert.match(html, /<span class="wkp-over">Over<\/span>/);
+  assert.match(html, /<span class="visually-hidden">Today, night<\/span><select class="" data-field="week-plan-set" data-date="2026-11-09" data-slot="night">/);
+  const tuesdayNight = html.slice(html.indexOf('data-date="2026-11-10" data-slot="night"'));
+  assert.match(tuesdayNight.slice(0, tuesdayNight.indexOf('</select>')), /<option value="date" selected>Date Night<\/option>/, 'a planned window shows its plan');
+  assert.match(html, /<span class="visually-hidden">Tuesday, night<\/span><select class="on"/, 'and is marked');
+  assert.match(html, /<option value=""( selected)?>No plan<\/option>/);
+  for (const o of OCCASIONS) assert.ok(html.includes(`<option value="${o.id}"`), `${o.label} can be planned`);
+  assert.match(html, /<p class="wkp-said" role="status" id="week-plan-live"><\/p>/, 'the status line is drawn empty, so what a choice did is announced');
+  // A day whose windows are both over isn't listed (11:30 pm).
+  assert.deepEqual(wear.weekPlanRows([{ dateISO: '2026-11-09', name: 'Monday', isToday: true, day: null, night: null }, days[1]], planned).map(r => r.dateISO), ['2026-11-10']);
+});
+
+test('a choice in the Plan sheet says what it did, in the plan’s own words', () => {
+  const date = occasionById('date'), formal = occasionById('formal');
+  const win = { dateISO: '2026-11-13', slot: 'night' };
+  assert.equal(wear.weekPlanSaid(win, date, null, '2026-11-09', { name: 'Amber Empire' }), 'Planned: a date on Friday night, with Amber Empire.');
+  assert.equal(wear.weekPlanSaid(win, formal, date, '2026-11-09', { name: 'Sticky Fingers' }), 'Planned: formal wear on Friday night, with Sticky Fingers.');
+  assert.equal(wear.weekPlanSaid(win, null, date, '2026-11-09'), 'No plan for a date on Friday night any more.');
+  assert.equal(wear.weekPlanSaid({ dateISO: '2026-11-09', slot: 'night' }, date, null, '2026-11-09'), 'Planned: a date tonight.');
+  assert.equal(wear.weekPlanSaid(win, date, date, '2026-11-09'), '', 'the same choice again changes nothing');
+  assert.equal(wear.weekPlanSaid(win, null, null, '2026-11-09'), '');
+});
+
+test('the Week offers Plan beside its heading, and the sheet’s choices save through the view’s own handlers', () => {
+  const html = wear.weekHTML([]);
+  assert.match(html, /<button class="btn tertiary compact wk-plan" data-action="week-plan" aria-label="Plan a day or night for an occasion">/);
+  assert.equal(typeof wear.actions['week-plan'], 'function');
+  assert.equal(typeof wear.changes['week-plan-set'], 'function');
+  assert.equal(typeof wear.sheets['week-plan'], 'function');
+});

@@ -465,6 +465,23 @@
 /* The note under the head says what the clock means. */
 .wk-legend { display: flex; align-items: center; gap: var(--s-1); margin-top: var(--s-1); color: var(--ambient); }
 .wk-legend svg { width: 13px; height: 13px; flex: none; }
+
+/* The Week's Plan button, and its sheet: a choice per day and night. A
+   planned window's choice takes the accent's line, as the Week marks it. */
+.wk-plan svg { width: 14px; height: 14px; }
+.wkp { display: grid; gap: var(--s-2); margin-top: var(--s-4); }
+.wkp-head, .wkp-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: var(--s-2); }
+.wkp-head span { display: flex; align-items: center; gap: var(--s-1); padding-left: var(--s-1); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.wkp-head svg { width: 14px; height: 14px; }
+.wkp-date { display: grid; }
+.wkp-date b { font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 600; letter-spacing: -0.01em; }
+.wkp-date small { color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
+.wkp-row.today .wkp-date b { color: var(--accent); }
+.wkp-row .trip-select { display: flex; }
+.wkp-row select { padding-right: var(--s-6); font-size: var(--fs-body); text-overflow: ellipsis; }
+.wkp-row select.on { border-color: var(--accent); }
+.wkp-over { padding-left: var(--s-3); color: var(--text-tertiary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.wkp-said { min-height: var(--lh-footnote); margin: var(--s-3) 0 var(--s-2); color: var(--ambient); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .wk-pick.empty { grid-template-columns: 16px 1fr; background: transparent; border-style: dashed; color: var(--text-tertiary); font-size: var(--fs-caption); }
 .wk-pick.empty .wk-slot { position: static; width: auto; height: auto; background: none; box-shadow: none; color: var(--text-tertiary); }
 .wk-pick.empty .wk-slot svg { width: 14px; height: 14px; }
