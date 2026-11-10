@@ -103,9 +103,11 @@ function wordsOf(b) {
   const clear = b.leads.reduce((a, r) => (r.weight * r.lead > a.weight * a.lead ? r : a));
   const wide = b.role !== 'backup' && clear.lead >= WIDE_LEAD && clear.next ? clear : null;
   const inline = wide && b.leads.indexOf(wide) < NAMED;
-  // A backup that leads: by a hair, or something that seldom comes up.
+  // A backup that leads: by a hair, or something that seldom comes up (else
+  // its leads are a hair's on average, and the line says how far ahead its main one is).
   const spare = !top.next ? '' : top.lead < CLEAR_LEAD ? ` ${top.next.name} is right behind, so little would be lost without it.`
-    : ` That comes up rarely, and ${top.next.name} is ${points(top.lead)} behind.`;
+    : b.leadShare < SPECIALIST_SHARE ? ` That comes up rarely, and ${top.next.name} is ${points(top.lead)} behind.`
+      : ` ${top.next.name} is ${points(top.lead)} behind there.`;
   const tail = b.role === 'backup' ? spare
     : wide ? (inline ? '' : ` For ${wide.title} it's ${points(wide.lead)} ahead of ${wide.next.name}.`)
       : clear.lead < CLEAR_LEAD && top.next ? ` ${top.next.name} is right behind.` : '';
