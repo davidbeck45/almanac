@@ -11,8 +11,8 @@
 //   wants   the want list (src/wishlist.js)
 //   mine    { name, records } (src/collections.js) and `active`, the list ranked
 //   uses    "How you wear" (src/uses.js), null when never set
-//   prefs   units, theme, liked styles, prefer great value, the still sky
-//           and the occasion last picked (src/app/state.js)
+//   prefs   units, theme, liked styles, prefer great value, the still sky,
+//           the occasion last picked and Worn's span (src/app/state.js)
 //   trip    the saved trip's place, dates, events and count, without its
 //           weather (src/views/wear/trip.js); carried, not yet restored
 // The CLI, journal-check and the widget read it as any journal (parseJournal
@@ -57,6 +57,7 @@ function tidyPrefs(prefs) {
   if (typeof prefs.preferValue === 'boolean') out.preferValue = prefs.preferValue;
   if (Array.isArray(prefs.likedStyles)) out.likedStyles = prefs.likedStyles.filter(s => typeof s === 'string');
   if (prefs.stillSky === true) out.stillSky = true;
+  if (prefs.wornSpan === 90 || prefs.wornSpan === 365) out.wornSpan = prefs.wornSpan;
   return out;
 }
 

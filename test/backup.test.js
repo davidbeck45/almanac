@@ -308,3 +308,11 @@ test('a restore the browser didn’t keep says so, and a file’s two wears for 
     { id: 1, date: '2026-11-01', slot: 'day' }, { id: 2, date: '2026-11-01', slot: 'day' }, { id: 3, date: '2026-11-01', slot: 'night' }] }));
   assert.deepEqual(twice.history.map(h => `${h.slot} ${h.id}`), ['night 3', 'day 1']);
 });
+
+test('a backup carries Worn’s span with the other prefs, and only a span Worn offers', () => {
+  const journal = { app: 'scentcast-journal', version: 1, exported: '2026-11-09T12:00:00.000Z', location: null, hidden: [], history: [] };
+  assert.equal(backupExport(journal, { prefs: { wornSpan: 365 } }).prefs.wornSpan, 365);
+  assert.equal(backupExport(journal, { prefs: { wornSpan: 90, units: 'C' } }).prefs.wornSpan, 90);
+  assert.ok(!('wornSpan' in backupExport(journal, { prefs: { wornSpan: 30 } }).prefs), '30 days is the default, stored as nothing');
+  assert.ok(!('wornSpan' in backupExport(journal, { prefs: { wornSpan: 7 } }).prefs));
+});

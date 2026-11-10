@@ -369,7 +369,7 @@ export function wornHTML({ stats, calendar, dusty, todayISO, span = 30, page = 0
       <button class="btn secondary" data-action="journal-export">${icon.download}Export</button>
       <button class="btn ${confirmClear ? 'secondary danger' : 'tertiary'}" data-action="journal-clear">${icon.remove}${confirmClear ? 'Press again to clear' : 'Clear history'}</button>
     </div>
-    <p class="muted small">Logged with “Wear this”, or on the calendar. History stays on this device; Export saves it as a file.</p>
+    <p class="muted small">Logged with “Wear this”, or on the calendar. History stays on this device; Export saves it, with everything else you’ve added, as a file Settings can restore.</p>
   </section>`;
 }
 
