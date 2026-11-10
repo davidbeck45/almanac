@@ -8,6 +8,8 @@ import { SEASONS } from '../engine.js';
 import { setHidden } from '../hidden.js';
 import { matchPct } from '../ui.js';
 import { nowSlot, savePrefs } from '../app/state.js';
+import { rank } from '../engine.js';
+import { applySkin } from '../skin.js';
 import { saveMine, shareURL, localMatches, nameMatches, importLines, MAX_IMPORT_LINES } from '../collections.js';
 import { customRecord, MAX_CUSTOM_ACCORDS } from '../custom.js';
 import { clearHistory, journalExport, journalToken, journalStats, toggleWear, wornIn, shiftISO, loadHistory } from '../history.js';
@@ -51,8 +53,9 @@ const windowWord = win => win.label.toLowerCase();
 
 /**
  * What a list has to sort by: `fit`, Now's window as planned ({ win, ranked,
- * pick }; null without a forecast), `lastWorn` (id -> date, the journal's)
- * and `skin` (your ratings). -> the sorts to offer, each { id, label, said,
+ * pick }, with `out`, the bottles switched off as they'd rank there; null
+ * without a forecast), `lastWorn` (id -> date, the journal's) and `skin`
+ * (your ratings). -> the sorts to offer, each { id, label, said,
  * off }: Brand and Fits now always, Fits now `off` with why when it can't
  * rank (no forecast, or no bottle switched on), Worn lately and Your stars
  * only when a bottle in the list has a wear or stars.
@@ -67,16 +70,24 @@ export function ownedSorts(list, { fit = null, lastWorn = new Map(), skin = {}, 
 /**
  * The list in a sort's order, a new array. Brand order (brand, then name)
  * breaks every tie, and is what a sort the list can't offer falls back on.
- * Fits now: Now's pick, then the window's ranking, then the bottles switched
- * off, which it doesn't rank. Worn lately: the newest wear first, never
- * worn last. Your stars: rated first, highest first.
+ * Fits now: Now's pick, then the window's ranking, a bottle switched off
+ * standing where its own score would put it (`fit.out`; under the pick, and
+ * last without one), so a switch leaves its row where it was. Worn lately:
+ * the newest wear first, never worn last. Your stars: rated first, highest
+ * first.
  */
 export function sortOwned(list, sort, { fit = null, lastWorn = new Map(), skin = {} } = {}) {
   const out = [...list].sort((a, b) => byBrandName.compare(a.brand ?? '', b.brand ?? '') || byBrandName.compare(a.name ?? '', b.name ?? ''));
   const by = key => out.map((f, i) => [key(f), i, f]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(e => e[2]);
   if (sort === 'fit' && fit) {
-    const place = new Map(fit.ranked.map((r, i) => [String(r.fragrance.id), i + 1]));
-    if (fit.pick) place.set(String(fit.pick.fragrance.id), 0);
+    const pick = fit.pick ? String(fit.pick.fragrance.id) : null;
+    const shown = [...(fit.pick ? [fit.pick] : []), ...fit.ranked.filter(r => String(r.fragrance.id) !== pick)];
+    const place = new Map(shown.map((r, i) => [String(r.fragrance.id), i]));
+    for (const o of fit.out ?? []) {
+      const under = shown.findIndex((r, i) => i > 0 && r.score < o.score);
+      // Just above the first bottle it outscores; the better of two there first.
+      place.set(String(o.fragrance.id), (under < 0 ? shown.length : under) - 0.5 - 0.4 * Math.max(0, Math.min(1, o.score)));
+    }
     return by(f => place.get(String(f.id)) ?? Infinity);
   }
   if (sort === 'worn') return by(f => (lastWorn.has(String(f.id)) ? -Date.parse(lastWorn.get(String(f.id))) : Infinity));
@@ -87,17 +98,20 @@ export function sortOwned(list, sort, { fit = null, lastWorn = new Map(), skin =
 /**
  * The fact a row shows beside its brand, matching the sort: { text, tone }
  * or null. Fits now: its match for the window in Now's words ("87%
- * tonight"), and "Left out of picks" for a bottle switched off. Worn
- * lately: "Worn 3 days ago", "Not worn yet". Your stars: "4★", "Not rated".
- * In brand order only your stars, where you gave some.
+ * tonight"), a bottle switched off saying so beside the match it would have
+ * ("84% tonight · left out"; "Left out of picks" without one). Worn lately:
+ * "Worn 3 days ago", "Not worn yet". Your stars: "4★", "Not rated". In brand
+ * order only your stars, where you gave some.
  */
 export function ownedFact(f, sort, { fit = null, lastWorn = new Map(), skin = {}, todayISO = null } = {}) {
   const stars = starsOf(skin, f);
   if (sort === 'fit' && fit) {
-    const entry = fit.ranked.find(r => String(r.fragrance.id) === String(f.id));
-    if (!entry) return { text: 'Left out of picks', tone: 'none' };
-    const pick = fit.pick && String(fit.pick.fragrance.id) === String(f.id);
-    return { text: `${matchPct(entry)}% ${windowWord(fit.win)}${pick ? ' · Now’s pick' : ''}`, tone: pick ? 'lead' : '' };
+    const of = list => list?.find(r => String(r.fragrance.id) === String(f.id));
+    const pick = of(fit.pick ? [fit.pick] : []);
+    const entry = pick ?? of(fit.ranked);
+    if (entry) return { text: `${matchPct(entry)}% ${windowWord(fit.win)}${pick ? ' · Now’s pick' : ''}`, tone: pick ? 'lead' : '' };
+    const out = of(fit.out);
+    return { text: out ? `${matchPct(out)}% ${windowWord(fit.win)} · left out` : 'Left out of picks', tone: 'none' };
   }
   if (sort === 'worn') {
     const last = lastWorn.get(String(f.id));
@@ -177,10 +191,17 @@ export function ownedHTML({ tab, demo, mine, shared, hidden, filter = '', confir
 }
 
 // What the list on screen has to sort by: Now's window as planned, the
-// journal's last wears up to Worn's today, and the device's ratings.
+// journal's last wears up to Worn's today, and the device's ratings. The
+// bottles switched off are scored for that window as rank() scores any
+// bottle there (their stars and recent wears counted, no plan around them),
+// so Fits now can stand each where it would rank; not for a window planned
+// for an occasion, which ranks its own way (rankEvent).
 const ownedBy = () => {
-  const today = wornToday();
-  return { fit: nowSlot(), lastWorn: journalStats(state.history, today).lastWorn, skin: loadSkin(), todayISO: today };
+  const today = wornToday(), skin = loadSkin(), now = nowSlot();
+  const hidden = hiddenIn(viewingDemo());
+  const off = now && !now.win.occasion ? sourceRecords().filter(f => hidden.has(f.id)) : [];
+  const out = off.length ? rank(applySkin(off, skin), now.win, now.win.slot, { history: state.history, todayISO: now.win.dateISO, holdBack: false }) : [];
+  return { fit: now && { win: now.win, ranked: now.ranked, pick: now.pick, out }, lastWorn: journalStats(state.history, today).lastWorn, skin, todayISO: today };
 };
 
 function ownedPane() {

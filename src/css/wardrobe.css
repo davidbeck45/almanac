@@ -45,7 +45,7 @@
 /* The filter and the sort share the bar; the sort drops under the filter
    where a phone has no room for both. */
 .owned-filter { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
-.owned-filter .filter { flex: 1 1 150px; }
+.owned-filter .filter { flex: 1 1 110px; }
 .owned-sort { position: relative; display: inline-flex; flex: 0 1 auto; align-items: center; min-width: 0; }
 .owned-sort select {
   max-width: 100%;
