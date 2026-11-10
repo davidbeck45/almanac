@@ -304,13 +304,13 @@ export function wornHTML({ stats, calendar, dusty, todayISO, span = 30, page = 0
   </div>`;
   // A longer span by month: a bar a month, its wears over it, said in full
   // (with its distinct bottles) for screen readers and on hover.
-  const most1 = Math.max(1, ...(months ?? []).map(m => m.wears));
+  const busiest = Math.max(1, ...(months ?? []).map(m => m.wears));
   const monthBars = months?.length > 1
-    ? `<section aria-labelledby="worn-months-title"><h3 id="worn-months-title">By month</h3><ul class="month-bars${months.length > 6 ? ' long' : ''}">${months.map(m => {
+    ? `<section aria-labelledby="worn-months-title"><h3 id="worn-months-title">By month</h3><ul class="month-bars${months.length > 6 ? ' long' : ''}" role="list">${months.map(m => {
       // A month of an earlier year says which: a year's span has two Novembers.
       const name = shortDate(`${m.month}-01`).split(' ')[0], year = m.month.slice(0, 4);
       const label = `${name}${year < todayISO.slice(0, 4) ? ` ${year}` : ''}: ${m.wears ? `${plural(m.wears, 'wear')}, ${plural(m.bottles, 'bottle')}` : 'nothing logged'}`;
-      return `<li title="${esc(label)}"><span class="visually-hidden">${esc(label)}</span><b aria-hidden="true">${m.wears || ''}</b><span class="month-bar" aria-hidden="true"><span style="height:${((m.wears / most1) * 100).toFixed(0)}%"></span></span><small aria-hidden="true">${esc(name[0])}<span>${esc(name.slice(1))}</span></small></li>`;
+      return `<li title="${esc(label)}"><span class="visually-hidden">${esc(label)}</span><b aria-hidden="true">${m.wears || ''}</b><span class="month-bar" aria-hidden="true"><span style="height:${((m.wears / busiest) * 100).toFixed(0)}%"></span></span><small aria-hidden="true">${esc(name[0])}<span>${esc(name.slice(1))}</span></small></li>`;
     }).join('')}</ul></section>`
     : '';
   const spans = segHTML(SPANS.map(s => ({ value: s.days, label: s.label, on: s.days === span })), { action: 'journal-span', label: 'Look back', cls: 'journal-span' });

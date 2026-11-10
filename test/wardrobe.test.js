@@ -331,7 +331,7 @@ test('the span chosen heads the card, and a longer one lists more bottles and it
   const quarter = worn(90, months);
   assert.match(quarter, /<h2 id="journal-title">Last 90 days<\/h2>/);
   assert.deepEqual([pressed(quarter), rows(quarter)], [[['90', '90 days']], 6]);
-  assert.match(quarter, /<section aria-labelledby="worn-months-title"><h3 id="worn-months-title">By month<\/h3><ul class="month-bars">/);
+  assert.match(quarter, /<section aria-labelledby="worn-months-title"><h3 id="worn-months-title">By month<\/h3><ul class="month-bars" role="list">/);
   // Each bar says its month, wears and distinct bottles; the tallest is the busiest month.
   assert.match(quarter, /<li title="Oct: 40 wears, 9 bottles"><span class="visually-hidden">Oct: 40 wears, 9 bottles<\/span><b aria-hidden="true">40<\/b><span class="month-bar" aria-hidden="true"><span style="height:100%"><\/span><\/span><small aria-hidden="true">O<span>ct<\/span><\/small><\/li>/);
   assert.match(quarter, /<li title="Sep: 20 wears, 6 bottles">.*?style="height:50%"/);
@@ -341,8 +341,7 @@ test('the span chosen heads the card, and a longer one lists more bottles and it
 
   // A year's has two Novembers: last year's says so, and thirteen bars go by initials on a phone (.long).
   const year = worn(365, [{ month: '2025-11', wears: 2, bottles: 1 }, ...Array.from({ length: 8 }, (_, i) => ({ month: `2026-0${i + 1}`, wears: 0, bottles: 0 })), ...months]);
-  assert.match(year, /<ul class="month-bars long"><li title="Nov 2025: 2 wears, 1 bottle">.*<li title="Nov: 1 wear, 1 bottle">/s);
-  assert.match(quarter, /<ul class="month-bars">/);
+  assert.match(year, /<ul class="month-bars long" role="list"><li title="Nov 2025: 2 wears, 1 bottle">.*<li title="Nov: 1 wear, 1 bottle">/s);
   assert.match(year, /<h2 id="journal-title">Last 12 months<\/h2>/);
   assert.deepEqual([pressed(year), rows(year)], [[['365', 'Year']], 8]);
   // Gathering dust stays about rotation: the last 30 days, whatever the span.
