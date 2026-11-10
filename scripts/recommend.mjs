@@ -14,6 +14,7 @@
 //   node scripts/recommend.mjs --pack --city London --from 2026-12-10 --to 2026-12-19 [--max 3] [--events "2026-12-15 night formal"]
 //   node scripts/recommend.mjs --spray "Liquid Brun" [--city X] [--occasion date]   (how many sprays, and where)
 //   node scripts/recommend.mjs --gaps [--city X] [--uses "office=often,formal=never"] [--value | --no-value] [--top N]
+//   node scripts/recommend.mjs --roles [--city X] [--uses "office=often,formal=never"]
 //                                                         (what the wardrobe is missing, and bottles that fill it)
 //   node scripts/recommend.mjs --check "Shalimar Millesime Tonka" [--style "skin,clean"]   (whether a bottle is worth buying; name or id)
 //   node scripts/recommend.mjs --style "skin,clean,intimate" [--all] [--lean masculine]   (bottles to buy that are those styles)
@@ -59,6 +60,7 @@ import { sprayGuide } from '../src/spray.js';
 import { tiesFor, planTies, tieName, tiesNews, runnerUpOf } from '../src/contrast.js';
 import { doubles } from '../src/doubles.js';
 import { gapContext, gapReport, buyCheck, checkJSON, ratingText, DEFAULT_CLIMATE, USES, useLabel } from '../src/gaps.js';
+import { ROLES, bottleRoles, rolesJSON, shareText as wearShare } from '../src/roles.js';
 import { fetchClimate } from '../src/climate.js';
 import { parseUses, sharesFrom } from '../src/uses.js';
 import {
@@ -88,6 +90,7 @@ const MODES = [
   ['spray', [...PLACE, 'date', 'slot', 'occasion']],
   ['check', [...PLACE, 'uses', 'value', 'no-value', 'style', 'mists']],
   ['gaps', [...PLACE, 'uses', 'value', 'no-value', 'mists', 'top']],
+  ['roles', [...PLACE, 'uses']],
   ['style', [...FILTERS, 'all', 'top']],
   ['more-like', [...FILTERS, 'top']],
   ['notes', [...FILTERS, 'top']],
@@ -130,16 +133,16 @@ function insteadOf(key, mode, name, args) {
     case 'from': case 'to': return `${off}; --from and --to give --pack its dates${mode === 'date' ? '' : ' (for one day\'s picks, use --date)'}`;
     case 'max': return `${off}; it's how many bottles --pack packs`;
     case 'occasion':
-      if (mode === 'gaps' || mode === 'check') return `${off}; say how often you dress for it with --uses "${findOccasion(args.occasion)?.id ?? 'OCCASION'}=often"`;
+      if (mode === 'gaps' || mode === 'check' || mode === 'roles') return `${off}; say how often you dress for it with --uses "${findOccasion(args.occasion)?.id ?? 'OCCASION'}=often"`;
       if (suggesting) return `${off}; narrow suggestions with --season or --slot`;
       return mode === 'layer' ? `${off}; layering reads only the weather (--slot, --date)` : off;
-    case 'value': case 'no-value': return suggesting ? `${off}; for value picks, set a floor with --min-value 3.8` : `${off}; it goes with --gaps and --check`;
-    case 'uses': return `${off}; it goes with --gaps and --check`;
+    case 'value': case 'no-value': return suggesting ? `${off}; for value picks, set a floor with --min-value 3.8` : mode === 'roles' ? `${off}, which reads only the bottles you own; it goes with --gaps and --check` : `${off}; it goes with --gaps and --check`;
+    case 'uses': return `${off}; it goes with --gaps, --check and --roles`;
     case 'style': return `${off}; --style on its own lists bottles of a style, and with --check names the styles you like`;
     case 'all': return `${off}; it goes with --style`;
     case 'season': case 'lean': case 'min-value': case 'min-rating': return `${off}; it filters --style, --more-like and --notes`;
     case 'mists': return `${off}; it lets body mists into --gaps, --check, --style, --more-like and --notes`;
-    case 'top': return mode === 'week' ? `${off}, which gives each window's pick; --date gives a day's ranking with reasons` : off;
+    case 'top': return mode === 'roles' ? `${off}, which lists every bottle you own` : mode === 'week' ? `${off}, which gives each window's pick; --date gives a day's ranking with reasons` : off;
     case 'city': case 'loc':
       if (suggesting) return `${off}; suggestions don't read the weather, so narrow them with --season or --slot`;
       return mode === 'ideal' ? `${off}; it reads every temperature` : off;
@@ -319,6 +322,7 @@ async function main() {
         events: { type: 'string' },
         spray: { type: 'string' },
         gaps: { type: 'boolean', default: false },
+        roles: { type: 'boolean', default: false },
         check: { type: 'string' },
         uses: { type: 'string' },
         value: { type: 'boolean', default: false },
@@ -767,7 +771,7 @@ async function main() {
   // What the wardrobe is missing and what would fill it (src/gaps.js), or
   // whether one bottle is worth buying. The climate is the place's (--city or
   // --loc: one archive call) or, without one, the ten temperate cities'.
-  if (args.gaps || args.check) {
+  if (args.gaps || args.check || args.roles) {
     if (args.value && args['no-value']) fail('Pass --value or --no-value, not both');
     // "How you wear", refined by the journal's wears as the app's Insights does.
     let shares = null;
@@ -796,6 +800,35 @@ async function main() {
       : f.first ? `${f.title}: ${pct(f.to)}, over ${whose(f)} at ${pct(f.from)}`
         : `${f.title}: ${pct(f.to)} as a second pick, behind ${whose(f)} at ${pct(f.from)}`);
     const valueText = `prefer great value: ${ctx.preferValue ? 'on (only bottles voters value 3.8+)' : 'off'}`;
+
+    // What each owned bottle is for (src/roles.js): the same table read per bottle.
+    if (args.roles) {
+      const roles = bottleRoles(ctx, { hidden });
+      const usesText = USES.map(u => `${useLabel(u)} ${pct(shares?.[u.id] ?? u.share)}`).join(', ');
+      if (args.json) {
+        console.log(JSON.stringify({ climate: where, bottles: fragrances.length, ...rolesJSON(roles) }, null, 2));
+        return;
+      }
+      console.log(`${fragrances.length} bottles · climate: ${where}`);
+      console.log(`How you wear: ${usesText}`);
+      for (const role of ROLES) {
+        const group = roles.bottles.filter(b => b.role === role.id);
+        if (!group.length) continue;
+        console.log(`\n${role.plural} (${group.length}): ${role.blurb}`);
+        for (const b of group) {
+          console.log(`  ${b.bottle.name} (${b.bottle.brand})\n    ${b.text}`);
+          // Where else rotation gives it turns, most worn first.
+          if (b.leads.length && b.mix.length) console.log(`    Also in the mix for ${wearShare(b.mixShare - b.leadShare)}: ${b.mix.slice(0, 3).map(s => s.title).join(', ')}${b.mix.length > 3 ? ` and ${b.mix.length - 3} more` : ''}.`);
+        }
+      }
+      if (roles.out.length) {
+        console.log('\nCovering nothing');
+        for (const o of roles.out) console.log(`  ${o.bottle.name} (${o.bottle.brand})\n    ${o.text}`);
+      }
+      if (!roles.bottles.length && !roles.out.length) console.log('\nNo bottles to read.');
+      console.log('\nA lead is the best you own for a situation; in the mix means close enough to take turns.');
+      return;
+    }
 
     if (args.check) {
       const q = args.check.trim();
@@ -1281,6 +1314,7 @@ const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,N
        node scripts/recommend.mjs --pack (--city NAME | --loc LAT,LON[,NAME]) --from YYYY-MM-DD --to YYYY-MM-DD [--max N] [--occasion ID] [--slot day|night] [--events "DATE [day|night] OCCASION; …"] [--json]
        node scripts/recommend.mjs --spray NAME [--city NAME | --loc LAT,LON[,NAME]] [--date YYYY-MM-DD] [--occasion ID] [--slot day|night] [--json]
        node scripts/recommend.mjs --gaps [--city NAME | --loc LAT,LON[,NAME]] [--uses USE=never|sometimes|often,…] [--value | --no-value] [--mists] [--top N] [--exclude NAME,NAME] [--journal FILE|TOKEN] [--demo] [--json]
+       node scripts/recommend.mjs --roles [--city NAME | --loc LAT,LON[,NAME]] [--uses USE=never|sometimes|often,…] [--exclude NAME,NAME] [--journal FILE|TOKEN] [--demo] [--json]
        node scripts/recommend.mjs --check NAME|ID|id:ID [--city NAME | --loc LAT,LON[,NAME]] [--uses …] [--value | --no-value] [--style STYLE,STYLE] [--exclude NAME,NAME] [--journal FILE|TOKEN] [--json]
        node scripts/recommend.mjs (--style STYLE,STYLE|liked [--all] | --more-like NAME,NAME|favorites | --notes "NOTE NOTE") [--season S,S] [--slot day|night] [--lean feminine|unisex|masculine] [--min-value V] [--min-rating R] [--mists] [--top N] [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --dupes NAME [--top N] [--json]`;

@@ -1,7 +1,8 @@
 // Wardrobe › Insights: what kinds of fragrance the wardrobe still needs, in
 // two halves. Situations: the gap finder's report (src/gaps.js, asked of the
 // pool client) as a headline, a coverage map of each use against the weather
-// by day and night, where it's thin, where it's strong, and the bottles that
+// by day and night, where it's thin, where it's strong, what each bottle
+// you own is for (the report's `roles`, src/roles.js), and the bottles that
 // would fill the gaps. Styles: the wardrobe's style mix (worked out here, from
 // the owned bottles alone), more of the styles you like, a starter for each
 // style you don't own, and doubles (bottles that smell alike). The modules it
@@ -31,6 +32,7 @@ const ins = {
   cell: null, // the map's cell picked (id); null = the worst gap
   slot: null, // Day or Night on narrow screens; null = the picked cell's
   allThin: false, // where it's thin shows every spot
+  roles: new Set(), // the roles (ids) whose every bottle shows under "What each bottle is for"
   open: null, // the style mix row showing its bottles
   allStyles: false, // the style mix shows every style
   kept: new Set(), // styles unliked here: their rows stay put, so focus has somewhere to stay
@@ -50,6 +52,8 @@ const SLOT_WORD = { day: 'days', night: 'nights' };
 const RARE = 0.004;
 // Thin spots shown before "Show more" ("The biggest four").
 const THIN_ROWS = 4;
+// Bottles a role shows before "Show N more": four groups stay a screen or two on a phone.
+const ROLE_ROWS = 3;
 // A starter for a style you don't own: well rated, a safe blind buy, fair value.
 const STARTER = { minRating: 4, minSafe: 50, minValue: 3.5 };
 const MAX_STARTERS = 6;
@@ -289,6 +293,49 @@ export function strongHTML(report) {
   }).join('')}</ul>`;
 }
 
+// A bottle's share as a bar: what it leads, solid, within what it's in the
+// mix for, faint, both against the widest in the wardrobe (`scale`).
+const roleBar = (b, scale) => `<span class="role-bar" aria-hidden="true" style="--lead:${(b.leadShare / scale).toFixed(3)};--mix:${(b.mixShare / scale).toFixed(3)}"></span>`;
+
+/**
+ * What each bottle is for (the report's `roles`, rolesJSON in src/roles.js):
+ * the bottles by role, each a row that opens its page, with what it leads as
+ * a bar and its situations in words; the first ROLE_ROWS of a role, the rest
+ * behind Show more (`open`: the roles showing every bottle). Bottles that
+ * cover nothing (rated 2★ or lower, switched off) close the card. '' when
+ * the report has no roles (an older worker's answer) or no bottles.
+ */
+export function rolesHTML(roles, { open = new Set() } = {}) {
+  if (!roles?.bottles?.length && !roles?.out?.length) return '';
+  const scale = Math.max(0.01, ...roles.bottles.map(b => b.mixShare));
+  // A benched bottle has no share to draw: its group's name says it.
+  const row = b => rowHTML(b, {
+    cls: 'wrap role-row', open: { ctx: '' },
+    meta: `${b.role === 'bench' ? '' : `<span class="role-share">${roleBar(b, scale)}<span class="role-lead">${esc(b.headline)}</span></span>`}<span class="role-detail">${esc(b.detail)}</span>`,
+  });
+  const groups = roles.roles.map(role => {
+    const all = roles.bottles.filter(b => b.role === role.id);
+    if (!all.length) return '';
+    const folds = all.length > ROLE_ROWS + 1, expanded = open.has(role.id);
+    const shown = expanded || !folds ? all : all.slice(0, ROLE_ROWS);
+    const toggle = !folds ? ''
+      : `<button class="btn tertiary compact mix-all${expanded ? ' less' : ''}" data-action="ins-roles-all" data-value="${esc(role.id)}" aria-controls="ins-roles-${esc(role.id)}" aria-expanded="${expanded}">${icon.chevron}<span>${expanded ? 'Show fewer' : `Show ${all.length - shown.length} more`}<span class="visually-hidden"> ${esc(role.plural.toLowerCase())}</span></span></button>`;
+    return `<section class="role-group" data-role="${esc(role.id)}" aria-label="${esc(role.plural)}">
+      <h4 class="role-head">${esc(role.plural)} <span class="role-count">${all.length}</span></h4>
+      <p class="muted small role-blurb">${esc(role.blurb)}</p>
+      <ul class="rows role-rows" id="ins-roles-${esc(role.id)}">${shown.map(row).join('')}</ul>
+      ${toggle}
+    </section>`;
+  }).join('');
+  const out = !roles.out?.length ? '' : `<section class="role-group" data-role="out" aria-label="Covering nothing">
+      <h4 class="role-head">Covering nothing <span class="role-count">${roles.out.length}</span></h4>
+      <ul class="rows role-rows">${roles.out.map(o => rowHTML(o, { cls: 'wrap role-row off', open: { ctx: '' }, meta: `<span class="role-detail">${esc(o.text)}</span>` })).join('')}</ul>
+    </section>`;
+  const n = roles.counts?.workhorse ?? 0, total = roles.bottles.length + (roles.out?.length ?? 0);
+  const lead = n ? `<p class="muted small role-sum">${n} of your ${plural(total, 'bottle')} ${n === 1 ? 'leads' : 'lead'} ${pct(roles.carried)}% of what you wear. A lead is the best you own for a situation; in the mix means close enough to take turns.</p>` : '';
+  return `${lead}<div class="role-groups">${groups}${out}</div>`;
+}
+
 /**
  * A suggestion: photo, name, brand, rating, value and risk, the situations
  * it fills against your best there, its cheaper twin, and Want / I own it.
@@ -460,7 +507,7 @@ export function insightsSkeletonHTML() {
 
 /**
  * The whole pane from its model: { report, error, busy, fresh, uses,
- * bands, cell, slot, allThin, context, wants (ids), ownedLabel (id -> label
+ * bands, cell, slot, allThin, roles (the roles shown whole), context, wants (ids), ownedLabel (id -> label
  * | null), styles: stylesHTML's }. Each half has an h2 (the headline, Your
  * styles), its cards h3s.
  */
@@ -468,6 +515,7 @@ export function insightsHTML(m) {
   const r = m.report;
   const h3 = { level: 3 };
   const titles = r ? sectionTitles(r) : null;
+  const rolesCard = r ? rolesHTML(r.roles, { open: m.roles }) : '';
   const situations = m.error && !r
     ? `<div class="card ins-error">${messageHTML({ glyph: icon.chart, title: 'Couldn’t work out your gaps', body: m.error, action: '<button class="btn primary" data-action="ins-retry">Try again</button>' })}</div>`
     : !r ? mapSkeleton(' aria-busy="true" aria-label="Working out your gaps"')
@@ -480,6 +528,10 @@ export function insightsHTML(m) {
         ${thinHTML(r, { all: m.allThin })}
         ${strongHTML(r)}
       </section>
+      ${rolesCard ? `<section class="card ins-roles" aria-labelledby="roles-title">
+        ${sectionHead('What each bottle is for', '', { ...h3, id: 'roles-title' })}
+        ${rolesCard}
+      </section>` : ''}
       <section class="ins-fill" aria-labelledby="fill-title">
         ${sectionHead(titles.fill, '<p>Picked as a set: each adds what the ones before it don’t.</p>', { ...h3, id: 'fill-title' })}
         ${picksHTML(r, { wants: m.wants, ownedLabel: m.ownedLabel, preferValue: m.context.preferValue })}
@@ -663,6 +715,7 @@ function model(lib) {
     cell: ins.cell,
     slot: ins.slot,
     allThin: ins.allThin,
+    roles: ins.roles,
     context: {
       place: state.loc?.name ?? null, climate: state.loc ? ins.climate : 'default', tagged: taggedWears(lib),
       preferValue: state.preferValue ?? ins.report?.preferValue ?? null, failed: Boolean(ins.error && !ins.report),
@@ -904,6 +957,13 @@ export const actions = {
     ins.allThin = !ins.allThin;
     app.keepingFocus(el, '#app', app.renderPage);
     document.querySelector('#main [data-action="ins-thin-all"]')?.scrollIntoView({ block: 'nearest' });
+  },
+  // A role's every bottle, or its first few again; its toggle stays in view as the list under it changes.
+  'ins-roles-all'(el, app) {
+    const role = el.dataset.value;
+    if (!ins.roles.delete(role)) ins.roles.add(role);
+    app.keepingFocus(el, '#app', app.renderPage);
+    document.querySelector(`#main [data-action="ins-roles-all"][data-value="${CSS.escape(role)}"]`)?.scrollIntoView({ block: 'nearest' });
   },
   async 'ins-own'(el, app) {
     const id = el.dataset.id;

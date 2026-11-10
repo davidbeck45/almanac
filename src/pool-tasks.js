@@ -23,7 +23,8 @@
 // them). The questions that suggest bottles say which preferValue they
 // used. By type, payload -> result:
 //   report   { owned, exclude?, summary?, shares? | uses?, preferValue?, mists?, k? }
-//            -> gapReport; each pick's twin and nearest carry their records
+//            -> gapReport; each pick's twin and nearest carry their records, and `roles` says what
+//               each owned bottle is for (rolesJSON in src/roles.js, off the same context)
 //   check    { owned, exclude?, id | record (or ids | records), liked?, stated?, summary?, shares? | uses?, preferValue?, mists? }
 //            -> checkJSON plus the bottle's record, styles and the liked styles it shows
 //               ({ checks } for several)
@@ -47,6 +48,7 @@
 import { loadPool, fromPool, loadPoolStyles, loadAbout, fragranticaLibrary } from './fragrantica.js';
 import { poolRowOf, preferValueDefault, familyIndex, ownedVectors, PREFER_VALUE } from './candidates.js';
 import { gapContext, gapReport, buyCheck, checkJSON, warmPoolTable, DEFAULT_CLIMATE } from './gaps.js';
+import { bottleRoles, rolesJSON } from './roles.js';
 import { sharesFrom } from './uses.js';
 import {
   discoverContext, likedStyles, moreOfStyles, defaultSeeds, moreLike, searchNotes, dupeIds, dupesOf, whyLine, addCloneVotes, scoresOf,
@@ -297,6 +299,10 @@ const TASKS = {
       if (pick.twin) pick.twin.record = ctx.byId.get(pick.twin.id) ?? null;
       if (pick.nearest) pick.nearest.record = bare(recordOf(ctx, pick.nearest.id));
     }
+    // What each bottle is for, read off the report's own table; the
+    // switched-off ones (kept with the wardrobe) are listed apart.
+    const { hidden } = await ownedFor(cache, p, await poolOf(cache));
+    report.roles = await timed(ms, 'task', () => rolesJSON(bottleRoles(ctx, { hidden: hidden.filter(f => f.name) })));
     return report;
   },
 
