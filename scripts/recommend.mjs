@@ -1349,11 +1349,12 @@ const AHEAD_MAX = 3;
  * match, tier, score, isPick, pick, gap: { points, line }, reasons, parts,
  * notes, ahead?, text, win }, or null when the list doesn't hold it.
  * `gap.line` is pickGapLine's, or says it's the pick; `points` how far its
- * displayed match sits under the pick's. `parts`: Why's bars (each fit as a
- * percent) with the share of the score each weighs. `notes`: what the heat,
- * the cold or a recent wear took off, and a bottle saved for an event.
- * `ahead`: for a pick that isn't first in its list, the bottles above it
- * (the first AHEAD_MAX), each with why it gave way. No temperature in any of it but `window`.
+ * displayed match sits under the pick's (negative: over it, where the plan
+ * passed it by). `parts`: Why's bars (each fit as a percent) with the share
+ * of the score each weighs. `notes`: what the heat, the cold or a recent
+ * wear took off, and a bottle saved for an event. `ahead`: for a pick that
+ * isn't first in its list, the bottles above it (the first AHEAD_MAX), each
+ * with why it gave way. No temperature in any of it but `window`.
  */
 export function whyWindow(f, { win, ranked, pick }, { occasion = null, history = [], todayISO = win.dateISO } = {}) {
   const occ = win.occasion ?? occasion ?? null;
