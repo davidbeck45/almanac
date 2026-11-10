@@ -63,7 +63,9 @@ test('each tab saves only the prefs it changed, over what the other saved', asyn
   assert.equal(prefs.stillSky, true);
 });
 
-test('a tab reads again what another tab saved', async () => {
+test('a tab reads again what another tab saved', async t => {
+  // Noon on Nov 2: loadEvents drops a plan once its date has gone by.
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-02T12:00:00Z') });
   const a = await openTab(), b = await openTab();
   a.addToMine(bottle('2', 'Two'));
   setHidden(a.state.hiding, '111', true, true);
