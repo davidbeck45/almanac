@@ -87,7 +87,7 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const AT = pathToFileURL(join(root, 'test/at.mjs')).href, SELF = pathToFileURL(fileURLToPath(import.meta.url)).href;
 
 function runCell({ at, tz }, { files = [], clockLog, started }) {
-  const env = { ...process.env, TZ: tz, ALMANAC_NOW: momentOf(at, started), NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import ${AT}`.trim() };
+  const env = { ...process.env, TZ: tz, ALMANAC_DATES: '1', ALMANAC_NOW: momentOf(at, started), NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import ${AT}`.trim() };
   delete env.ALMANAC_SHIFT;
   if (clockLog) env.ALMANAC_CLOCK_LOG = clockLog; else delete env.ALMANAC_CLOCK_LOG;
   return new Promise(resolve => {
@@ -185,5 +185,5 @@ async function main(argv) {
 }
 
 // node --test runs every file under test/ as a test file, this one too: only
-// a plain `node test/dates.mjs` runs the matrix.
-if (process.argv[1] === fileURLToPath(import.meta.url) && !process.env.NODE_TEST_CONTEXT) process.exitCode = await main(process.argv.slice(2));
+// a plain `node test/dates.mjs` runs the matrix, never a cell of its own.
+if (process.argv[1] === fileURLToPath(import.meta.url) && !process.env.NODE_TEST_CONTEXT && !process.env.ALMANAC_DATES) process.exitCode = await main(process.argv.slice(2));
