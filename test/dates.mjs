@@ -32,10 +32,11 @@ const FULL = [
   ...NZ_CHANGES.flatMap(d => ['02:30', '03:30'].map(h => ({ at: `${d}T${h}`, tz: 'Pacific/Auckland' }))),
 ];
 // Files that read the clock but whose tests take none of their answers from
-// it (a stopwatch, a module that reads the date as it loads), and take 5–19 s
-// each: the compact matrix runs them in its first cell only. --full runs them
-// in every cell; they passed all of it in November 2026.
-const HEAVY = ['discover', 'discover-screens', 'gaps', 'pool', 'pool-tasks', 'reasons', 'skin', 'wardrobe-screens'].map(n => `test/${n}.test.js`);
+// it (a stopwatch, a module that reads the date as it loads), most taking
+// 5–19 s: the compact matrix runs them in its first cell only, --full in
+// every cell. With them in, the compact matrix's 16 moments failed only their
+// stopwatches, under its own load (November 2026).
+const HEAVY = ['discover', 'discover-screens', 'gaps', 'pool', 'pool-tasks', 'reasons', 'scent-styles', 'shell', 'skin', 'wardrobe-screens'].map(n => `test/${n}.test.js`);
 // One of each kind, the zones taking turns: the days ahead, the year's turn
 // late and early (this machine's date a day off the place's, in midwinter),
 // a leap day, and the hours the clocks change.
