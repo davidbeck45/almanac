@@ -20,7 +20,6 @@ const NOTE_FLOOR_POWER = 0.81;
 const GENDER = { f: 'women', m: 'men', u: 'women and men' };
 const NOTE_TIERS = { t: 'top', m: 'mid', b: 'base', f: 'all' };
 const NOTE_TIER_KEYS = ['t', 'm', 'b', 'f'];
-const SEASONS = ['winter', 'spring', 'summer', 'fall'];
 // Search: a bottle whose whole name was typed ranks as if it had WHOLE_LIFT
 // times its votes plus WHOLE_FLOOR: a new bottle typed exactly still leads
 // hits with a few dozen votes, a 0-vote clone none with more.
@@ -29,6 +28,22 @@ const WHOLE_FLOOR = 1;
 
 const round3 = x => Math.round(x * 1000) / 1000;
 
+// Brands and notes repeat from row to row (the pool's 9,644 bottles share
+// about 1,500 of each), and casing one costs a regular expression, so each
+// name is worked out once: making the pool's records asked 160,000 times.
+// KEPT bounds what a long visit can pile up; past it names are worked out
+// as before.
+const KEPT = 20_000;
+const brandCases = new Map(), noteCases = new Map(), brandSlugs = new Map();
+function once(names, name, make) {
+  let out = names.get(name);
+  if (out === undefined) {
+    out = make();
+    if (names.size < KEPT) names.set(name, out);
+  }
+  return out;
+}
+
 /**
  * A brand written in capitals ("MAISON ASRAR", "ALREHAB PERFUMES") in title
  * case, as scripts/build_collection.py brand_case (Python's str.title); short
@@ -36,8 +51,9 @@ const round3 = x => Math.round(x * 1000) / 1000;
  * them.
  */
 export function brandCase(brand) {
-  if (typeof brand !== 'string' || brand !== brand.toUpperCase() || brand === brand.toLowerCase() || brand.replace(/ /g, '').length <= 4) return brand;
-  return brand.toLowerCase().replace(/(^|[^\p{L}])(\p{L})/gu, (_, before, letter) => before + letter.toUpperCase());
+  if (typeof brand !== 'string') return brand;
+  return once(brandCases, brand, () => (brand !== brand.toUpperCase() || brand === brand.toLowerCase() || brand.replace(/ /g, '').length <= 4 ? brand
+    : brand.toLowerCase().replace(/(^|[^\p{L}])(\p{L})/gu, (_, before, letter) => before + letter.toUpperCase())));
 }
 const thumbOf = id => `https://fimgs.net/mdimg/perfume-thumbs/dark-m.${id}.2x.webp`;
 
@@ -49,8 +65,9 @@ const SMALL_WORDS = new Set('de of la le du des and the et di da'.split(' '));
  * scripts/build_collection.py note_case does; others stay as they are.
  */
 export function noteCase(note) {
-  if (typeof note !== 'string' || note !== note.toLowerCase()) return note;
-  return note.split(/([ -])/).map((w, i) => (i && SMALL_WORDS.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join('');
+  if (typeof note !== 'string') return note;
+  return once(noteCases, note, () => (note !== note.toLowerCase() ? note
+    : note.split(/([ -])/).map((w, i) => (i && SMALL_WORDS.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join('')));
 }
 
 /**
@@ -70,13 +87,24 @@ export function noteVotesOf(weights) {
 
 /** One row of data/fragrantica/r/*.json -> engine record (same shape as data/collection.json). */
 export function fromFragrantica(id, row) {
-  const accords = Object.fromEntries(Object.entries(row.a).map(([a, s]) => [a, barWidth(s)]));
-  const like = row.k ? { season: Object.fromEntries(SEASONS.map((s, i) => [s, row.k[i]])), night: row.k[4] } : null;
+  const accords = {};
+  for (const a of Object.keys(row.a)) accords[a] = barWidth(row.a[a]);
   const notes = {}, weights = {};
-  for (const [tier, list] of Object.entries(row.no ?? {})) {
-    notes[NOTE_TIERS[tier]] = Object.keys(list).map(noteCase);
-    for (const [note, w] of Object.entries(list)) weights[noteCase(note)] = w;
+  if (row.no) {
+    for (const tier of Object.keys(row.no)) {
+      const list = row.no[tier], names = Object.keys(list), cased = names.map(note => noteCase(note));
+      notes[NOTE_TIERS[tier]] = cased;
+      for (let j = 0; j < names.length; j++) weights[cased[j]] = list[names[j]];
+    }
   }
+  return recordOf(id, row, accords, notes, noteVotesOf(weights));
+}
+
+// The record itself, from a row's plain fields with its accords (bar
+// widths), notes by tier and note votes (or null) read already: an r/ row's
+// by fromFragrantica, a pool row's by fromPool straight from its columns.
+function recordOf(id, row, accords, notes, votes) {
+  const like = row.k ? { season: { winter: row.k[0], spring: row.k[1], summer: row.k[2], fall: row.k[3] }, night: row.k[4] } : null;
   const record = {
     id: String(id),
     source: 'fragrantica',
@@ -99,10 +127,9 @@ export function fromFragrantica(id, row) {
   const estimate = () => (est ??= predictedShares(accords, like));
   if (n) record.seasonVotes = seasonVotes;
   if (day + night) record.timeVotes = { day, night };
-  record.season = n ? Object.fromEntries(SEASONS.map(s => [s, round3(seasonVotes[s] / n)])) : estimate().season;
+  record.season = n ? { winter: round3(winter / n), spring: round3(spring / n), summer: round3(summer / n), fall: round3(fall / n) } : estimate().season;
   const nightShare = day + night ? night / (day + night) : estimate().night;
   record.dayNight = { day: round3(1 - nightShare), night: round3(nightShare) };
-  const votes = noteVotesOf(weights);
   if (votes) record.noteVotes = votes;
   if (row.l && row.si) {
     record.performance = { longevity: row.l[0], sillage: row.si[0], votes: Math.min(row.l[1], row.si[1]) };
@@ -120,10 +147,11 @@ const pooled = new WeakMap();
 
 /**
  * Bottle `i` of the suggestion pool (data/fragrantica/pool.json, from
- * loadPool) -> engine record. It goes through fromFragrantica, so it scores as
- * the bottle's r/ row would (rating, Fragrantica longevity/sillage and the
- * smells-like shares are rounded to 2 decimals, the longevity and sillage
- * vote counts to 2 significant digits). Its signals ride along as
+ * loadPool) -> engine record. recordOf makes it, as it makes an r/ row's
+ * (fromFragrantica), so it scores as the bottle's r/ row would (rating,
+ * Fragrantica longevity/sillage and the smells-like shares are rounded to 2
+ * decimals, the longevity and sillage vote counts to 2 significant digits).
+ * Its signals ride along as
  * `extras` (see scripts/decant.py); its 8 strongest notes too, when
  * pool-notes.json loaded, with their votes in tenths of the top note's as
  * the r/ row reads them (noteVotesOf), worked out from its whole pyramid.
@@ -133,28 +161,33 @@ export function fromPool(pool, i) {
   const memo = pooled.get(pool);
   if (memo[i]) return memo[i];
   const c = pool.cols, id = c.id[i], name = c.n[i], brand = pool.brands[c.b[i]];
+  // Its accords as the r/ row reads them: the bar's width from the strength
+  // (the pool keeps widths; through barStrength and back, to the bit).
+  const accords = {}, as = c.a[i], ws = c.w[i];
+  for (let j = 0; j < as.length; j++) accords[pool.accords[as[j]]] = barWidth(barStrength(ws[j]));
   const row = {
-    s: pool.slugs[id] ?? `${slugPart(brand)}/${slugPart(name)}`,
+    s: pool.slugs[id] ?? `${once(brandSlugs, brand, () => slugPart(brand))}/${slugPart(name)}`,
     n: name,
     b: brand,
     y: c.y[i] || undefined,
     g: c.g[i] || undefined,
     r: [c.r[i] / 100, c.rv[i]],
-    a: Object.fromEntries(c.a[i].map((a, j) => [pool.accords[a], barStrength(c.w[i][j])])),
   };
   if (c.v[i].length) row.v = c.v[i];
   if (c.l[i] && c.si[i]) [row.l, row.si] = [[c.l[i] / 100, c.lv[i]], [c.si[i] / 100, c.lv[i]]];
   if (c.k[i].length) row.k = c.k[i].map(x => x / 100);
-  const notes = pool.noteList?.no[i], votes = {};
-  if (notes?.length) {
-    row.no = {};
-    for (let j = 0; j < notes.length; j += 2) {
-      const note = pool.noteList.notes[notes[j] >> 2];
-      (row.no[NOTE_TIER_KEYS[notes[j] & 3]] ??= {})[note] = 0;
-      if (notes[j + 1]) votes[noteCase(note)] = 100 * notes[j + 1]; // 0: nobody voted
+  const listed = pool.noteList?.no[i], notes = {}, votes = {};
+  if (listed?.length) {
+    // Each tier's notes once, in the order an r/ row's object of them lists its keys.
+    const tiers = {};
+    for (let j = 0; j < listed.length; j += 2) {
+      const note = pool.noteList.notes[listed[j] >> 2];
+      (tiers[NOTE_TIER_KEYS[listed[j] & 3]] ??= {})[note] = 0;
+      if (listed[j + 1]) votes[noteCase(note)] = 100 * listed[j + 1]; // 0: nobody voted
     }
+    for (const tier of Object.keys(tiers)) notes[NOTE_TIERS[tier]] = Object.keys(tiers[tier]).map(note => noteCase(note));
   }
-  const record = fromFragrantica(id, row);
+  const record = recordOf(id, row, accords, notes, null);
   if (Object.keys(votes).length) record.noteVotes = votes;
   record.extras = {
     value: c.val[i] ? c.val[i] / 100 : null,

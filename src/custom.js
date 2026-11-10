@@ -51,7 +51,11 @@ const seasonShares = raw => {
 };
 
 export function estimateSeason(accords, picked = []) {
-  const est = seasonShares(accordShares(accords).slice(0, 4));
+  return seasonFrom(accordShares(accords), picked);
+}
+// The estimates from accordShares' five numbers, so predictedShares reads a bottle's accords once for both.
+function seasonFrom(shares, picked) {
+  const est = seasonShares(shares.slice(0, 4));
   const chosen = SEASONS.filter(s => picked.includes(s));
   const w = chosen.length ? PICK_WEIGHT : 0;
   return Object.fromEntries(SEASONS.map(s =>
@@ -59,7 +63,10 @@ export function estimateSeason(accords, picked = []) {
 }
 
 export function estimateNight(accords, time = null) {
-  const est = clamp(accordShares(accords)[4], 0.15, 0.85);
+  return nightFrom(accordShares(accords), time);
+}
+function nightFrom(shares, time) {
+  const est = clamp(shares[4], 0.15, 0.85);
   return round3(time in TIME_TARGET ? (1 - PICK_WEIGHT) * est + PICK_WEIGHT * TIME_TARGET[time] : est);
 }
 
@@ -67,7 +74,7 @@ export function estimateNight(accords, time = null) {
 // averaged with the votes of the bottles voters say it smells like (`like`,
 // from data/fragrantica/) when it has them.
 export function predictedShares(accords, like = null) {
-  const season = estimateSeason(accords), night = estimateNight(accords);
+  const shares = accordShares(accords), season = seasonFrom(shares, []), night = nightFrom(shares, null);
   if (!like) return { season, night };
   return {
     season: Object.fromEntries(SEASONS.map(s => [s, (season[s] + like.season[s]) / 2])),
