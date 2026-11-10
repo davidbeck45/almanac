@@ -31,17 +31,31 @@ function moveDates(value, days) {
 // Days from the saved forecast's first day to New York's today (not this
 // machine's, which east of New York can be a day ahead); the journal moves with it.
 const FORECAST = read('ny-forecast.json');
-const placeDay = now => new Date(now.getTime() + FORECAST.utc_offset_seconds * 1000).toISOString().slice(0, 10);
+// New York's own offset from UTC at `now`, in seconds. The saved forecast
+// carries October's (daylight time, UTC-4): read by that once the clocks had
+// gone back, the app's clock ran an hour ahead of New York's, so at 10 pm
+// there tonight's window had ended and Now opened on tomorrow's daytime.
+export function offsetAt(now) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: FORECAST.timezone, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric',
+  }).formatToParts(now);
+  const at = Object.fromEntries(parts.map(p => [p.type, Number(p.value)]));
+  return (Date.UTC(at.year, at.month - 1, at.day, at.hour, at.minute) - Math.floor(now.getTime() / 60_000) * 60_000) / 1000;
+}
+const placeDay = now => new Date(now.getTime() + offsetAt(now) * 1000).toISOString().slice(0, 10);
 const shift = now => Math.round((noon(placeDay(now)) - noon(FORECAST.daily.time[0])) / 864e5);
 
 /**
- * The saved forecast starting today, read at this hour: `current` is the
+ * The saved forecast starting on New York's today, on New York's clock as it
+ * is then (standard or daylight time), read at this hour: `current` is the
  * hourly row src/weather.js reads as now once a forecast is an hour old (the
  * hour on the forecast's clock), so a fresh fetch shows the same reading.
  */
 export function shiftedForecast(now = new Date()) {
   const out = moveDates(FORECAST, shift(now));
   delete out.fetchedAt;
+  out.utc_offset_seconds = offsetAt(now);
+  out.timezone_abbreviation = `GMT${out.utc_offset_seconds < 0 ? '' : '+'}${out.utc_offset_seconds / 3600}`;
   const time = `${new Date(now.getTime() + out.utc_offset_seconds * 1000).toISOString().slice(0, 13)}:00`;
   const { hourly: h, daily: d } = out, i = h.time.indexOf(time), day = d.time.indexOf(time.slice(0, 10));
   if (i < 0 || day < 0) return out;
