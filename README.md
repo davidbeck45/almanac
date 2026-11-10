@@ -14,7 +14,7 @@ Live at **https://davidbeck45.github.io/almanac/**. It opens on my wardrobe; add
 
 **Wardrobe**
 - **Owned**: your bottles, each switched in or out of rotation. Add them by search, paste a list, or enter one no database has by its accords. Share the list as a link.
-- **Wishlist**: bottles you want, each with a verdict on how it would fit your shelf (Strong fit, Good, Covered, Risky or Redundant) and what it would fill. "I bought it" moves it into your collection.
+- **Wishlist**: bottles you want, each with a verdict on how it would fit your shelf (Strong fit, Good, Covered, Risky or Redundant) and what it would fill. "I bought it" moves it into your collection, and each takes a note of your own: where you smelled it, the size or price you're waiting for.
 - **Worn**: the wear journal. "Wear this" logs today's pick so the next picks rotate; a calendar that pages back through the year it keeps, your wears and most-worn bottles over the last 30 days, 90 days or year, and the bottles gathering dust. Export saves it as a file; Copy for Claude copies a short version (the last ten days' wears, your stars and switched-off bottles, no places) to paste to Claude or the Omarchy widget, so their picks skip what you just wore.
 - **Insights**: what your wardrobe still needs. A map of every occasion against your climate's weather, by day and by night, filled as far as your bottles cover it; where it's thin, and the bottles that would fill it, with a cheaper twin and blind-buy risk. Then your style mix, more of the styles you like (skin scent, clean, intimate…), a safe first bottle for each style you don't own, and any bottles you own that smell alike. Tell it how often you dress for each occasion, and whether to stick to great value.
 

@@ -599,7 +599,15 @@ button.cal-cell:active { transform: scale(0.95); }
 .wish-name .sk-line { display: block; height: 20px; margin-top: var(--s-1); }
 .wish-stand { display: block; color: var(--text-secondary); font-family: var(--sans); font-size: var(--fs-body); line-height: var(--lh-body); font-style: normal; font-weight: 500; letter-spacing: 0; }
 .wish-meta { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
-.wish-note { margin-top: var(--s-2); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-style: italic; }
+/* A want's own note, under the card's facts: a pen, then his words (a long
+   word or a link wraps, and never widens the card). */
+.wish-note { display: flex; align-items: flex-start; gap: var(--s-2); margin-top: var(--s-3); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-style: italic; }
+.wish-note svg { flex: none; width: 14px; height: 14px; margin-top: 2px; color: var(--text-tertiary); }
+.wish-note > span { min-width: 0; overflow-wrap: anywhere; }
+.wish-note-form { margin-top: var(--s-3); }
+.wish-note-form .name-field { margin: 0; }
+.wish-note-form .name-field input { width: 100%; min-width: 0; }
+.wish-note-hint { margin-top: var(--s-2); color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
 .wish-reasons { display: grid; gap: var(--s-1); margin-top: var(--s-3); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .wish-reasons li:not(:first-child) { color: var(--text-secondary); }
 .wish-label { margin-top: var(--s-3); color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); font-weight: 600; }
