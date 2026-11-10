@@ -315,4 +315,8 @@ test('a backup carries Worn’s span with the other prefs, and only a span Worn 
   assert.equal(backupExport(journal, { prefs: { wornSpan: 90, units: 'C' } }).prefs.wornSpan, 90);
   assert.ok(!('wornSpan' in backupExport(journal, { prefs: { wornSpan: 30 } }).prefs), '30 days is the default, stored as nothing');
   assert.ok(!('wornSpan' in backupExport(journal, { prefs: { wornSpan: 7 } }).prefs));
+  // Owned's order too: an id, which the pane reads as brand order when it doesn't know it.
+  assert.equal(backupExport(journal, { prefs: { ownedSort: 'stars' } }).prefs.ownedSort, 'stars');
+  assert.ok(!('ownedSort' in backupExport(journal, { prefs: { ownedSort: 'brand' } }).prefs), 'brand order is the default, stored as nothing');
+  assert.ok(!('ownedSort' in backupExport(journal, { prefs: { ownedSort: 7 } }).prefs));
 });
