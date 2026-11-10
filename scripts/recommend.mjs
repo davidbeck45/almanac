@@ -354,11 +354,12 @@ async function main() {
   for (const key of ['date', 'from', 'to']) {
     if (args[key] !== undefined && !isDate(args[key])) fail(`--${key} takes a date like ${today}, not "${args[key]}"`);
   }
-  // A place's date can be a day either side of this machine's. A date before
-  // yesterday here has passed everywhere; the weather checks the rest against
-  // the place's own date (windowsAt), before asking the archive for a day
-  // that's over there.
-  const earliest = dayBefore(today);
+  // A place's date can be a day ahead of this machine's or two behind (zones
+  // span 26 hours: just past midnight in Auckland it's still the day before
+  // yesterday at UTC-12). A date before that has passed everywhere; the
+  // weather checks the rest against the place's own date (windowsAt), before
+  // asking the archive for a day that's over there.
+  const earliest = dayBefore(dayBefore(today));
   if (args.date && args.date < earliest) fail(`--date ${args.date} has passed; pick today or later`);
   if (args.date && daysFrom(today, args.date) > MAX_AHEAD_DAYS) fail(`--date ${args.date} is more than a year out`);
 
