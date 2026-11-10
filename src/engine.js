@@ -224,9 +224,10 @@ export function steadyShares(frag) {
   // Season and day/night votes steady separately; a split nobody voted on is an estimate already.
   let season = frag.season, dayNight = frag.dayNight;
   if (frag.seasonVotes) {
-    const n = voted.season ? SEASONS.reduce((sum, s) => sum + frag.seasonVotes[s], 0) : 0;
-    season = Object.fromEntries(SEASONS.map(s => [s,
-      (n * frag.season[s] + k.season * est.season[s] + ko * (orig?.season[s] ?? 0)) / (n + k.season + ko)]));
+    const sv = frag.seasonVotes, n = voted.season ? 0 + sv.winter + sv.spring + sv.summer + sv.fall : 0;
+    const steady = s => (n * frag.season[s] + k.season * est.season[s] + ko * (orig?.season[s] ?? 0)) / (n + k.season + ko);
+    // In SEASONS' order, as a loop over it would build them (every pool bottle is steadied once, for the gap finder).
+    season = { winter: steady('winter'), spring: steady('spring'), summer: steady('summer'), fall: steady('fall') };
   }
   if (frag.timeVotes) {
     const tn = voted.time ? frag.timeVotes.day + frag.timeVotes.night : 0;
