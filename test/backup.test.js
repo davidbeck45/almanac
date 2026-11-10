@@ -128,7 +128,7 @@ test('adding keeps this device’s wear, rating, plan, want and bottle wherever 
   saveMine({ name: '', records: [bottle('2', 'Two, as this device has it'), bottle('3', 'Three')] });
   localStorage.setItem('scentcast.prefs', JSON.stringify({ units: 'F', preferValue: null }));
   const { counts } = restoreBackup(readBackup(file), 'add', { fromISO: FROM });
-  assert.deepEqual(counts, { wears: 1, kept: 1, ratings: 1, hidden: 1, plans: 1, wants: 1, mine: 1 });
+  assert.deepEqual(counts, { wears: 1, dropped: 0, kept: 1, ratings: 1, hidden: 1, plans: 1, wants: 1, mine: 1 });
   assert.equal(restoreText(counts), 'Added 1 wear, 1 rating, 1 plan, 1 want and 1 bottle to Mine. Switched off 1 bottle. 1 window kept this device’s wear.');
   assert.deepEqual(loadHistory().map(h => `${h.date} ${h.slot} ${h.id}`),
     ['2026-11-09 day 300', '2026-11-08 night 555', '2026-11-07 day 555', '2026-01-03 day 100'], 'newest first, the device’s wear for a window both have');
@@ -268,7 +268,8 @@ test('Settings shows what a file holds with both ways to restore it, then what h
   const page = s => settingsHTML({ loc: null, units: 'F', themeName: 'default', active: 'demo', mineCount: 0, shared: null, on: 1, total: 1, wears: 0, updated: '', stale: false, credits: '', ...s });
   const journal = html => html.slice(html.indexOf('>Wear journal</h2>')).split('</section>')[0];
   const plain = journal(page());
-  assert.match(plain, /data-action="restore-pick" aria-describedby="restore-note">Choose file<\/button><input type="file" id="restore-file" data-field="restore-file" accept="\.json,application\/json" hidden>/);
+  assert.match(plain, /data-action="restore-pick" aria-describedby="restore-note">Choose file<\/button>/);
+  assert.ok(!plain.includes('type="file"'), 'the picker’s input isn’t in the pane, where a redraw while the picker is open would replace it and lose the file chosen');
   assert.match(plain, /<small id="restore-note">One that Export saved<\/small>/);
   assert.ok(!plain.includes('set-restore"'), 'nothing under the row until a file is chosen');
   assert.ok(!/data-action="journal-export"[^>]*disabled/.test(plain), 'an export is the whole device: wants and Mine without a wear still export');
@@ -319,4 +320,65 @@ test('a backup carries Worn’s span with the other prefs, and only a span Worn 
   assert.equal(backupExport(journal, { prefs: { ownedSort: 'stars' } }).prefs.ownedSort, 'stars');
   assert.ok(!('ownedSort' in backupExport(journal, { prefs: { ownedSort: 'brand' } }).prefs), 'brand order is the default, stored as nothing');
   assert.ok(!('ownedSort' in backupExport(journal, { prefs: { ownedSort: 7 } }).prefs));
+});
+
+// ---------- What a review of the restore found ----------
+
+test('a save that didn’t take is noticed store by store, even when the counts match', () => {
+  // One wear here, one in the file: Replace leaves as many wears as before.
+  const device = () => {
+    fresh();
+    toggleWear('1', '2026-11-01', 'day');
+    setWant('900', true, { added: '2026-10-20' });
+  };
+  const file = JSON.stringify({ app: 'scentcast-journal', version: 2, hidden: [], history: [{ id: '2', date: '2026-11-02', slot: 'day' }],
+    wants: [{ id: '901', added: '2026-10-21' }], hiding: { hidden: [], shown: [] } });
+  for (const key of ['scentcast.history', 'scentcast.want']) {
+    device();
+    const setItem = localStorage.setItem;
+    localStorage.setItem = (k, v) => { if (k === key) throw new Error('QuotaExceededError'); setItem(k, v); };
+    assert.equal(restoreBackup(readBackup(file), 'replace', { fromISO: FROM }).saved, false, `${key} didn’t save`);
+  }
+  device();
+  assert.equal(restoreBackup(readBackup(file), 'replace', { fromISO: FROM }).saved, true);
+  assert.deepEqual([loadHistory().map(h => h.id), loadWants().map(w => w.id)], [['2'], ['901']]);
+  // Restoring what's already there changes nothing, and that isn't a failed save.
+  assert.equal(restoreBackup(readBackup(file), 'add', { fromISO: FROM }).saved, true);
+});
+
+test('a file from a newer Almanac is turned away rather than read as this one’s', () => {
+  const newer = JSON.stringify({ app: 'scentcast-journal', version: BACKUP_VERSION + 1, hidden: [], history: [{ id: '1', date: '2026-11-01', slot: 'day' }] });
+  assert.throws(() => readBackup(newer), /saved by a newer Almanac than this one\. Reload the app so it updates, then choose the file again\. Nothing on this device changed\./);
+});
+
+test('a file with no hidden list says nothing about the defaults', () => {
+  const bare = readBackup(JSON.stringify({ app: 'scentcast-journal', version: 1, history: [{ id: '1', date: '2026-11-01', slot: 'day' }] }));
+  assert.deepEqual(bare.hiding, { hidden: [], shown: [] }, 'Jake isn’t switched back on by a file that never listed the hides');
+  const listed = readBackup(JSON.stringify({ app: 'scentcast-journal', version: 1, hidden: [], history: [{ id: '1', date: '2026-11-01', slot: 'day' }] }));
+  assert.ok(listed.hiding.shown.includes('4310'), 'one that lists them without Jake had switched it on');
+});
+
+test('a hand-edited file’s odd values are left out before they reach a screen', () => {
+  const odd = readBackup(JSON.stringify({ app: 'scentcast-journal', version: 2, hidden: [],
+    history: [{ id: 7, date: '2026-11-01', slot: 'night', planned: true, lat: 40.7, lon: -74, occasion: 'date', wx: { f: 50.1, note: 'x' }, pick: 9, extra: { a: 1 } }],
+    wants: [{ id: 'x', added: 'soon' }, { id: 'y', added: '2026-10-01', record: { ...bottle('y', 'Y'), url: 'javascript:alert(1)', layeredWith: 'x' } }],
+    mine: { name: 'M', records: [{ ...bottle('1', 'One'), layeredWith: 'x', notes: 'x', parfumo: 3, url: 'javascript:alert(1)' }, { ...bottle('2', 'Two'), layeredWith: [], url: 'https://www.fragrantica.com/perfume/a/b-2.html' }] } }));
+  assert.deepEqual(odd.history, [{ id: '7', date: '2026-11-01', slot: 'night', lat: 40.7, lon: -74, occasion: 'date', wx: { f: 50.1 }, pick: '9' }], 'a wear keeps what a wear holds: no `planned`, which reads as a plan');
+  assert.match(odd.wants[0].added, /^\d{4}-\d{2}-\d{2}$/, 'a want’s date that isn’t one reads as today');
+  assert.equal(odd.wants[1].added, '2026-10-01');
+  assert.deepEqual([odd.wants[1].record.url, odd.wants[1].record.layeredWith], [undefined, undefined]);
+  const [one, two] = odd.mine.records;
+  assert.deepEqual(['layeredWith', 'notes', 'parfumo', 'url'].filter(k => k in one), [], 'parts in the wrong shape are dropped, and a link that isn’t https');
+  assert.deepEqual([two.layeredWith, two.url], [[], 'https://www.fragrantica.com/perfume/a/b-2.html']);
+});
+
+test('adding to a journal at its cap says how many of the device’s oldest wears fell off', () => {
+  const day = n => new Date(Date.UTC(2025, 0, 1) + n * 86_400_000).toISOString().slice(0, 10);
+  const device = { history: Array.from({ length: 730 }, (_, n) => ({ id: '1', date: day(729 - n), slot: 'day' })), skin: {}, asked: {}, events: [], hiding: { hidden: [], shown: [] }, wants: [], mine: { name: '', records: [] }, active: null, uses: null, prefs: {} };
+  const backup = readBackup(JSON.stringify({ app: 'scentcast-journal', version: 1, hidden: [], history: Array.from({ length: 40 }, (_, n) => ({ id: '2', date: day(729 - n), slot: 'night' })) }));
+  const { stores, counts } = mergeBackup(device, backup, { mode: 'add', fromISO: FROM });
+  assert.deepEqual([stores.history.length, counts.wears, counts.dropped], [730, 40, 40]);
+  assert.match(restoreText(counts), /^Added 40 wears\. The journal keeps its newest 730 wears, so this device’s 40 oldest dropped off\.$/);
+  assert.match(restoreText({ ...counts, dropped: 1 }), /so this device’s oldest one dropped off\./);
+  assert.ok(!restoreText({ ...counts, dropped: 0 }).includes('dropped off'));
 });

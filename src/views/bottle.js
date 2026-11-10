@@ -375,14 +375,14 @@ function headSection({ f, entry, ctxLabel, solo }) {
   const pf = f.parfumo?.votes > 0 ? f.parfumo : null, p = performanceRating(f);
   const keys = [['longevity', 'Lasts'], ['sillage', 'Projects']].filter(([key]) => p?.[key] != null);
   const figure = key => `${p.parfumoShare[key] < 0.5 ? '≈ ' : ''}${p[key].toFixed(1)}`;
-  const parfumo = pf && `<a href="${esc(pf.url)}" target="_blank" rel="noopener" data-focus="bp-parfumo">Parfumo</a>`;
+  const parfumo = pf && (httpsURL(pf.url) ? `<a href="${esc(pf.url)}" target="_blank" rel="noopener" data-focus="bp-parfumo">Parfumo</a>` : 'Parfumo');
   const fragrantica = keys.some(([key]) => p.parfumoShare[key] < 1);
   const source = !pf ? 'of 10, estimated from Fragrantica votes' : `of 10 on ${parfumo}${fragrantica ? ' and Fragrantica' : ''}`;
   const performance = keys.length
     ? `${keys.map(([key, word]) => `${word} ${figure(key)}`).join(' · ')} <span>${source}</span>`
     : [f.longevity, f.sillage && `${f.sillage} projection`].filter(Boolean).map(esc).join(' · ');
   const o = f.original;
-  const inspired = o ? `<p class="inspired">Inspired by ${o.url ? `<a href="${esc(o.url)}" target="_blank" rel="noopener" data-focus="bp-inspired">${esc(o.name)}</a>` : esc(o.name)} · ${esc(o.brand)}</p>` : '';
+  const inspired = o ? `<p class="inspired">Inspired by ${httpsURL(o.url) ? `<a href="${esc(o.url)}" target="_blank" rel="noopener" data-focus="bp-inspired">${esc(o.name)}</a>` : esc(o.name)} · ${esc(o.brand)}</p>` : '';
   const kicker = entry && !solo ? `<p class="kicker">${magDot(entry.tier)}${esc(ctxLabel)}</p>` : '';
   return `<header class="bp-head" style="--accord:${accordColor(Object.keys(f.accords)[0])}">
     <div class="bp-bottle">${img(f, { lazy: false })}</div>
@@ -396,6 +396,11 @@ function headSection({ f, entry, ctxLabel, solo }) {
     </div>
   </header>`;
 }
+
+// A record's link as the page draws one: only to an https page. Records
+// come from files and links too (a restored backup's Mine, a share link's
+// hand-entered bottle), where a `javascript:` address would be drawn as given.
+const httpsURL = url => (typeof url === 'string' && url.startsWith('https://') ? url : '');
 
 // The feels-like range a bottle suits (engine comfortRange), in the user's units.
 function comfortHTML(range) {
@@ -420,11 +425,14 @@ function wearsHTML(wears, today) {
  * when it was last worn: "The Week’s pick for Saturday night", or "Suits
  * tomorrow as well as the Week’s pick", the window named as its own page's
  * head names it. The window opens the page in that window's list, where Why
- * shows how it ranks there; on that window's own page (`ctx`) the line says
- * nothing the page doesn't.
+ * shows how it ranks there; on that window's own page (its context `ctx`,
+ * or Now's list for the same window, `win`) the line says nothing the page
+ * doesn't.
  */
-export function weekFactHTML(week, f, ctx) {
-  if (!week || week.ctx === ctx) return '';
+export function weekFactHTML(week, f, ctx, win = null) {
+  // That window's own page: the Week's (its context), or Now's for the same day or night.
+  const nows = (ctx === 'day' || ctx === 'night') && win?.dateISO === week?.win.dateISO && win?.slot === week?.win.slot;
+  if (!week || week.ctx === ctx || nows) return '';
   const at = `<button class="link-btn" data-action="open" data-ctx="${esc(week.ctx)}" data-id="${esc(f.id)}">${esc(inSentence(week.win.label))}</button>`;
   return `<p class="fact">${icon.calendar}<span>${week.kind === 'planned' ? `The Week’s pick for ${at}` : `Suits ${at} as well as the Week’s pick`}</span></p>`;
 }
@@ -437,7 +445,7 @@ function summarySection({ f, entry, win, ctx, comfort, wears, week, todayISO: to
     ${entry ? reasonsList(entry.reasons.filter(r => r.text !== rest), 'full') : ''}
     ${comfortHTML(comfort)}
     ${owned ? wearsHTML(wears, today) : ''}
-    ${weekFactHTML(week, f, ctx)}
+    ${weekFactHTML(week, f, ctx, win)}
   </div>`;
 }
 
@@ -460,7 +468,7 @@ function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned, inMine,
     ${owned ? (wearable && entry ? wearButton(entry, ctx, worn) : '') : own}
     ${owned || inMine ? '' : wantButton(f, wanted)}
     <button class="btn secondary" data-action="bp-compare" data-id="${esc(linkId(f))}" data-ctx="${esc(ctx ?? '')}">${icon.compare}<span>Compare</span></button>
-    ${f.url ? `<a class="btn secondary" href="${esc(f.url)}" target="_blank" rel="noopener" data-focus="bp-fragrantica">Fragrantica ${icon.external}</a>` : ''}
+    ${httpsURL(f.url) ? `<a class="btn secondary" href="${esc(f.url)}" target="_blank" rel="noopener" data-focus="bp-fragrantica">Fragrantica ${icon.external}</a>` : ''}
     ${owned ? rotation : ''}
   </div>`;
 }

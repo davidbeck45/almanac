@@ -36,13 +36,18 @@ import { plural, shortDate } from './ui.js';
 
 export const BACKUP_VERSION = 2;
 const KEYS = { prefs: 'scentcast.prefs', uses: 'scentcast.uses', trip: 'scentcast.trip', active: 'scentcast.active' };
+// Where each store restoreBackup saves through its own module is kept, for checking that a save took.
+const STORE_KEYS = {
+  history: 'scentcast.history', skin: 'scentcast.skin', asked: 'scentcast.asked', events: 'scentcast.events',
+  hidden: 'scentcast.hidden', shown: 'scentcast.shown', wants: 'scentcast.want', mine: 'scentcast.mine',
+};
 const LEVELS = ['never', 'sometimes', 'often'];
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const isMap = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const ids = list => (Array.isArray(list) ? [...new Set(list.filter(x => typeof x === 'string' || Number.isFinite(x)).map(String))] : []);
 const readJSON = key => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } };
-const writeJSON = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} };
+const writeJSON = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; } };
 // The device's date, `days` from today (not UTC's, a day ahead by evening).
 const deviceDay = (days = 0, d = new Date(Date.now() + days * 86_400_000)) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -85,8 +90,35 @@ function tidyTrip(trip) {
   };
 }
 
+// A record from a file, its optional parts kept only in the shape a screen
+// reads them in (usableRecord checks what ranking needs; a bottle page reads
+// the rest, and one `layeredWith` that isn't a list broke every page in
+// Mine): a list for `layeredWith`, maps for the others, a link only to an
+// https page.
+const RECORD_MAPS = ['notes', 'parfumo', 'performance', 'extras', 'about', 'original'];
+function tidyRecord(r) {
+  const out = { ...r, id: String(r.id) };
+  if ('layeredWith' in out && !Array.isArray(out.layeredWith)) delete out.layeredWith;
+  for (const key of RECORD_MAPS) if (key in out && !isMap(out[key])) delete out[key];
+  if ('url' in out && !(typeof out.url === 'string' && out.url.startsWith('https://'))) delete out.url;
+  return out;
+}
+
+// A file's wear, kept to what a wear holds (src/history.js toggleWear): a
+// hand-edited file's other keys stay out (`planned`, which rotation and Copy
+// for Claude read as a plan, not a wear).
+function tidyWear({ id, date, slot, lat, lon, occasion, wx, pick }) {
+  return {
+    id, date, slot,
+    ...(Number.isFinite(lat) && Number.isFinite(lon) && { lat, lon }),
+    ...(typeof occasion === 'string' && occasion && { occasion }),
+    ...(isMap(wx) && { wx: Object.fromEntries(Object.entries(wx).filter(([, v]) => Number.isFinite(v))) }),
+    ...(pick != null && { pick: String(pick) }),
+  };
+}
+
 function tidyMine(mine) {
-  const records = Array.isArray(mine?.records) ? mine.records.filter(usableRecord).map(r => (typeof r.id === 'string' ? r : { ...r, id: String(r.id) })) : [];
+  const records = Array.isArray(mine?.records) ? mine.records.filter(usableRecord).map(tidyRecord) : [];
   const seen = new Set();
   return { name: typeof mine?.name === 'string' ? mine.name : '', records: records.filter(r => !seen.has(r.id) && seen.add(r.id)) };
 }
@@ -164,21 +196,27 @@ export function readBackup(text) {
   }
   const journal = parseJournal(data);
   if (!journal) throw new Error(`That file isn’t an Almanac export. Choose the almanac-journal file that Export saved. ${NOTHING}`);
+  // A file from a newer Almanac may carry stores this one doesn't know to
+  // look for: read as this version's, Replace would empty what it didn't find.
+  if (Number(data.version) > BACKUP_VERSION) {
+    throw new Error(`That file was saved by a newer Almanac than this one. Reload the app so it updates, then choose the file again. ${NOTHING}`);
+  }
   const whole = Number(data.version) >= BACKUP_VERSION;
   // Before the split, `hidden` ran the defaults together with the device's
   // own: a default in it was still hidden, one missing had been switched on.
+  // A file with no `hidden` list says nothing about the defaults.
   const hiding = isMap(data.hiding) ? { hidden: ids(data.hiding.hidden), shown: ids(data.hiding.shown) }
-    : { hidden: journal.hidden.filter(id => !DEFAULT_HIDDEN.includes(id)), shown: DEFAULT_HIDDEN.filter(id => !journal.hidden.includes(id)) };
+    : { hidden: journal.hidden.filter(id => !DEFAULT_HIDDEN.includes(id)), shown: Array.isArray(data.hidden) ? DEFAULT_HIDDEN.filter(id => !journal.hidden.includes(id)) : [] };
   const has = key => whole || key in data;
   return {
     version: Number(data.version) || 1,
     exported: typeof data.exported === 'string' ? data.exported : null,
-    history: oneAWindow([...journal.history].sort(byNewest)),
+    history: oneAWindow(journal.history.map(tidyWear).sort(byNewest)),
     skin: tidySkin(journal.skin),
     events: journal.events,
     hiding,
     asked: tidyAsked(data.asked),
-    wants: tidyWants(data.wants),
+    wants: tidyWants(data.wants).map(w => (w.record ? { ...w, record: tidyRecord(w.record) } : w)),
     mine: tidyMine(data.mine),
     active: tidyActive(data.active),
     uses: tidyUses(data.uses),
@@ -306,6 +344,8 @@ export function mergeBackup(device, backup, { mode = 'add', fromISO = deviceDay(
     stores,
     counts: {
       wears: fresh.filter(h => stays.has(h)).length,
+      // The journal keeps its newest MAX_ENTRIES: the device's own that newer ones from the file pushed out.
+      dropped: device.history.filter(h => !stays.has(h)).length,
       kept: backup.history.filter(h => logged.has(windowOf(h)) && logged.get(windowOf(h)).id !== h.id).length,
       ratings: Object.keys(backup.skin).filter(id => !(id in device.skin)).length,
       hidden: off.length,
@@ -336,6 +376,7 @@ export function restoreText(counts, mode = 'add') {
     added.length ? `Added ${listOf(added)}.` : !counts.hidden && 'Nothing to add: this device already has everything in that file.',
     counts.hidden && `Switched off ${plural(counts.hidden, 'bottle')}.`,
     counts.kept && `${plural(counts.kept, 'window')} kept this device’s wear.`,
+    counts.dropped && `The journal keeps its newest ${MAX_ENTRIES} wears, so this device’s ${counts.dropped === 1 ? 'oldest one' : `${counts.dropped} oldest`} dropped off.`,
   ];
   return said.filter(Boolean).join(' ');
 }
@@ -370,6 +411,23 @@ export function restoreBackup(backup, mode = 'add', { fromISO = deviceDay(-1) } 
     prefs: isMap(prefs) ? prefs : {},
   };
   const { stores, counts } = mergeBackup(device, backup, { mode, fromISO });
+  // A browser whose storage is full or blocked drops a save without a word,
+  // so a store the restore changed counts as kept only once its key reads
+  // differently than it did (each key on its own: the hides are two).
+  const raw = () => Object.fromEntries(Object.entries(STORE_KEYS).map(([store, key]) => { try { return [store, localStorage.getItem(key)]; } catch { return [store, null]; } }));
+  const differs = (a, b) => JSON.stringify(a) !== JSON.stringify(b);
+  const idSet = list => [...list].map(String).sort();
+  const changed = {
+    history: differs(device.history, stores.history),
+    skin: differs(device.skin, stores.skin),
+    asked: differs(device.asked, stores.asked),
+    events: differs(device.events, stores.events),
+    hidden: differs(idSet(device.hiding.hidden), idSet(stores.hiding.hidden)),
+    shown: differs(idSet(device.hiding.shown), idSet(stores.hiding.shown)),
+    wants: differs(device.wants, stores.wants),
+    mine: differs(device.mine, stores.mine),
+  };
+  const before = raw();
   saveHistory(stores.history);
   saveSkin(stores.skin);
   saveAsked(stores.asked);
@@ -377,10 +435,10 @@ export function restoreBackup(backup, mode = 'add', { fromISO = deviceDay(-1) } 
   saveHidden({ hidden: new Set(stores.hiding.hidden), shown: new Set(stores.hiding.shown) });
   saveWants(stores.wants);
   saveMine(stores.mine);
-  if (stores.active && stores.active !== device.active) { try { localStorage.setItem(KEYS.active, stores.active); } catch {} }
-  if (stores.uses && stores.uses !== device.uses) writeJSON(KEYS.uses, stores.uses);
-  if (JSON.stringify(stores.prefs) !== JSON.stringify(device.prefs)) writeJSON(KEYS.prefs, stores.prefs);
-  const saved = loadHistory().length === stores.history.length && Object.keys(loadSkin()).length === Object.keys(stores.skin).length
-    && loadMine().records.length === stores.mine.records.length;
+  const after = raw();
+  let saved = Object.keys(changed).every(store => !changed[store] || after[store] !== before[store]);
+  if (stores.active && stores.active !== device.active) { try { localStorage.setItem(KEYS.active, stores.active); } catch { saved = false; } }
+  if (stores.uses && stores.uses !== device.uses && !writeJSON(KEYS.uses, stores.uses)) saved = false;
+  if (differs(stores.prefs, device.prefs) && !writeJSON(KEYS.prefs, stores.prefs)) saved = false;
   return { counts, stores, saved, activeBefore: device.active };
 }

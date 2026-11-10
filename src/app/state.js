@@ -665,10 +665,12 @@ function applyPrefs(prefs) {
 
 /**
  * Reads again what another tab may have saved (the shell calls it on a
- * storage event): Mine, the switched-off bottles, the journal, plans and
- * prefs. Ratings, wants and "How you wear" are read as they're drawn.
+ * storage event): the list ranked, Mine, the switched-off bottles, the
+ * journal, plans and prefs. Ratings, wants and "How you wear" are read as they're drawn.
  */
 export function reloadStored() {
+  // The list ranked too (a restore in another tab can switch it); a shared link's view stays.
+  if (!state.shared) state.active = loadActive();
   state.mine = loadMine();
   state.hiding = loadHidden();
   state.history = loadHistory();

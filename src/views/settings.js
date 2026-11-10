@@ -98,7 +98,7 @@ export function settingsHTML({ loc, units, themeName, stillSky = false, deviceSt
     `)}
     ${group('Wear journal', `
       ${row(`<a class="set-link" href="#/wardrobe/worn">${plural(wears, 'wear')} logged</a>`, `<button class="btn tertiary compact" data-action="journal-export">${icon.download}Export</button>`, { note: 'On this device only' })}
-      ${row('Restore from a file', `<button class="btn tertiary compact" data-action="restore-pick" aria-describedby="restore-note">Choose file</button><input type="file" id="restore-file" data-field="restore-file" accept=".json,application/json" hidden>`, { note: 'One that Export saved', noteId: 'restore-note' })}
+      ${row('Restore from a file', `<button class="btn tertiary compact" data-action="restore-pick" aria-describedby="restore-note">Choose file</button>`, { note: 'One that Export saved', noteId: 'restore-note' })}
       ${restoreHTML(restore ?? {})}
       ${row('For Claude’s picks', `<button class="btn tertiary compact" data-action="journal-claude">${icon.paste}Copy for Claude</button>`, { note: 'Recent wears and stars' })}
     `)}
@@ -275,12 +275,18 @@ export const actions = {
     setStillSky(!state.stillSky);
     app.keepingFocus(el, '#app', app.render);
   },
-  // Restore from a file: the device's own file picker, on the input beside
-  // the button (changes['restore-file'] reads what's chosen).
-  'restore-pick'() {
-    const input = document.getElementById('restore-file');
-    if (!input) return;
-    input.value = ''; // the same file chosen twice still reads
+  // Restore from a file: the device's own file picker. Its input is made
+  // here and kept on the body, outside what a redraw replaces, and heard
+  // directly: a phone hides the page while its picker is open, and coming
+  // back draws the pane again (the forecast read for the hour), so an input
+  // in the pane was gone by the time its file was chosen, and the choice
+  // went unheard. A new one each time, so the same file chosen twice reads.
+  'restore-pick'(el, app) {
+    document.getElementById('restore-file')?.remove();
+    const input = Object.assign(document.createElement('input'), { type: 'file', id: 'restore-file', accept: '.json,application/json', hidden: true });
+    input.addEventListener('change', () => { changes['restore-file'](input, app); input.remove(); }, { once: true });
+    input.addEventListener('cancel', () => input.remove(), { once: true });
+    document.body.append(input);
     input.click();
   },
   'restore-add': (el, app) => runRestore(app, 'add'),

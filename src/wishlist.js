@@ -18,7 +18,8 @@ const today = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1)
 function entry(raw) {
   const id = raw?.id ?? raw?.record?.id;
   if (id == null || id === '') return null;
-  const out = { id: String(id), added: typeof raw.added === 'string' ? raw.added : today() };
+  // `added` is a date (the Wishlist says when): anything else, from a hand-edited file, reads as today.
+  const out = { id: String(id), added: typeof raw.added === 'string' && /^\d{4}-\d{2}-\d{2}/.test(raw.added) && !Number.isNaN(Date.parse(raw.added)) ? raw.added : today() };
   const note = typeof raw.note === 'string' ? raw.note.trim().slice(0, MAX_NOTE) : '';
   if (note) out.note = note;
   if (usableRecord(raw.record)) out.record = { ...raw.record, id: String(id) };
