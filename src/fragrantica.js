@@ -92,7 +92,6 @@ export function fromFragrantica(id, row) {
   // through before were a third of that.
   const accords = {};
   for (const a of Object.keys(row.a)) accords[a] = barWidth(row.a[a]);
-  const like = row.k ? { season: { winter: row.k[0], spring: row.k[1], summer: row.k[2], fall: row.k[3] }, night: row.k[4] } : null;
   const notes = {}, weights = {};
   if (row.no) {
     for (const tier of Object.keys(row.no)) {
@@ -101,6 +100,14 @@ export function fromFragrantica(id, row) {
       for (let j = 0; j < names.length; j++) weights[cased[j]] = list[names[j]];
     }
   }
+  return recordOf(id, row, accords, notes, noteVotesOf(weights));
+}
+
+// The record itself, from a row's plain fields with its accords (bar
+// widths), notes by tier and note votes (or null) read already: an r/ row's
+// by fromFragrantica, a pool row's by fromPool straight from its columns.
+function recordOf(id, row, accords, notes, votes) {
+  const like = row.k ? { season: { winter: row.k[0], spring: row.k[1], summer: row.k[2], fall: row.k[3] }, night: row.k[4] } : null;
   const record = {
     id: String(id),
     source: 'fragrantica',
@@ -126,7 +133,6 @@ export function fromFragrantica(id, row) {
   record.season = n ? { winter: round3(winter / n), spring: round3(spring / n), summer: round3(summer / n), fall: round3(fall / n) } : estimate().season;
   const nightShare = day + night ? night / (day + night) : estimate().night;
   record.dayNight = { day: round3(1 - nightShare), night: round3(nightShare) };
-  const votes = noteVotesOf(weights);
   if (votes) record.noteVotes = votes;
   if (row.l && row.si) {
     record.performance = { longevity: row.l[0], sillage: row.si[0], votes: Math.min(row.l[1], row.si[1]) };
@@ -157,8 +163,10 @@ export function fromPool(pool, i) {
   const memo = pooled.get(pool);
   if (memo[i]) return memo[i];
   const c = pool.cols, id = c.id[i], name = c.n[i], brand = pool.brands[c.b[i]];
-  const strengths = {}, as = c.a[i], ws = c.w[i];
-  for (let j = 0; j < as.length; j++) strengths[pool.accords[as[j]]] = barStrength(ws[j]);
+  // Its accords as the r/ row reads them: the bar's width from the strength
+  // (the pool keeps widths; through barStrength and back, to the bit).
+  const accords = {}, as = c.a[i], ws = c.w[i];
+  for (let j = 0; j < as.length; j++) accords[pool.accords[as[j]]] = barWidth(barStrength(ws[j]));
   const row = {
     s: pool.slugs[id] ?? `${once(brandSlugs, brand, () => slugPart(brand))}/${slugPart(name)}`,
     n: name,
@@ -166,21 +174,22 @@ export function fromPool(pool, i) {
     y: c.y[i] || undefined,
     g: c.g[i] || undefined,
     r: [c.r[i] / 100, c.rv[i]],
-    a: strengths,
   };
   if (c.v[i].length) row.v = c.v[i];
   if (c.l[i] && c.si[i]) [row.l, row.si] = [[c.l[i] / 100, c.lv[i]], [c.si[i] / 100, c.lv[i]]];
   if (c.k[i].length) row.k = c.k[i].map(x => x / 100);
-  const notes = pool.noteList?.no[i], votes = {};
-  if (notes?.length) {
-    row.no = {};
-    for (let j = 0; j < notes.length; j += 2) {
-      const note = pool.noteList.notes[notes[j] >> 2];
-      (row.no[NOTE_TIER_KEYS[notes[j] & 3]] ??= {})[note] = 0;
-      if (notes[j + 1]) votes[noteCase(note)] = 100 * notes[j + 1]; // 0: nobody voted
+  const listed = pool.noteList?.no[i], notes = {}, votes = {};
+  if (listed?.length) {
+    // Each tier's notes once, in the order an r/ row's object of them lists its keys.
+    const tiers = {};
+    for (let j = 0; j < listed.length; j += 2) {
+      const note = pool.noteList.notes[listed[j] >> 2];
+      (tiers[NOTE_TIER_KEYS[listed[j] & 3]] ??= {})[note] = 0;
+      if (listed[j + 1]) votes[noteCase(note)] = 100 * listed[j + 1]; // 0: nobody voted
     }
+    for (const tier of Object.keys(tiers)) notes[NOTE_TIERS[tier]] = Object.keys(tiers[tier]).map(note => noteCase(note));
   }
-  const record = fromFragrantica(id, row);
+  const record = recordOf(id, row, accords, notes, null);
   if (Object.keys(votes).length) record.noteVotes = votes;
   record.extras = {
     value: c.val[i] ? c.val[i] / 100 : null,
