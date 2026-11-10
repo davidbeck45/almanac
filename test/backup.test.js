@@ -128,7 +128,7 @@ test('adding keeps this device’s wear, rating, plan, want and bottle wherever 
   saveMine({ name: '', records: [bottle('2', 'Two, as this device has it'), bottle('3', 'Three')] });
   localStorage.setItem('scentcast.prefs', JSON.stringify({ units: 'F', preferValue: null }));
   const { counts } = restoreBackup(readBackup(file), 'add', { fromISO: FROM });
-  assert.deepEqual(counts, { wears: 1, dropped: 0, kept: 1, ratings: 1, hidden: 1, plans: 1, wants: 1, mine: 1 });
+  assert.deepEqual(counts, { wears: 1, dropped: 0, kept: 1, ratings: 1, hidden: 1, plans: 1, wants: 1, droppedWants: 0, mine: 1 });
   assert.equal(restoreText(counts), 'Added 1 wear, 1 rating, 1 plan, 1 want and 1 bottle to Mine. Switched off 1 bottle. 1 window kept this device’s wear.');
   assert.deepEqual(loadHistory().map(h => `${h.date} ${h.slot} ${h.id}`),
     ['2026-11-09 day 300', '2026-11-08 night 555', '2026-11-07 day 555', '2026-01-03 day 100'], 'newest first, the device’s wear for a window both have');
@@ -381,4 +381,18 @@ test('adding to a journal at its cap says how many of the device’s oldest wear
   assert.match(restoreText(counts), /^Added 40 wears\. The journal keeps its newest 730 wears, so this device’s 40 oldest dropped off\.$/);
   assert.match(restoreText({ ...counts, dropped: 1 }), /so this device’s oldest one dropped off\./);
   assert.ok(!restoreText({ ...counts, dropped: 0 }).includes('dropped off'));
+});
+
+test('adding at the want list’s cap counts what stays, says what fell off, and isn’t a failed save', () => {
+  const day = n => new Date(Date.UTC(2026, 0, 1) + n * 86_400_000).toISOString().slice(0, 10);
+  const full = Array.from({ length: 200 }, (_, n) => ({ id: `w${n}`, added: day(250 - n) }));
+  localStorage.setItem('scentcast.want', JSON.stringify(full));
+  const file = wants => JSON.stringify({ app: 'scentcast-journal', version: 2, hidden: [], history: [], wants, hiding: { hidden: [], shown: [] } });
+  // Older than every want here: it doesn't fit, so nothing is added, and nothing failed.
+  const older = restoreBackup(readBackup(file([{ id: 'old', added: '2025-06-01' }])), 'add', { fromISO: FROM });
+  assert.deepEqual([older.saved, older.counts.wants, older.counts.droppedWants, loadWants().length], [true, 0, 0, 200]);
+  // Newer than all of them: it goes in, and the device's oldest drops off, said.
+  const newer = restoreBackup(readBackup(file([{ id: 'new', added: '2026-12-01' }])), 'add', { fromISO: FROM });
+  assert.deepEqual([newer.saved, newer.counts.wants, newer.counts.droppedWants, loadWants().length, loadWants()[0].id], [true, 1, 1, 200, 'new']);
+  assert.match(restoreText(newer.counts), /^Added 1 want\. The want list keeps its newest 200, so this device’s oldest one dropped off\.$/);
 });

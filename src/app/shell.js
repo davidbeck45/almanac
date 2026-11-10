@@ -865,15 +865,22 @@ function listen() {
   // frame, and in a hidden tab once it's in sight (it runs no frames). An
   // open sheet stays as it is, and focus where it was (render). The
   // forecast and climate another tab fetched are caches: nothing to draw.
-  let elsewhere = 0;
+  let elsewhere = 0, plans = false;
   const cacheKeys = ['scentcast.weather', 'scentcast.climate'];
   window.addEventListener('storage', e => {
     if (e.key !== null && (!e.key.startsWith('scentcast.') || cacheKeys.includes(e.key))) return;
+    // Whether the plans are among what changed (or everything was cleared).
+    plans ||= e.key === null || e.key === 'scentcast.events';
     elsewhere ||= requestAnimationFrame(() => {
       elsewhere = 0;
+      // A sheet that only shows the plans (`live`: the Week's Plan) draws
+      // again when they changed, and stays as it is for anything else: a
+      // wear or a trip's weather saved elsewhere would replace a select
+      // someone has open.
+      const redraw = plans && Boolean(state.sheet?.live);
+      plans = false;
       reloadStored();
-      // A sheet that only shows what's stored (`live`: the Week's Plan) draws again with it.
-      render({ sheet: Boolean(state.sheet?.live) });
+      render({ sheet: redraw });
     });
   });
 

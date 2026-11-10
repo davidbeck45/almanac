@@ -7,7 +7,7 @@
 import { usableRecord } from './collections.js';
 
 const KEY = 'scentcast.want';
-const MAX_WANTS = 200;
+export const MAX_WANTS = 200;
 export const MAX_NOTE = 140; // a note's longest, in characters
 
 // Today on this device's calendar.

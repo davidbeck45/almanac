@@ -30,7 +30,7 @@ import { parseJournal, isJournalToken, loadHistory, saveHistory, MAX_ENTRIES } f
 import { loadSkin, saveSkin, tidySkin, loadAsked, saveAsked, tidyAsked } from './skin.js';
 import { loadEvents, saveEvents, tidyEvents } from './events.js';
 import { loadHidden, saveHidden, DEFAULT_HIDDEN } from './hidden.js';
-import { loadWants, saveWants, tidyWants } from './wishlist.js';
+import { loadWants, saveWants, tidyWants, MAX_WANTS } from './wishlist.js';
 import { loadMine, saveMine, usableRecord } from './collections.js';
 import { plural, shortDate } from './ui.js';
 
@@ -322,7 +322,11 @@ export function mergeBackup(device, backup, { mode = 'add', fromISO = deviceDay(
   const planned = new Set(device.events.map(e => `${e.dateISO}:${e.slot}`));
   const plans = tidyEvents(backup.events, fromISO).filter(e => !planned.has(`${e.dateISO}:${e.slot}`));
   const off = backup.hiding.hidden.filter(id => !device.hiding.hidden.includes(id));
-  const { wants, added: wanted } = mergeWants(device.wants, backup.wants);
+  // The want list keeps its newest MAX_WANTS, as saveWants stores it: what's
+  // counted as added is what stays, and the device's own that fell off is said.
+  const wants = mergeWants(device.wants, backup.wants).wants.slice(0, MAX_WANTS);
+  const hadWant = new Set(device.wants.map(w => w.id)), keptWant = new Set(wants.map(w => w.id));
+  const wanted = wants.filter(w => !hadWant.has(w.id)).length;
   const owned = new Set(device.mine.records.map(r => r.id));
   const bottles = backup.mine.records.filter(r => !owned.has(r.id));
   const asked = { ...backup.asked };
@@ -351,6 +355,7 @@ export function mergeBackup(device, backup, { mode = 'add', fromISO = deviceDay(
       hidden: off.length,
       plans: plans.length,
       wants: wanted,
+      droppedWants: device.wants.filter(w => !keptWant.has(w.id)).length,
       mine: bottles.length,
     },
   };
@@ -377,6 +382,7 @@ export function restoreText(counts, mode = 'add') {
     counts.hidden && `Switched off ${plural(counts.hidden, 'bottle')}.`,
     counts.kept && `${plural(counts.kept, 'window')} kept this device’s wear.`,
     counts.dropped && `The journal keeps its newest ${MAX_ENTRIES} wears, so this device’s ${counts.dropped === 1 ? 'oldest one' : `${counts.dropped} oldest`} dropped off.`,
+    counts.droppedWants && `The want list keeps its newest ${MAX_WANTS}, so this device’s ${counts.droppedWants === 1 ? 'oldest one' : `${counts.droppedWants} oldest`} dropped off.`,
   ];
   return said.filter(Boolean).join(' ');
 }
