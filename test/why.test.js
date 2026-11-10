@@ -14,7 +14,7 @@ import { pickGapLine, whyParts, whyNotes } from '../src/contrast.js';
 import { planWindows, rank, occasionWeights, restReason } from '../src/engine.js';
 import { occasionById } from '../src/occasions.js';
 import { applySkin } from '../src/skin.js';
-import { summarize } from '../src/weather.js';
+import { summarize, week } from '../src/weather.js';
 import { matchPct } from '../src/ui.js';
 import { shiftISO } from '../src/history.js';
 import { syntheticForecast } from './fixtures.js';
@@ -101,6 +101,34 @@ test('for an occasion the parts take its weights and the heat’s note; an event
   assert.ok(day.notes.includes('Saved for formal wear tonight, so the plan picks another bottle here.'), day.notes.join(' | '));
   assert.equal(day.isPick, false);
   assert.deepEqual([night.isPick, night.event, night.occasion, night.gap.line], [true, true, 'formal', 'It\'s the pick for formal tonight.']);
+});
+
+test('a pick that isn’t first in its list names the bottles above it, each with why it gave way', () => {
+  // A week planned around a day at the office at its end (Oct 5), whose bottle the days before leave be.
+  const at = Date.parse('2026-09-28T16:00:00Z'), office = occasionById('office');
+  const windows = week(syntheticForecast(8), at).flatMap(d => [d.day, d.night].filter(Boolean)).map((w, i) => (i === 14 ? { ...w, occasion: office } : w));
+  assert.deepEqual([windows[14].dateISO, windows[14].slot], ['2026-10-05', 'day']);
+  const plan = planWindows(fragrances, windows, { nowISO: today });
+  let turns = 0, saved = 0;
+  for (const p of plan) {
+    const i = p.ranked.indexOf(p.pick);
+    const w = whyWindow(p.pick.fragrance, p, { todayISO: today });
+    assert.equal(w.isPick, true);
+    if (!i) {
+      assert.equal(w.ahead, undefined, 'first in its list: nothing gave way');
+      continue;
+    }
+    assert.deepEqual(w.ahead.map(a => a.name), p.ranked.slice(0, i).map(r => r.fragrance.name));
+    for (const [k, a] of w.ahead.entries()) {
+      const line = pickGapLine(p.ranked[k], p.pick, p.win);
+      if (line) assert.equal(a.line, line);
+      else assert.equal(a.line, 'Saved for the office on Oct 5, so the plan picks another bottle here.');
+      turns += / but the plan gives /.test(a.line);
+      saved += /^Saved for /.test(a.line);
+      assert.doesNotMatch(a.line, NO_TEMPERATURE);
+    }
+  }
+  assert.ok(turns > 0 && saved > 0, `${turns} gave the pick a turn, ${saved} saved`);
 });
 
 test('--why is a mode of its own: it reads a window’s flags and stops on the rest with a sentence', async () => {

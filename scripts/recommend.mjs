@@ -1360,7 +1360,9 @@ export function whyWindow(f, { win, ranked, pick }, { occasion = null, history =
   const worn = history.find(h => !h.planned && h.date === win.dateISO && h.slot === win.slot)?.id ?? null;
   const label = listLabel(win, occ);
   const beside = e => pickGapLine(e, pick, win, { occasion: occ, worn });
-  const ahead = isPick ? ranked.slice(0, at).map(r => ({ name: r.fragrance.name, line: beside(r) })).filter(a => a.line) : [];
+  // A bottle saved for an event has no line beside the pick: its own note says why it gave way.
+  const kept = e => whyNotes(e, win, { occasion: occ, todayISO }).find(n => n.key === 'saved')?.text ?? '';
+  const ahead = isPick ? ranked.slice(0, at).map(r => ({ name: r.fragrance.name, line: beside(r) || kept(r) })).filter(a => a.line) : [];
   return {
     window: { label: win.label, date: win.dateISO, slot: win.slot, feelsF: Math.round(win.feelsF), humidity: Math.round(win.humidity), dewF: Math.round(win.dewF), condition: win.condition, rainChance: win.pop, ...(win.typical && { typical: true }) },
     occasion: occ?.id ?? null,
