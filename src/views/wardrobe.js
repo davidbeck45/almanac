@@ -174,12 +174,17 @@ export function calendarPages(history, todayISO) {
   return Math.floor(daysFrom(first < floor ? floor : first, lastDay) / (7 * CAL_WEEKS));
 }
 
-/** A calendar page's days in words ("Sep 6 – Oct 10"), up to today on the page it's on. */
+/**
+ * A calendar page's days in words ("Sep 6 – Oct 10"), up to today on the
+ * page it's on, with its year once the page ends in an earlier one
+ * ("Oct 26 – Nov 29, 2025": a year back, the months come round again).
+ */
 export function calendarRange(calendar, todayISO) {
   const days = calendar.flat();
   if (!days.length) return '';
   const last = days.at(-1).dateISO;
-  return `${shortDate(days[0].dateISO)} – ${shortDate(last > todayISO ? todayISO : last)}`;
+  const year = last.slice(0, 4) < todayISO.slice(0, 4) ? `, ${last.slice(0, 4)}` : '';
+  return `${shortDate(days[0].dateISO)} – ${shortDate(last > todayISO ? todayISO : last)}${year}`;
 }
 
 /** What turning to a page says to screen readers: its days and how much they hold. */
@@ -301,10 +306,11 @@ export function wornHTML({ stats, calendar, dusty, todayISO, span = 30, page = 0
   // (with its distinct bottles) for screen readers and on hover.
   const most1 = Math.max(1, ...(months ?? []).map(m => m.wears));
   const monthBars = months?.length > 1
-    ? `<section aria-labelledby="worn-months-title"><h3 id="worn-months-title">By month</h3><ul class="month-bars">${months.map(m => {
-      const name = shortDate(`${m.month}-01`).split(' ')[0];
-      const label = `${name}: ${m.wears ? `${plural(m.wears, 'wear')}, ${plural(m.bottles, 'bottle')}` : 'nothing logged'}`;
-      return `<li title="${esc(label)}"><span class="visually-hidden">${esc(label)}</span><b aria-hidden="true">${m.wears || ''}</b><span class="month-bar" aria-hidden="true"><span style="height:${((m.wears / most1) * 100).toFixed(0)}%"></span></span><small aria-hidden="true">${esc(name)}</small></li>`;
+    ? `<section aria-labelledby="worn-months-title"><h3 id="worn-months-title">By month</h3><ul class="month-bars${months.length > 6 ? ' long' : ''}">${months.map(m => {
+      // A month of an earlier year says which: a year's span has two Novembers.
+      const name = shortDate(`${m.month}-01`).split(' ')[0], year = m.month.slice(0, 4);
+      const label = `${name}${year < todayISO.slice(0, 4) ? ` ${year}` : ''}: ${m.wears ? `${plural(m.wears, 'wear')}, ${plural(m.bottles, 'bottle')}` : 'nothing logged'}`;
+      return `<li title="${esc(label)}"><span class="visually-hidden">${esc(label)}</span><b aria-hidden="true">${m.wears || ''}</b><span class="month-bar" aria-hidden="true"><span style="height:${((m.wears / most1) * 100).toFixed(0)}%"></span></span><small aria-hidden="true">${esc(name[0])}<span>${esc(name.slice(1))}</span></small></li>`;
     }).join('')}</ul></section>`
     : '';
   const spans = segHTML(SPANS.map(s => ({ value: s.days, label: s.label, on: s.days === span })), { action: 'journal-span', label: 'Look back', cls: 'journal-span' });
@@ -1246,8 +1252,9 @@ export const actions = {
   'journal-span'(el, app) {
     setWornSpan(Number(el.dataset.value));
     app.keepingFocus(el, '#app', app.renderPage);
-    const { stats, span } = wornData();
-    app.announce(`${spanOf(span).title}: ${stats.wears ? `${plural(stats.wears, 'wear')}, ${plural(stats.bottles, 'bottle')}` : 'nothing logged'}.`);
+    const { days, title } = spanOf(state.wornSpan);
+    const { wears, bottles } = journalStats(state.history, wornToday(), days);
+    app.announce(`${title}: ${wears ? `${plural(wears, 'wear')}, ${plural(bottles, 'bottle')}` : 'nothing logged'}.`);
   },
   // Earlier and Later turn Worn's calendar a page (five weeks) through the
   // journal, as far back as its first wear and never ahead of today's page.
@@ -1261,7 +1268,7 @@ export const actions = {
     const held = document.activeElement === el;
     app.keepingFocus(el, '#app', app.renderPage);
     if (held && !document.activeElement?.closest?.('.cal-pager')) document.querySelector('#main .cal-pager button:not(:disabled)')?.focus({ preventScroll: true });
-    app.announce(calendarSaid(wornData().calendar, today));
+    app.announce(calendarSaid(calendarPage(state.history, today, wornPage), today));
   },
   'journal-clear'(el, app) {
     if (state.armed !== 'journal-clear') {

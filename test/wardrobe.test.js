@@ -284,6 +284,10 @@ test('the calendar pages back five weeks at a time, to the journal’s first wea
   assert.equal(wardrobe.calendarRange(before, today), 'Sep 6 – Oct 10');
   assert.equal(wardrobe.calendarRange(now, today), 'Oct 11 – Nov 9');
   assert.equal(wardrobe.calendarRange([], today), '');
+  // A year back the months come round again, so a page that ends in an earlier year says so.
+  const old = [wear('1', '2025-11-10')];
+  assert.equal(wardrobe.calendarRange(wardrobe.calendarPage(old, today, 10), today), 'Oct 26 – Nov 29, 2025');
+  assert.equal(wardrobe.calendarRange(wardrobe.calendarPage(old, today, 9), today), 'Nov 30 – Jan 3', 'into this year: no need');
   assert.equal(wardrobe.calendarSaid(before, today), 'Calendar, Sep 6 – Oct 10: 2 wears logged.');
   assert.equal(wardrobe.calendarSaid(wardrobe.calendarPage(history, today, 2), today), 'Calendar, Aug 2 – Sep 5: nothing logged.');
 });
@@ -329,13 +333,16 @@ test('the span chosen heads the card, and a longer one lists more bottles and it
   assert.deepEqual([pressed(quarter), rows(quarter)], [[['90', '90 days']], 6]);
   assert.match(quarter, /<section aria-labelledby="worn-months-title"><h3 id="worn-months-title">By month<\/h3><ul class="month-bars">/);
   // Each bar says its month, wears and distinct bottles; the tallest is the busiest month.
-  assert.match(quarter, /<li title="Oct: 40 wears, 9 bottles"><span class="visually-hidden">Oct: 40 wears, 9 bottles<\/span><b aria-hidden="true">40<\/b><span class="month-bar" aria-hidden="true"><span style="height:100%"><\/span><\/span><small aria-hidden="true">Oct<\/small><\/li>/);
+  assert.match(quarter, /<li title="Oct: 40 wears, 9 bottles"><span class="visually-hidden">Oct: 40 wears, 9 bottles<\/span><b aria-hidden="true">40<\/b><span class="month-bar" aria-hidden="true"><span style="height:100%"><\/span><\/span><small aria-hidden="true">O<span>ct<\/span><\/small><\/li>/);
   assert.match(quarter, /<li title="Sep: 20 wears, 6 bottles">.*?style="height:50%"/);
   assert.match(quarter, /<li title="Nov: 1 wear, 1 bottle">/);
   assert.match(quarter, /<li title="Aug: nothing logged"><span class="visually-hidden">Aug: nothing logged<\/span><b aria-hidden="true"><\/b>.*?style="height:0%"/);
   assert.ok(quarter.indexOf('class="stat-tiles"') < quarter.indexOf('By month') && quarter.indexOf('By month') < quarter.indexOf('worn-cal-title'), 'between the tiles and the calendar');
 
-  const year = worn(365, months);
+  // A year's has two Novembers: last year's says so, and thirteen bars go by initials on a phone (.long).
+  const year = worn(365, [{ month: '2025-11', wears: 2, bottles: 1 }, ...Array.from({ length: 8 }, (_, i) => ({ month: `2026-0${i + 1}`, wears: 0, bottles: 0 })), ...months]);
+  assert.match(year, /<ul class="month-bars long"><li title="Nov 2025: 2 wears, 1 bottle">.*<li title="Nov: 1 wear, 1 bottle">/s);
+  assert.match(quarter, /<ul class="month-bars">/);
   assert.match(year, /<h2 id="journal-title">Last 12 months<\/h2>/);
   assert.deepEqual([pressed(year), rows(year)], [[['365', 'Year']], 8]);
   // Gathering dust stays about rotation: the last 30 days, whatever the span.
