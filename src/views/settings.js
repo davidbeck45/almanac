@@ -97,8 +97,8 @@ export function settingsHTML({ loc, units, themeName, stillSky = false, deviceSt
       ${row(`<a class="set-link" href="#/wardrobe/owned">${on} of ${plural(total, 'bottle')} in rotation</a>`, `<button class="btn tertiary compact" data-action="share" ${on ? '' : 'disabled'}>${icon.share}Share</button>`)}
     `)}
     ${group('Wear journal', `
-      ${row(`<a class="set-link" href="#/wardrobe/worn">${plural(wears, 'wear')} logged</a>`, `<button class="btn tertiary compact" data-action="journal-export">${icon.download}Export</button>`, { note: 'On this device only. Export saves it all as a file.' })}
-      ${row('Restore from a file', `<button class="btn tertiary compact" data-action="restore-pick" aria-describedby="restore-note">Choose file</button><input type="file" id="restore-file" data-field="restore-file" accept=".json,application/json" hidden>`, { note: 'An export from this or another device', noteId: 'restore-note' })}
+      ${row(`<a class="set-link" href="#/wardrobe/worn">${plural(wears, 'wear')} logged</a>`, `<button class="btn tertiary compact" data-action="journal-export">${icon.download}Export</button>`, { note: 'On this device only' })}
+      ${row('Restore from a file', `<button class="btn tertiary compact" data-action="restore-pick" aria-describedby="restore-note">Choose file</button><input type="file" id="restore-file" data-field="restore-file" accept=".json,application/json" hidden>`, { note: 'One that Export saved', noteId: 'restore-note' })}
       ${restoreHTML(restore ?? {})}
       ${row('For Claude’s picks', `<button class="btn tertiary compact" data-action="journal-claude">${icon.paste}Copy for Claude</button>`, { note: 'Recent wears and stars' })}
     `)}

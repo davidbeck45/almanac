@@ -318,7 +318,7 @@ export function mergeBackup(device, backup, { mode = 'add', fromISO = deviceDay(
 export function restoreText(counts, mode = 'add') {
   if (mode === 'replace') {
     const wears = counts.wears ? plural(counts.wears, 'wear') : 'no wears';
-    return `Replaced this device’s with the file’s: ${[wears, ...partsOf(counts)].join(', ')}.`;
+    return `Replaced what was on this device with the file’s: ${[wears, ...partsOf(counts)].join(', ')}.`;
   }
   const added = [
     counts.wears && plural(counts.wears, 'wear'),

@@ -163,7 +163,7 @@ test('replacing swaps this device’s for the file’s, store by store', () => {
   const { counts } = restoreBackup(readBackup(file), 'replace', { fromISO: FROM });
   const { 'scentcast.trip': trip, ...rest } = before;
   assert.deepEqual(snapshot(), rest);
-  assert.equal(restoreText(counts, 'replace'), 'Replaced this device’s with the file’s: 3 wears, 2 ratings, 1 bottle switched off, 2 plans, 2 wants, Mine: 2 bottles.');
+  assert.equal(restoreText(counts, 'replace'), 'Replaced what was on this device with the file’s: 3 wears, 2 ratings, 1 bottle switched off, 2 plans, 2 wants, Mine: 2 bottles.');
 });
 
 test('exports from before the backup restore what they hold and leave the rest', () => {
@@ -177,7 +177,7 @@ test('exports from before the backup restore what they hold and leave the rest',
   assert.deepEqual(backup.carries, ['history', 'hiding']);
   assert.deepEqual(backup.hiding, { hidden: ['300'], shown: [] }, 'Jake in the list was the default, not this device’s own hide');
   assert.equal(backupSummary(backup, { fromISO: FROM }), '1 wear on Aug 30, 1 bottle switched off.');
-  assert.equal(restoreText(restoreBackup(backup, 'replace', { fromISO: FROM }).counts, 'replace'), 'Replaced this device’s with the file’s: 1 wear, 1 bottle switched off.');
+  assert.equal(restoreText(restoreBackup(backup, 'replace', { fromISO: FROM }).counts, 'replace'), 'Replaced what was on this device with the file’s: 1 wear, 1 bottle switched off.');
   assert.deepEqual(loadHistory(), [{ id: '100', date: '2026-08-30', slot: 'night' }]);
   assert.deepEqual([...loadHidden().hidden], ['300']);
   assert.equal(loadSkin()['777'].rating, 1, 'ratings the file never carried stay');
@@ -237,4 +237,54 @@ test('a merge is pure, and the log keeps its cap', () => {
   assert.equal(counts.wears, 729, 'only the wears that fit are counted as added');
   assert.equal(stores.history[0].id, 'a');
   assert.equal(mergeBackup(device, backup, { mode: 'replace', fromISO: FROM }).counts.wears, 730);
+});
+
+test('a restore starts from what’s stored, so another tab’s wears stay, and a tab reads it all again', async () => {
+  fill();
+  const file = exported();
+  fresh();
+  const tab = await import('../src/app/state.js?backup=1');
+  const backup = readBackup(file); // this tab reads the file, and waits for an answer…
+  toggleWear('777', '2026-11-09', 'night'); // …while another logs two wears, one for a window the file has
+  toggleWear('888', '2026-11-08', 'night');
+  const { counts } = restoreBackup(backup, 'add', { fromISO: FROM });
+  assert.deepEqual(loadHistory().map(h => h.id), ['777', '300', '888', '100']);
+  assert.deepEqual([counts.wears, counts.kept], [2, 1]);
+  assert.deepEqual(tab.state.history, [], 'the tab as it was opened');
+  tab.reloadStored();
+  assert.equal(tab.state.history.length, 4);
+  assert.equal(tab.state.mine.name, 'Brooke');
+  assert.equal(tab.state.units, 'C');
+  assert.deepEqual(tab.state.likedStyles, ['skin', 'clean']);
+  assert.equal(tab.state.preferValue, false);
+  assert.ok(tab.hiddenIn(true).has('300') && !tab.hiddenIn(true).has('4310'));
+  // And what it saves next starts from there.
+  tab.setStillSky(false);
+  assert.equal(tab.loadPrefs().theme, 'gruvbox');
+});
+
+test('Settings shows what a file holds with both ways to restore it, then what happened', async () => {
+  const { restoreHTML, settingsHTML, actions, changes } = await import('../src/views/settings.js');
+  const page = s => settingsHTML({ loc: null, units: 'F', themeName: 'default', active: 'demo', mineCount: 0, shared: null, on: 1, total: 1, wears: 0, updated: '', stale: false, credits: '', ...s });
+  const journal = html => html.slice(html.indexOf('>Wear journal</h2>')).split('</section>')[0];
+  const plain = journal(page());
+  assert.match(plain, /data-action="restore-pick" aria-describedby="restore-note">Choose file<\/button><input type="file" id="restore-file" data-field="restore-file" accept="\.json,application\/json" hidden>/);
+  assert.match(plain, /<small id="restore-note">One that Export saved<\/small>/);
+  assert.ok(!plain.includes('set-restore"'), 'nothing under the row until a file is chosen');
+  assert.ok(!/data-action="journal-export"[^>]*disabled/.test(plain), 'an export is the whole device: wants and Mine without a wear still export');
+  const chosen = { name: 'almanac-journal-2026-11-09.json', summary: '212 wears from Jan 3 to Nov 9, 14 ratings.' };
+  const preview = journal(page({ restore: chosen }));
+  assert.match(preview, /role="group" aria-labelledby="restore-name"/);
+  assert.match(preview, /<strong id="restore-name">almanac-journal-2026-11-09\.json<\/strong><span>212 wears from Jan 3 to Nov 9, 14 ratings\.<\/span>/);
+  assert.deepEqual([...preview.matchAll(/data-action="(restore-(?:add|replace|cancel))">([^<]+)</g)].map(m => `${m[1]}: ${m[2]}`),
+    ['restore-add: Add to this device', 'restore-replace: Replace this device’s', 'restore-cancel: Not now']);
+  assert.match(restoreHTML({ ...chosen, armed: true }), /class="btn secondary compact danger" data-action="restore-replace">Press again to replace</);
+  const done = restoreHTML({ done: 'Added 174 wears and 9 ratings. 12 windows kept this device’s wear.' });
+  assert.match(done, /Added 174 wears and 9 ratings\. 12 windows kept this device’s wear\./);
+  assert.ok(!done.includes('data-action'), 'the choice is made');
+  assert.match(restoreHTML({ error: 'That file isn’t an Almanac export.' }), /<p class="error">That file isn’t an Almanac export\.<\/p>/);
+  assert.match(restoreHTML({ name: '<img src=x>', summary: '<b>' }), /&lt;img src=x&gt;.*&lt;b&gt;/s);
+  assert.equal(restoreHTML(), '');
+  for (const name of ['restore-pick', 'restore-add', 'restore-replace', 'restore-cancel']) assert.equal(typeof actions[name], 'function', name);
+  assert.equal(typeof changes['restore-file'], 'function');
 });
