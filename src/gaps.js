@@ -206,43 +206,62 @@ const allFooted = records => footedLists.get(records) ?? footedLists.set(records
  */
 export function fitTable(bottles, { cells, slotBands }) {
   const m = cells.length, out = new Float32Array(bottles.length * m);
-  const keys = [...new Set(cells.map(c => c.sb))];
-  const occasions = [...new Set(cells.map(c => c.occasion).filter(Boolean))];
-  const fit = new Map(), occ = new Map(), raw = new Map();
-  bottles.forEach((b, i) => {
-    const q = quality(b), personal = personalPart(b);
-    // The night lean (nightLean) moves an occasion's raw fit with the
-    // weather, so those occasions' parts are averaged per window, past the knee.
-    for (const o of occasions) { const r = occasionRaw(b, o); raw.set(o, r); occ.set(o, occasionPart(r, o)); }
-    const voted = { day: timeFit(b, 'day'), night: timeFit(b, 'night') };
-    for (const k of keys) {
-      const { wins, slot } = slotBands[k];
-      let season = 0, forgiven = 0, weather = 0, heat = 0, cold = 0;
+  const keys = [...new Set(cells.map(c => c.sb))], nk = keys.length;
+  const occasions = [...new Set(cells.map(c => c.occasion).filter(Boolean))], no = occasions.length;
+  // The pool's table is 9,600 bottles × 55 cells, so one bottle's parts sit
+  // in arrays made once (by slot × band, by occasion) and each cell reads
+  // them by index: a Map and an object a cell were a fifth of the work.
+  const season = new Float64Array(nk), time = new Float64Array(nk), weather = new Float64Array(nk), heat = new Float64Array(nk), cold = new Float64Array(nk);
+  const raw = new Float64Array(no), occ = new Float64Array(no), night = new Float64Array(nk * no);
+  const bands = keys.map(k => slotBands[k]);
+  // The night lean (nightLean) moves an occasion's raw fit with the
+  // weather, so those occasions' parts are averaged per window, past the knee.
+  const leans = bands.map(({ slot }) => occasions.map(o => Boolean(o.night) && slot === 'night'));
+  const keyOf = cells.map(c => keys.indexOf(c.sb)), occOf = cells.map(c => (c.occasion ? occasions.indexOf(c.occasion) : -1));
+  const parts = { season: 0, time: 0, weather: 0, quality: 0, occasion: null, heat: 0, cold: 0, personal: 0 };
+  for (let i = 0; i < bottles.length; i++) {
+    const b = bottles[i];
+    parts.quality = quality(b);
+    parts.personal = personalPart(b);
+    for (let x = 0; x < no; x++) {
+      raw[x] = occasionRaw(b, occasions[x]);
+      occ[x] = occasionPart(raw[x], occasions[x]);
+    }
+    const votedDay = timeFit(b, 'day'), votedNight = timeFit(b, 'night');
+    for (let k = 0; k < nk; k++) {
+      const { wins, slot } = bands[k], n = wins.length;
+      let seasons = 0, forgiven = 0, weathers = 0, heats = 0, colds = 0;
       for (const w of wins) {
-        season += seasonFit(b, w.weights);
+        seasons += seasonFit(b, w.weights);
         forgiven += timeForgiven(b, slot, w.cond);
-        weather += weatherFit(b, w.cond);
-        heat += richInHeat(b, w.cond);
-        cold += thinInCold(b, w.cond);
+        weathers += weatherFit(b, w.cond);
+        heats += richInHeat(b, w.cond);
+        colds += thinInCold(b, w.cond);
       }
-      const time = voted[slot] + (1 - voted[slot]) * forgiven / wins.length;
-      const night = new Map();
-      for (const o of occasions) {
-        if (!o.night || slot !== 'night') continue;
+      const voted = slot === 'day' ? votedDay : votedNight;
+      season[k] = seasons / n;
+      time[k] = voted + (1 - voted) * forgiven / n;
+      weather[k] = weathers / n;
+      heat[k] = heats / n;
+      cold[k] = colds / n;
+      for (let x = 0; x < no; x++) {
+        if (!leans[k][x]) continue;
         let sum = 0;
-        const r = raw.get(o);
-        for (const w of wins) sum += occasionPart(r + nightLean(b, o, slot, w.cond), o);
-        night.set(o, sum / wins.length);
+        for (const w of wins) sum += occasionPart(raw[x] + nightLean(b, occasions[x], slot, w.cond), occasions[x]);
+        night[k * no + x] = sum / n;
       }
-      fit.set(k, [season / wins.length, time, weather / wins.length, heat / wins.length, cold / wins.length, night]);
     }
     for (let j = 0; j < m; j++) {
-      const c = cells[j], [season, time, weather, heat, cold, night] = fit.get(c.sb);
-      const occasion = c.occasion ? (night.get(c.occasion) ?? occ.get(c.occasion)) : null;
-      const parts = { season, time, weather, quality: q, occasion, heat, cold, personal };
-      out[i * m + j] = scoreOf(parts, c.occasion);
+      const k = keyOf[j], x = occOf[j];
+      parts.season = season[k];
+      parts.time = time[k];
+      parts.weather = weather[k];
+      parts.heat = heat[k];
+      parts.cold = cold[k];
+      parts.occasion = x < 0 ? null : leans[k][x] ? night[k * no + x] : occ[x];
+      out[i * m + j] = scoreOf(parts, cells[j].occasion);
     }
-  });
+  }
   return out;
 }
 

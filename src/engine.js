@@ -512,6 +512,17 @@ const PERFORMANCE_REASON = 0.1;
  * styles, filters, Compare), so they stand on the same evidence.
  */
 export function performanceRating(frag) {
+  const known = rated.get(frag);
+  if (known !== undefined) return known;
+  const rating = readPerformance(frag);
+  rated.set(frag, rating);
+  return rating;
+}
+// Remembered per record, as steadyShares is (a record never changes its
+// votes): an occasion's fit reads it for longevity and again for sillage,
+// and the gap finder asks seven occasions' of every bottle in the pool.
+const rated = new WeakMap();
+function readPerformance(frag) {
   const pf = frag.parfumo?.votes > 0 ? frag.parfumo : null, fv = frag.performance?.votes > 0 ? frag.performance : null;
   if (!pf && !fv) return null;
   const out = { votes: {}, parfumoShare: {} };
@@ -604,10 +615,13 @@ export function votedOccasionFit(frag, occasion) {
 
 /** How well a bottle's accords suit the occasion: their profile values, weighted by strength. */
 export function accordFit(frag, occasion) {
+  const { accords } = frag, { profile } = occasion;
   let sum = 0, total = 0;
-  for (const [a, s] of Object.entries(frag.accords)) {
+  // By key, in Object.entries' order: the gap finder asks this of every pool bottle for every occasion.
+  for (const a of Object.keys(accords)) {
+    const s = accords[a];
     total += s;
-    sum += s * (occasion.profile[a] ?? 0);
+    sum += s * (profile[a] ?? 0);
   }
   return total ? sum / total : 0;
 }
