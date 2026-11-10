@@ -33,6 +33,7 @@ export function loadPrefs() {
 
 // The prefs as this tab holds them, in the shape they're stored.
 const prefsHeld = () => ({
+  ownedSort: state.ownedSort === 'brand' ? undefined : state.ownedSort,
   occasion: state.occasion, units: state.units, theme: savedTheme ?? undefined, preferValue: state.preferValue, likedStyles: state.likedStyles,
   stillSky: state.stillSky || undefined,
 });
@@ -55,6 +56,7 @@ export function savePrefs() {
 // tab saves them (reloadStored).
 function fromPrefs(prefs) {
   return {
+    ownedSort: typeof prefs.ownedSort === 'string' ? prefs.ownedSort : 'brand',
     units: prefs.units === 'C' || prefs.units === 'F' ? prefs.units : defaultUnits(),
     occasion: prefs.occasion ?? 'casual',
     preferValue: typeof prefs.preferValue === 'boolean' ? prefs.preferValue : null,
@@ -98,6 +100,7 @@ export const state = {
   from: null, // the route before the page under it last changed (a bottle page: the compare page's Back goes there)
   units: stored.units,
   occasion: stored.occasion,
+  ownedSort: stored.ownedSort, // Wardrobe › Owned's order, an id of its OWNED_SORTS (a pref; one it doesn't know reads as 'brand')
   occasionSlot: null,
   slot: null, // the window picked with Now's Day/Night toggle, { slot, dateISO }; null = the next one
   history: loadHistory(),
