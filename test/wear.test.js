@@ -1078,7 +1078,7 @@ test('a night planned for a date: Now and the Week plan around it, say what for,
     assert.match(now, /<span class="event-tag">.*<span>For a date<\/span><\/span><button class="link-btn" data-action="event-clear" data-date="[\d-]+" data-slot="night">Clear<span class="visually-hidden">: (Tonight|Tomorrow night) isn’t for a date<\/span><\/button>/s);
     const board = wear.weekHTML(days);
     assert.equal((board.match(/class="wk-mark wk-event"/g) ?? []).length, 2);
-    assert.match(board, /aria-label="[^"]+ night: [^"]+, for formal wear"/);
+    assert.match(board, /aria-label="[^"]+ night: [^"]+, for formal wear[",]/);
     assert.match(board, /What you planned gets its best bottle/);
     // A wear logged from tonight's card counts for a date.
     const ui = { keepingFocus() {}, render() {} };
@@ -1723,7 +1723,7 @@ test('a plan link shows what it would plan, in the plan’s words, and plans not
     assert.match(toasts.at(-1), /^<span class="note">Planned formal wear (on \w+day night|tomorrow night) and the office on \w+day\.<\/span>$/);
     const board = pane.render({}, state.base);
     assert.ok(!board.includes('plan-link'));
-    assert.match(board, /aria-label="[^"]+ night: [^"]+, for formal wear"/, 'the Week plans around it');
+    assert.match(board, /aria-label="[^"]+ night: [^"]+, for formal wear[",]/, 'the Week plans around it');
 
     // Answered with a bottle page docked beside the Week: Back onto the
     // Week's entry, which still has the plan, doesn't ask again, and the
