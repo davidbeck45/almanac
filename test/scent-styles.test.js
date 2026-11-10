@@ -131,9 +131,17 @@ test('scoring is fast enough to run over the dataset', async () => {
   const records = [...(await library.records(ids)).values()];
   assert.ok(records.length > 1000);
   styleScores(records[0]);
-  const start = performance.now();
-  for (const r of records) styleScores(r);
-  const perRecord = (performance.now() - start) / records.length;
+  // The processor's time, not the clock's, and the best of three passes: on
+  // a machine busy with other work (several suites at once) the loop waits
+  // its turn, which only ever adds time; by the clock the same scoring ran
+  // over the bound.
+  const pass = () => {
+    const start = process.cpuUsage();
+    for (const r of records) styleScores(r);
+    const { user, system } = process.cpuUsage(start);
+    return (user + system) / 1000 / records.length;
+  };
+  const perRecord = Math.min(pass(), pass(), pass());
   // About 10 µs in Node on a laptop; a generous bound for slow machines.
   assert.ok(perRecord < 0.1, `${(perRecord * 1000).toFixed(1)} µs per record`);
 });
