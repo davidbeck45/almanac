@@ -203,7 +203,8 @@ async function main() {
   let moved = null;
   if (args.against) {
     const before = JSON.parse(readFileSync(args.against, 'utf8'));
-    moved = [...new Set([...Object.keys(before), ...Object.keys(answers)])].filter(key => !isDeepStrictEqual(before[key], answers[key]));
+    // The answers this run asked for (--quick asks fewer than the file may hold).
+    moved = Object.keys(answers).filter(key => !isDeepStrictEqual(before[key], answers[key]));
     console.log(moved.length ? `ANSWERS MOVED (${moved.length} of ${Object.keys(answers).length}):\n  ${moved.join('\n  ')}`
       : `All ${Object.keys(answers).length} answers are deep-equal to ${args.against}`);
   }

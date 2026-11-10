@@ -288,7 +288,7 @@ const nextTurn = () => new Promise(resolve => setTimeout(resolve, 0));
  * gapContext's pool table for `records` (the pool's) in a climate, worked
  * out ahead of time in slices of `chunk` bottles, pausing between them so a
  * Worker answers other questions meanwhile: the first report or buy check
- * then finds it done (about 230 ms of a 340 ms context in Node). Stops when
+ * then finds it done (about 170 ms of a 250 ms context in Node). Stops when
  * one already is, and never pushes out the table of the climate asked about
  * last. -> the table.
  */

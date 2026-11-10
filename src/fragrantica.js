@@ -87,9 +87,6 @@ export function noteVotesOf(weights) {
 
 /** One row of data/fragrantica/r/*.json -> engine record (same shape as data/collection.json). */
 export function fromFragrantica(id, row) {
-  // Written out key by key, in the order Object.entries gives them: this
-  // makes every one of the pool's records, and the arrays of pairs it went
-  // through before were a third of that.
   const accords = {};
   for (const a of Object.keys(row.a)) accords[a] = barWidth(row.a[a]);
   const notes = {}, weights = {};
@@ -150,10 +147,11 @@ const pooled = new WeakMap();
 
 /**
  * Bottle `i` of the suggestion pool (data/fragrantica/pool.json, from
- * loadPool) -> engine record. It goes through fromFragrantica, so it scores as
- * the bottle's r/ row would (rating, Fragrantica longevity/sillage and the
- * smells-like shares are rounded to 2 decimals, the longevity and sillage
- * vote counts to 2 significant digits). Its signals ride along as
+ * loadPool) -> engine record. recordOf makes it, as it makes an r/ row's
+ * (fromFragrantica), so it scores as the bottle's r/ row would (rating,
+ * Fragrantica longevity/sillage and the smells-like shares are rounded to 2
+ * decimals, the longevity and sillage vote counts to 2 significant digits).
+ * Its signals ride along as
  * `extras` (see scripts/decant.py); its 8 strongest notes too, when
  * pool-notes.json loaded, with their votes in tenths of the top note's as
  * the r/ row reads them (noteVotesOf), worked out from its whole pyramid.
