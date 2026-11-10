@@ -231,12 +231,20 @@ export function allow(record, ctx) {
 
 /** The pool's medians, which quality is measured against: { rating, keep, value }. */
 export function poolNorms(records) {
-  return {
-    rating: median(records.map(r => r.rating)),
-    keep: median(records.map(r => signalsOf(r).keep)),
-    value: median(records.map(r => signalsOf(r).value)),
-  };
+  let norms = normsOf.get(records);
+  if (!norms) {
+    norms = {
+      rating: median(records.map(r => r.rating)),
+      keep: median(records.map(r => signalsOf(r).keep)),
+      value: median(records.map(r => signalsOf(r).value)),
+    };
+    normsOf.set(records, norms);
+  }
+  return norms;
 }
+// Kept per list of records (the pool's never changes): the gap finder's
+// context and Discover's each ask, and a buy check makes both.
+const normsOf = new WeakMap();
 
 /** reach's multiplier on a candidate's worth: 1 from REACH_FULL (and unknown), 1 - REACH_DAMP at none. */
 export const reachMult = reach => (reach == null ? 1 : 1 - REACH_DAMP * clamp((REACH_FULL - reach) / REACH_FULL, [0, 1]));
