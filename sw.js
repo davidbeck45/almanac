@@ -110,6 +110,7 @@ const SHELL = [
   'src/gaps.js',
   'src/hidden.js',
   'src/history.js',
+  'src/backup.js',
   'src/layering.js',
   'src/location.js',
   'src/occasions.js',

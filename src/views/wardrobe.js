@@ -9,6 +9,7 @@ import { setHidden } from '../hidden.js';
 import { saveMine, shareURL, localMatches, nameMatches, importLines, MAX_IMPORT_LINES } from '../collections.js';
 import { customRecord, MAX_CUSTOM_ACCORDS } from '../custom.js';
 import { clearHistory, journalExport, journalToken, journalStats, toggleWear, wornIn, shiftISO, loadHistory } from '../history.js';
+import { backupExport, deviceStores } from '../backup.js';
 import { loadSkin } from '../skin.js';
 import { placeClock } from '../weather.js';
 import { esc, plural, shortDate, weekdayShort, relativeDay, accordLabel, toastName } from '../ui.js';
@@ -1158,7 +1159,7 @@ export const actions = {
   },
   // With your own ratings and skin nudges (src/skin.js) and the plans made at home (src/events.js), for journal-check.
   'journal-export'() {
-    const data = journalExport(state.history, state.loc, hiddenIn(true), { skin: loadSkin(), events: state.events });
+    const data = backupExport(journalExport(state.history, state.loc, hiddenIn(true), { skin: loadSkin(), events: state.events }), deviceStores());
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
     // Named by the device's date: an evening export in the Americas is already tomorrow in UTC.

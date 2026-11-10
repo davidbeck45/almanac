@@ -22,13 +22,13 @@ Live at **https://davidbeck45.github.io/almanac/**. It opens on my wardrobe; add
 
 **Bottle page**: every bottle has one. Why it ranks where it does, how much to spray and where, what to layer it with and which to spray first, its style, what smells like it (its original, cheaper twins), what voters say (value for money, how many owners keep it, how safe a blind buy it is, how its ratings spread) and Fragrantica members' pros and cons, its accords, seasons and notes. Rate your own bottles and say whether they last or project more on your skin; the picks follow. For a bottle you don't own, a verdict on how it would fit your wardrobe. **Compare** puts two or three side by side and says which to wear tonight.
 
-**Settings**: your place, °F or °C, two themes, a still sky, which list is ranked, and the journal export.
+**Settings**: your place, °F or °C, two themes, a still sky, which list is ranked, and the journal. Export saves everything you've added on this device as one file (wears, ratings, plans, wants, your own list and settings), and Restore from a file reads one back: it says what's in the file first, then adds what this device doesn't have or replaces what it has.
 
 Picks come from Fragrantica's community votes (seasons, day or night, and those of the bottles voters say it smells like), each bottle's main accords against the temperature and how sticky the air is, the occasion's accord profile, and for some occasions how long it lasts and how far it projects, by Parfumo's and Fragrantica's votes, each counted by how many there are.
 
 ## Privacy
 
-There's no account and no tracking. What you add stays in your browser's storage on this device: your bottles, wishlist, wear journal, ratings, planned occasions, settings and recent places. The journal leaves only when you export it or copy it for Claude.
+There's no account and no tracking. What you add stays in your browser's storage on this device: your bottles, wishlist, wear journal, ratings, planned occasions, settings and recent places. It leaves only when you export it or copy the journal for Claude. An export is a file you keep: Settings restores it on a new phone, or after the browser's data is cleared.
 
 The app is static files on GitHub Pages. Beyond them it talks to:
 - **Open-Meteo**, for the weather: the coordinates of the places you ask about (your device's location rounded to about 100 m, or a city you picked) for their forecast, and with a date for a trip or an occasion past the forecast, for typical weather; your place to half a degree for Insights' climate; and the city names you search.

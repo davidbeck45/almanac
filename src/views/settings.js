@@ -1,12 +1,14 @@
 // Settings (#/settings, behind the gear): location, units, theme, which list
 // is ranked and sharing it, the journal's export and Copy for Claude (its
-// handlers are Worn's, src/views/wardrobe.js), and where the data comes
-// from. Also the location sheet. Styles: src/css/shell.css (.set-*).
+// handlers are Worn's, src/views/wardrobe.js), restoring an export
+// (src/backup.js), and where the data comes from. Also the location sheet.
+// Styles: src/css/shell.css (.set-*).
 import { loadRecent, deviceLocation, searchCities } from '../location.js';
 import { theme } from '../theme.js';
 import { esc, plural, setUnits, shortDate } from '../ui.js';
 import { icon, segHTML, sheetFrame, switchHTML } from '../ui/components.js';
-import { state, savePrefs, activeFragrances, sourceRecords, setStillSky, chooseTheme } from '../app/state.js';
+import { state, savePrefs, activeFragrances, sourceRecords, setStillSky, chooseTheme, reloadStored } from '../app/state.js';
+import { readBackup, backupSummary, backupEmpty, restoreBackup, restoreText } from '../backup.js';
 import { samePlace, placesStatus } from './wear/pickers.js';
 
 // "Oct 14" as every date in the app reads, with the year when it isn't this one.
@@ -56,8 +58,28 @@ export function updatedText(fetchedAt, now = new Date()) {
   return at.toLocaleString([], { ...(!sameDay && { weekday: 'short' }), hour: 'numeric', minute: '2-digit' });
 }
 
+// Restore from a file, under the journal's rows: what a file read holds
+// before anything changes, with the two ways to restore it (Replace asks
+// twice, `armed`), else what the last restore did (`done`) or why a file
+// didn't read (`error`).
+export function restoreHTML({ name = '', summary = '', error = '', done = '', armed = false } = {}) {
+  if (error) return `<div class="set-restore"><p class="error">${esc(error)}</p></div>`;
+  if (done) return `<div class="set-restore"><p class="set-restore-done">${icon.check}<span>${esc(done)}</span></p></div>`;
+  if (!summary) return '';
+  return `<div class="set-restore" role="group" aria-labelledby="restore-name">
+      <p class="set-restore-file"><strong id="restore-name">${esc(name || 'The file')}</strong><span>${esc(summary)}</span></p>
+      <p class="set-restore-how">Add brings in what this device doesn’t have and keeps its own wherever both have one. Replace swaps what’s on this device for what’s in the file.</p>
+      <div class="set-restore-actions">
+        <button class="btn primary compact" data-action="restore-add">Add to this device</button>
+        <button class="btn secondary compact${armed ? ' danger' : ''}" data-action="restore-replace">${armed ? 'Press again to replace' : 'Replace this device’s'}</button>
+        <button class="btn tertiary compact" data-action="restore-cancel">Not now</button>
+      </div>
+    </div>`;
+}
+
 // `stale`: a saved forecast standing in, `offline` when the network was why.
-export function settingsHTML({ loc, units, themeName, stillSky = false, deviceStill = false, active, mineCount, shared, on, total, wears, updated, stale, offline = false, credits }) {
+// `restore`: restoreHTML's state, when a file was chosen.
+export function settingsHTML({ loc, units, themeName, stillSky = false, deviceStill = false, active, mineCount, shared, on, total, wears, updated, stale, offline = false, credits, restore = null }) {
   const age = !updated ? '' : !stale ? `Updated ${esc(updated)}` : offline ? `Offline · Updated ${esc(updated)}` : `Not updated since ${esc(updated)}`;
   return `
     ${group('Weather', `
@@ -75,15 +97,38 @@ export function settingsHTML({ loc, units, themeName, stillSky = false, deviceSt
       ${row(`<a class="set-link" href="#/wardrobe/owned">${on} of ${plural(total, 'bottle')} in rotation</a>`, `<button class="btn tertiary compact" data-action="share" ${on ? '' : 'disabled'}>${icon.share}Share</button>`)}
     `)}
     ${group('Wear journal', `
-      ${row(`<a class="set-link" href="#/wardrobe/worn">${plural(wears, 'wear')} logged</a>`, `<button class="btn tertiary compact" data-action="journal-export" ${wears ? '' : 'disabled'}>${icon.download}Export</button>`, { note: 'Stays on this device' })}
+      ${row(`<a class="set-link" href="#/wardrobe/worn">${plural(wears, 'wear')} logged</a>`, `<button class="btn tertiary compact" data-action="journal-export">${icon.download}Export</button>`, { note: 'On this device only' })}
+      ${row('Restore from a file', `<button class="btn tertiary compact" data-action="restore-pick" aria-describedby="restore-note">Choose file</button><input type="file" id="restore-file" data-field="restore-file" accept=".json,application/json" hidden>`, { note: 'One that Export saved', noteId: 'restore-note' })}
+      ${restoreHTML(restore ?? {})}
       ${row('For Claude’s picks', `<button class="btn tertiary compact" data-action="journal-claude">${icon.paste}Copy for Claude</button>`, { note: 'Recent wears and stars' })}
     `)}
     ${group('About', `<p class="set-credits">${credits}</p><p class="set-credits">Almanac picks from your own bottles with the weather, time of day and occasion. Everything you add stays on this device.</p>`)}`;
 }
 
+// A file chosen to restore: { route, name, backup, summary, error, done }.
+// It belongs to the visit: leaving Settings drops it, as Not now does.
+let restore = null;
+const restoring = () => {
+  if (restore && restore.route !== state.route) restore = null;
+  return restore;
+};
+// The restore's place on the page said and shown: drawn, focus on Choose
+// file (the buttons a restore answers are gone once it's done), and the
+// sentence in the live region.
+function showRestore(app, next, said) {
+  restore = next && { ...next, route: state.route };
+  state.armed = null;
+  app.render();
+  document.querySelector('#main [data-action="restore-pick"]')?.focus({ preventScroll: true });
+  document.querySelector('#main .set-restore')?.scrollIntoView({ block: 'nearest' });
+  if (said) app.announce(said);
+}
+
 function settingsPage() {
   const all = sourceRecords();
+  const chosen = restoring();
   return settingsHTML({
+    restore: chosen && { ...chosen, armed: state.armed === 'restore-replace' },
     loc: state.loc,
     units: state.units,
     themeName: theme(),
@@ -229,6 +274,75 @@ export const actions = {
     if (el.getAttribute('aria-disabled') === 'true') return;
     setStillSky(!state.stillSky);
     app.keepingFocus(el, '#app', app.render);
+  },
+  // Restore from a file: the device's own file picker, on the input beside
+  // the button (changes['restore-file'] reads what's chosen).
+  'restore-pick'() {
+    const input = document.getElementById('restore-file');
+    if (!input) return;
+    input.value = ''; // the same file chosen twice still reads
+    input.click();
+  },
+  'restore-add': (el, app) => runRestore(app, 'add'),
+  // Replacing can't be undone: it asks twice.
+  'restore-replace'(el, app) {
+    if (!restoring()?.backup) return;
+    if (state.armed !== 'restore-replace') {
+      state.armed = 'restore-replace';
+      app.keepingFocus(el, '#app', app.renderPage);
+      return app.announce('Press again to replace what’s on this device with what’s in the file.');
+    }
+    runRestore(app, 'replace');
+  },
+  'restore-cancel'(el, app) {
+    showRestore(app, null, 'Nothing restored.');
+  },
+};
+
+// Restores the file read (src/backup.js): each store starts from what's
+// stored now, so another tab's changes stay, then this tab reads it all
+// again and draws, as it does when another tab saves. The list ranked
+// follows the file's when the restore changed it.
+function runRestore(app, mode) {
+  const chosen = restoring();
+  if (!chosen?.backup) return;
+  const { counts, stores, saved, activeBefore } = restoreBackup(chosen.backup, mode);
+  reloadStored();
+  if (!saved) {
+    // The browser didn't keep it all: what's in is in, and adding the file again finishes it.
+    const error = 'This browser couldn’t save all of it: its storage is full or blocked, so the restore is incomplete. Free some space, then choose the file again and add it.';
+    return showRestore(app, { error }, error);
+  }
+  if (stores.active && stores.active !== activeBefore && stores.active !== state.active) app.setActive(stores.active);
+  const done = restoreText(counts, mode);
+  showRestore(app, { done }, done);
+}
+
+// A file over this size isn't an export (a year of wears with every bottle
+// of a big Mine is under a megabyte), and reading it would stall the page.
+const MAX_BACKUP_BYTES = 12_000_000;
+const NOT_EXPORT = 'That file isn’t an Almanac export. Choose the almanac-journal file that Export saved. Nothing on this device changed.';
+
+export const changes = {
+  // A file chosen: read it and show what's in it. Nothing changes until
+  // Add or Replace; a file that doesn't read says why.
+  async 'restore-file'(el, app) {
+    const file = el.files?.[0];
+    if (!file) return;
+    const route = state.route;
+    let next;
+    try {
+      if (file.size > MAX_BACKUP_BYTES) throw new Error(NOT_EXPORT);
+      let text;
+      try { text = await file.text(); } catch { throw new Error('That file couldn’t be read. Try choosing it again. Nothing on this device changed.'); }
+      const backup = readBackup(text);
+      if (backupEmpty(backup)) throw new Error('That export is empty: no wears, ratings, plans, wants or bottles in it. Nothing on this device changed.');
+      next = { name: file.name, backup, summary: backupSummary(backup) };
+    } catch (err) {
+      next = { error: err.message };
+    }
+    if (state.route !== route) return; // left Settings while it read
+    showRestore(app, next, next.error ?? `${next.name}: ${next.summary} Choose Add to this device or Replace this device’s.`);
   },
 };
 
