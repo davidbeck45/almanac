@@ -11,7 +11,7 @@ import { ACCORDS } from '../src/accords.js';
 import { insightsSkeletonHTML } from '../src/views/wardrobe/insights.js';
 import { wishlistHTML } from '../src/views/wardrobe/wishlist.js';
 import { liveHTML } from '../src/views/wardrobe/parts.js';
-import { state } from '../src/app/state.js';
+import { state, setWornSpan, loadPrefs } from '../src/app/state.js';
 
 const bottle = (id, name, brand) => ({ id, name, brand, accords: { woody: 80 } });
 const aventus = bottle('9828', 'Aventus', 'Creed');
@@ -216,7 +216,9 @@ test('the calendar’s days gone by and today open the log sheet; days ahead don
   assert.match(html, /class="cal-cell today" data-action="journal-log" data-date="2026-11-02" title="Today, Nov 2: nothing logged" tabindex="0" aria-current="date">/);
   assert.match(html, /<span class="cal-cell future" title="Nov 3">/);
   assert.ok(!html.includes('data-date="2026-11-03"'), 'a day ahead can’t be worn yet');
-  assert.match(html, /<h3>Calendar<\/h3><p class="muted small cal-hint">Choose a day to log a wear you didn’t at the time\.<\/p>/);
+  // Its heading says the days on the page, up to today.
+  assert.match(html, /<h3 id="worn-cal-title">Calendar<small class="cal-range"><span class="visually-hidden">, <\/span>Oct 31 – Nov 2<\/small><\/h3><\/header>\s*<p class="muted small cal-hint">Choose a day to log a wear you didn’t at the time\.<\/p>/);
+  assert.ok(!html.includes('journal-page'), 'a journal all on one page has no Earlier or Later');
   // An empty journal offers one too, for today.
   const empty = wardrobe.wornHTML({ stats: { wears: 0, bottles: 0, top: [], lastWorn: new Map() }, calendar: [], dusty: [], todayISO: '2026-11-02' }, () => null);
   assert.match(empty, /data-action="journal-log" data-date="2026-11-02">.*Log a wear<\/button>/s);
@@ -253,6 +255,133 @@ test('the calendar keeps one tab stop, on the day focus came back to', () => {
   assert.deepEqual(stops(), ['2026-10-31']);
   wardrobe.calendarStop(days, days[0]);
   assert.deepEqual(stops(), ['2026-10-30']);
+});
+
+// Monday, Nov 9, 2026: today's page runs Sun, Oct 11 to Sat, Nov 14.
+const wear = (id, date, slot = 'day') => ({ id, date, slot });
+
+test('the calendar pages back five weeks at a time, to the journal’s first wear and at most a year', () => {
+  const today = '2026-11-09';
+  assert.equal(wardrobe.calendarPages([], today), 0);
+  assert.equal(wardrobe.calendarPages([wear('1', '2026-11-09'), wear('1', '2026-10-11')], today), 0, 'every wear on today’s page');
+  assert.equal(wardrobe.calendarPages([wear('1', '2026-10-10')], today), 1, 'the Saturday before it');
+  assert.equal(wardrobe.calendarPages([wear('1', '2026-09-06')], today), 1);
+  assert.equal(wardrobe.calendarPages([wear('1', '2026-09-05')], today), 2);
+  assert.equal(wardrobe.calendarPages([wear('1', '2026-11-12')], today), 0, 'a wear dated ahead opens nothing');
+  // Nov 10, 2025 is the first of the 365 days kept: ten pages back, however old the log.
+  assert.equal(wardrobe.calendarPages([wear('1', '2025-11-10')], today), 10);
+  assert.equal(wardrobe.calendarPages([wear('1', '2024-03-01')], today), 10);
+
+  const history = [wear('1', '2026-11-09'), wear('2', '2026-10-10', 'night'), wear('1', '2026-09-06')];
+  const now = wardrobe.calendarPage(history, today, 0), before = wardrobe.calendarPage(history, today, 1);
+  assert.deepEqual([now.length, now[0].length, now[0][0].dateISO, now.at(-1).at(-1).dateISO], [5, 7, '2026-10-11', '2026-11-14']);
+  assert.deepEqual(now.flat().filter(c => c.future).map(c => c.dateISO), ['2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14']);
+  assert.equal(now.flat().find(c => c.dateISO === today).day.id, '1');
+  assert.deepEqual([before[0][0].dateISO, before.at(-1).at(-1).dateISO], ['2026-09-06', '2026-10-10'], 'the five weeks before, none skipped or shown twice');
+  assert.ok(before.flat().every(c => !c.future));
+  assert.deepEqual([before[0][0].day.id, before.at(-1).at(-1).night.id], ['1', '2']);
+  // The page in words: its days, up to today on today's.
+  assert.equal(wardrobe.calendarRange(before, today), 'Sep 6 – Oct 10');
+  assert.equal(wardrobe.calendarRange(now, today), 'Oct 11 – Nov 9');
+  assert.equal(wardrobe.calendarRange([], today), '');
+  // A year back the months come round again, so a page that ends in an earlier year says so.
+  const old = [wear('1', '2025-11-10')];
+  assert.equal(wardrobe.calendarRange(wardrobe.calendarPage(old, today, 10), today), 'Oct 26 – Nov 29, 2025');
+  assert.equal(wardrobe.calendarRange(wardrobe.calendarPage(old, today, 9), today), 'Nov 30 – Jan 3', 'into this year: no need');
+  assert.equal(wardrobe.calendarSaid(before, today), 'Calendar, Sep 6 – Oct 10: 2 wears logged.');
+  assert.equal(wardrobe.calendarSaid(wardrobe.calendarPage(history, today, 2), today), 'Calendar, Aug 2 – Sep 5: nothing logged.');
+});
+
+test('an earlier page has Earlier and Later, one tab stop on its last day, and days that open the log sheet', () => {
+  const today = '2026-11-09';
+  const history = [wear(mango.id, '2026-09-20', 'night'), wear(mango.id, '2026-08-30')];
+  const stats = { wears: 0, bottles: 0, top: [], lastWorn: new Map([[mango.id, '2026-09-20']]) };
+  const worn = (page, pages = 2) => wardrobe.wornHTML({ stats, calendar: wardrobe.calendarPage(history, today, page), dusty: [], todayISO: today, page, pages }, id => (id === mango.id ? mango : null));
+  const turn = (html, to) => html.match(new RegExp(`<button class="btn secondary compact" data-action="journal-page" data-value="${to}"( disabled)?>`));
+  const mid = worn(1);
+  assert.match(mid, /<h3 id="worn-cal-title">Calendar<small class="cal-range"><span class="visually-hidden">, <\/span>Sep 6 – Oct 10<\/small><\/h3><div class="cal-pager" role="group" aria-label="Calendar pages">/);
+  assert.match(mid, /data-value="earlier">.*Earlier<\/button><button[^>]*data-value="later">Later/s);
+  assert.deepEqual([turn(mid, 'earlier')[1], turn(mid, 'later')[1]], [undefined, undefined], 'both ways open in the middle');
+  assert.equal((mid.match(/data-action="journal-log"/g) ?? []).length, 35, 'every day gone by can be logged');
+  assert.match(mid, /data-date="2026-09-20" title="Sun, Sep 20: Mango Sticky Rice at night" tabindex="-1">/);
+  assert.equal((mid.match(/tabindex="0"/g) ?? []).length, 1);
+  assert.match(mid, /data-date="2026-10-10" title="Sat, Oct 10: nothing logged" tabindex="0">/, 'the stop: the page’s last day, as today is on its own');
+  assert.ok(!mid.includes('aria-current'), 'today isn’t on it');
+  // At either end the way on is switched off, so focus goes to the other.
+  assert.deepEqual([turn(worn(2), 'earlier')[1], turn(worn(2), 'later')[1]], [' disabled', undefined]);
+  assert.deepEqual([turn(worn(0), 'earlier')[1], turn(worn(0), 'later')[1]], [undefined, ' disabled']);
+  assert.match(worn(0), /data-date="2026-11-09" title="Today, Nov 9: nothing logged" tabindex="0" aria-current="date">/);
+});
+
+test('the span chosen heads the card, and a longer one lists more bottles and its wears by month', () => {
+  const today = '2026-11-09';
+  const stats = { wears: 30, bottles: 10, top: many.map((f, i) => [f.id, 12 - i]), lastWorn: new Map(many.map(f => [f.id, today])) };
+  const resolve = id => many.find(f => f.id === id);
+  const worn = (span, months = null) => wardrobe.wornHTML({ stats, calendar: [], dusty: [], todayISO: today, span, months }, resolve);
+  const rows = html => (html.match(/class="rank-n"/g) ?? []).length;
+  const pressed = html => [...html.matchAll(/data-action="journal-span" data-value="(\d+)" aria-pressed="true"><span>([^<]+)</g)].map(m => [m[1], m[2]]);
+  const month = worn(30);
+  assert.match(month, /<h2 id="journal-title">Last 30 days<\/h2>/);
+  assert.match(month, /<div class="seg journal-span" role="group" aria-label="Look back">/);
+  assert.deepEqual([pressed(month), rows(month)], [[['30', '30 days']], 5]);
+  assert.ok(!month.includes('By month'), 'a month is one bar: none');
+  assert.ok(month.indexOf('journal-span') < month.indexOf('class="stat-tiles"'), 'over the tiles it changes');
+
+  const months = [{ month: '2026-08', wears: 0, bottles: 0 }, { month: '2026-09', wears: 20, bottles: 6 }, { month: '2026-10', wears: 40, bottles: 9 }, { month: '2026-11', wears: 1, bottles: 1 }];
+  const quarter = worn(90, months);
+  assert.match(quarter, /<h2 id="journal-title">Last 90 days<\/h2>/);
+  assert.deepEqual([pressed(quarter), rows(quarter)], [[['90', '90 days']], 6]);
+  assert.match(quarter, /<section aria-labelledby="worn-months-title"><h3 id="worn-months-title">By month<\/h3><ul class="month-bars" role="list">/);
+  // Each bar says its month, wears and distinct bottles; the tallest is the busiest month.
+  assert.match(quarter, /<li title="Oct: 40 wears, 9 bottles"><span class="visually-hidden">Oct: 40 wears, 9 bottles<\/span><b aria-hidden="true">40<\/b><span class="month-bar" aria-hidden="true"><span style="height:100%"><\/span><\/span><small aria-hidden="true">O<span>ct<\/span><\/small><\/li>/);
+  assert.match(quarter, /<li title="Sep: 20 wears, 6 bottles">.*?style="height:50%"/);
+  assert.match(quarter, /<li title="Nov: 1 wear, 1 bottle">/);
+  assert.match(quarter, /<li title="Aug: nothing logged"><span class="visually-hidden">Aug: nothing logged<\/span><b aria-hidden="true"><\/b>.*?style="height:0%"/);
+  assert.ok(quarter.indexOf('class="stat-tiles"') < quarter.indexOf('By month') && quarter.indexOf('By month') < quarter.indexOf('worn-cal-title'), 'between the tiles and the calendar');
+
+  // A year's has two Novembers: last year's says so, and thirteen bars go by initials on a phone (.long).
+  const year = worn(365, [{ month: '2025-11', wears: 2, bottles: 1 }, ...Array.from({ length: 8 }, (_, i) => ({ month: `2026-0${i + 1}`, wears: 0, bottles: 0 })), ...months]);
+  assert.match(year, /<ul class="month-bars long" role="list"><li title="Nov 2025: 2 wears, 1 bottle">.*<li title="Nov: 1 wear, 1 bottle">/s);
+  assert.match(year, /<h2 id="journal-title">Last 12 months<\/h2>/);
+  assert.deepEqual([pressed(year), rows(year)], [[['365', 'Year']], 8]);
+  // Gathering dust stays about rotation: the last 30 days, whatever the span.
+  assert.match(wardrobe.wornHTML({ stats, calendar: [], dusty: [{ f: nish, last: null }], todayISO: today, span: 365 }, resolve, { list: 'Mine' }), /From Mine: in rotation, not worn in 30 days\./);
+  const none = wardrobe.wornHTML({ stats: { ...stats, wears: 0, bottles: 0, top: [] }, calendar: [], dusty: [], todayISO: today, span: 365 }, resolve);
+  assert.match(none, /Nothing logged in the last 12 months\./);
+  assert.equal(wardrobe.spanOf(7).days, 30, 'a span it doesn’t know reads as 30 days');
+});
+
+test('wears count by calendar month over the span, a month with none included', () => {
+  const history = [
+    wear('1', '2026-11-09'), wear('2', '2026-11-09', 'night'), wear('1', '2026-10-31'), wear('1', '2026-10-01', 'night'), wear('3', '2026-10-01'),
+    wear('1', '2026-08-12'), wear('9', '2026-08-11'), wear('9', '2026-11-20'),
+  ];
+  // 90 days up to Nov 9 start on Aug 12: the 11th is before them, the 20th ahead.
+  assert.deepEqual(wardrobe.wearsByMonth(history, '2026-11-09', 90), [
+    { month: '2026-08', wears: 1, bottles: 1 }, { month: '2026-09', wears: 0, bottles: 0 },
+    { month: '2026-10', wears: 3, bottles: 2 }, { month: '2026-11', wears: 2, bottles: 2 },
+  ]);
+  const year = wardrobe.wearsByMonth(history, '2026-11-09', 365);
+  assert.deepEqual([year.length, year[0].month, year[1].month, year[2].month, year.at(-1).month], [13, '2025-11', '2025-12', '2026-01', '2026-11'], 'over the new year');
+  assert.equal(year.reduce((n, m) => n + m.wears, 0), 7);
+});
+
+test('the span is kept with the prefs, and only when it isn’t the 30 days it starts on', () => {
+  const real = globalThis.localStorage, store = new Map();
+  globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k) };
+  try {
+    setWornSpan(365);
+    assert.equal(state.wornSpan, 365);
+    assert.equal(loadPrefs().wornSpan, 365);
+    setWornSpan(45);
+    assert.equal(state.wornSpan, 30, 'only the three spans');
+    assert.ok(!('wornSpan' in loadPrefs()));
+    setWornSpan(90);
+    assert.equal(loadPrefs().wornSpan, 90);
+  } finally {
+    setWornSpan(30);
+    globalThis.localStorage = real;
+  }
 });
 
 test('the log sheet’s filter says how many bottles are left, or that none match, past a Clear’s message', t => {
