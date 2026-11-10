@@ -860,6 +860,9 @@ function filterLog() {
   }, 400);
 }
 
+// A form not saved yet (the shell holds an out-of-sight version reload for it): a want's note being written.
+export const unsaved = () => wishlist.noteUnsaved();
+
 export const sheets = {
   add: s => addSheetHTML(s, new Set(state.mine.records.map(r => r.id))),
   'share-link': shareSheetHTML,

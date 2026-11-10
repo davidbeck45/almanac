@@ -28,6 +28,13 @@ const wish = {
   said: '', // what the last note saved did, which the status line says until the list has news of its own
 };
 
+/**
+ * Whether a note is being written on the Wishlist as it stands (its field
+ * open on this visit to the pane): a version that reloads the page out of
+ * sight waits for it, as it does for the Trip form (the view's `unsaved`).
+ */
+export const noteUnsaved = () => Boolean(wish.noting && wish.noting.base === state.base);
+
 // ---------- Templates (pure) ----------
 
 /**

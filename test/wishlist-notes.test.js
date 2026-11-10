@@ -159,3 +159,11 @@ test('the pane opens one card’s field, and the list’s status line says what 
   assert.equal(count(saved, 'role="status"'), 1, 'one status line, the list’s');
   assert.match(saved, /<p class="muted small wish-status">2 bottles: 1 strong fit, 1 good\.<\/p>/, 'the line on screen is the list’s, as it was');
 });
+
+test('a note being written holds an out-of-sight version reload, as the Trip form does', async () => {
+  const wardrobe = await import('../src/views/wardrobe.js');
+  const wishlist = await import('../src/views/wardrobe/wishlist.js');
+  assert.equal(typeof wardrobe.unsaved, 'function', 'the shell asks each view (src/app/shell.js)');
+  assert.equal(wardrobe.unsaved(), false, 'nothing being written');
+  assert.equal(wishlist.noteUnsaved(), false);
+});
