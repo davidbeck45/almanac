@@ -57,6 +57,13 @@ function save(events) {
   try { localStorage.setItem(KEY, JSON.stringify(events)); } catch {}
 }
 
+/** Saves a whole list (a restored backup's, src/backup.js), tidied from `fromISO` on; returns it. */
+export function saveEvents(events, fromISO = yesterday()) {
+  const next = tidyEvents(events, fromISO);
+  save(next);
+  return next;
+}
+
 /**
  * Sets what a window is for (an occasion id, replacing the one it had) or,
  * with null, clears it; dates before `fromISO` drop out. Saves and returns

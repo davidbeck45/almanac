@@ -25,11 +25,16 @@ function entry(raw) {
   return out;
 }
 
+/** A list as the device keeps one (the stored one, a backup's): each entry tidied, one a bottle. */
+export function tidyWants(list) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : []).map(entry).filter(w => w && !seen.has(w.id) && seen.add(w.id));
+}
+
 /** The stored want list, newest first ([] when there's none or it can't be read). */
 export function loadWants() {
   try {
-    const list = JSON.parse(localStorage.getItem(KEY));
-    return Array.isArray(list) ? list.map(entry).filter(Boolean) : [];
+    return tidyWants(JSON.parse(localStorage.getItem(KEY)));
   } catch {
     return [];
   }

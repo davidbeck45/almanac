@@ -339,6 +339,14 @@ html:has(#main .disc-search) { scroll-padding-top: calc(env(safe-area-inset-top)
 .set-text small { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .set-link { color: var(--text-primary); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
 .set-rows > .notice { margin: var(--s-3) var(--s-4) 0; }
+/* Restore from a file: what the file holds and the two ways to restore it, under its row. */
+.set-restore { display: grid; gap: var(--s-3); padding: var(--s-1) var(--s-4) var(--s-4); }
+.set-restore > .error { margin: 0; }
+.set-restore-file { display: grid; gap: var(--s-1); padding: var(--s-3); border-radius: var(--r-control); background: var(--fill); overflow-wrap: anywhere; }
+.set-restore-file span, .set-restore-how { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.set-restore-actions { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.set-restore-done { display: flex; align-items: flex-start; gap: var(--s-2); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.set-restore-done svg { width: 18px; height: 18px; flex: none; color: var(--positive); }
 .set-credits { padding: var(--s-3) var(--s-4); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .set-credits + .set-credits { padding-top: 0; }
 .set-credits span { display: block; }

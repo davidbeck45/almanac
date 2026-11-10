@@ -6,7 +6,7 @@
 import { describe } from './wmo.js';
 
 const KEY = 'scentcast.history';
-const MAX_ENTRIES = 730;
+export const MAX_ENTRIES = 730;
 
 // A wear as the log keeps one: a bottle, a real date and day or night.
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -30,6 +30,12 @@ export function loadHistory() {
 
 function save(history) {
   try { localStorage.setItem(KEY, JSON.stringify(history.slice(0, MAX_ENTRIES))); } catch {}
+}
+
+/** Saves a whole log (a restored backup's, src/backup.js), newest first; returns it as stored. */
+export function saveHistory(history) {
+  save(wearsOf(history));
+  return loadHistory();
 }
 
 export function wornIn(history, dateISO, slot) {
@@ -121,7 +127,9 @@ export function wearSettled(shown, id, dateISO, slot) {
 // so a check can rebuild what the app was choosing from, your own ratings
 // and skin nudges (`skin`, src/skin.js's loadSkin()) and the days and nights
 // planned for an occasion (`events`, src/events.js's loadEvents()) when
-// there are any.
+// there are any. The Export button's file is this with the rest of what the
+// device holds beside it (src/backup.js backupExport, `version: 2`), which
+// every reader of a journal skips.
 export function journalExport(history, loc, hidden, { nowISO = new Date().toISOString(), skin = null, events = [] } = {}) {
   const planned = eventsOf(events);
   return {
@@ -137,7 +145,9 @@ export function journalExport(history, loc, hidden, { nowISO = new Date().toISOS
 }
 
 // A journal file read back (scripts/journal-check.mjs, recommend.mjs --journal),
-// ids as strings like the app keeps them. Null when it isn't one. Files from
+// ids as strings like the app keeps them. Null when it isn't one, whatever
+// its `version` (2 added a backup's keys beside these, which Settings'
+// Restore reads: src/backup.js). Files from
 // before ratings were exported read with an empty `skin`. Wears without an
 // ISO date and day or night, and a `hidden` that isn't a list, are left out.
 // `counts` is a Copy for Claude's wears per use (occasionCounts over the

@@ -23,11 +23,16 @@ function clean(entry) {
 
 const isBlank = e => e.rating === null && NUDGES.every(k => !e[k]);
 
+const isMap = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
+
+/** A map of entries as the device keeps one (a stored one, a backup's): string ids, each cleaned, blanks left out. */
+export const tidySkin = stored => (isMap(stored)
+  ? Object.fromEntries(Object.entries(stored).map(([id, e]) => [String(id), clean(e)]).filter(([, e]) => !isBlank(e))) : {});
+
 /** { id: { rating, longevity, sillage, updated } } for every bottle with one. */
 export function loadSkin() {
   try {
-    const stored = JSON.parse(localStorage.getItem(KEY)) ?? {};
-    return Object.fromEntries(Object.entries(stored).map(([id, e]) => [String(id), clean(e)]).filter(([, e]) => !isBlank(e)));
+    return tidySkin(JSON.parse(localStorage.getItem(KEY)));
   } catch {
     return {};
   }
@@ -69,19 +74,27 @@ export function setSkin(id, patch, nowISO = today()) {
 const ASKED_KEY = 'scentcast.asked';
 export const ASKS = ['stars', 'skin'];
 
+/** A map of what was asked as the device keeps one (a stored one, a backup's). */
+export function tidyAsked(stored) {
+  if (!isMap(stored)) return {};
+  const out = {};
+  for (const [id, e] of Object.entries(stored)) {
+    const kept = Object.fromEntries(ASKS.filter(k => typeof e?.[k] === 'string').map(k => [k, e[k]]));
+    if (Object.keys(kept).length) out[String(id)] = kept;
+  }
+  return out;
+}
+
 export function loadAsked() {
   try {
-    const stored = JSON.parse(localStorage.getItem(ASKED_KEY));
-    if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
-    const out = {};
-    for (const [id, e] of Object.entries(stored)) {
-      const kept = Object.fromEntries(ASKS.filter(k => typeof e?.[k] === 'string').map(k => [k, e[k]]));
-      if (Object.keys(kept).length) out[String(id)] = kept;
-    }
-    return out;
+    return tidyAsked(JSON.parse(localStorage.getItem(ASKED_KEY)));
   } catch {
     return {};
   }
+}
+
+export function saveAsked(asked) {
+  try { localStorage.setItem(ASKED_KEY, JSON.stringify(asked)); } catch {}
 }
 
 /** Whether Now has asked `kind` ('stars' or 'skin') about a bottle. */
