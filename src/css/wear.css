@@ -478,10 +478,18 @@
 .wkp-date small { color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
 .wkp-row.today .wkp-date b { color: var(--accent); }
 .wkp-row .trip-select { display: flex; }
-.wkp-row select { padding-right: var(--s-6); font-size: var(--fs-body); text-overflow: ellipsis; }
-.wkp-row select.on { border-color: var(--accent); }
+/* Over .trip-select's own size and padding, which come later in this file. */
+.wkp-row .trip-select select { padding-right: var(--s-6); font-size: var(--fs-body); text-overflow: ellipsis; }
+.wkp-row .trip-select select.on { border-color: var(--accent); }
 .wkp-over { padding-left: var(--s-3); color: var(--text-tertiary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 .wkp-said { min-height: var(--lh-footnote); margin: var(--s-3) 0 var(--s-2); color: var(--ambient); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+/* A 320px phone: the two choices a row get 106px each, where "No plan" and
+   "Date Night" were cut short at the body size. */
+@media (max-width: 359px) {
+  .wkp-head, .wkp-row { grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr); gap: var(--s-1); }
+  .wkp-row .trip-select select { padding: 0 var(--s-5) 0 var(--s-2); font-size: var(--fs-footnote); }
+  .wkp-row .trip-select svg { right: var(--s-2); }
+}
 .wk-pick.empty { grid-template-columns: 16px 1fr; background: transparent; border-style: dashed; color: var(--text-tertiary); font-size: var(--fs-caption); }
 .wk-pick.empty .wk-slot { position: static; width: auto; height: auto; background: none; box-shadow: none; color: var(--text-tertiary); }
 .wk-pick.empty .wk-slot svg { width: 14px; height: 14px; }

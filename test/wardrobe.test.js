@@ -290,6 +290,9 @@ test('the calendar pages back five weeks at a time, to the journal’s first wea
   assert.equal(wardrobe.calendarRange(wardrobe.calendarPage(old, today, 9), today), 'Nov 30 – Jan 3', 'into this year: no need');
   assert.equal(wardrobe.calendarSaid(before, today), 'Calendar, Sep 6 – Oct 10: 2 wears logged.');
   assert.equal(wardrobe.calendarSaid(wardrobe.calendarPage(history, today, 2), today), 'Calendar, Aug 2 – Sep 5: nothing logged.');
+  // A wear dated after today isn't in the days the page names, so it isn't in their count.
+  const ahead = [wear('1', '2026-11-08'), wear('1', '2026-11-10'), wear('1', '2026-11-11', 'night')];
+  assert.equal(wardrobe.calendarSaid(wardrobe.calendarPage(ahead, today, 0), today), 'Calendar, Oct 11 – Nov 9: 1 wear logged.');
 });
 
 test('an earlier page has Earlier and Later, one tab stop on its last day, and days that open the log sheet', () => {
@@ -342,6 +345,8 @@ test('the span chosen heads the card, and a longer one lists more bottles and it
   // A year's has two Novembers: last year's says so, and thirteen bars go by initials on a phone (.long).
   const year = worn(365, [{ month: '2025-11', wears: 2, bottles: 1 }, ...Array.from({ length: 8 }, (_, i) => ({ month: `2026-0${i + 1}`, wears: 0, bottles: 0 })), ...months]);
   assert.match(year, /<ul class="month-bars long" role="list"><li title="Nov 2025: 2 wears, 1 bottle">.*<li title="Nov: 1 wear, 1 bottle">/s);
+  assert.match(year, /<small aria-hidden="true">N<span>ov ’25<\/span><\/small>/, 'last year’s November says so under its bar, where names fit');
+  assert.match(year, /<small aria-hidden="true">N<span>ov<\/span><\/small>/);
   assert.match(year, /<h2 id="journal-title">Last 12 months<\/h2>/);
   assert.deepEqual([pressed(year), rows(year)], [[['365', 'Year']], 8]);
   // Gathering dust stays about rotation: the last 30 days, whatever the span.

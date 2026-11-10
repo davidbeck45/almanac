@@ -13,7 +13,7 @@ import { planTies, rankedTies, tieLine, contrast } from '../contrast.js';
 import { setSkin, loadSkin, loadAsked, markAsked, wasAsked } from '../skin.js';
 import { theme } from '../theme.js';
 import { toggleWear, wearStamp, wornIn, journalStats, journalFreshness, shiftISO, wearSettled, loadHistory } from '../history.js';
-import { parseEventText } from '../events.js';
+import { parseEventText, loadEvents } from '../events.js';
 import { WINDOWS } from '../weather.js';
 import { routeHash, go } from '../app/router.js';
 import { esc, cap, temp, deg, plural, shortDate, weekdayShort, windowRange, feelWords, displayReasons, moveText, ratedText, listLabel, sprayLine } from '../ui.js';
@@ -962,8 +962,10 @@ export const actions = {
   // Now's "For a date · Clear": the window back to everyday picks. Focus
   // goes on to the card's Details.
   // The Week's Plan: a sheet with a choice for each day and night it shows.
+  // `live`: it holds no typing, so it draws again when another tab changes
+  // the plans (src/app/shell.js), where a sheet otherwise stays as drawn.
   'week-plan'(el, app) {
-    app.openSheet({ kind: 'week-plan' });
+    app.openSheet({ kind: 'week-plan', live: true });
   },
   'event-clear'(el, app) {
     const { date: dateISO, slot } = el.dataset;
@@ -1073,16 +1075,39 @@ export const changes = {
   // and its status line says what the choice did.
   'week-plan-set'(el, app) {
     const { date: dateISO, slot } = el.dataset;
+    const say = said => {
+      if (state.sheet?.kind === 'week-plan') state.sheet.said = said;
+      const live = globalThis.document?.querySelector('#week-plan-live');
+      if (live) live.textContent = said;
+    };
+    // By the clock as it is now: a window that ended since the sheet was
+    // drawn (tonight, chosen just after 11) isn't planned, and the sheet
+    // draws again without it, as a plan link's Plan them reads the clock first.
+    readClock();
+    if (!computeWeek().find(d => d.dateISO === dateISO)?.[slot]) {
+      const over = `${slot === 'night' ? 'That night' : 'That day'} is over, so nothing was planned.`;
+      if (state.sheet?.kind === 'week-plan') state.sheet.said = over;
+      app.render();
+      return app.announce(over);
+    }
     const occasion = occasionById(el.value) ?? null;
     const was = occasionById(eventAt({ dateISO, slot })?.occasion) ?? null;
     setEvent(dateISO, slot, occasion?.id ?? null);
+    // A browser that can't store (full, or blocked) keeps no plan, and the
+    // next one made would start from what's stored and drop this one unsaid:
+    // show what is stored, and say so.
+    const stored = loadEvents().find(e => e.dateISO === dateISO && e.slot === slot)?.occasion ?? null;
+    if (stored !== (occasion?.id ?? null)) {
+      state.events = loadEvents();
+      el.value = stored ?? '';
+      el.classList.toggle('on', !!stored);
+      app.render({ sheet: false });
+      return say('This browser couldn’t save that plan: its storage is full or blocked.');
+    }
     el.classList.toggle('on', !!occasion);
     app.render({ sheet: false });
     const pick = occasion && computeWeek().find(d => d.dateISO === dateISO)?.[slot]?.pick.fragrance;
-    const said = weekPlanSaid({ dateISO, slot }, occasion, was, state.wx?.todayISO ?? todayISO(), pick || null);
-    if (state.sheet?.kind === 'week-plan') state.sheet.said = said;
-    const live = globalThis.document?.querySelector('#week-plan-live');
-    if (live) live.textContent = said;
+    say(weekPlanSaid({ dateISO, slot }, occasion, was, state.wx?.todayISO ?? todayISO(), pick || null));
   },
 };
 export const sheets = {

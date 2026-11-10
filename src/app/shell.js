@@ -872,7 +872,8 @@ function listen() {
     elsewhere ||= requestAnimationFrame(() => {
       elsewhere = 0;
       reloadStored();
-      render({ sheet: false });
+      // A sheet that only shows what's stored (`live`: the Week's Plan) draws again with it.
+      render({ sheet: Boolean(state.sheet?.live) });
     });
   });
 

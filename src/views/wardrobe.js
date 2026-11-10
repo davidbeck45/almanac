@@ -312,7 +312,8 @@ export function calendarRange(calendar, todayISO) {
 
 /** What turning to a page says to screen readers: its days and how much they hold. */
 export function calendarSaid(calendar, todayISO) {
-  const wears = calendar.flat().reduce((n, c) => n + (c.day ? 1 : 0) + (c.night ? 1 : 0), 0);
+  // Up to today, as the range it names: a wear dated ahead (a clock set wrong, another zone) isn't in it.
+  const wears = calendar.flat().filter(c => !c.future).reduce((n, c) => n + (c.day ? 1 : 0) + (c.night ? 1 : 0), 0);
   return `Calendar, ${calendarRange(calendar, todayISO)}: ${wears ? `${plural(wears, 'wear')} logged` : 'nothing logged'}.`;
 }
 
@@ -430,10 +431,12 @@ export function wornHTML({ stats, calendar, dusty, todayISO, span = 30, page = 0
   const busiest = Math.max(1, ...(months ?? []).map(m => m.wears));
   const monthBars = months?.length > 1
     ? `<section aria-labelledby="worn-months-title"><h3 id="worn-months-title">By month</h3><ul class="month-bars${months.length > 6 ? ' long' : ''}" role="list">${months.map(m => {
-      // A month of an earlier year says which: a year's span has two Novembers.
+      // A month of an earlier year says which, in its label and under its bar
+      // where names fit ("Nov ’25"): a year's span has two Novembers.
       const name = shortDate(`${m.month}-01`).split(' ')[0], year = m.month.slice(0, 4);
-      const label = `${name}${year < todayISO.slice(0, 4) ? ` ${year}` : ''}: ${m.wears ? `${plural(m.wears, 'wear')}, ${plural(m.bottles, 'bottle')}` : 'nothing logged'}`;
-      return `<li title="${esc(label)}"><span class="visually-hidden">${esc(label)}</span><b aria-hidden="true">${m.wears || ''}</b><span class="month-bar" aria-hidden="true"><span style="height:${((m.wears / busiest) * 100).toFixed(0)}%"></span></span><small aria-hidden="true">${esc(name[0])}<span>${esc(name.slice(1))}</span></small></li>`;
+      const earlier = year < todayISO.slice(0, 4);
+      const label = `${name}${earlier ? ` ${year}` : ''}: ${m.wears ? `${plural(m.wears, 'wear')}, ${plural(m.bottles, 'bottle')}` : 'nothing logged'}`;
+      return `<li title="${esc(label)}"><span class="visually-hidden">${esc(label)}</span><b aria-hidden="true">${m.wears || ''}</b><span class="month-bar" aria-hidden="true"><span style="height:${((m.wears / busiest) * 100).toFixed(0)}%"></span></span><small aria-hidden="true">${esc(name[0])}<span>${esc(name.slice(1))}${earlier ? ` ’${year.slice(2)}` : ''}</span></small></li>`;
     }).join('')}</ul></section>`
     : '';
   const spans = segHTML(SPANS.map(s => ({ value: s.days, label: s.label, on: s.days === span })), { action: 'journal-span', label: 'Look back', cls: 'journal-span' });

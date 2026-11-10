@@ -1018,8 +1018,19 @@ test('the week line names the window as a link to that window’s list, as its p
   const win = { dateISO: '2026-11-14', slot: 'night', label: 'Saturday night' };
   assert.equal(weekFactHTML(null, f, 'night'), '');
   assert.equal(weekFactHTML({ kind: 'planned', win, ctx: 'w:2026-11-14:night' }, f, 'w:2026-11-14:night'), '', 'not on that window’s own page');
+  assert.equal(weekFactHTML({ kind: 'planned', win, ctx: 'w:2026-11-14:night' }, f, 'night', { dateISO: '2026-11-14', slot: 'night' }), '', 'nor on Now’s page for that same night');
+  assert.notEqual(weekFactHTML({ kind: 'planned', win, ctx: 'w:2026-11-14:night' }, f, 'night', { dateISO: '2026-11-09', slot: 'night' }), '', 'tonight’s page still says Saturday’s');
+  assert.notEqual(weekFactHTML({ kind: 'planned', win, ctx: 'w:2026-11-14:night' }, f, 'occ', { dateISO: '2026-11-14', slot: 'night' }), '', 'an occasion’s list for that night is another ranking');
   assert.match(weekFactHTML({ kind: 'planned', win, ctx: 'w:2026-11-14:night' }, f, 'night'),
     /<span>The Week’s pick for <button class="link-btn" data-action="open" data-ctx="w:2026-11-14:night" data-id="7">Saturday night<\/button><\/span>/);
   assert.match(weekFactHTML({ kind: 'suits', win: { dateISO: '2026-11-10', slot: 'day', label: 'Tomorrow' }, ctx: 'w:2026-11-10:day' }, f, 'night'),
     /<span>Suits <button [^>]+>tomorrow<\/button> as well as the Week’s pick<\/span>/);
+});
+
+test('a record’s links are drawn only to an https page', () => {
+  const f = { ...byName('Détour Noir'), url: 'javascript:alert(1)' };
+  const html = bottlePageHTML(modelOf(f));
+  assert.ok(!html.includes('javascript:'), 'a restored or shared record’s address isn’t drawn as given');
+  assert.ok(!html.includes('data-focus="bp-fragrantica"'));
+  assert.ok(bottlePageHTML(modelOf(byName('Détour Noir'))).includes('data-focus="bp-fragrantica"'), 'the wardrobe’s own still link out');
 });
