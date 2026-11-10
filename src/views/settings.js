@@ -306,8 +306,13 @@ export const actions = {
 function runRestore(app, mode) {
   const chosen = restoring();
   if (!chosen?.backup) return;
-  const { counts, stores, activeBefore } = restoreBackup(chosen.backup, mode);
+  const { counts, stores, saved, activeBefore } = restoreBackup(chosen.backup, mode);
   reloadStored();
+  if (!saved) {
+    // The browser didn't keep it all: what's in is in, and adding the file again finishes it.
+    const error = 'This browser couldn’t save all of it: its storage is full or blocked, so the restore is incomplete. Free some space, then choose the file again and add it.';
+    return showRestore(app, { error }, error);
+  }
   if (stores.active && stores.active !== activeBefore && stores.active !== state.active) app.setActive(stores.active);
   const done = restoreText(counts, mode);
   showRestore(app, { done }, done);

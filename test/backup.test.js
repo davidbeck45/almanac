@@ -288,3 +288,23 @@ test('Settings shows what a file holds with both ways to restore it, then what h
   for (const name of ['restore-pick', 'restore-add', 'restore-replace', 'restore-cancel']) assert.equal(typeof actions[name], 'function', name);
   assert.equal(typeof changes['restore-file'], 'function');
 });
+
+test('a restore the browser didn’t keep says so, and a file’s two wears for one window read as one', () => {
+  fill();
+  const file = exported();
+  fresh();
+  assert.equal(restoreBackup(readBackup(file), 'add', { fromISO: FROM }).saved, true);
+  fresh();
+  const setItem = localStorage.setItem;
+  localStorage.setItem = (k, v) => { if (k === 'scentcast.history') throw new Error('QuotaExceededError'); setItem(k, v); };
+  const { saved, counts } = restoreBackup(readBackup(file), 'add', { fromISO: FROM });
+  assert.equal(saved, false, 'the journal didn’t save');
+  assert.equal(counts.wears, 3);
+  assert.equal(loadMine().records.length, 2, 'what did save is in');
+  localStorage.setItem = setItem;
+  const again = restoreBackup(readBackup(file), 'add', { fromISO: FROM });
+  assert.deepEqual([again.saved, again.counts.wears, again.counts.mine], [true, 3, 0], 'adding it again finishes the restore');
+  const twice = readBackup(JSON.stringify({ app: 'scentcast-journal', version: 1, hidden: [], history: [
+    { id: 1, date: '2026-11-01', slot: 'day' }, { id: 2, date: '2026-11-01', slot: 'day' }, { id: 3, date: '2026-11-01', slot: 'night' }] }));
+  assert.deepEqual(twice.history.map(h => `${h.slot} ${h.id}`), ['night 3', 'day 1']);
+});

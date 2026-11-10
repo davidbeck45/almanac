@@ -93,6 +93,8 @@ const tidyActive = active => (active === 'mine' || active === 'demo' ? active : 
 // Newest first, as the log is kept: a date's night before its day.
 const byNewest = (a, b) => b.date.localeCompare(a.date) || (a.slot === b.slot ? 0 : a.slot === 'night' ? -1 : 1);
 const windowOf = h => `${h.date}:${h.slot}`;
+// One wear a window, as the log keeps them: the first of two a file gives one.
+const oneAWindow = (wears, seen = new Set()) => wears.filter(h => !seen.has(windowOf(h)) && seen.add(windowOf(h)));
 
 // ---------- Export ----------
 
@@ -168,7 +170,7 @@ export function readBackup(text) {
   return {
     version: Number(data.version) || 1,
     exported: typeof data.exported === 'string' ? data.exported : null,
-    history: [...journal.history].sort(byNewest),
+    history: oneAWindow([...journal.history].sort(byNewest)),
     skin: tidySkin(journal.skin),
     events: journal.events,
     hiding,
@@ -339,9 +341,13 @@ export function restoreText(counts, mode = 'add') {
 
 /**
  * Restores a backup (readBackup's) into this device: each store read as it's
- * stored now, merged (mergeBackup) and saved. -> { counts, stores }. The
- * caller reads the state again (reloadStored) and draws; other open tabs
- * hear the saves as storage events.
+ * stored now, merged (mergeBackup) and saved. -> { counts, stores, saved,
+ * activeBefore }. `saved` is false when the browser didn't keep what was
+ * written (its storage full or blocked; saves fail without a word, as
+ * everywhere in the app): some stores may be in and others not, and adding
+ * the file again once there's room finishes it. The caller reads the state
+ * again (reloadStored) and draws; other open tabs hear the saves as storage
+ * events.
  */
 export function restoreBackup(backup, mode = 'add', { fromISO = deviceDay(-1) } = {}) {
   const { hidden, shown } = loadHidden();
@@ -371,5 +377,7 @@ export function restoreBackup(backup, mode = 'add', { fromISO = deviceDay(-1) } 
   if (stores.active && stores.active !== device.active) { try { localStorage.setItem(KEYS.active, stores.active); } catch {} }
   if (stores.uses && stores.uses !== device.uses) writeJSON(KEYS.uses, stores.uses);
   if (JSON.stringify(stores.prefs) !== JSON.stringify(device.prefs)) writeJSON(KEYS.prefs, stores.prefs);
-  return { counts, stores, activeBefore: device.active };
+  const saved = loadHistory().length === stores.history.length && Object.keys(loadSkin()).length === Object.keys(stores.skin).length
+    && loadMine().records.length === stores.mine.records.length;
+  return { counts, stores, saved, activeBefore: device.active };
 }
