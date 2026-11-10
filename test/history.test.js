@@ -101,7 +101,8 @@ test('a wear logged from a live window keeps its weather and the pick shown, and
   assert.deepEqual(entry, { id: 'a', date: '2026-10-02', slot: 'night', lat: 40.71, lon: -74.01, occasion: 'daily', ...stamp });
   assert.ok(JSON.stringify(stamp).length <= 64, 'small: a year of wears carries about 45 KB of them');
   const back = stampedWindow(entry, 40.71);
-  assert.deepEqual({ ...back, date: back.date.toISOString().slice(0, 10) }, {
+  // Its date is noon that day on the device's clock (the day before in UTC, east of UTC+12).
+  assert.deepEqual({ ...back, date: back.date.toLocaleDateString('en-CA') }, {
     slot: 'night', dateISO: '2026-10-02', date: '2026-10-02', lat: 40.71, feelsF: 51.2, dewF: 44.1, humidity: 71, pop: 35, code: 61, condition: 'Light rain', category: 'rain',
   });
   assert.equal(stampedWindow({ id: 'a', date: '2026-10-02', slot: 'day' }), null, 'a wear from before stamps');

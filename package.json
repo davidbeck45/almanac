@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "python3 -m http.server 5173 --bind 127.0.0.1",
     "test": "node --test",
+    "test:dates": "node test/dates.mjs",
     "build:data": "python3 scripts/build_collection.py",
     "fit": "node scripts/fit-accords.mjs --write"
   }

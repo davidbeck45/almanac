@@ -122,7 +122,7 @@ test("Insights' risk words in CLAUDE.md are riskWord's", () => {
 
 test('the code names, paths and files CLAUDE.md gives are in the repo', () => {
   const code = filesUnder(['src', 'scripts', 'dev', 'worker', 'omarchy'], /\.(js|mjs|py|html|css|json|qml|toml|sh)$/)
-    .map(f => f.text).concat(read('sw.js'), read('index.html')).join('\n');
+    .map(f => f.text).concat(read('sw.js'), read('index.html'), read('test/at.mjs'), read('test/dates.mjs')).join('\n'); // and the suite's date tools
   const quoted = new Set([...claude.matchAll(/`([^`\n]+)`/g)].map(m => m[1]));
   // Names from outside the code: a Claude in Chrome tool, Parfumo's brand slugs.
   const outside = new Set(['get_page_text', 'Afnan_Perfumes', 'Goldfield__Banks']);

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { offlineData, offlineFetch, savedPlaceArgs, shiftedForecast, shiftedHistory } from '../dev/offline/saved.mjs';
-import { fetchForecast, summarize, week } from '../src/weather.js';
+import { clock, fetchForecast, summarize, week, windowOpen } from '../src/weather.js';
 import { fetchClimate } from '../src/climate.js';
 import { journalExport, parseJournal } from '../src/history.js';
 
@@ -21,6 +21,26 @@ test('the saved forecast and wears move to the day asked', () => {
   assert.ok(wears.every(w => w.lat === 40.71 && w.lon === -74.01 && /^\d+$/.test(w.id)));
   // Every sample wear is one the app and --journal keep (they drop malformed ones).
   assert.deepEqual(parseJournal(journalExport(wears, { name: 'New York', lat: 40.71, lon: -74.01 }, [])).history, wears);
+});
+
+test('the saved week keeps New York’s own clock, standard or daylight: at 10 pm there, tonight is still on', () => {
+  // The saved forecast is October's, at UTC-4. Read by that in November it
+  // was 11:10 pm, tonight's window over, and Now opened on tomorrow's daytime.
+  const late = new Date('2026-11-10T03:10:00Z'); // 10:10 pm on the 9th in New York
+  const f = shiftedForecast(late);
+  assert.equal(f.utc_offset_seconds, -5 * 3600);
+  assert.equal(f.daily.time[0], '2026-11-09', 'New York’s date, not UTC’s');
+  assert.equal(f.current.time, '2026-11-09T22:00');
+  const wx = summarize({ ...f, fetchedAt: late.getTime() }, late.getTime());
+  assert.equal(wx.night.dateISO, '2026-11-09');
+  assert.ok(windowOpen(wx.night, clock(f, late.getTime())), 'tonight can still be worn');
+  assert.equal(shiftedHistory(late)[0].date, '2026-11-06', 'the newest wear, 3 days before');
+  // In summer it's daylight time again, and the hour before the clocks go back still is.
+  assert.equal(shiftedForecast(new Date('2027-07-01T16:00:00Z')).utc_offset_seconds, -4 * 3600);
+  const before = shiftedForecast(new Date('2027-11-07T05:30:00Z')); // 1:30 am daylight time
+  assert.deepEqual([before.utc_offset_seconds, before.current.time], [-4 * 3600, '2027-11-07T01:00']);
+  const after = shiftedForecast(new Date('2027-11-07T06:30:00Z')); // 1:30 am again, standard time
+  assert.deepEqual([after.utc_offset_seconds, after.current.time, after.timezone_abbreviation], [-5 * 3600, '2027-11-07T01:00', 'GMT-5']);
 });
 
 test('its now is the reading for this hour, fresh or an hour old', () => {

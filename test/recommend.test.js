@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { pinCLI } from './at.mjs';
 import assert from 'node:assert/strict';
 import { spawnSync, execFile } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -18,7 +19,6 @@ const offline = (...args) => spawnSync(process.execPath, ['--import', mock, scri
 const run = (...args) => new Promise(resolve => {
   execFile(process.execPath, ['--import', mock, script, ...args], { encoding: 'utf8' }, (err, stdout, stderr) => resolve({ status: err ? err.code ?? 1 : 0, stdout, stderr }));
 });
-
 test('bottle names match exactly first, else by part', () => {
   assert.deepEqual(matchBottles(fragrances, 'sauvage').map(f => f.name), ['Sauvage']);
   assert.deepEqual(matchBottles(fragrances, 'détour').map(f => f.name), ['Détour Noir']);
@@ -320,7 +320,7 @@ test('--week, --date and today\'s picks plan around --events: each takes the occ
   assert.deepEqual(date.slots.map(s => [s.slot, s.pick.occasion ?? null]), [['day', null], ['night', 'formal']]);
   assert.equal(date.slots[1].pick.name, top.name);
   const text = cli('--loc', '40.7,-74', '--week', '--events', `${night} night formal`);
-  assert.match(text.stdout, new RegExp(`night .+${top.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\(.+\\) for formal wear: `));
+  assert.match(text.stdout, new RegExp(`night .+${top.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\(.+\\) for formal wear(?:, or [^:]+)?: `)); // in midwinter another bottle suits it as well
   // Tonight by the place's clock (tomorrow night once tonight is over there), not this machine's.
   const tonight = JSON.parse(cli('--loc', '40.7,-74', '--json').stdout).slots.find(s => s.slot === 'night').window.date;
   const now2 = cli('--loc', '40.7,-74', '--events', `${tonight} night date; ${night} night formal`);
@@ -376,7 +376,7 @@ test('--events stops on a window the plan doesn\'t cover, and on a mode that doe
   }
 });
 
-test('an event tonight, once tonight is over at the place, says it’s over, not out of reach', () => {
+test('an event tonight, once tonight is over at the place, says it’s over, not out of reach', t => {
   // A time zone where it's 23:00 or later: the plan starts tomorrow there.
   const hour = new Date().getUTCHours();
   const offset = ((23 - hour + 36) % 24) - 12;
@@ -387,6 +387,11 @@ test('an event tonight, once tonight is over at the place, says it’s over, not
     assert.equal(r.status, 1, args.join(' '));
     assert.match(r.stderr, new RegExp(`^--events: the night of ${placeToday} is over\\n$`));
   }
+  // Half past midnight on Jan 1 in Auckland is 11:30 pm on Dec 30 at UTC-12,
+  // two dates behind this machine's: over there, not "passed" everywhere.
+  t.after(pinCLI('2026-12-31T11:30:00Z'));
+  const far = spawnSync(process.execPath, ['--import', mock, script, '--loc', '40.7,-74', '--events', '2026-12-30 night date'], { encoding: 'utf8', env: { ...process.env, TZ: 'Pacific/Auckland', MOCK_UTC_OFFSET: '-12' } });
+  assert.equal(far.stderr, '--events: the night of 2026-12-30 is over\n');
 });
 
 test('--pack plans a trip: few bottles, every window, events on their night', () => {
@@ -617,15 +622,19 @@ test('--doubles names pairs that wear as one, or the closest pair', () => {
   assert.match(cli('--doubles').stdout, /^No doubles in \d+ bottles: every one smells its own way\.\nClosest pair: .+ and .+, \d+% alike \(/);
 });
 
-test('a pick names the bottles that suit its window just as well, each with how it differs, never one worn lately', async () => {
+test('a pick names the bottles that suit its window just as well, each with how it differs, never one worn lately', async t => {
+  // A November evening at the place: which windows are toss-ups turns with
+  // the season (in May the synthetic night has no equal).
+  t.after(pinCLI('2026-11-09T22:00:00Z'));
   const [single, text, plan, week, date] = await Promise.all([
     run('--loc', '40.7,-74', '--json', '--slot', 'night'),
     run('--loc', '40.7,-74', '--slot', 'night'),
     run('--loc', '40.7,-74', '--json'),
     run('--loc', '40.7,-74', '--json', '--week'),
-    run('--loc', '40.7,-74', '--json', '--date', dayISO(2), '--slot', 'day'),
+    run('--loc', '40.7,-74', '--json', '--date', '2026-11-11', '--slot', 'day'),
   ]);
   const night = JSON.parse(single.stdout).slots[0];
+  assert.equal(night.window.date, '2026-11-09', 'the pinned evening');
   assert.ok(night.pick.ties.length, 'the synthetic night is a toss-up');
   for (const t of night.pick.ties) {
     assert.notEqual(t.name, night.pick.name);
