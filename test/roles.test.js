@@ -8,6 +8,7 @@ import { applySkin } from '../src/skin.js';
 import { sharesFrom, parseUses } from '../src/uses.js';
 import { ROLES, WORKHORSE_SHARE, bottleRoles, rolesJSON, roleLine, shareText } from '../src/roles.js';
 import { handlePool, newPoolCache } from '../src/pool-tasks.js';
+import { rolesHTML } from '../src/views/wardrobe/insights.js';
 
 const dir = new URL('../data/fragrantica/', import.meta.url);
 const load = async path => {
@@ -88,20 +89,31 @@ test('David’s wardrobe: workhorses lead a large share, and the bottles daily p
     assert.equal(b.mixShare, 0);
     assert.match(b.text, /^Your .+ outdoes it even for .+, where it comes closest\.$/);
   }
-  // Workhorses first, each role's biggest lead first.
+  // Workhorses first; they and the specialists biggest lead first, the backups least called for first.
   const order = ROLES.map(r => r.id);
   for (let i = 1; i < roles.bottles.length; i++) {
     const [a, b] = [roles.bottles[i - 1], roles.bottles[i]];
     assert.ok(order.indexOf(a.role) <= order.indexOf(b.role));
-    if (a.role === b.role) assert.ok(a.leadShare >= b.leadShare - 1e-9);
+    if (a.role !== b.role) continue;
+    if (a.role === 'backup') assert.ok(a.leadShare < b.leadShare || (a.leadShare === b.leadShare && a.mixShare <= b.mixShare + 1e-9), `${a.bottle.name} before ${b.bottle.name}`);
+    else if (a.role !== 'bench') assert.ok(a.leadShare >= b.leadShare - 1e-9);
   }
+  const backups = roles.bottles.filter(b => b.role === 'backup');
+  assert.equal(backups[0].bottle.name, 'Glorious Oud Royal Blanc', 'the backup least in the mix leads the list of what could go');
+  assert.equal(backups.at(-1).bottle.name, 'Terra');
+  // The short forms a card shows beside the name and under it.
+  const detour = roles.bottles.find(b => b.bottle.name === 'Détour Noir');
+  assert.equal(detour.headline, 'Leads 20%');
+  assert.equal(detour.text, `Leads 20% of what you wear: ${detour.detail}`);
+  assert.match(backups[0].headline, /^In the mix for \d+%$/);
+  assert.equal(bench[0]?.headline ?? 'On the bench', 'On the bench');
 });
 
 test('no wording holds a temperature, and every line says something', () => {
   const lists = [roles, bottleRoles(contextOf(wardrobe.slice(0, 5))), bottleRoles(contextOf(wardrobe.slice(5, 7)))];
   for (const r of lists) {
     for (const b of r.bottles) {
-      const texts = [b.text, roleLine(b), ...b.leads.map(s => s.title), ...b.mix.map(s => s.title), b.closest?.title ?? ''];
+      const texts = [b.text, b.headline, b.detail, roleLine(b), ...b.leads.map(s => s.title), ...b.mix.map(s => s.title), b.closest?.title ?? ''];
       for (const text of texts) assert.ok(!/°|\d\s*F\b|undefined|NaN|null/.test(text), text);
       assert.ok(b.text.length > 20 && b.text.endsWith('.'), b.text);
     }
@@ -159,6 +171,8 @@ test('rolesJSON is plain data that survives JSON, with a count per role', () => 
   assert.deepEqual(JSON.parse(JSON.stringify(plain)), plain);
   assert.equal(Object.values(plain.counts).reduce((a, b) => a + b, 0), wardrobe.length);
   assert.deepEqual(Object.keys(plain.counts), ROLES.map(r => r.id));
+  assert.deepEqual(plain.roles.map(r => r.id), Object.keys(plain.counts));
+  assert.ok(plain.carried > 0.5 && plain.carried < 1, `workhorses lead ${plain.carried}`);
   for (const b of plain.bottles) {
     assert.equal(typeof b.id, 'string');
     assert.ok(b.name && b.label && b.text);
@@ -178,4 +192,35 @@ test('the pool’s report carries the roles, switched-off bottles apart, as plai
   // The same screen's coverage map names the same leaders.
   const leaderOf = new Map(sent.bottles.flatMap(b => b.leads.flatMap(s => s.cells.map(id => [id, b.id]))));
   for (const c of coverage.filter(c => c.weight > 0)) assert.equal(leaderOf.get(c.cell), c.top[0].id, c.title);
+});
+
+test('Insights’ card groups the bottles by role, a few to a group, each row opening its page', () => {
+  const plain = rolesJSON(roles);
+  const html = rolesHTML(plain);
+  // Four groups in role order, three rows each where a role holds more than four.
+  assert.deepEqual([...html.matchAll(/data-role="(\w+)"/g)].map(m => m[1]), ['workhorse', 'specialist', 'backup', 'bench']);
+  const rows = h => (h.match(/class="row wrap role-row/g) ?? []).length;
+  assert.equal(rows(html), 3 + 3 + 3 + 1);
+  assert.match(html, /<p class="muted small role-sum">8 of your 26 bottles lead 79% of what you wear\./);
+  assert.match(html, /data-action="ins-roles-all" data-value="workhorse" aria-controls="ins-roles-workhorse" aria-expanded="false">[^]*?Show 5 more<span class="visually-hidden"> workhorses<\/span>/);
+  assert.ok(!/data-value="bench"/.test(html), 'a short group has no toggle');
+  // Every row is one button that opens the bottle, with its share as words beside the bar.
+  assert.equal((html.match(/<button class="row-main" data-action="open" data-ctx="" data-id="\d+">/g) ?? []).length, rows(html));
+  assert.match(html, /<b>Détour Noir<\/b><small><span class="role-share"><span class="role-bar" aria-hidden="true" style="--lead:0\.\d+;--mix:0\.\d+"><\/span><span class="role-lead">Leads 20%<\/span>/);
+  // A benched bottle draws no bar: its group's name says it.
+  assert.match(html, /<b>Zahri Amara<\/b><small><span class="role-detail">Your Aristo outdoes it even for Casual on mild days, where it comes closest\.<\/span>/);
+  // How far ahead a specialist is sits beside the situation it's ahead in.
+  assert.match(rolesHTML(plain, { open: new Set(['specialist']) }), /Outdoors on cold days \(6 points ahead of Cedrus Blanc\)\./);
+  for (const m of html.matchAll(/--lead:([\d.]+);--mix:([\d.]+)/g)) assert.ok(+m[1] <= +m[2] + 1e-9 && +m[2] <= 1, m[0]);
+  // A role shown whole lists every bottle and offers the way back.
+  const open = rolesHTML(plain, { open: new Set(['backup']) });
+  assert.equal(rows(open), 3 + 3 + 9 + 1);
+  assert.match(open, /data-value="backup"[^>]*aria-expanded="true">[^]*?Show fewer/);
+  assert.ok(!/°|\d\s*F\b|undefined|NaN/.test(open), 'no temperature, nothing unfilled');
+  // Bottles that cover nothing close the card; with no roles there is no card.
+  const rated = applySkin(wardrobe, { [owned('Cream Velvet').id]: { rating: 1 } });
+  const apart = rolesHTML(rolesJSON(bottleRoles(contextOf(rated.filter(f => f.name !== 'Jake')), { hidden: [owned('Jake')] })));
+  assert.match(apart, /data-role="out"[^]*Covering nothing <span class="role-count">2<\/span>[^]*You rate it 1★, so it covers nothing: picks pass it over\.[^]*Switched off, so it covers nothing\./);
+  assert.equal(rolesHTML(undefined), '');
+  assert.equal(rolesHTML(rolesJSON(bottleRoles(contextOf([])))), '');
 });

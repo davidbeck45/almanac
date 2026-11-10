@@ -408,6 +408,27 @@ button.cal-cell:active { transform: scale(0.95); }
 .strong-row b { font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
 .strong-row span { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
 
+/* What each bottle is for: the bottles by role, each with what it leads as a bar. */
+.role-sum { margin: 0 0 var(--s-3); }
+.role-groups { display: grid; gap: var(--s-4); }
+@container page (min-width: 720px) { .role-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--s-6); align-items: start; } }
+.role-group { min-width: 0; }
+.role-head { font-size: var(--fs-headline); line-height: var(--lh-headline); font-weight: 600; }
+.role-count { margin-left: var(--s-1); color: var(--text-tertiary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 500; font-variant-numeric: tabular-nums; }
+.role-blurb { margin-top: var(--s-0); }
+.role-rows { margin: var(--s-1) calc(-1 * var(--s-2)) 0; }
+.role-row { align-items: start; }
+.role-row .row-main { align-items: start; padding-top: var(--s-2); padding-bottom: var(--s-2); }
+.role-row .row-text b { font-family: var(--display); font-style: italic; letter-spacing: -0.005em; }
+.role-row .row-text small { display: grid; gap: var(--s-1); }
+.role-share { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
+.role-lead { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.role-bar { position: relative; flex: 0 1 96px; min-width: 48px; height: 6px; overflow: hidden; border-radius: var(--r-pill); background: var(--fill-strong); }
+.role-bar::before, .role-bar::after { content: ''; position: absolute; inset: 0 auto 0 0; border-radius: inherit; }
+.role-bar::before { width: calc(var(--mix) * 100%); background: color-mix(in srgb, var(--ambient) 35%, transparent); }
+.role-bar::after { width: calc(var(--lead) * 100%); background: var(--ambient); }
+.role-group .mix-all { margin-top: 0; }
+
 /* The bottles that would fill the gaps: each stands on a shelf line. */
 .ins-fill > .section-head { padding: 0 var(--s-1); }
 .ins-picks { display: grid; gap: var(--s-3); }

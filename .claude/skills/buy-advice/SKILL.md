@@ -1,6 +1,6 @@
 ---
 name: buy-advice
-description: Fragrance buying advice for David's wardrobe, answered with scripts/recommend.mjs. Use whenever he's shopping: what to buy or what's missing ("I need a formal winter scent"), whether a bottle is worth it, more of a style he likes ("more skin scents"), more like a bottle, bottles with given notes ("iris and leather for winter nights"), and dupes ("cheaper alternative to X", "does X smell like Y").
+description: Fragrance buying advice for David's wardrobe, answered with scripts/recommend.mjs. Use whenever he's shopping: what to buy or what's missing ("I need a formal winter scent"), whether a bottle is worth it, more of a style he likes ("more skin scents"), more like a bottle, bottles with given notes ("iris and leather for winter nights"), dupes ("cheaper alternative to X", "does X smell like Y"), and what each bottle he owns is for before he sells or swaps one ("what could I sell", "which bottles don't I need").
 ---
 
 # Buy advice
@@ -21,6 +21,7 @@ Run from the repo root. The flags are documented in CLAUDE.md's "Gap finder and 
 | "Something with iris and leather for winter nights" | `--notes "iris leather" --season winter --slot night` |
 | "Dupes of X", "a cheaper X" | `--dupes "X"` |
 | "Does X smell like Y" | `--dupes "X"`, then step 3's "Smells like" chain |
+| "What could I sell", "which bottles don't I need", "what is X for" | `--roles` (with `--city` and `--uses` as for `--gaps`) |
 
 Names take part of a name in any case, with or without accents; add the brand when a name is common. `--check` also takes a Fragrantica id (the number ending its URL) as `id:<number>`, which is exact: a bare number is a name first when a well-voted bottle has it (CLAUDE.md's "Gap finder and buy check"). Uses are `casual, office, date, nightout, formal, outdoors, cozy` at `never`, `sometimes` or `often`.
 
@@ -77,6 +78,7 @@ Verdicts ignore "Prefer great value". When `value` is under 3.8, say so beside t
 Fields worth reading:
 
 - `--gaps`: `gaps[]` (`title`, `status`: gap, then thin, then room to grow; `text`), `strengths[].text`, `coverage[]` per use × day or night × weather band (`status`: plenty, covered, room, thin, gap, off), and `picks[]`: `rating`, `ratingVotes`, `quality.value`, `fills[]` (`title`, `from` → `to`, `beats.name`), `nearest` (closest owned; `via` when it's an owned dupe's original), `twin.text`, `risk`.
+- `--roles`: `bottles[]` grouped by `role` (workhorse, specialist, backup, bench), each with `leadShare` (the share of what he wears it's his best for), `mixShare` (within reach of the best), `leads[]` and `mix[]` (`title`, `weight`, `next.name`), `closest` and `text`; `out[]` lists bottles that cover nothing (rated 2★ or lower, switched off). For "what could I sell", name the bench and the first backups (they're listed least called for first) with each one's `text`, and for "what is X for" its own entry. A role reads fit, not what he enjoys or what a bottle is worth: say so, and never tell him to sell a bottle he loves.
 - `--check`: `verdict`, `reasons[]`, `fills[]`, `overlap` (the owned bottle it's closest to, or with `link` the one voters tie it to; `via` when it's an owned dupe's original), `risk`, `twin`, `value`.
 - `--style`, `--more-like`, `--notes`: `results[]` with `rating`, `votes`, `value`, `styles`, `wearsClose`, `leansOnly` (under `--all`, the chosen styles a pick only leans toward; the text says how many are all of them), `smellsLike` (what a clone copies, with votes), `closestOwned` (`through` an owned dupe's original; `shares`), `risk`, `cheaperTwin`, `why`.
 - `--dupes`: `original` (`built: true` is the original of a dupe he owns; otherwise "going by the votes"), `cheaper[]` (`why: "notes"`: alike by notes, no votes; `notesDiffer`: voted alike but the notes differ), `siblings[]`, `smellsLikeVotes` [yes, no], `owned`, `mist`.

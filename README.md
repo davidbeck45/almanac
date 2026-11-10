@@ -55,6 +55,7 @@ node scripts/recommend.mjs --ideal "Amber Empire"  # the temperatures it wears b
 node scripts/recommend.mjs --mix                   # the collection's scent styles
 node scripts/recommend.mjs --doubles               # bottles you own that wear as one
 node scripts/recommend.mjs --gaps --city Houston   # what the wardrobe is missing there, and what fills it
+node scripts/recommend.mjs --roles                 # what each bottle you own is for, and which could go
 node scripts/recommend.mjs --check "Le Male Le Parfum"   # worth buying?
 node scripts/recommend.mjs --style "skin,clean,intimate" --all   # bottles to buy that are all three
 node scripts/recommend.mjs --more-like "Liquid Brun,Amber Empire"

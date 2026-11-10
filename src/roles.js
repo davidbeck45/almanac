@@ -23,10 +23,12 @@ const NAMED = 3;
 export const ROLES = [
   { id: 'workhorse', label: 'Workhorse', plural: 'Workhorses', blurb: 'The best you own for a large share of what you wear.' },
   { id: 'specialist', label: 'Specialist', plural: 'Specialists', blurb: 'The clear pick for a few situations.' },
-  { id: 'backup', label: 'Backup', plural: 'Backups', blurb: 'Within reach of the best, never clearly first: the first to go unmissed.' },
-  { id: 'bench', label: 'On the bench', plural: 'On the bench', blurb: 'Within reach of the best in nothing you wear.' },
+  { id: 'backup', label: 'Backup', plural: 'Backups', blurb: 'In the mix, never clearly first. The least called for come first: they’d go unmissed.' },
+  { id: 'bench', label: 'On the bench', plural: 'On the bench', blurb: 'In the mix for nothing you wear.' },
 ];
 export const roleById = id => ROLES.find(r => r.id === id);
+// The roles listed by how much they lead; the rest, by how little calls for them.
+const LEADING = new Set(['workhorse', 'specialist']);
 
 const BAND_ORDER = Object.fromEntries(BANDS.map((b, i) => [b.id, i]));
 const list = words => (words.length <= 2 ? words.join(' and ') : `${words.slice(0, -1).join(', ')} and ${words.at(-1)}`);
@@ -60,8 +62,10 @@ function situations(entries) {
   }).sort((a, b) => b.weight - a.weight);
 }
 
-const named = runs => {
-  const shown = runs.slice(0, NAMED).map(r => r.title), more = runs.length - shown.length;
+// The first NAMED situations in words, then "and N more"; `note` adds a few
+// words in brackets after one of them (how far ahead the bottle is there).
+const named = (runs, note = null) => {
+  const shown = runs.slice(0, NAMED).map(r => (note?.run === r ? `${r.title} (${note.text})` : r.title)), more = runs.length - shown.length;
   return more > 0 ? `${shown.join(', ')} and ${more} more` : list(shown);
 };
 
@@ -72,23 +76,31 @@ function roleOf(b) {
   return b.mixShare > 0 ? 'backup' : 'bench';
 }
 
-// One or two sentences on a bottle, in the app's voice; never a temperature.
-function textOf(b) {
+// A bottle in words, in the app's voice and never with a temperature:
+// `headline` ("Leads 20%", "In the mix for 30%", "On the bench"), `detail`
+// (its situations, and what stands behind it) and `text`, the two as one or
+// two sentences for a line on its own.
+function wordsOf(b) {
   const [top] = b.leads, near = b.closest;
   if (b.role === 'bench') {
-    return near ? `Your ${near.leader.name} outdoes it even for ${near.title}, where it comes closest.` : 'Nothing you wear calls for it.';
+    const detail = near ? `Your ${near.leader.name} outdoes it even for ${near.title}, where it comes closest.` : 'Nothing you wear calls for it.';
+    return { headline: 'On the bench', detail, text: detail };
   }
   if (!top) {
     const behind = near.gap < CLEAR_LEAD ? 'just behind' : `${points(near.gap)} behind`;
-    return `In the mix for ${shareText(b.mixShare)} of what you wear, never first. Closest for ${near.title}, ${behind} ${near.leader.name}.`;
+    const detail = `Closest for ${near.title}, ${behind} ${near.leader.name}.`;
+    return { headline: `In the mix for ${shareText(b.mixShare)}`, detail, text: `In the mix for ${shareText(b.mixShare)} of what you wear, never first. ${detail}` };
   }
-  const head = `Leads ${shareText(b.leadShare)} of what you wear: ${named(b.leads)}.`;
-  // Where the most would be lost without it says how far ahead it is; a hair's lead, who steps in.
+  // Where the most would be lost without it says how far ahead it is, beside
+  // that situation when it's one of those named; a hair's lead, who steps in.
   const clear = b.leads.reduce((a, r) => (r.weight * r.lead > a.weight * a.lead ? r : a));
-  if (b.role === 'backup') return `${head} ${top.next ? `${top.next.name} is right behind, so little would be lost without it.` : ''}`.trim();
-  if (clear.lead >= WIDE_LEAD && clear.next) return `${head} For ${clear.title} the next best, ${clear.next.name}, is ${points(clear.lead)} behind.`;
-  if (clear.lead < CLEAR_LEAD && top.next) return `${head} ${top.next.name} is right behind.`;
-  return head;
+  const wide = b.role !== 'backup' && clear.lead >= WIDE_LEAD && clear.next ? clear : null;
+  const inline = wide && b.leads.indexOf(wide) < NAMED;
+  const tail = b.role === 'backup' ? (top.next ? ` ${top.next.name} is right behind, so little would be lost without it.` : '')
+    : wide ? (inline ? '' : ` For ${wide.title} it's ${points(wide.lead)} ahead of ${wide.next.name}.`)
+      : clear.lead < CLEAR_LEAD && top.next ? ` ${top.next.name} is right behind.` : '';
+  const detail = `${named(b.leads, inline ? { run: wide, text: `${points(wide.lead)} ahead of ${wide.next.name}` } : null)}.${tail}`;
+  return { headline: `Leads ${shareText(b.leadShare)}`, detail, text: `Leads ${shareText(b.leadShare)} of what you wear: ${detail}` };
 }
 
 /**
@@ -103,7 +115,8 @@ function textOf(b) {
  *        leads, mix (situations: { cells, use, slot, bands, title, weight, lead, gap, next, leader };
  *          mix leaves out the ones it leads),
  *        closest ({ title, gap, leader }: the situation that comes up where it sits nearest the best, null with no cells),
- *        text }], workhorses first, each role's most useful first,
+ *        headline, detail, text (wordsOf) }], workhorses first: they and the specialists by how much they
+ *        lead, most first; backups and the bench by how little calls for them, least first (what could go),
  *      out: [{ bottle, why: 'rated' | 'off', text }]: bottles that cover nothing }
  */
 export function bottleRoles(ctx, { hidden = [] } = {}) {
@@ -142,10 +155,11 @@ export function bottleRoles(ctx, { hidden = [] } = {}) {
       closest: r.near ? { cell: r.near.cell.id, title: cellTitle(r.near.cell.use, r.near.cell.slot, r.near.cell.band), gap: r.near.gap, leader: r.near.leader } : null,
     };
     b.role = roleOf(b);
-    b.text = textOf(b);
-    return b;
-  }).sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role) || b.leadShare - a.leadShare || b.mixShare - a.mixShare
-    || (a.closest?.gap ?? 0) - (b.closest?.gap ?? 0) || a.bottle.name.localeCompare(b.bottle.name));
+    return Object.assign(b, wordsOf(b));
+  }).sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role) || (LEADING.has(a.role)
+    ? b.leadShare - a.leadShare || b.mixShare - a.mixShare
+    : a.leadShare - b.leadShare || a.mixShare - b.mixShare || (b.closest?.gap ?? 0) - (a.closest?.gap ?? 0))
+    || a.bottle.name.localeCompare(b.bottle.name));
   const wornSet = new Set(worn);
   const out = [
     ...ctx.owned.filter(f => !wornSet.has(f)).map(bottle => ({
@@ -163,20 +177,24 @@ const situationJSON = s => ({
 
 /**
  * bottleRoles as plain data (JSON and postMessage safe), bottles as stubs:
- * { total, counts ({ workhorse, specialist, backup, bench }), bottles: [{ id,
- * name, brand, …, role, label, leadShare, mixShare, loss, leads, mix,
- * closest, text }], out: [{ id, name, …, why, text }] }.
+ * { total, counts ({ workhorse, specialist, backup, bench }), carried (the
+ * share of what you wear the workhorses lead), roles (ROLES, for a screen
+ * that doesn't load this module), bottles: [{ id, name, brand, …, role,
+ * label, leadShare, mixShare, loss, leads, mix, closest, headline, detail,
+ * text }], out: [{ id, name, …, why, text }] }.
  */
 export function rolesJSON(roles) {
   return {
     total: round(roles.total, 4),
     counts: Object.fromEntries(ROLES.map(r => [r.id, roles.bottles.filter(b => b.role === r.id).length])),
+    carried: round(roles.bottles.reduce((sum, b) => sum + (b.role === 'workhorse' ? b.leadShare : 0), 0), 4),
+    roles: ROLES,
     bottles: roles.bottles.map(b => ({
       ...stub(b.bottle), role: b.role, label: roleById(b.role).label,
       leadShare: round(b.leadShare, 4), mixShare: round(b.mixShare, 4), loss: round(b.loss, 5),
       leads: b.leads.map(situationJSON), mix: b.mix.map(situationJSON),
       closest: b.closest && { cell: b.closest.cell, title: b.closest.title, gap: round(b.closest.gap), leader: stub(b.closest.leader) },
-      text: b.text,
+      headline: b.headline, detail: b.detail, text: b.text,
     })),
     out: roles.out.map(o => ({ ...stub(o.bottle), why: o.why, text: o.text })),
   };

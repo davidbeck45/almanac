@@ -826,7 +826,7 @@ async function main() {
         for (const o of roles.out) console.log(`  ${o.bottle.name} (${o.bottle.brand})\n    ${o.text}`);
       }
       if (!roles.bottles.length && !roles.out.length) console.log('\nNo bottles to read.');
-      console.log('\nA lead is the best you own for a situation; in the mix is within reach of it, where rotation gives a bottle turns.');
+      console.log('\nA lead is the best you own for a situation; in the mix means close enough to take turns.');
       return;
     }
 
