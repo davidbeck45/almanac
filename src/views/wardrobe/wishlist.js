@@ -2,14 +2,15 @@
 // buy check against the wardrobe (the pool client's 'check', judged like
 // Insights, with the styles you like), what it would fill, and how it would
 // do today; best verdicts first, then most gain. "I bought it" moves a
-// bottle into Mine. Also the Want button every screen shares (wish-toggle,
-// drawn by parts.js wantButton). Styles: src/css/wardrobe.css.
+// bottle into Mine, and a want takes a note of your own, written in place on
+// its card. Also the Want button every screen shares (wish-toggle, drawn by
+// parts.js wantButton). Styles: src/css/wardrobe.css.
 import { rank } from '../../engine.js';
 import { esc, plural, shortDate, toastName } from '../../ui.js';
 import { icon, img, messageHTML, sectionHead, matchBadge } from '../../ui/components.js';
 import { askPool, warmPool } from '../../app/pool.js';
 import { state, findRecord, nowSlot, poolInputs, ownedIn } from '../../app/state.js';
-import { loadWants, saveWants, setWant, hasWant } from '../../wishlist.js';
+import { loadWants, saveWants, setWant, hasWant, setNote, MAX_NOTE } from '../../wishlist.js';
 import {
   libNow, loadLib, libFailed, likedFor, inputsKey, ownable, repaint, listLoading, verdictBadge, verdictOf, verdictRank, fillsHTML, OWNED_WORD,
   liveHTML, speak,
@@ -23,6 +24,8 @@ const wish = {
   asked: new Set(), // ids whose records were asked for (asked again only by Try again)
   recordsError: '', // a sentence, when those records couldn't load
   undo: null, // { list: the wants before the last removal, id: the one removed }
+  noting: null, // { id, draft, base }: the want whose note is being written, as typed so far, on this visit to the pane
+  said: '', // what the last note saved did, which the status line says until the list has news of its own
 };
 
 // ---------- Templates (pure) ----------
@@ -48,9 +51,12 @@ const STAND_IN = 'A bottle on your wishlist';
  * One want: photo, name, its verdict and reasons, what it would fill,
  * today's match, I bought it and Remove. One you own already says where,
  * and offers only Remove. `failed`: its checks or record couldn't load, so
- * nothing on it is still on its way.
+ * nothing on it is still on its way. A note of your own sits under the
+ * card's facts, with Add a note or Edit note among its actions (one you own
+ * keeps its note, with nothing to edit); `noting` ({ draft }) draws the
+ * field to write it in, in their place.
  */
-export function wantCardHTML({ want, record, check, today, owned = null }, { failed = false } = {}) {
+export function wantCardHTML({ want, record, check, today, owned = null }, { failed = false, noting = null } = {}) {
   const name = record?.name ?? check?.name ?? null;
   const stand = name ? null : check?.missing ? 'A bottle the library doesn’t have' : failed ? STAND_IN : null;
   const f = record ?? { id: want.id, name: name ?? stand ?? STAND_IN };
@@ -80,15 +86,39 @@ export function wantCardHTML({ want, record, check, today, owned = null }, { fai
         ${verdict}
       </div>
       <p class="wish-meta">${esc(meta)}</p>
-      ${want.note ? `<p class="wish-note">${esc(want.note)}</p>` : ''}
       ${body}
       ${today && !owned ? `<p class="wish-today">${matchBadge(today.entry)}<span>${today.slot === 'day' ? 'today' : 'tonight'}</span></p>` : ''}
+      ${noting && !owned ? noteFormHTML(want.id, f.name, noting.draft) : `${noteHTML(want.note)}
       <div class="action-row">
         ${bought}
         <button class="btn tertiary compact" data-action="wish-remove" data-id="${id}">${icon.remove}<span>Remove<span class="visually-hidden"> ${esc(f.name)}</span></span></button>
-      </div>
+        ${owned ? '' : `<button class="btn tertiary compact" data-action="wish-note" data-id="${id}">${icon.pen}<span>${want.note ? 'Edit note<span class="visually-hidden"> on ' : 'Add a note<span class="visually-hidden"> to '}${esc(f.name)}</span></span></button>`}
+      </div>`}
     </div>
   </li>`;
+}
+
+// A want's note as its card shows it: your own words, marked with a pen so
+// they don't read as one of the check's reasons.
+const noteHTML = note => (note ? `<p class="wish-note">${icon.pen}<span><span class="visually-hidden">Your note: </span>${esc(note)}</span></p>` : '');
+
+/**
+ * The field a want's note is written in, where the card's actions were: one
+ * line, as long as a stored note can be, with Save and Cancel. Enter saves
+ * (it clicks Save, the form's own button) and Escape cancels (watchNote).
+ */
+export function noteFormHTML(id, name, draft = '') {
+  return `<form class="wish-note-form" novalidate>
+    <label class="name-field">
+      <span>Note<span class="visually-hidden"> on ${esc(name)}</span></span>
+      <input type="text" id="wish-note-field" name="note" data-id="${esc(id)}" value="${esc(draft)}" maxlength="${MAX_NOTE}" autocomplete="off" enterkeyhint="done" aria-describedby="wish-note-hint">
+    </label>
+    <p class="wish-note-hint" id="wish-note-hint">Where you smelled it, the size or price you’re waiting for, who told you about it. Up to ${MAX_NOTE} characters.</p>
+    <div class="action-row">
+      <button type="submit" class="btn primary compact" data-action="wish-note-save" data-id="${esc(id)}">${icon.check}<span>Save<span class="visually-hidden"> the note on ${esc(name)}</span></span></button>
+      <button type="button" class="btn tertiary compact" data-action="wish-note-cancel" data-id="${esc(id)}">Cancel</button>
+    </div>
+  </form>`;
 }
 
 /** What the list adds up to, once checked: "1 strong fit, 2 good, 1 you own already". */
@@ -103,9 +133,10 @@ export function wishSummary(items) {
 /**
  * The pane: { items (sorted), busy, error (a sentence), reload (the checks
  * need modules that didn't load: only a reload helps), failed (a record
- * didn't load) }.
+ * didn't load), noting ({ id, draft }: the want whose note is being
+ * written), said (what the last note saved did, for screen readers) }.
  */
-export function wishlistHTML({ items, busy = false, error = '', reload = false, failed = false }) {
+export function wishlistHTML({ items, busy = false, error = '', reload = false, failed = false, noting = null, said = '' }) {
   if (!items.length) {
     return messageHTML({
       glyph: icon.heart,
@@ -126,11 +157,12 @@ export function wishlistHTML({ items, busy = false, error = '', reload = false, 
       : esc(line);
   const down = Boolean(reload || error || failed);
   // The line redraws with the list, so screen readers hear it from a status
-  // line of its own (liveHTML), once per change.
+  // line of its own (liveHTML), once per change. What a note's save did is
+  // said there too, in the line's place (the card itself shows it).
   return `<section class="card wishlist" aria-labelledby="wish-title">
     ${sectionHead('Bottles you want', '<p>Best fit for your shelf first.</p>', { id: 'wish-title' })}
-    <p class="muted small wish-status">${status}</p>${liveHTML('wish-live', line)}
-    <ul class="wishes${busy ? ' busy' : ''}">${items.map(i => wantCardHTML(i, { failed: down })).join('')}</ul>
+    <p class="muted small wish-status">${status}</p>${liveHTML('wish-live', said || line)}
+    <ul class="wishes${busy ? ' busy' : ''}">${items.map(i => wantCardHTML(i, { failed: down, noting: noting && noting.id === i.want.id ? noting : null })).join('')}</ul>
   </section>`;
 }
 
@@ -156,7 +188,18 @@ function items() {
   }));
 }
 
-const wishlistPane = () => wishlistHTML({ items: items(), busy: wish.busy, error: wish.error || wish.recordsError, reload: libFailed(), failed: Boolean(wish.recordsError) });
+// A note being written stays open through the pane's redraws (a check
+// landing mid-word), but not past the visit: coming back to the Wishlist, or
+// finding its want gone or owned (another tab), starts with every card shut.
+function wishlistPane() {
+  const list = items();
+  const open = wish.noting && wish.noting.base === state.base && list.some(i => i.want.id === wish.noting.id && !i.owned);
+  if (!open) wish.noting = null;
+  return wishlistHTML({
+    items: list, busy: wish.busy, error: wish.error || wish.recordsError, reload: libFailed(), failed: Boolean(wish.recordsError),
+    noting: wish.noting, said: wish.said,
+  });
+}
 
 const onPane = () => state.base?.dest === 'wardrobe' && state.base.pane === 'wishlist';
 function paint(app) {
@@ -174,7 +217,7 @@ async function refresh(app) {
   if (need.length) {
     need.forEach(id => wish.asked.add(id));
     askPool('records', { ids: need }).then(() => paint(app), err => {
-      wish.recordsError = err.message;
+      Object.assign(wish, { recordsError: err.message, said: '' });
       paint(app);
     });
   }
@@ -196,7 +239,8 @@ async function refresh(app) {
   const key = JSON.stringify([inputsKey(lib), check.map(w => w.id), liked, stated]);
   if (key === wish.key) return;
   const n = ++asked;
-  Object.assign(wish, { key, busy: check.length > 0, error: '' });
+  // A new round is the list's own news: the status line is its again.
+  Object.assign(wish, { key, busy: check.length > 0, error: '', said: '' });
   if (!check.length) return paint(app);
   paint(app);
   try {
@@ -208,7 +252,7 @@ async function refresh(app) {
     if (n !== asked) return;
     wish.error = err.message;
   }
-  wish.busy = false;
+  Object.assign(wish, { busy: false, said: '' });
   paint(app);
 }
 
@@ -220,10 +264,43 @@ export const wishlistPaneDef = {
   render: wishlistPane,
   after(app) {
     warmPool();
+    watchNote(app);
     speak(document.getElementById('main'));
     refresh(app);
   },
 };
+
+// ---------- A want's note ----------
+
+// The note's field, each time it's drawn: what's typed is kept for the next
+// redraw, Escape cancels (and is the field's alone: it doesn't also close a
+// bottle page docked beside the list), and the form goes nowhere of its own.
+function watchNote(app) {
+  const field = document.getElementById('wish-note-field');
+  if (!field) return;
+  field.oninput = () => { if (wish.noting) wish.noting.draft = field.value; };
+  field.form.onsubmit = e => e.preventDefault();
+  field.form.onkeydown = e => {
+    if (e.key !== 'Escape' || e.isComposing) return;
+    e.stopPropagation();
+    closeNote(app, field.dataset.id);
+  };
+}
+
+const noteButton = id => document.querySelector(`.wish [data-action="wish-note"][data-id="${CSS.escape(id)}"]`);
+
+// The field goes and the card's actions come back, with focus on the note's
+// button where it was; `said` is what a save did, for the status line (with
+// none, a cancel or a note left as it was, the line keeps what it said). A
+// want that left the list meanwhile hands focus to the list's heading.
+function closeNote(app, id, said = '') {
+  wish.noting = null;
+  if (said) wish.said = said;
+  app.renderPage();
+  const button = noteButton(id);
+  if (button) button.focus();
+  else focusWant(null);
+}
 
 // ---------- Actions ----------
 
@@ -303,6 +380,37 @@ export const actions = {
     setWant(id, false);
     app.own(record);
     focusWant(next);
+  },
+  // Add a note, Edit note: the card's actions give way to the field, with
+  // the caret after what's there.
+  'wish-note'(el, app) {
+    const id = el.dataset.id;
+    const want = loadWants().find(w => w.id === id);
+    if (!want) return app.render(); // removed in another tab since this was drawn
+    wish.noting = { id, draft: want.note ?? '', base: state.base };
+    app.renderPage();
+    const field = document.getElementById('wish-note-field');
+    if (!field) return;
+    field.focus();
+    field.setSelectionRange(field.value.length, field.value.length);
+    field.scrollLeft = field.scrollWidth; // a long note's end, where the caret is
+  },
+  // Save, or Enter in the field (which clicks the form's Save): an emptied
+  // note is taken off, and the status line says what happened, reading the
+  // note back as stored, so no two saves say the same (speak says a line once).
+  'wish-note-save'(el, app, event) {
+    event?.preventDefault();
+    const id = el.dataset.id;
+    const before = loadWants().find(w => w.id === id);
+    const name = findRecord(id)?.name ?? before?.record?.name ?? 'this bottle'; // whole: it's heard, not fitted to a toast
+    if (!before) return closeNote(app, id, 'That bottle isn’t on your wishlist any more, so there’s no note to save.');
+    const after = setNote(id, el.form?.elements.note?.value ?? wish.noting?.draft ?? '').find(w => w.id === id);
+    const said = after.note === before.note ? '' : !after.note ? `Note removed from ${name}.`
+      : `Note ${before.note ? 'changed' : 'saved'} on ${name}: “${after.note}”`;
+    closeNote(app, id, said);
+  },
+  'wish-note-cancel'(el, app) {
+    closeNote(app, el.dataset.id);
   },
   'wish-retry'(el, app) {
     Object.assign(wish, { key: null, error: '', recordsError: '' });

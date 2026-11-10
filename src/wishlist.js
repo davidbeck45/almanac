@@ -8,7 +8,7 @@ import { usableRecord } from './collections.js';
 
 const KEY = 'scentcast.want';
 const MAX_WANTS = 200;
-const MAX_NOTE = 140;
+export const MAX_NOTE = 140; // a note's longest, in characters
 
 // Today on this device's calendar.
 const today = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -73,6 +73,18 @@ export const removeWant = (wants, id) => wants.filter(w => w.id !== String(id));
 export const hasWant = (wants, id) => wants.some(w => w.id === String(id));
 
 /**
+ * The list with a want's note set (where he smelled it, the price he's
+ * waiting for), trimmed to MAX_NOTE as a stored one is, or taken off when
+ * nothing is left of it. The want keeps its place and its date; a bottle
+ * that isn't on the list leaves it as it was.
+ */
+export function noteWant(wants, id, note) {
+  const text = typeof note === 'string' ? note.trim().slice(0, MAX_NOTE).trim() : '';
+  return wants.map(w => (w.id !== String(id) ? w
+    : { id: w.id, added: w.added, ...(text ? { note: text } : null), ...(w.record ? { record: w.record } : null) }));
+}
+
+/**
  * Add, remove or toggle and save in one go, as the UI does: -> the new list.
  * `want` true adds, false removes, undefined toggles.
  */
@@ -82,5 +94,17 @@ export function setWant(bottle, want, options = {}) {
   const on = want ?? !hasWant(wants, id);
   const next = on ? addWant(wants, bottle, options) : removeWant(wants, id);
   saveWants(next);
+  return next;
+}
+
+/**
+ * Sets or clears a want's note and saves, as the UI does: -> the new list.
+ * Like setWant it starts from the stored list, so a want another tab added
+ * since this one drew is kept, and one it removed stays removed.
+ */
+export function setNote(id, note) {
+  const wants = loadWants();
+  const next = noteWant(wants, id, note);
+  if (hasWant(wants, id)) saveWants(next);
   return next;
 }
