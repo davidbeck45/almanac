@@ -7,14 +7,14 @@
 // The sections in their own modules are src/views/bottle-*.js; the ones that
 // ask the suggestion pool keep their answers with pooled(), and draw again
 // on their own when an answer lands (redrawSection).
-import { rank, comfortRange, restReason, savedReason, occasionWeights, SEASONS, performanceRating } from '../engine.js';
+import { rank, comfortRange, restReason, SEASONS, performanceRating } from '../engine.js';
 import { layerPicks, pairingKept, warmPairing } from '../layering.js';
 import { setHidden } from '../hidden.js';
 import { loadWants, saveWants, hasWant, setWant } from '../wishlist.js';
 import { loadSkin, applySkin } from '../skin.js';
 import { isCustomId, shareToken } from '../custom.js';
 import { styleById } from '../scent-styles.js';
-import { pickGapLine } from '../contrast.js';
+import { pickGapLine, whyParts, whyNotes } from '../contrast.js';
 import { esc, deg, temp, matchPct, relativeDay, toastName } from '../ui.js';
 import { icon, img, bar, reasonsList, accordColor, wearButton, magDot, messageHTML, shelfHTML } from '../ui/components.js';
 import { askPool } from '../app/pool.js';
@@ -326,13 +326,8 @@ export function bottlePageHTML(model, { modal = true } = {}) {
 
 const SEASON_COLORS = { winter: '#8fc7f0', spring: '#9be39a', summer: '#f6a08f', fall: '#f2b264', day: '#f5c451', night: '#8ea3d9' };
 const GENDER = { men: 'for men', women: 'for women', 'women and men': 'unisex' };
-const FACTORS = [
-  ['occasion', 'Occasion', '#e7b6ff'],
-  ['season', 'Season', '#9be39a'],
-  ['weather', 'Weather', '#8fc7f0'],
-  ['time', 'Time of day', '#f5c451'],
-  ['quality', 'Rating', '#f2b264'],
-];
+// Why's bars, by the part of the score each shows (whyParts in src/contrast.js).
+const FACTOR_COLORS = { occasion: '#e7b6ff', season: '#9be39a', weather: '#8fc7f0', time: '#f5c451', quality: '#f2b264' };
 // Names longer than this step down a size, so they don't run to four lines.
 const LONG_NAME = 28;
 // Accord bars are Fragrantica's widths (30–100), read out as words.
@@ -426,42 +421,19 @@ function actionsSection({ f, entry, ctx, worn, canWear: wearable, owned, inMine,
   </div>`;
 }
 
-// Why a bottle is given a rest, in the words of its reason (src/engine.js).
-const restText = (parts, slot) => restReason(parts, slot) ?? (parts.planned ? 'Picked for a day nearby' : 'Worn recently');
-
-// The least the heat or cold has to take off for Why to say so, in percent.
-const NOTE_MIN = 2;
+// Why it ranks here: each part of the score as a bar, then what the heat, the
+// cold, a recent wear or an event later in the plan takes off or holds back.
+// The parts and the sentences are src/contrast.js's (whyParts, whyNotes),
+// which the CLI's --why prints too.
 function whySection({ entry, pick, solo, win, occasion, worn, todayISO: today }) {
   if (!entry) return '';
-  const p = entry.parts;
-  // The rating bar is mostly your stars once you've rated it (engine
-  // quality()), and says so; with neither stars nor crowd votes (a bottle
-  // entered by hand) it would only read a neutral 50, so it stays out.
-  const f = entry.fragrance;
-  const yours = Number.isFinite(f.personal?.rating);
-  const crowd = f.source !== 'custom' && f.rating > 0 && f.ratingVotes > 0;
-  const bars = FACTORS.filter(([k]) => p[k] !== null && p[k] !== undefined && (k !== 'quality' || yours || crowd))
-    .map(([k, label, color]) => bar(k === 'quality' && yours ? 'Your rating' : label, p[k] * 100, color, `${Math.round(p[k] * 100)}%`)).join('');
-  // What a recent wear (or a pick for a day nearby) takes off its match.
-  const rotation = p.rotation > 0
-    ? `<p class="why-note">${esc(restText(p, win?.slot))}: ${Math.round(p.rotation * 100)}% lower so others get a turn.</p>`
-    : '';
-  // What the heat takes off a rich bottle for an occasion (engine richInHeat),
-  // and the cold off a thin one (thinInCold), from NOTE_MIN percent: a point
-  // is a mild evening's or the office commute's, not this heat or cold.
-  const phrase = occasion ? esc(occasion.phrase ?? occasion.label.toLowerCase()) : '';
-  const heat = occasion && p.heat ? Math.round(occasionWeights(occasion).heat * p.heat * 100) : 0;
-  const cold = occasion && p.cold ? Math.round(occasionWeights(occasion).cold * p.cold * 100) : 0;
-  const heavy = heat >= NOTE_MIN ? `<p class="why-note">Rich for this heat: ${heat}% lower for ${phrase}.</p>` : '';
-  const thin = cold >= NOTE_MIN ? `<p class="why-note">Thin for this cold: ${cold}% lower for ${phrase}.</p>` : '';
-  // Kept for an event later in the plan (planWindows' `saved`): its match
-  // stands, another bottle takes the window. Said as on today, as the plan says it.
-  const saved = p.saved && win ? `<p class="why-note">${esc(savedReason(p.saved, today ?? win.dateISO))}, so the plan picks another bottle here.</p>` : '';
+  const bars = whyParts(entry, occasion).map(({ key, label, value, pct }) => bar(label, value * 100, FACTOR_COLORS[key], `${pct}%`)).join('');
+  const notes = whyNotes(entry, win, { occasion, todayISO: today }).map(n => `<p class="why-note">${esc(n.text)}</p>`).join('');
   const title = solo ? `How it would do ${win.slot === 'day' ? 'by day' : 'tonight'}` : 'Why it ranks here';
   // In the list, beside its pick when that's another bottle (src/contrast.js).
   const gap = !solo && win ? pickGapLine(entry, pick, win, { occasion, worn }) : '';
   const vs = gap ? `<p class="why-vs">${esc(gap)}</p>` : '';
-  return `<section class="bp-section"><h3>${title} <span class="h3-aside">${matchPct(entry)}% match</span></h3>${vs}<div class="bars why">${bars}</div>${heavy}${thin}${rotation}${saved}</section>`;
+  return `<section class="bp-section"><h3>${title} <span class="h3-aside">${matchPct(entry)}% match</span></h3>${vs}<div class="bars why">${bars}</div>${notes}</section>`;
 }
 
 // Only the relative words go lower case: "Also good for tonight", "Also good for Saturday night".

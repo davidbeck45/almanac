@@ -7,7 +7,7 @@
 // (src/views/bottle.js), the CLI's answers (scripts/recommend.mjs) and the
 // Omarchy widget (omarchy/widget.mjs) read it.
 import { heaviness } from './accords.js';
-import { performanceLevel, isDisliked, rotationPenalty, occasionWeights, DAILY_WEIGHTS } from './engine.js';
+import { performanceLevel, isDisliked, rotationPenalty, occasionWeights, DAILY_WEIGHTS, restReason, savedReason } from './engine.js';
 import { styleScores, shownOf, STYLES } from './scent-styles.js';
 import { matchPct } from './ui.js';
 
@@ -238,4 +238,60 @@ export function pickGapLine(entry, pick, win, { occasion = null, worn = null } =
       : isDisliked(entry.fragrance) ? `you rate it ${stars}★`
         : `the plan gives ${name} a turn`;
   return `${by(-points)} over ${name} ${at}, but ${but}.`;
+}
+
+// ---------- Why it ranks here ----------
+// What the bottle page's Why says of one ranked entry, as data: the page
+// draws it (src/views/bottle.js) and the CLI's --why prints it
+// (scripts/recommend.mjs), so the two say it in the same words.
+
+// The least the heat or cold has to take off for Why to say so, in percent.
+const NOTE_MIN = 2;
+// Why's bars, in the page's order.
+const WHY_PARTS = [['occasion', 'Occasion'], ['season', 'Season'], ['weather', 'Weather'], ['time', 'Time of day'], ['quality', 'Rating']];
+// Why a bottle is given a rest, in the words of its reason (src/engine.js).
+const restText = (parts, slot) => restReason(parts, slot) ?? (parts.planned ? 'Picked for a day nearby' : 'Worn recently');
+
+/**
+ * Each part of an entry's score as Why's bars show it, for the list's
+ * `occasion`: [{ key, label, value: the fit (0..1), pct: as the bar says it,
+ * weight: its share of the score (occasionWeights, else DAILY_WEIGHTS) }].
+ * The rating bar is mostly his stars once he's rated it (engine quality()),
+ * and says so ("Your rating"); with neither stars nor crowd votes (a bottle
+ * entered by hand) it would only read a neutral 50, so it stays out.
+ */
+export function whyParts(entry, occasion = null) {
+  const p = entry.parts, f = entry.fragrance;
+  const W = occasion ? occasionWeights(occasion) : DAILY_WEIGHTS;
+  const yours = Number.isFinite(f.personal?.rating);
+  const crowd = f.source !== 'custom' && f.rating > 0 && f.ratingVotes > 0;
+  return WHY_PARTS.filter(([k]) => p[k] !== null && p[k] !== undefined && (k !== 'quality' || yours || crowd))
+    .map(([key, label]) => ({ key, label: key === 'quality' && yours ? 'Your rating' : label, value: p[key], pct: Math.round(p[key] * 100), weight: W[key] }));
+}
+
+/**
+ * What Why says took points off an entry's match, or holds it back, in the
+ * page's order: [{ key, text, pct? }]. What the heat takes off a rich bottle
+ * for an occasion (engine richInHeat) and the cold off a thin one
+ * (thinInCold), from NOTE_MIN percent (a point is a mild evening's or the
+ * office commute's, not this heat or cold): "Rich for this heat: 10% lower
+ * for a date."; what a recent wear, or a pick for a day nearby, takes off:
+ * "Worn 3 days ago: 6% lower so others get a turn."; and a bottle kept for
+ * an event later in the plan (planWindows' `saved`: its match stands,
+ * another bottle takes the window), said as on `todayISO`, as the plan says
+ * it. Never a temperature.
+ */
+export function whyNotes(entry, win, { occasion = null, todayISO = null } = {}) {
+  const p = entry.parts, notes = [];
+  const phrase = occasion ? occasion.phrase ?? occasion.label.toLowerCase() : '';
+  const heat = occasion && p.heat ? Math.round(occasionWeights(occasion).heat * p.heat * 100) : 0;
+  const cold = occasion && p.cold ? Math.round(occasionWeights(occasion).cold * p.cold * 100) : 0;
+  if (heat >= NOTE_MIN) notes.push({ key: 'heat', pct: heat, text: `Rich for this heat: ${heat}% lower for ${phrase}.` });
+  if (cold >= NOTE_MIN) notes.push({ key: 'cold', pct: cold, text: `Thin for this cold: ${cold}% lower for ${phrase}.` });
+  if (p.rotation > 0) {
+    const pct = Math.round(p.rotation * 100);
+    notes.push({ key: 'rotation', pct, text: `${restText(p, win?.slot)}: ${pct}% lower so others get a turn.` });
+  }
+  if (p.saved && win) notes.push({ key: 'saved', text: `${savedReason(p.saved, todayISO ?? win.dateISO)}, so the plan picks another bottle here.` });
+  return notes;
 }
