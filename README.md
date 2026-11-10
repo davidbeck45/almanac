@@ -52,6 +52,7 @@ node scripts/recommend.mjs --pack --city London --from 2026-12-10 --to 2026-12-1
 node scripts/recommend.mjs --spray "Liquid Brun" --occasion date             # how many sprays, and where
 node scripts/recommend.mjs --layer "Liquid Brun"   # or --layer all
 node scripts/recommend.mjs --ideal "Amber Empire"  # the temperatures it wears best in
+node scripts/recommend.mjs --why "Liam" --city "New York"   # where it ranks in today's picks, and why (--slot, --occasion, --date for another window)
 node scripts/recommend.mjs --mix                   # the collection's scent styles
 node scripts/recommend.mjs --doubles               # bottles you own that wear as one
 node scripts/recommend.mjs --gaps --city Houston   # what the wardrobe is missing there, and what fills it

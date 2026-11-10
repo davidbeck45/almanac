@@ -7,6 +7,7 @@
 //   node scripts/recommend.mjs --layer "Liquid Brun"       (what layers with it; --layer all for the best pairs)
 //   node scripts/recommend.mjs --layer "Liquid Brun" --city "New York" [--slot night] [--date 2026-11-07]   (for that weather)
 //   node scripts/recommend.mjs --ideal "Amber Empire"     (the temperatures it wears best in)
+//   node scripts/recommend.mjs --why "Liam" --city "New York" [--slot night] [--occasion date] [--date 2026-11-07]   (where it ranks in a window's picks, and why)
 //   node scripts/recommend.mjs --mix                       (the collection's scent styles, bottle by bottle)
 //   node scripts/recommend.mjs --doubles                   (bottles in the collection that wear as one)
 //   node scripts/recommend.mjs --styles "Prada L'Homme"   (one bottle's style scores; any Fragrantica bottle)
@@ -59,6 +60,8 @@ import { packTrip, withEvents, picksFor, tripOccasion } from '../src/pack.js';
 import { sprayGuide } from '../src/spray.js';
 import { tiesFor, planTies, tieName, tiesNews, runnerUpOf } from '../src/contrast.js';
 import { doubles } from '../src/doubles.js';
+import { pickGapLine, whyParts, whyNotes } from '../src/contrast.js';
+import { matchPct, ordinal, listLabel, displayReasons } from '../src/ui.js';
 import { gapContext, gapReport, buyCheck, checkJSON, ratingText, DEFAULT_CLIMATE, USES, useLabel } from '../src/gaps.js';
 import { ROLES, bottleRoles, rolesJSON, shareText as wearShare } from '../src/roles.js';
 import { fetchClimate } from '../src/climate.js';
@@ -88,6 +91,7 @@ const MODES = [
   ['styles', []],
   ['pack', [...PLACE, 'from', 'to', 'max', 'occasion', 'slot', 'events']],
   ['spray', [...PLACE, 'date', 'slot', 'occasion']],
+  ['why', [...PLACE, 'occasion', 'slot', 'date', 'events']],
   ['check', [...PLACE, 'uses', 'value', 'no-value', 'style', 'mists']],
   ['gaps', [...PLACE, 'uses', 'value', 'no-value', 'mists', 'top']],
   ['roles', [...PLACE, 'uses']],
@@ -126,6 +130,7 @@ export function misread(args) {
 function insteadOf(key, mode, name, args) {
   const off = `--${key} doesn't apply to ${name}`;
   const suggesting = ['style', 'more-like', 'notes'].includes(mode);
+  if (mode === 'why' && WHY_INSTEAD[key]) return WHY_INSTEAD[key];
   switch (key) {
     case 'events': return `--events goes with a plan (today's picks, --week, --date or --pack), not ${name}`;
     case 'week': return mode === 'date' ? '--date picks for one day; leave out --week' : off;
@@ -308,6 +313,7 @@ async function main() {
         week: { type: 'boolean', default: false },
         layer: { type: 'string' },
         ideal: { type: 'string' },
+        why: { type: 'string' },
         journal: { type: 'string' },
         demo: { type: 'boolean', default: false },
         top: { type: 'string' },
@@ -406,7 +412,7 @@ async function main() {
   // --events, which wins on its window. One that doesn't fit what's asked
   // (gone by, the other slot, another date) is left out without a word,
   // since David didn't type it; trips keep their own.
-  if (journal?.events.length && [null, 'week', 'date'].includes(mode)) {
+  if (journal?.events.length && [null, 'week', 'date', 'why'].includes(mode)) {
     const only = slot ?? occasion?.slot;
     for (const e of journal.events) {
       const o = occasionById(e.occasion);
@@ -436,6 +442,55 @@ async function main() {
     const line = journalLine();
     if (line) console.log(`\n${line}`);
   };
+  // --why NAME: where one bottle stands in a window's picks and why, in the
+  // words of its page's Why (whyWindow). The windows are the matching mode's
+  // own (today's picks, or --date's), planned as it plans them, so the two
+  // agree; each hands its plan to sayWhy. A switched-off bottle is ranked
+  // among the rest as if it were on, saying so.
+  let sayWhy = null;
+  if (mode === 'why') {
+    if (!args.city && !args.loc) fail('--why needs a place: --city NAME or --loc LAT,LON');
+    let hits = matchBottles(wardrobe.filter(f => !off.has(f.id)), args.why);
+    const switchedOff = !hits.length;
+    if (switchedOff) hits = matchBottles(wardrobe.filter(f => off.has(f.id)), args.why);
+    if (!hits.length) fail(`No bottle in the wardrobe matches "${args.why}". For one you don't own, --check "${args.why}" says whether it's worth buying.`);
+    const bottle = hits[0];
+    if (switchedOff) {
+      console.error(`${bottle.name} is switched off; answering for it anyway.`);
+      off.delete(bottle.id);
+    }
+    if (hits.length > 1) console.error(`"${args.why}" matches ${hits.map(f => f.name).join(', ')}; using ${bottle.name}. Give more of the name for another.`);
+    // result: the mode's plan ([{ win, ranked, pick }]); todayISO: the place's
+    // own today; date: --date's, else `now`, the forecast's reading.
+    sayWhy = (result, { place, todayISO, date = null, now = null }) => {
+      const windows = result.map(r => whyWindow(bottle, r, { occasion, history, todayISO })).filter(Boolean);
+      if (!windows.length) fail(`No window left to answer for${slot ? ` with --slot ${slot}` : ''}`);
+      const typical = result.some(r => r.win.typical);
+      if (args.json) {
+        console.log(JSON.stringify({
+          place,
+          ...(date ? { date, weather: typical ? 'typical' : 'forecast' } : { now }),
+          occasion: occasion?.id ?? null,
+          journal: freshness || false,
+          bottle: { name: bottle.name, brand: bottle.brand, inspiredBy: inspiredBy(bottle), ...(Number.isFinite(bottle.personal?.rating) && { stars: bottle.personal.rating }), ...(switchedOff && { switchedOff: true }) },
+          windows: windows.map(({ win, ...rest }) => rest),
+        }, null, 2));
+        return;
+      }
+      console.log(date
+        ? `${place.name} · ${shortDate(date)}${typical ? ' · typical weather for the date (past the forecast)' : ''}${occasion ? ` · occasion: ${occasion.label}` : ''}`
+        : `${place.name} · now ${Math.round(now.tempF)}°F ${now.label}${occasion ? ` · occasion: ${occasion.label}` : ''}`);
+      console.log(`${bottle.name} (${bottle.brand}${bottle.original ? `, inspired by ${inspiredBy(bottle)}` : ''})${switchedOff ? ' · switched off: ranked as if it were on' : ''}`);
+      for (const w of windows) {
+        const win = w.win, event = win.occasion ? `, for ${win.occasion.phrase ?? win.occasion.label.toLowerCase()}` : '';
+        const sky = `${win.typical ? 'typically ' : ''}${date ? win.condition.toLowerCase() : win.condition}`;
+        const rain = win.pop >= 30 ? (win.typical ? `, wet on ${win.pop}% of these dates in past years` : `, ${win.pop}% rain`) : '';
+        console.log(`\n${date ? (win.slot === 'day' ? 'Day' : 'Night') : win.label}${event}: ${sky}, feels ${Math.round(win.feelsF)}°F, ${Math.round(win.humidity)}% humidity${rain}`);
+        for (const line of whyLines(w)) console.log(`  ${line}`);
+      }
+      sayJournal();
+    };
+  }
   // Picks rank the bottles switched on; suggestions and checks count the rest as owned (`hidden`).
   const fragrances = wardrobe.filter(f => !off.has(f.id)), hidden = wardrobe.filter(f => off.has(f.id));
   const suggesting = Boolean(args.gaps || args.check || args.style || args['more-like'] || args.notes || args.dupes);
@@ -1027,6 +1082,7 @@ async function main() {
     atPlace(todayISO);
     if (windows?.length) result = planWindows(fragrances, onWindows(windows, `--date ${args.date}`), { occasion, history, nudge: nudge && args.date <= todayISO, nowISO: todayISO });
     if (!result?.length) fail(`No weather came back for ${args.date}`);
+    if (sayWhy) return sayWhy(result, { place, todayISO, date: args.date });
     const typical = result.some(r => r.win.typical);
     const ties = tiesOf(result, !wanted || events.length > 0);
     if (args.json) {
@@ -1126,6 +1182,7 @@ async function main() {
     const plan = planWindows(fragrances, [...shown, ...next], { history, nudge });
     [result, after] = [plan.slice(0, shown.length), plan.slice(shown.length)];
   }
+  if (sayWhy) return sayWhy(result, { place, todayISO: wx.todayISO, now: wx.now });
   // A plan's ties are read over the window after it and the events after
   // today's windows too, which hold their bottles.
   const ties = events.length || !wanted ? newsOnly(result, planTies([...result, ...after, ...ahead], { history }).slice(0, result.length)) : tiesOf(result, false);
@@ -1305,9 +1362,85 @@ async function discover(args, fragrances, { slot, count, history, hidden }) {
   console.log(`\n${CREDIT}.`);
 }
 
+// ---------- --why ----------
+// What to do instead of a flag --why doesn't read (insteadOf).
+const WHY_INSTEAD = {
+  week: '--week doesn\'t apply to --why, which answers for today\'s windows; for another day, give --date',
+  top: '--top doesn\'t apply to --why, which answers for one bottle; today\'s picks with --top N give the first N with their reasons',
+};
+
+// The most bottles above a pick that its answer names (a wear logged for the
+// window can rank anywhere in its list).
+const AHEAD_MAX = 3;
+
+/**
+ * --why for one window of a plan ({ win, ranked, pick }: planWindows', or a
+ * list ranked alone with its top as the pick): where bottle `f` stands in it
+ * and why, as plain data, in the words of its page's Why (src/contrast.js).
+ * `occasion`: the list's (--occasion; an event's window has its own),
+ * `history`: the journal's wears, `todayISO`: the plan's today, which a
+ * bottle saved for an event is said from. -> { window, occasion, rank, of,
+ * match, tier, score, isPick, pick, gap: { points, line }, reasons, parts,
+ * notes, ahead?, text, win }, or null when the list doesn't hold it.
+ * `gap.line` is pickGapLine's, or says it's the pick; `points` how far its
+ * displayed match sits under the pick's (negative: over it, where the plan
+ * passed it by). `parts`: Why's bars (each fit as a percent) with the share
+ * of the score each weighs. `notes`: what the heat, the cold or a recent
+ * wear took off, and a bottle saved for an event. `ahead`: for a pick that
+ * isn't first in its list, the bottles above it (the first AHEAD_MAX), each
+ * with why it gave way. No temperature in any of it but `window`.
+ */
+export function whyWindow(f, { win, ranked, pick }, { occasion = null, history = [], todayISO = win.dateISO } = {}) {
+  const occ = win.occasion ?? occasion ?? null;
+  const at = ranked.findIndex(r => String(r.fragrance.id) === String(f.id));
+  if (at < 0) return null;
+  const entry = ranked[at];
+  const isPick = Boolean(pick) && String(pick.fragrance.id) === String(f.id);
+  const worn = history.find(h => !h.planned && h.date === win.dateISO && h.slot === win.slot)?.id ?? null;
+  const label = listLabel(win, occ);
+  const beside = e => pickGapLine(e, pick, win, { occasion: occ, worn });
+  // A bottle saved for an event has no line beside the pick: its own note says why it gave way.
+  const kept = e => whyNotes(e, win, { occasion: occ, todayISO }).find(n => n.key === 'saved')?.text ?? '';
+  const ahead = isPick ? ranked.slice(0, at).map(r => ({ name: r.fragrance.name, line: beside(r) || kept(r) })).filter(a => a.line).slice(0, AHEAD_MAX) : [];
+  return {
+    window: { label: win.label, date: win.dateISO, slot: win.slot, feelsF: Math.round(win.feelsF), humidity: Math.round(win.humidity), dewF: Math.round(win.dewF), condition: win.condition, rainChance: win.pop, ...(win.typical && { typical: true }) },
+    occasion: occ?.id ?? null,
+    ...(win.occasion && { event: true }),
+    rank: at + 1,
+    of: ranked.length,
+    match: matchPct(entry),
+    tier: entry.tier,
+    score: +entry.score.toFixed(3),
+    isPick,
+    pick: pick ? { name: pick.fragrance.name, brand: pick.fragrance.brand, match: matchPct(pick), tier: pick.tier, score: +pick.score.toFixed(3), ...(pick.nudged && { nudged: true }) } : null,
+    gap: { points: pick ? matchPct(pick) - matchPct(entry) : 0, line: isPick ? `It's the pick ${label}.` : beside(entry) },
+    reasons: displayReasons(entry).map(sign),
+    parts: whyParts(entry, occ).map(p => ({ part: p.key, label: p.label, fit: p.pct, weight: +p.weight.toFixed(3) })),
+    notes: whyNotes(entry, win, { occasion: occ, todayISO }).map(n => n.text),
+    ...(ahead.length && { ahead }),
+    text: `${f.name} is ${ordinal(at + 1)} of ${ranked.length} ${label}: ${matchPct(entry)}% match, tier ${entry.tier}.`,
+    win,
+  };
+}
+
+// A window's answer as the lines --why prints under its heading.
+function whyLines(w) {
+  const pct = x => `${Math.round(x * 100)}%`;
+  return [
+    w.text,
+    w.gap.line,
+    ...(w.ahead ?? []).map(a => `${a.name}: ${a.line}`),
+    !w.isPick && w.pick && `Pick: ${w.pick.name} (${w.pick.brand}), ${w.pick.match}% match`,
+    w.reasons.length && `Reasons: ${w.reasons.join('; ')}`,
+    `Parts: ${w.parts.map((p, i) => `${p.label} ${p.fit}% (${i ? '' : 'weighs '}${pct(p.weight)})`).join(' · ')}`,
+    ...w.notes,
+  ].filter(Boolean);
+}
+
 const USAGE = `usage: node scripts/recommend.mjs (--city NAME | --loc LAT,LON[,NAME]) [--occasion ${OCCASIONS.map(o => o.id).join('|')}] [--slot day|night] [--week] [--events "DATE [day|night] OCCASION; …"] [--journal FILE|TOKEN] [--exclude NAME,NAME] [--demo] [--top N] [--json]
        node scripts/recommend.mjs --layer NAME|all [--city NAME | --loc LAT,LON[,NAME]] [--slot day|night] [--date YYYY-MM-DD] [--exclude NAME,NAME] [--json]
        node scripts/recommend.mjs --ideal NAME [--exclude NAME,NAME] [--json]
+       node scripts/recommend.mjs --why NAME (--city NAME | --loc LAT,LON[,NAME]) [--slot day|night] [--occasion ID] [--date YYYY-MM-DD] [--events "DATE [day|night] OCCASION; …"] [--journal FILE|TOKEN] [--exclude NAME,NAME] [--demo] [--json]
        node scripts/recommend.mjs --mix [--exclude NAME,NAME] [--demo] [--json]
        node scripts/recommend.mjs --doubles [--exclude NAME,NAME] [--demo] [--json]
        node scripts/recommend.mjs --styles NAME [--json]
