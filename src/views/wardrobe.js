@@ -1293,7 +1293,7 @@ export const changes = {
     if (!sort || el.selectedOptions[0]?.disabled) return;
     state.ownedSort = sort.id;
     savePrefs();
-    app.keepingFocus(el, '#app', app.render);
+    app.keepingFocus(el, '#app', app.renderPage);
     const said = ownedSorts(sourceRecords(), { ...ownedBy(), hidden: hiddenIn(viewingDemo()) }).find(s => s.id === sort.id)?.said ?? sort.said;
     clearTimeout(filterSaid);
     say('owned-live', said);
