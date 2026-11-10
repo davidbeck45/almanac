@@ -117,6 +117,7 @@ const SHELL = [
   'src/pool-tasks.js',
   'src/pool-worker.js',
   'src/profiles.js',
+  'src/roles.js',
   'src/scene.js',
   'src/scent-styles.js',
   'src/similar.js',
