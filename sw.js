@@ -78,6 +78,7 @@ const SHELL = [
   'src/views/bottle-skin.js',
   'src/views/bottle-spray.js',
   'src/views/bottle-styles.js',
+  'src/views/bottle-wears.js',
   'src/views/compare.js',
   'src/views/discover.js',
   'src/views/discover/query.js',
