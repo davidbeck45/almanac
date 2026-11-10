@@ -5,6 +5,7 @@
 import './bottle-check.js';
 import './bottle-spray.js';
 import './bottle-skin.js';
+import './bottle-wears.js';
 import './bottle-styles.js';
 import './bottle-dupes.js';
 import './bottle-crowd.js';
