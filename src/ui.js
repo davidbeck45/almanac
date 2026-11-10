@@ -123,3 +123,11 @@ export function feelWords(win) {
   if (win.pop >= 30) words.push(`${win.pop}% rain`);
   return words;
 }
+
+// "2 sprays · neck, chest", from src/spray.js's guide: Now's pick card and
+// the Omarchy panel say how much to spray in the same few words.
+const SPOT_WORDS = { 'collar or scarf': 'collar', 'back of the neck': 'nape' };
+export function sprayLine({ sprays: [lo, hi], where, unit = 'spray' }) {
+  const count = lo === hi ? plural(lo, unit) : `${lo}–${hi} ${unit}s`;
+  return `${count} · ${where.map(w => SPOT_WORDS[w] ?? w).join(', ')}`;
+}

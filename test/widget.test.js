@@ -26,6 +26,7 @@ test('the widget leads with the next window and plans the rest of the week', () 
   assert.notEqual(out.now.runnerUp.name, out.now.name);
   assert.ok(out.now.reasons.length > 0 && out.now.reasons.length <= 4);
   assert.ok(out.now.accords.every(a => /^#[0-9a-f]{6}$/.test(a.color)));
+  assert.match(out.now.spray, /^(\d|\d–\d) (sprays?|dabs?) · [a-z]/, 'how much to spray and where, as Now’s card says it');
   assert.ok(out.now.match >= 1 && out.now.match <= 99);
 });
 

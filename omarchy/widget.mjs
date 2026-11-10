@@ -24,7 +24,8 @@ import { occasionById } from '../src/occasions.js';
 import { applySkin } from '../src/skin.js';
 import { searchCities } from '../src/location.js';
 import { fetchForecast, week } from '../src/weather.js';
-import { displayReasons, matchPct } from '../src/ui.js';
+import { sprayGuide } from '../src/spray.js';
+import { displayReasons, matchPct, sprayLine } from '../src/ui.js';
 
 export const OMARCHY_LOCATION = join(homedir(), '.local/state/omarchy/settings/weather.json');
 const COORDS = /^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*(?:,\s*(.+?))?\s*$/;
@@ -122,7 +123,9 @@ function brief(p, ties = []) {
   };
 }
 
-// The window to wear now, in full; `tieLine` is the panel's one line on its
+// The window to wear now, in full; `spray` is how much to spray and where,
+// in the words of Now's card ("2 sprays · neck, chest": src/spray.js's guide
+// for the window and its occasion); `tieLine` is the panel's one line on its
 // ties ("Legacy (fresher) suits tonight just as well."), '' with none, and
 // the runner-up the best after them, as they're equal choices (runnerUpOf:
 // never one saved for a later event or rated 2★ or lower, as the CLI's).
@@ -144,6 +147,7 @@ function detail(p, ties = []) {
     url: f.url ?? '',
     accords: Object.keys(f.accords).slice(0, 3).map(name => ({ name, color: accordColor(name) })),
     reasons: displayReasons(pick, 4).map(r => ({ tone: r.tone, text: cap(r.text) })),
+    spray: sprayLine(sprayGuide(f, win, win.occasion ?? null)),
     runnerUp: runnerUp ? { name: runnerUp.fragrance.name, brand: runnerUp.fragrance.brand, tier: runnerUp.tier } : null,
   };
 }

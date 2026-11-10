@@ -16,7 +16,7 @@ import { toggleWear, wearStamp, wornIn, journalStats, journalFreshness, shiftISO
 import { parseEventText } from '../events.js';
 import { WINDOWS } from '../weather.js';
 import { routeHash, go } from '../app/router.js';
-import { esc, cap, temp, deg, plural, shortDate, weekdayShort, windowRange, feelWords, displayReasons, moveText, ratedText, listLabel } from '../ui.js';
+import { esc, cap, temp, deg, plural, shortDate, weekdayShort, windowRange, feelWords, displayReasons, moveText, ratedText, listLabel, sprayLine } from '../ui.js';
 import {
   icon, img, slotIcon, wxIcon, wxIconFor, messageHTML, skeletonHTML, reasonsList, chips, matchBadge, shelfHTML,
   wearButton, segHTML, starsHTML, sharedBannerHTML, accordColor, sectionHead, sheetFrame,
@@ -173,13 +173,6 @@ export function eventTagHTML(win, { clear = false } = {}) {
 function reasonsOf(entry, n) {
   const nudge = nudgeOf(entry);
   return displayReasons(nudge ? { ...entry, reasons: entry.reasons.filter(r => r.text !== nudge) } : entry, n);
-}
-
-// "2 sprays · chest", from src/spray.js's guide, for the pick card.
-const SPOT_WORDS = { 'collar or scarf': 'collar', 'back of the neck': 'nape' };
-export function sprayLine({ sprays: [lo, hi], where, unit = 'spray' }) {
-  const count = lo === hi ? plural(lo, unit) : `${lo}–${hi} ${unit}s`;
-  return `${count} · ${where.map(w => SPOT_WORDS[w] ?? w).join(', ')}`;
 }
 
 // "Legacy (fresher) and Aristo suit today just as well": the bottles that

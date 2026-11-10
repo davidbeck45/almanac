@@ -481,6 +481,18 @@ Panel {
             }
           }
 
+          // How much to spray and where, as Now's card says it.
+          Text {
+            visible: !!(root.pick && root.pick.spray)
+            width: parent.width
+            textFormat: Text.PlainText
+            text: root.pick && root.pick.spray ? root.pick.spray : ""
+            color: root.foreground
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            elide: Text.ElideRight
+          }
+
           // The bottles that suit the window as well, when there are any; else the runner-up.
           Text {
             visible: !!(root.pick && (root.pick.tieLine || root.pick.runnerUp))
