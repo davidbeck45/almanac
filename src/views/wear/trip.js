@@ -98,6 +98,18 @@ export function loadTrip(text = storedText()) {
   }
 }
 
+/**
+ * The journal's today: home's, or a trip's under way a day ahead of it (late
+ * evening here it's tomorrow morning in Tokyo, and Wear this on the trip's
+ * card dates a wear by Tokyo's day), so that wear shows, counts and can be
+ * changed: Worn reads it, and a bottle's own wears on its page.
+ */
+export function wornToday() {
+  const today = todayISO(), trip = loadTrip();
+  const there = trip?.place && placeClock(trip.place).todayISO;
+  return there && there > today && trip.fromISO <= there && there <= trip.toISO ? there : today;
+}
+
 export function saveTrip(trip) {
   // Each window's `date` is rebuilt from its dateISO on the way back in.
   const windows = trip.windows.map(({ date, occasion, ...w }) => w);

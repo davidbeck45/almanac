@@ -148,7 +148,7 @@ async function main(argv) {
       files = files.filter(f => !heavy.includes(f));
       const short = list => list.map(f => relative(root, f).replace(/^test\/|\.test\.js$/g, '')).join(', ');
       console.log(`      ${read.length} files read the clock; the rest of the matrix runs ${files.length}: ${short(files)}${heavy.length ? `\n      (not ${short(heavy)}: --full runs those too)` : ''}`);
-      if (!files.length) return 0;
+      if (!files.length) return failed(first) ? 1 : 0; // nothing read the clock: the first cell is the whole answer
     }
     const rest = cells.slice(1);
     let next = 0;
@@ -168,7 +168,7 @@ async function main(argv) {
       console.log(`${still.length ? 'again' : 'alone'} ${r.at.padEnd(17)} ${r.tz.padEnd(17)} ${still.length ? `fails again: ${still.map(f => f.name).join('; ')}` : `passes on its own (${r.fails.map(f => f.name).join('; ')})`}`.slice(0, 260));
       r.flaky = r.fails.filter(f => !still.some(g => g.file === f.file && g.name === f.name));
       r.fails = still;
-      if (!still.length) r.code = 0;
+      if (!still.length && !failed(again)) r.code = 0; // forgiven only when the rerun itself passed
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });

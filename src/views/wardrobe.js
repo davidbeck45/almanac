@@ -15,7 +15,6 @@ import { customRecord, MAX_CUSTOM_ACCORDS } from '../custom.js';
 import { clearHistory, journalExport, journalToken, journalStats, toggleWear, wornIn, shiftISO, loadHistory } from '../history.js';
 import { backupExport, deviceStores } from '../backup.js';
 import { loadSkin } from '../skin.js';
-import { placeClock } from '../weather.js';
 import { esc, plural, shortDate, weekdayShort, relativeDay, accordLabel, toastName } from '../ui.js';
 import {
   icon, img, slotIcon, messageHTML, rowHTML, switchHTML, segHTML, sheetFrame, sharedBannerHTML, accordColor, sectionHead,
@@ -27,7 +26,7 @@ import {
 import { warmPool } from '../app/pool.js';
 import { whenPhrase } from './wear/when.js';
 import { setWornSpan } from '../app/state.js';
-import { loadTrip } from './wear/trip.js';
+import { loadTrip, wornToday } from './wear/trip.js';
 import { liveHTML, say, speak } from './wardrobe/parts.js';
 import * as insights from './wardrobe/insights.js';
 import * as wishlist from './wardrobe/wishlist.js';
@@ -817,14 +816,6 @@ function logSheet(s) {
   return logSheetHTML(s, { bottles: logOrder(activeFragrances(), lastWorn), worn: { day: wearOn('day'), night: wearOn('night') }, lastWorn, todayISO: today });
 }
 
-// Worn's today: home's, or a trip's under way a day ahead of it (late
-// evening here it's tomorrow morning in Tokyo, and Wear this on the trip's
-// card dates a wear by Tokyo's day), so that wear shows and can be changed.
-function wornToday() {
-  const today = todayISO(), trip = loadTrip();
-  const there = trip?.place && placeClock(trip.place).todayISO;
-  return there && there > today && trip.fromISO <= there && there <= trip.toISO ? there : today;
-}
 
 // Where a wear logged after the fact was worn: on the saved trip's place on
 // a day the trip covers (Now's "Wore something this morning?" sits under its

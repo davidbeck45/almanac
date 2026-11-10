@@ -51,7 +51,7 @@ test('a wear older than the twelve months counts as its first, not in the strip'
   // All of them older: the section says when it was last worn.
   const old = bottleWears([wear('1', '2025-10-20', 'night')], '1', TODAY);
   assert.equal(old.count, 0);
-  assert.match(yourWearsHTML(mine(), old), /Not worn in the last 12 months\. Last on Oct 20, 2025\./);
+  assert.match(yourWearsHTML(mine(), old), /Not worn since Oct 20, 2025\./);
 });
 
 test('the lines say only what the wears can', () => {
@@ -89,7 +89,7 @@ test('the lines say only what the wears can', () => {
 test('the section draws a strip and lines, a sentence for one wear, nothing for none', () => {
   const html = yourWearsHTML(mine(), bottleWears(JOURNAL, '1', TODAY));
   assert.match(html, /<section class="bp-section" id="bp-wears" aria-labelledby="bp-wears-title">/);
-  assert.match(html, /<h3 id="bp-wears-title" tabindex="-1">Your wears <span class="h3-aside">6 in 12 months<\/span><\/h3>/);
+  assert.match(html, /<h3 id="bp-wears-title" tabindex="-1">Your wears <span class="h3-aside">6 since Dec 2025<\/span><\/h3>/);
   assert.equal(html.match(/<li title=/g).length, 12, 'a bar a month');
   assert.ok(html.includes('title="Dec 2025: not worn"') && html.includes('title="Nov: 2 wears"') && html.includes('title="Mar: 1 wear"'), html);
   assert.ok(html.includes('style="height:100%"') && html.includes('style="height:50%"') && html.includes('style="height:0%"'));
@@ -100,7 +100,7 @@ test('the section draws a strip and lines, a sentence for one wear, nothing for 
   const once = yourWearsHTML(mine({ f: { id: '3' } }), bottleWears(JOURNAL, '3', TODAY));
   assert.ok(once.includes('Worn once, on Oct 12 at night, for a date.'), once);
   assert.ok(!once.includes('bw-months') && !once.includes('h3-aside'));
-  assert.ok(yourWearsHTML(mine({ todayISO: '2026-11-08' }), bottleWears([wear('1', '2026-11-07', 'day')], '1', '2026-11-08')).includes('Worn once, yesterday by day.'));
+  assert.ok(yourWearsHTML(mine({ todayISO: '2026-11-08' }), bottleWears([wear('1', '2026-11-07', 'day')], '1', '2026-11-08')).includes('Worn once, yesterday.'));
   // Never worn, or not his: nothing.
   assert.equal(yourWearsHTML(mine(), bottleWears(JOURNAL, '9', TODAY)), '');
   assert.equal(yourWearsHTML(mine({ owned: false }), bottleWears(JOURNAL, '1', TODAY)), '', 'a bottle he doesn\'t own');
@@ -113,4 +113,20 @@ test('it sits between On your skin and the shelf, for a bottle that is his', () 
   assert.equal(at('wears').shopOrder, undefined);
   // With nothing in the journal (as here) the registered section draws nothing.
   assert.equal(at('wears').render(mine()), '');
+});
+
+test('one wear names its day in the day’s own words, and the strip’s months are never called twelve', () => {
+  const mine = (over = {}) => ({ owned: true, inMine: false, todayISO: '2026-12-01', ...over });
+  const once = (date, slot, today) => yourWearsHTML(mine({ todayISO: today }), bottleWears([{ id: '1', date, slot }], '1', today));
+  assert.ok(once('2026-12-01', 'night', '2026-12-01').includes('Worn once, tonight.'));
+  assert.ok(once('2026-11-30', 'night', '2026-12-01').includes('Worn once, last night.'));
+  assert.ok(once('2026-12-01', 'day', '2026-12-01').includes('Worn once, today.'));
+  assert.ok(once('2026-11-28', 'night', '2026-12-01').includes('Worn once, 3 days ago at night.'));
+  // On the 1st the strip's twelve calendar months are eleven months and a day:
+  // a wear 351 days old is before them, and nothing calls them "12 months".
+  const old = once('2025-12-15', 'day', '2026-12-01');
+  assert.ok(old.includes('Not worn since Dec 15, 2025.'), old);
+  const two = yourWearsHTML(mine(), bottleWears([{ id: '1', date: '2025-12-15', slot: 'day' }, { id: '1', date: '2026-11-20', slot: 'day' }, { id: '1', date: '2026-11-25', slot: 'night' }], '1', '2026-12-01'));
+  assert.match(two, /<span class="h3-aside">2 since Jan<\/span>/);
+  assert.ok(!/12 months/.test(old + two));
 });

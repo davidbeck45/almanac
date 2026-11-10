@@ -9,6 +9,7 @@ import { occasionById } from '../occasions.js';
 import { esc, temp, deg, plural, shortDate, relativeDay } from '../ui.js';
 import { addSection } from './bottle.js';
 import { state } from '../app/state.js';
+import { wornToday } from './wear/trip.js';
 
 /** Stamped wears it takes before the feels-like range, or the pick's share, says anything. */
 export const ENOUGH_WEARS = 3;
@@ -122,20 +123,31 @@ function monthsHTML(w, todayISO) {
 export function yourWearsHTML(m, w) {
   if ((!m.owned && !m.inMine) || !w) return '';
   const today = m.todayISO;
+  // The strip's twelve calendar months, named by their first ("since Dec
+  // 2025"): on the 1st they span eleven months and a day, so "in 12 months"
+  // left out a wear 351 days old and said "not worn in the last 12 months".
+  const start = w.months[0].month;
+  const from = `${shortDate(`${start}-01`).split(' ')[0]}${start.slice(0, 4) < today.slice(0, 4) ? ` ${start.slice(0, 4)}` : ''}`;
   const head = body => `<section class="bp-section" id="bp-wears" aria-labelledby="bp-wears-title">
-    <h3 id="bp-wears-title" tabindex="-1">Your wears${w.count > 1 ? ` <span class="h3-aside">${w.count} in 12 months</span>` : ''}</h3>
+    <h3 id="bp-wears-title" tabindex="-1">Your wears${w.count > 1 ? ` <span class="h3-aside">${w.count} since ${esc(from)}</span>` : ''}</h3>
     ${body}
   </section>`;
   // Its wears are all older than the strip's twelve months.
-  if (!w.count) return head(`<p class="bw-line">Not worn in the last 12 months. Last on ${esc(dated(w.latest, today))}.</p>`);
+  if (!w.count) return head(`<p class="bw-line">Not worn since ${esc(dated(w.latest, today))}.</p>`);
   if (w.count === 1) {
     // One wear is a sentence: "Worn once, on Oct 12 at night, for a date."
-    const day = relativeDay(w.latest, today), on = day === shortDate(w.latest) ? `on ${dated(w.latest, today)}` : day;
+    // "tonight" and "last night", "today" and "yesterday": a relative day says its own half.
+    const day = relativeDay(w.latest, today), night = Boolean(w.night);
+    const when = day === 'today' ? (night ? 'tonight' : 'today') : day === 'yesterday' ? (night ? 'last night' : 'yesterday')
+      : `${day === shortDate(w.latest) ? `on ${dated(w.latest, today)}` : day} ${night ? 'at night' : 'by day'}`;
     const use = w.uses[0] ? `, ${usePhrase(w.uses[0])}` : '';
-    return head(`<p class="bw-line">${esc(`Worn once${w.since ? '' : ' in the last 12 months'}, ${on} ${w.night ? 'at night' : 'by day'}${use}.`)}</p>`);
+    return head(`<p class="bw-line">${esc(`Worn once${w.since ? '' : ` since ${from}`}, ${when}${use}.`)}</p>`);
   }
   return head(`${monthsHTML(w, today)}
     <ul class="bw-lines" role="list">${wearLines(w, today).map(line => `<li class="bw-line">${esc(line)}</li>`).join('')}</ul>`);
 }
 
-addSection({ id: 'wears', order: 280, render: m => yourWearsHTML(m, bottleWears(state.history, m.f.id, m.todayISO)) });
+// By the journal's today, as Worn counts: a wear logged on a trip a day
+// ahead of home is dated tomorrow here, and by home's date the section left
+// it out until midnight.
+addSection({ id: 'wears', order: 280, render: m => { const today = wornToday(); return yourWearsHTML({ ...m, todayISO: today }, bottleWears(state.history, m.f.id, today)); } });
