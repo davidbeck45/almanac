@@ -7,7 +7,7 @@
 // The sections in their own modules are src/views/bottle-*.js; the ones that
 // ask the suggestion pool keep their answers with pooled(), and draw again
 // on their own when an answer lands (redrawSection).
-import { rank, comfortRange, restReason, savedReason, occasionWeights, SEASONS, performanceRating } from '../engine.js';
+import { rank, comfortRange, restReason, savedReason, occasionWeights, SEASONS, performanceRating, isDisliked } from '../engine.js';
 import { layerPicks, pairingKept, warmPairing } from '../layering.js';
 import { setHidden } from '../hidden.js';
 import { loadWants, saveWants, hasWant, setWant } from '../wishlist.js';
@@ -20,8 +20,9 @@ import { icon, img, bar, reasonsList, accordColor, wearButton, magDot, messageHT
 import { askPool } from '../app/pool.js';
 import {
   state, findRecord, inSource, isActive, activeFragrances, sourceRecords, viewingDemo, nowSlot, canWear, wornId,
-  wearInfo, todayISO, poolInputs,
+  wearInfo, todayISO, poolInputs, rankedFragrances, computeWeek, dustWhen,
 } from '../app/state.js';
+import { wornIn } from '../history.js';
 
 // ---------- The registry ----------
 
@@ -230,13 +231,35 @@ export const linkId = f => (isCustomId(f.id) && !String(f.id).includes('~') && !
  *   for a trip's), solo: ranked on its own (not in the list on screen), ctx and
  *   ctxLabel: the list it was opened from, occasion: that list's (or null),
  *   owned: in the collection being ranked, active: and switched on, inMine,
- *   worn, canWear, wears, todayISO, win, alts, partners, comfort, about:
+ *   worn, canWear, wears, week: when this week the Week gives it a turn
+ *   ({ kind: 'planned' | 'suits', win, ctx } or null: weekTurn), todayISO,
+ *   win, alts, partners, comfort, about:
  *   loadAbout()'s data (undefined while it loads, null when the dataset has
  *   none; the wardrobe's and catalog's records carry theirs as f.about),
  *   wanted: on the want list, skin: your own rating and nudges (src/skin.js)
  *   or null, aboutFailed: its about data couldn't load (offline), arg: the
  *   route's argument }. A bottle ranked on its own counts your stars.
  */
+// When this week the Week next gives a bottle a turn: the first window ahead
+// it's the pick for, else the first it suits as well as that window's pick
+// (state.js dustWhen, as Gathering dust reads the Week), among the windows
+// with no wear logged yet (a logged wear has settled its window); null with
+// none, or before the forecast is in. The Week is planned once for the same
+// forecast, hour, journal, plans and list, however often the page draws.
+let weekKept = null;
+function weekTurn(id) {
+  if (!state.forecast || !state.wx) return null;
+  const key = [state.forecast, state.wx, state.history, state.events, rankedFragrances()];
+  if (!weekKept || key.some((k, i) => k !== weekKept.key[i])) {
+    const open = p => (p && !wornIn(state.history, p.win.dateISO, p.win.slot) ? p : null);
+    weekKept = { key, days: computeWeek().map(d => ({ ...d, day: open(d.day), night: open(d.night) })) };
+  }
+  const when = dustWhen(id, weekKept.days);
+  // One he rates 2★ or lower never reads as suiting a window as well as its pick (src/contrast.js).
+  if (when.kind === 'suits' && isDisliked(rankedFragrances().find(f => f.id === id))) return null;
+  return when.kind === 'none' ? null : when;
+}
+
 export function bottleModel(route) {
   const id = route.arg;
   const fallback = nowSlot()?.win.slot ?? null;
@@ -268,6 +291,7 @@ export function bottleModel(route) {
     worn: win ? wornId(win) : null,
     canWear: Boolean(win) && active && canWear(win, ctx.place),
     wears: wearInfo(f.id),
+    week: active ? weekTurn(f.id) : null,
     todayISO: todayISO(),
     // The rest of the list's best, led on the pick's own page by the ties
     // its Week cell names (the context's `ties`), which may rank lower.
@@ -391,14 +415,29 @@ function wearsHTML(wears, today) {
   return `<p class="fact">${icon.clock}<span>${esc(text)}</span></p>`;
 }
 
+/**
+ * When the Week next gives the bottle a turn (the model's `week`), beside
+ * when it was last worn: "The Week’s pick for Saturday night", or "Suits
+ * tomorrow as well as the Week’s pick", the window named as its own page's
+ * head names it. The window opens the page in that window's list, where Why
+ * shows how it ranks there; on that window's own page (`ctx`) the line says
+ * nothing the page doesn't.
+ */
+export function weekFactHTML(week, f, ctx) {
+  if (!week || week.ctx === ctx) return '';
+  const at = `<button class="link-btn" data-action="open" data-ctx="${esc(week.ctx)}" data-id="${esc(f.id)}">${esc(inSentence(week.win.label))}</button>`;
+  return `<p class="fact">${icon.calendar}<span>${week.kind === 'planned' ? `The Week’s pick for ${at}` : `Suits ${at} as well as the Week’s pick`}</span></p>`;
+}
+
 // Why says what a rest takes off ("Worn 5 days ago: 4% lower so others get a
 // turn.") and the wears line when it was, so the reasons leave it to them.
-function summarySection({ entry, win, comfort, wears, todayISO: today, owned }) {
+function summarySection({ f, entry, win, ctx, comfort, wears, week, todayISO: today, owned }) {
   const rest = entry?.parts.rotation > 0 ? restReason(entry.parts, win?.slot) : null;
   return `<div class="bp-summary">
     ${entry ? reasonsList(entry.reasons.filter(r => r.text !== rest), 'full') : ''}
     ${comfortHTML(comfort)}
     ${owned ? wearsHTML(wears, today) : ''}
+    ${weekFactHTML(week, f, ctx)}
   </div>`;
 }
 

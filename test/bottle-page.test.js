@@ -6,8 +6,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { SECTIONS, bottlePageHTML, bottleModel, pooled, sectionsFor, linkId, likedStyleIds, likedTaste, shelfOf } from '../src/views/bottle.js';
-import { state, computeToday, nowSlot, keepBottles } from '../src/app/state.js';
+import { SECTIONS, bottlePageHTML, bottleModel, pooled, sectionsFor, linkId, likedStyleIds, likedTaste, shelfOf, weekFactHTML } from '../src/views/bottle.js';
+import { state, computeToday, computeWeek, nowSlot, keepBottles } from '../src/app/state.js';
 import '../src/views/sections.js';
 import { buyCheckHTML, checkable, fillGroups } from '../src/views/bottle-check.js';
 import { sprayHTML, figureSVG, sprayCount } from '../src/views/bottle-spray.js';
@@ -977,4 +977,49 @@ test('the pick’s page leads its shelf with the ties its Week cell names, howev
   assert.deepEqual(ids(shelfOf(ctx, '2')), ['6', '8', '0', '1']);
   assert.deepEqual(ids(shelfOf(ctx, '0')), ['1', '2', '3', '4'], 'another bottle’s page keeps the order');
   assert.deepEqual(ids(shelfOf({ ranked, pick: ranked[0] }, '0')), ['1', '2', '3', '4'], 'a context without ties');
+});
+
+test('an owned bottle’s page says when this week the Week gives it a turn', () => {
+  const store = new Map();
+  globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)) };
+  try {
+    const forecast = syntheticForecast(7);
+    const at = Date.parse('2026-09-28T16:00:00Z');
+    Object.assign(state, { demo: { fragrances }, active: 'demo', shared: null, forecast, wx: summarize(forecast, at), history: [], events: [] });
+    computeToday();
+    const windows = computeWeek().flatMap(d => [d.day, d.night]).filter(Boolean);
+    // A bottle the Week picks later on, opened from tonight's list.
+    const later = windows.slice(2).find(p => !windows.slice(0, 2).some(q => q.pick.fragrance.id === p.pick.fragrance.id));
+    const id = later.pick.fragrance.id;
+    const model = bottleModel({ dest: 'bottle', arg: id, query: { ctx: 'night' } });
+    const first = windows.find(p => p.pick.fragrance.id === id);
+    assert.deepEqual([model.week.kind, model.week.ctx], ['planned', first.ctx], 'the first window it’s the pick for');
+    const html = bottlePageHTML(model);
+    assert.match(html, new RegExp(`<span>The Week’s pick for <button class="link-btn" data-action="open" data-ctx="${first.ctx}" data-id="${id}">[^<]+</button></span>`));
+    // On that window's own page the head and Why already say so.
+    const own = bottleModel({ dest: 'bottle', arg: id, query: { ctx: first.ctx } });
+    assert.ok(!bottlePageHTML(own).includes('The Week’s pick for'));
+    // A window with a wear logged is settled: the line names the next one, or nothing.
+    state.history = [{ id, date: first.win.dateISO, slot: first.win.slot }];
+    const after = bottleModel({ dest: 'bottle', arg: id, query: { ctx: 'night' } }).week;
+    assert.ok(!after || after.ctx !== first.ctx, 'never the window he has already logged');
+    // Before the forecast is in, and for a bottle that isn't his, there's no line.
+    state.history = [];
+    state.forecast = null;
+    assert.equal(bottleModel({ dest: 'bottle', arg: id, query: { ctx: 'night' } }).week, null);
+  } finally {
+    delete globalThis.localStorage;
+    Object.assign(state, { demo: null, wx: null, forecast: null, today: null, contexts: {}, history: [], events: [] });
+  }
+});
+
+test('the week line names the window as a link to that window’s list, as its page’s head names it', () => {
+  const f = { id: '7', name: 'Liam' };
+  const win = { dateISO: '2026-11-14', slot: 'night', label: 'Saturday night' };
+  assert.equal(weekFactHTML(null, f, 'night'), '');
+  assert.equal(weekFactHTML({ kind: 'planned', win, ctx: 'w:2026-11-14:night' }, f, 'w:2026-11-14:night'), '', 'not on that window’s own page');
+  assert.match(weekFactHTML({ kind: 'planned', win, ctx: 'w:2026-11-14:night' }, f, 'night'),
+    /<span>The Week’s pick for <button class="link-btn" data-action="open" data-ctx="w:2026-11-14:night" data-id="7">Saturday night<\/button><\/span>/);
+  assert.match(weekFactHTML({ kind: 'suits', win: { dateISO: '2026-11-10', slot: 'day', label: 'Tomorrow' }, ctx: 'w:2026-11-10:day' }, f, 'night'),
+    /<span>Suits <button [^>]+>tomorrow<\/button> as well as the Week’s pick<\/span>/);
 });
