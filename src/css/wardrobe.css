@@ -68,6 +68,12 @@
 .owned-list .has-fact .row-text small { display: flex; gap: var(--s-1); }
 .own-brand { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .own-fact { flex: none; color: var(--text-primary); font-weight: 500; }
+/* A phone's row has no room for the fact's aside ("· Now’s pick", "· left
+   out"): at 320px it ran past the row, cut mid-word, and left the brand no
+   width. The pick is the first row, and a bottle left out is dimmed with
+   its switch off. Without it the fact fits whole, so it never shrinks (a
+   fact allowed to gave up letters to an ellipsis over a rounding's width). */
+@container page (max-width: 420px) { .own-more { display: none; } }
 .own-fact::before { content: '·'; margin-right: var(--s-1); color: var(--text-tertiary); font-weight: 400; }
 .own-fact.none { color: inherit; font-weight: 400; }
 .own-fact.stars { color: var(--accent); font-weight: 600; }
@@ -312,7 +318,7 @@ button.cal-cell:active { transform: scale(0.95); }
 
 .insights { display: grid; gap: var(--s-4); }
 @container page (min-width: 600px) { .insights { gap: var(--s-5); } }
-.insights.busy :is(.ins-cov, .ins-thin, .ins-fill) { opacity: 0.55; transition: opacity var(--dur-3); }
+.insights.busy :is(.ins-cov, .ins-thin, .ins-roles, .ins-fill) { opacity: 0.55; transition: opacity var(--dur-3); }
 .ins-top, .ins-part { padding: var(--s-2) var(--s-1) 0; }
 .ins-part { margin-top: var(--s-6); }
 .ins-headline { font-family: var(--display); font-size: var(--fs-title-2); line-height: var(--lh-title-2); font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }

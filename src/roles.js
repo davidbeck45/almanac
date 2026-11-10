@@ -9,9 +9,18 @@
 import { PLAN_MARGIN } from './engine.js';
 import { BANDS, MIN_WEIGHT, cellTitle, stub } from './gaps.js';
 
-// A workhorse leads this share of what you wear or more (David's eight lead
-// 6–20%; the next lead under 5%).
+// A workhorse leads this share of what you wear or more (of David's 26, the
+// next lead under 5%), and never less than half an even share of the
+// bottles he'd wear (EVEN_HALF: of nine, an eighteenth), or a small list is
+// nearly all workhorses (seven of Brooke's nine at a flat 5%, one leading
+// 5.1%), while two bottles that split the year 60 to 40 both carry it.
 export const WORKHORSE_SHARE = 0.05;
+export const EVEN_HALF = 0.5;
+// Under this share a workhorse also leads clearly (CLEAR_LEAD on average):
+// Atlantis Extrait led 6% of David's wears by half a point, a workhorse
+// "right behind" which stood another bottle, while Terra, leading 4% by as
+// little, was a backup that "would go unmissed".
+export const SURE_SHARE = 0.1;
 // A lead of a point or more is a real one: under it the next best is a
 // toss-up (TIE_POINTS in src/contrast.js), and the bottle could go unmissed.
 export const CLEAR_LEAD = 0.01;
@@ -75,10 +84,14 @@ const named = (runs, note = null) => {
   return more > 0 ? `${shown.join(', ')} and ${more} more` : list(shown);
 };
 
-// A bottle's role from what it leads and where it's within reach.
-function roleOf(b) {
-  if (b.leadShare >= WORKHORSE_SHARE) return 'workhorse';
-  const clear = b.leadShare >= SPECIALIST_SHARE && b.loss / b.leadShare >= CLEAR_LEAD;
+// A bottle's role from what it leads and where it's within reach, among
+// `worn` bottles he'd wear. Shares count as the headline shows them, in
+// whole percents, so two bottles that both read "Leads 5%" get one role.
+function roleOf(b, worn) {
+  const pct = x => Math.round(x * 100);
+  const clearly = b.leadShare > 0 && b.loss / b.leadShare >= CLEAR_LEAD;
+  if (pct(b.leadShare) >= pct(Math.max(WORKHORSE_SHARE, EVEN_HALF / Math.max(1, worn))) && (clearly || pct(b.leadShare) >= pct(SURE_SHARE))) return 'workhorse';
+  const clear = b.leadShare >= SPECIALIST_SHARE && clearly;
   if (clear || b.leads.some(s => s.lead >= WIDE_LEAD && s.weight >= MIN_WEIGHT)) return 'specialist';
   return b.mixShare > 0 ? 'backup' : 'bench';
 }
@@ -110,7 +123,8 @@ function wordsOf(b) {
       : ` ${top.next.name} is ${points(top.lead)} behind there.`;
   const tail = b.role === 'backup' ? spare
     : wide ? (inline ? '' : ` For ${wide.title} it's ${points(wide.lead)} ahead of ${wide.next.name}.`)
-      : clear.lead < CLEAR_LEAD && top.next ? ` ${top.next.name} is right behind.` : '';
+      // A specialist is one by its leads on average: its main one a hair's is no "right behind".
+      : b.role === 'workhorse' && clear.lead < CLEAR_LEAD && top.next ? ` ${top.next.name} is right behind.` : '';
   const detail = `${named(b.leads, inline ? { run: wide, text: `${points(wide.lead)} ahead of ${wide.next.name}` } : null)}.${tail}`;
   return { headline: `Leads ${shareText(b.leadShare)}`, detail, text: `Leads ${shareText(b.leadShare)} of what you wear: ${detail}` };
 }
@@ -166,7 +180,7 @@ export function bottleRoles(ctx, { hidden = [] } = {}) {
       leads: situations(r.led), mix: situations(r.mixed),
       closest: r.near ? { cell: r.near.cell.id, title: cellTitle(r.near.cell.use, r.near.cell.slot, r.near.cell.band), gap: r.near.gap, leader: r.near.leader } : null,
     };
-    b.role = roleOf(b);
+    b.role = roleOf(b, rows.length);
     return Object.assign(b, wordsOf(b));
   }).sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role) || (LEADING.has(a.role)
     ? b.leadShare - a.leadShare || b.mixShare - a.mixShare

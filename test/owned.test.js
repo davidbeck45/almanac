@@ -72,7 +72,7 @@ test('Owned draws the sort beside the filter, each row’s fact on its brand’s
   const fit = owned({ ...by, sort: 'fit' });
   assert.deepEqual(optionsOf(fit), ['brand Brand A–Z', 'fit* Fits now', 'worn Worn lately', 'stars Your stars']);
   assert.deepEqual(rows(fit).map(r => r.match(/<b>([^<]*)</)[1]), ['Liam', 'Sauvage', 'Aristo', 'Jake']);
-  assert.match(rows(fit)[0], /<small><span class="own-brand">Lattafa Perfumes<\/span><span class="own-fact lead">86% tonight · Now’s pick<\/span><\/small>/);
+  assert.match(rows(fit)[0], /<small><span class="own-brand">Lattafa Perfumes<\/span><span class="own-fact lead">86% tonight<span class="own-more"> · Now’s pick<\/span><\/span><\/small>/);
   assert.match(rows(fit)[3], /^<li class="row off has-fact"/, 'a switched-off bottle stays, marked as before');
   assert.match(rows(fit)[3], /Left out of picks/);
   assert.match(rows(fit)[3], /role="switch" aria-checked="false" data-action="rotation" data-id="4"/);

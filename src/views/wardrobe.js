@@ -128,7 +128,10 @@ function ownedRow(f, { hidden, removable, fact = null }) {
   const trailing = `${removable ? `<button class="icon-btn ghosted" data-action="remove" data-id="${esc(f.id)}" aria-label="Remove ${esc(f.name)}">${icon.remove}</button>` : ''}
     ${switchHTML({ on, label: `Include ${f.name} in picks`, action: 'rotation', id: f.id })}`;
   // The brand gives way before the fact does: one line, whatever the sort.
-  const said = fact?.spoken ? `<span aria-hidden="true">${esc(fact.text)}</span><span class="visually-hidden">${esc(fact.spoken)}</span>` : esc(fact?.text);
+  // A fact's aside ("87% today · Now’s pick") is a part of its own, which a phone's row leaves out.
+  const [main, ...aside] = (fact?.text ?? '').split(' · ');
+  const shown = `${esc(main)}${aside.length ? `<span class="own-more"> · ${esc(aside.join(' · '))}</span>` : ''}`;
+  const said = fact?.spoken ? `<span aria-hidden="true">${shown}</span><span class="visually-hidden">${esc(fact.spoken)}</span>` : shown;
   const meta = fact ? `<span class="own-brand">${esc(f.brand)}</span><span class="own-fact${fact.tone ? ` ${fact.tone}` : ''}">${said}</span>` : esc(f.brand);
   return rowHTML(f, { meta, open: { ctx: '' }, trailing, cls: `${on ? '' : 'off'}${fact ? ' has-fact' : ''}`, attrs: ` data-name="${esc(`${f.name} ${f.brand}`.toLowerCase())}"` });
 }

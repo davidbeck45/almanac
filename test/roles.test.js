@@ -6,7 +6,7 @@ import { loadPool, fromPool } from '../src/fragrantica.js';
 import { gapContext, gapReport } from '../src/gaps.js';
 import { applySkin } from '../src/skin.js';
 import { sharesFrom, parseUses } from '../src/uses.js';
-import { ROLES, WORKHORSE_SHARE, SPECIALIST_SHARE, WIDE_LEAD, bottleRoles, rolesJSON, roleLine, shareText } from '../src/roles.js';
+import { ROLES, WORKHORSE_SHARE, SURE_SHARE, EVEN_HALF, CLEAR_LEAD, SPECIALIST_SHARE, WIDE_LEAD, bottleRoles, rolesJSON, roleLine, shareText } from '../src/roles.js';
 import { handlePool, newPoolCache } from '../src/pool-tasks.js';
 import { rolesHTML } from '../src/views/wardrobe/insights.js';
 
@@ -66,7 +66,17 @@ test('it reads the coverage map’s own table: a cell’s leader is the report�
 test('David’s wardrobe: workhorses lead a large share, and the bottles daily picks pass over aren’t among them', () => {
   const count = id => roles.bottles.filter(b => b.role === id).length;
   assert.ok(count('workhorse') >= 4 && count('workhorse') <= 10, `${count('workhorse')} workhorses`);
-  for (const b of roles.bottles) assert.equal(b.role === 'workhorse', b.leadShare >= WORKHORSE_SHARE, b.bottle.name);
+  // By the share as its headline shows it, so two that both read "Leads 5%" get one role…
+  const pct = x => Math.round(x * 100);
+  for (const b of roles.bottles.filter(b => b.role === 'workhorse')) assert.ok(pct(b.leadShare) >= pct(WORKHORSE_SHARE), b.bottle.name);
+  for (const b of roles.bottles.filter(b => pct(b.leadShare) >= pct(SURE_SHARE))) assert.equal(b.role, 'workhorse', b.bottle.name);
+  // …and under a tenth of what he wears a workhorse leads by a clear margin
+  // on average: one a hair ahead is a backup, as one leading less by as little is.
+  for (const b of roles.bottles.filter(b => pct(b.leadShare) >= pct(WORKHORSE_SHARE) && pct(b.leadShare) < pct(SURE_SHARE))) {
+    assert.equal(b.role === 'workhorse', b.loss / b.leadShare >= CLEAR_LEAD, b.bottle.name);
+  }
+  assert.equal(roleOf(roles, 'Atlantis Extrait'), 'backup', 'it leads 6% by half a point');
+  assert.match(roles.bottles.find(b => b.bottle.name === 'Atlantis Extrait').text, /is right behind, so little would be lost without it\.$/);
   // Never in a daily top 3 over three years of weather (scripts/backtest.mjs).
   for (const name of ['Sandalwood & Musk', 'Zahri Amara', 'Hawas Elixir']) {
     const b = roles.bottles.find(x => x.bottle.name === name);
@@ -100,7 +110,7 @@ test('David’s wardrobe: workhorses lead a large share, and the bottles daily p
   }
   const backups = roles.bottles.filter(b => b.role === 'backup');
   assert.equal(backups[0].bottle.name, 'Glorious Oud Royal Blanc', 'the backup least in the mix leads the list of what could go');
-  assert.equal(backups.at(-1).bottle.name, 'Terra');
+  assert.deepEqual(backups.slice(-3).map(b => b.bottle.name), ['Terra', 'Atlantis Extrait', 'Jake'], 'the ones that lead something by a hair come last, most led last');
   // A lead that seldom comes up, a point ahead, isn't a specialist's: Sauvage's one is about four nights a year.
   const sauvage = roles.bottles.find(b => b.bottle.name === 'Sauvage');
   assert.equal(sauvage.role, 'backup');
@@ -149,6 +159,10 @@ test('taking a bottle out of a two-bottle wardrobe changes the other’s role', 
   const split = bottleRoles(contextOf([owned('Amber Empire'), owned('Zahri Amara')]));
   assert.deepEqual(split.bottles.map(b => b.role), ['workhorse', 'workhorse']);
   assert.ok(close(split.bottles.reduce((sum, b) => sum + b.leadShare, 0), 1));
+  // A small wardrobe isn't all workhorses: one leads at least half an even share of it.
+  const nine = bottleRoles(contextOf(wardrobe.slice(0, 9)));
+  for (const b of nine.bottles.filter(b => b.role === 'workhorse')) assert.ok(Math.round(b.leadShare * 100) >= Math.round((EVEN_HALF / nine.bottles.length) * 100), `${b.bottle.name}: ${b.leadShare}`);
+  assert.ok(nine.bottles.some(b => b.role !== 'workhorse'));
   // An empty wardrobe has nothing to say.
   assert.deepEqual(bottleRoles(contextOf([])), { total: 0, bottles: [], out: [] });
 });
@@ -210,8 +224,8 @@ test('Insights’ card groups the bottles by role, a few to a group, each row op
   assert.deepEqual([...html.matchAll(/data-role="(\w+)"/g)].map(m => m[1]), ['workhorse', 'specialist', 'backup', 'bench']);
   const rows = h => (h.match(/class="row wrap role-row/g) ?? []).length;
   assert.equal(rows(html), 3 + 3 + 3 + 1);
-  assert.match(html, /<p class="muted small role-sum">8 of your 26 bottles lead 79% of what you wear\./);
-  assert.match(html, /data-action="ins-roles-all" data-value="workhorse" aria-controls="ins-roles-workhorse" aria-expanded="false">[^]*?Show 5 more<span class="visually-hidden"> workhorses<\/span>/);
+  assert.match(html, /<p class="muted small role-sum">7 of your 26 bottles lead 71% of what you wear\./);
+  assert.match(html, /data-action="ins-roles-all" data-value="workhorse" aria-controls="ins-roles-workhorse" aria-expanded="false">[^]*?Show 4 more<span class="visually-hidden"> workhorses<\/span>/);
   assert.ok(!/data-value="bench"/.test(html), 'a short group has no toggle');
   // Every row is one button that opens the bottle, with its share as words beside the bar.
   assert.equal((html.match(/<button class="row-main" data-action="open" data-ctx="" data-id="\d+">/g) ?? []).length, rows(html));
@@ -223,7 +237,7 @@ test('Insights’ card groups the bottles by role, a few to a group, each row op
   for (const m of html.matchAll(/--lead:([\d.]+);--mix:([\d.]+)/g)) assert.ok(+m[1] <= +m[2] + 1e-9 && +m[2] <= 1, m[0]);
   // A role shown whole lists every bottle and offers the way back.
   const open = rolesHTML(plain, { open: new Set(['backup']) });
-  assert.equal(rows(open), 3 + 3 + 11 + 1);
+  assert.equal(rows(open), 3 + 3 + 13 + 1);
   assert.match(open, /data-value="backup"[^>]*aria-expanded="true">[^]*?Show fewer/);
   assert.ok(!/°|\d\s*F\b|undefined|NaN/.test(open), 'no temperature, nothing unfilled');
   // Bottles that cover nothing close the card; with no roles there is no card.

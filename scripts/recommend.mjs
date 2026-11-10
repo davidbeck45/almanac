@@ -862,7 +862,8 @@ async function main() {
       const roles = bottleRoles(ctx, { hidden });
       const usesText = USES.map(u => `${useLabel(u)} ${pct(shares?.[u.id] ?? u.share)}`).join(', ');
       if (args.json) {
-        console.log(JSON.stringify({ climate: where, bottles: fragrances.length, ...rolesJSON(roles) }, null, 2));
+        // `owned`, not `bottles`: rolesJSON's own `bottles` is the list, and took the count's place.
+        console.log(JSON.stringify({ climate: where, owned: fragrances.length, uses: Object.fromEntries(USES.map(u => [u.id, shares?.[u.id] ?? u.share])), ...rolesJSON(roles) }, null, 2));
         return;
       }
       console.log(`${fragrances.length} bottles · climate: ${where}`);
