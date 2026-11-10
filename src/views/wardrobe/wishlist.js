@@ -402,7 +402,7 @@ export const actions = {
     event?.preventDefault();
     const id = el.dataset.id;
     const before = loadWants().find(w => w.id === id);
-    const name = toastName(findRecord(id)?.name ?? before?.record?.name ?? 'this bottle');
+    const name = findRecord(id)?.name ?? before?.record?.name ?? 'this bottle'; // whole: it's heard, not fitted to a toast
     if (!before) return closeNote(app, id, 'That bottle isn’t on your wishlist any more, so there’s no note to save.');
     const after = setNote(id, el.form?.elements.note?.value ?? wish.noting?.draft ?? '').find(w => w.id === id);
     const said = after.note === before.note ? '' : !after.note ? `Note removed from ${name}.`
