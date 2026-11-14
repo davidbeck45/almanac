@@ -5,6 +5,7 @@
 //   #/bottle/<id>[?ctx=<context key>]
 //   #/compare/<id>,<id>[,<id>]
 //   #/settings
+//   #/guide
 // parseRoute and routeHash are pure (test/router.test.js). The shell renders;
 // go() only changes the URL.
 
@@ -39,7 +40,7 @@ export function parseRoute(hash, panes) {
   const keep = key => Object.fromEntries((QUERY_KEYS[key] ?? []).filter(k => params.get(k)).map(k => [k, params.get(k)]));
   const query = keep(dest);
   if (dest === 'bottle' && first) return { dest, pane: null, arg: first, query };
-  if (dest === 'settings') return { dest, pane: null, arg: null, query: {} };
+  if (dest === 'settings' || dest === 'guide') return { dest, pane: null, arg: null, query: {} };
   // Up to three bottles side by side; the order they were picked in.
   if (dest === 'compare') return { dest, pane: null, arg: compareIds(first).join(',') || null, query: {} };
   const list = panes[dest];

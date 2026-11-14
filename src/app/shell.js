@@ -36,6 +36,7 @@ import * as discoverView from '../views/discover.js';
 import * as bottleView from '../views/bottle.js';
 import * as settingsView from '../views/settings.js';
 import * as compareView from '../views/compare.js';
+import * as guideView from '../views/guide.js';
 import '../views/sections.js';
 
 const REFRESH_AFTER = 20 * 60 * 1000;
@@ -43,10 +44,10 @@ const $ = sel => document.querySelector(sel);
 
 // ---------- The views ----------
 
-const VIEWS = [wearView, wardrobeView, discoverView, bottleView, settingsView, compareView];
+const VIEWS = [wearView, wardrobeView, discoverView, bottleView, settingsView, compareView, guideView];
 // The nav's destinations, in order, and every page a route can name.
 const DESTINATIONS = [wearView.wear, wardrobeView.wardrobe, discoverView.discover];
-const PAGES = Object.fromEntries([...DESTINATIONS, settingsView.settings, compareView.compare].map(p => [p.id, p]));
+const PAGES = Object.fromEntries([...DESTINATIONS, settingsView.settings, compareView.compare, guideView.guide].map(p => [p.id, p]));
 const PANES = Object.fromEntries(DESTINATIONS.map(d => [d.id, (d.panes ?? []).map(p => p.id)]));
 
 // One map per kind of handler, from every view and from bottle-page sections
@@ -313,7 +314,7 @@ function renderPage() {
 
 function renderFoot() {
   const all = sourceRecords();
-  $('#foot').innerHTML = settingsView.creditsHTML({
+  $('#foot').innerHTML = (state.base?.dest === 'guide' ? '' : guideView.guideLinkHTML()) + settingsView.creditsHTML({
     fetched: state.demo?.fetched,
     scraped: all.some(f => !f.source),
     fragella: all.some(f => isFragellaId(f.id)),

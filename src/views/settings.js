@@ -102,7 +102,7 @@ export function settingsHTML({ loc, units, themeName, stillSky = false, deviceSt
       ${restoreHTML(restore ?? {})}
       ${row('For Claude’s picks', `<button class="btn tertiary compact" data-action="journal-claude">${icon.paste}Copy for Claude</button>`, { note: 'Recent wears and stars' })}
     `)}
-    ${group('About', `<p class="set-credits">${credits}</p><p class="set-credits">Almanac picks from your own bottles with the weather, time of day and occasion. Everything you add stays on this device.</p>`)}`;
+    ${group('About', `${row('How Almanac works', '<a class="btn tertiary compact" href="#/guide">Open guide</a>', { glyph: icon.journal, note: 'What each screen does' })}<p class="set-credits">${credits}</p><p class="set-credits">Almanac picks from your own bottles with the weather, time of day and occasion. Everything you add stays on this device.</p>`)}`;
 }
 
 // A file chosen to restore: { route, name, backup, summary, error, done }.

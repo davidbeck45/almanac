@@ -28,7 +28,7 @@
 // the new one's from then on (a lazy import, the pool worker): it reloads
 // instead, at its next page change or once out of sight. It knows its
 // version by VERSION in src/app/version.js, which is CACHE: bump both.
-const CACHE = 'almanac-v26';
+const CACHE = 'almanac-v27';
 const NETWORK_WAIT_MS = 2500;
 const SLOW_MS = 1000;
 // Dataset files (data/fragrantica/) load a shard at a time as people search
@@ -83,6 +83,7 @@ const SHELL = [
   'src/views/discover.js',
   'src/views/discover/query.js',
   'src/views/discover/templates.js',
+  'src/views/guide.js',
   'src/views/sections.js',
   'src/views/settings.js',
   'src/views/wardrobe.js',

@@ -121,14 +121,16 @@ html:has(#main .disc-search) { scroll-padding-top: calc(env(safe-area-inset-top)
 /* ---------- Footer: credits ---------- */
 
 [data-route='settings'] .foot { display: none; }
+/* The guide's way in, on a line of its own above the credits. */
+.foot-guide { display: flex; justify-content: center; flex: 1 0 100%; margin-bottom: var(--s-2); }
 .foot { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-1) var(--s-4); margin-top: var(--s-8); color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); text-align: center; }
 /* Links in the credits' sentences, each kept whole on its line. Their hit
    area grows sideways but no taller than the line (as .link-btn's does):
    grown to 44px, each covered the line above or below, and a tap on the
    licence opened Open-Meteo. Links in a sentence are exempt from the 24px
    minimum. */
-.foot a, .set-credits a { position: relative; color: var(--text-secondary); text-underline-offset: 2px; white-space: nowrap; }
-:is(.foot, .set-credits) a::before { content: ''; position: absolute; inset: min(0px, calc(50% - 0.5lh)) min(0px, calc(50% - var(--hit) / 2)); }
+.foot a:not(.btn), .set-credits a { position: relative; color: var(--text-secondary); text-underline-offset: 2px; white-space: nowrap; }
+:is(.foot, .set-credits) a:not(.btn)::before { content: ''; position: absolute; inset: min(0px, calc(50% - 0.5lh)) min(0px, calc(50% - var(--hit) / 2)); }
 
 /* ---------- Nav: tab bar ---------- */
 
@@ -332,7 +334,7 @@ html:has(#main .disc-search) { scroll-padding-top: calc(env(safe-area-inset-top)
 .set-group h2 { padding: 0 var(--s-1); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
 .set-rows { display: grid; overflow: hidden; border-radius: var(--r-surface); border: 1px solid var(--border-subtle); background: var(--surface-1); }
 .set-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2) var(--s-3); min-height: 60px; padding: var(--s-2) var(--s-4); }
-.set-row + .set-row, .set-restore + .set-row { border-top: 1px solid var(--border-subtle); }
+.set-row + .set-row, .set-restore + .set-row, .set-row + .set-credits { border-top: 1px solid var(--border-subtle); }
 .set-label { display: flex; align-items: center; gap: var(--s-3); min-width: 0; }
 .set-label > svg { width: 18px; height: 18px; flex: none; color: var(--ambient); }
 .set-text { display: grid; min-width: 0; }
@@ -410,3 +412,19 @@ body:has(#sheet:not([hidden]) .sheet-bar) .toast, body:has(#bottle.modal:not([hi
   @keyframes vt-page-in { from { opacity: 0; transform: translateX(48px); } }
   @keyframes vt-page-out { to { opacity: 0; transform: translateX(48px); } }
 }
+
+/* ---------- The guide (#/guide, src/views/guide.js) ---------- */
+
+.guide { display: grid; gap: var(--s-6); max-width: 720px; }
+.guide-intro { color: var(--text-secondary); font-size: var(--fs-body); line-height: var(--lh-body); }
+.guide-section { display: grid; gap: var(--s-3); }
+.guide-head { display: flex; align-items: flex-start; gap: var(--s-3); padding: 0 var(--s-1); }
+.guide-head > svg { width: 22px; height: 22px; flex: none; margin-top: 2px; color: var(--ambient); }
+.guide-head h2 { font-size: var(--fs-title-3); line-height: var(--lh-title-3); font-weight: 600; }
+.guide-head p { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.guide-items { display: grid; margin: 0; padding: 0; list-style: none; overflow: hidden; border-radius: var(--r-surface); border: 1px solid var(--border-subtle); background: var(--surface-1); }
+.guide-item { display: grid; gap: var(--s-1); padding: var(--s-3) var(--s-4); }
+.guide-item + .guide-item { border-top: 1px solid var(--border-subtle); }
+.guide-item h3 { font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 600; }
+.guide-item p { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.guide-item b { color: var(--text-primary); font-weight: 600; }
