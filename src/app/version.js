@@ -14,7 +14,7 @@
 
 // The version this page's files are: sw.js's CACHE, the cache they're saved
 // in. test/shell.test.js holds the two equal, so bump both.
-export const VERSION = 'almanac-v27';
+export const VERSION = 'almanac-v28';
 
 /**
  * Watches `workers` (navigator.serviceWorker) for another version taking

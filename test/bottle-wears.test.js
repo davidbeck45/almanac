@@ -5,7 +5,9 @@ import assert from 'node:assert/strict';
 import { setUnits } from '../src/ui.js';
 import { SECTIONS } from '../src/views/bottle.js';
 import '../src/views/sections.js';
-import { bottleWears, wearLines, feltLine, yourWearsHTML, ENOUGH_WEARS } from '../src/views/bottle-wears.js';
+import { bottleWears, wearLines, feltLine, yourWearsHTML, praiseHTML, ENOUGH_WEARS } from '../src/views/bottle-wears.js';
+import { praiseSaid, wearPhrase } from '../src/ui.js';
+import { MAX_PRAISE } from '../src/history.js';
 
 const TODAY = '2026-11-09';
 const wear = (id, date, slot, extra = {}) => ({ id, date, slot, ...extra });
@@ -129,4 +131,55 @@ test('one wear names its day in the day’s own words, and the strip’s months 
   const two = yourWearsHTML(mine(), bottleWears([{ id: '1', date: '2025-12-15', slot: 'day' }, { id: '1', date: '2026-11-20', slot: 'day' }, { id: '1', date: '2026-11-25', slot: 'night' }], '1', '2026-12-01'));
   assert.match(two, /<span class="h3-aside">2 since Jan<\/span>/);
   assert.ok(!/12 months/.test(old + two));
+});
+
+test('compliments: the lines count them, and the section notes one on the bottle’s latest wear', () => {
+  const log = [
+    wear('1', '2026-11-10', 'day', { praise: 5 }), // tomorrow: not worn yet
+    wear('1', '2026-11-08', 'night', { praise: 2 }),
+    wear('1', '2026-11-08', 'day'),
+    wear('1', '2026-11-02', 'day', { praise: 1 }),
+    wear('1', '2026-10-20', 'night'),
+    wear('2', '2026-11-09', 'day'),
+  ];
+  const w = bottleWears(log, 1, TODAY);
+  assert.equal(w.id, '1');
+  assert.deepEqual(w.praise, { count: 3, wears: 2 });
+  assert.deepEqual(w.last, { date: '2026-11-08', slot: 'night', praise: 2 }, 'a day’s night is its later wear');
+  assert.equal(wearLines(w, TODAY).at(-1), '3 compliments over 4 wears.');
+  const html = yourWearsHTML(mine(), w);
+  assert.match(html, /<li class="bw-line">3 compliments over 4 wears\.<\/li>/);
+  // The buttons carry the wear they were drawn for: its bottle, date and slot.
+  assert.match(html, /data-action="praise" data-id="1" data-date="2026-11-08" data-slot="night" data-by="1">.*?<span>Got a compliment<\/span>/);
+  assert.match(html, /data-action="praise" data-id="1" data-date="2026-11-08" data-slot="night" data-by="-1">Take one off<\/button>/);
+  assert.match(html, /<p class="bw-praise-when">2 compliments on your wear last night\.<\/p>/);
+  // None yet: one button, saying which wear it counts for; nothing counted in the lines.
+  const plain = bottleWears(JOURNAL, '1', TODAY);
+  assert.deepEqual([plain.praise, plain.last], [null, { date: '2026-11-07', slot: 'night', praise: 0 }]);
+  const none = yourWearsHTML(mine(), plain);
+  assert.match(none, /<p class="bw-praise-when">Counts for your wear on Sat night, Nov 7\.<\/p>/);
+  assert.ok(!none.includes('data-by="-1"') && !/compliments? over/.test(none));
+  // One wear is a sentence, which says its compliments, with the button under it.
+  const once = yourWearsHTML(mine({ f: { id: '2' } }), bottleWears([wear('2', TODAY, 'day', { praise: 1 })], '2', TODAY));
+  assert.ok(once.includes('Worn once, today. It got a compliment.') && once.includes('1 compliment on your wear today.'), once);
+  assert.ok(yourWearsHTML(mine(), bottleWears([wear('2', TODAY, 'night', { praise: 3 })], '2', TODAY)).includes('Worn once, tonight. It got 3 compliments.'));
+  // A wear at the most it keeps takes no more; a wear older than the strip's months offers nothing.
+  assert.match(praiseHTML('1', { date: TODAY, slot: 'day', praise: MAX_PRAISE }, TODAY), /data-by="1" disabled>/);
+  assert.ok(!yourWearsHTML(mine(), bottleWears([wear('1', '2025-06-01', 'day', { praise: 1 })], '1', TODAY)).includes('data-action="praise"'));
+  assert.ok(!/undefined|NaN|\[object/.test(html + none + once));
+});
+
+test('noting a compliment says what it did, by the wear it went to', () => {
+  assert.deepEqual(['day', 'night'].map(k => wearPhrase(TODAY, k, TODAY)), ['today', 'tonight']);
+  assert.deepEqual(['day', 'night'].map(k => wearPhrase('2026-11-08', k, TODAY)), ['yesterday', 'last night']);
+  assert.deepEqual(['day', 'night'].map(k => wearPhrase('2026-11-07', k, TODAY)), ['on Sat, Nov 7', 'on Sat night, Nov 7']);
+  const said = (done, by) => praiseSaid(done, by, 'last night', MAX_PRAISE);
+  assert.equal(said({ praise: 1, changed: true }, 1), 'Compliment noted for your wear last night.');
+  assert.equal(said({ praise: 3, changed: true }, 1), 'Compliment noted: 3 on your wear last night.');
+  assert.equal(said({ praise: 2, changed: true }, -1), 'One taken off: 2 compliments on your wear last night.');
+  assert.equal(said({ praise: 1, changed: true }, -1), 'One taken off: 1 compliment on your wear last night.');
+  assert.equal(said({ praise: 0, changed: true }, -1), 'Compliment taken off your wear last night.');
+  assert.equal(said({ praise: MAX_PRAISE, changed: false }, 1), 'That wear has 9 compliments, the most one keeps.');
+  assert.equal(said({ praise: 0, changed: false }, -1), 'No compliments on your wear last night.');
+  assert.equal(said(null, 1), 'That wear was changed since, so nothing was noted.', 'another tab logged another bottle there');
 });

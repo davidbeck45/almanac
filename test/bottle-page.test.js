@@ -473,6 +473,18 @@ test('on my skin: stars, nudges and where the bottle moved', () => {
   assert.ok(!/\bon me\b|On my skin/.test(html));
   const unrated = skinHTML(modelOf(evil));
   assert.ok(!unrated.includes('bp-skin-clear'));
+  // Your note: none offers Add a note; one shows in your words (escaped) with Edit note; being written, its field takes its place.
+  assert.match(unrated, /data-action="bp-skin-note" data-id="[^"]+">.*?<span>Add a note<span class="visually-hidden"> to /);
+  assert.ok(!unrated.includes('class="skin-note"'));
+  const noted = clean(skinHTML(modelOf(evil, { skin: { rating: null, longevity: 0, sillage: 0, note: EVIL } })), 'a note');
+  assert.match(noted, /<p class="skin-note" aria-labelledby="skin-note-label">.*?<span>&lt;img/);
+  assert.match(noted, /<span>Edit note<span class="visually-hidden"> on /);
+  const writing = clean(skinHTML(modelOf(evil, { skin: { rating: 4, longevity: 0, sillage: 0, note: 'old' } }), '', { draft: EVIL }), 'a note being written');
+  assert.match(writing, /<textarea id="skin-note-field" name="note" rows="3" data-id="[^"]+" maxlength="280"[^>]*aria-describedby="skin-note-hint">&lt;img/);
+  assert.match(writing, /<button type="submit" class="btn primary compact" data-action="bp-skin-note-save"/);
+  assert.match(writing, /<button type="button" class="btn tertiary compact" data-action="bp-skin-note-cancel"/);
+  assert.ok(!writing.includes('data-action="bp-skin-note"') && !writing.includes('class="skin-note"'), 'the field in place of the note and its button');
+  assert.match(writing, /data-action="bp-skin-rate" data-value="4"/, 'the stars stay as they are while it’s written');
   assert.match(unrated, /tabindex="0" data-action="bp-skin-rate" data-value="1"/, 'one tab stop, on the first star');
   assert.match(unrated, /bp-skin-lasts" data-value="0" aria-pressed="true"/, 'as expected until told otherwise');
 

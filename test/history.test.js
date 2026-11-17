@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   journalStats, journalCalendar, journalExport, toggleWear, parseJournal, occasionCounts, loadHistory,
   journalToken, journalFromToken, readJournal, isJournalToken, journalFreshness, RECENT_DAYS, shiftISO,
-  wearStamp, stampedWindow,
+  wearStamp, stampedWindow, addPraise, praiseStats, MAX_PRAISE,
 } from '../src/history.js';
 import { ROTATION_PENALTY } from '../src/engine.js';
 import { windowOn, week } from '../src/weather.js';
@@ -278,4 +278,59 @@ test('an empty journal makes a token too, and a bad one says so in a sentence', 
   assert.equal(readJournal(JSON.stringify(journalExport(history, null, []))).history.length, 4);
   assert.equal(readJournal('not json'), null);
   assert.equal(readJournal('{"app":"else"}'), null);
+});
+
+test('a wear keeps the compliments it got: added and taken off on the wear they name, never past what one keeps', () => withStore(store => {
+  toggleWear('100', '2026-11-14', 'night', { lat: 40.71, lon: -74.01 }, 'date', { wx: { f: 50, d: 40, h: 60, p: 0, c: 3 }, pick: '200' });
+  toggleWear('200', '2026-11-15', 'day');
+  const one = addPraise('100', '2026-11-14', 'night');
+  assert.deepEqual([one.praise, one.changed], [1, true]);
+  assert.deepEqual(loadHistory()[1], { id: '100', date: '2026-11-14', slot: 'night', lat: 40.71, lon: -74.01, occasion: 'date', wx: { f: 50, d: 40, h: 60, p: 0, c: 3 }, pick: '200', praise: 1 }, 'the wear as it was, with its compliment');
+  assert.equal(addPraise(100, '2026-11-14', 'night').praise, 2, 'an id as a number finds it too');
+  assert.equal(loadHistory()[0].praise, undefined, 'the other wear untouched');
+  // Taken off one at a time; at none the key goes, and there's nothing below it.
+  assert.equal(addPraise('100', '2026-11-14', 'night', -1).praise, 1);
+  assert.deepEqual([addPraise('100', '2026-11-14', 'night', -1).praise, 'praise' in loadHistory()[1]], [0, false]);
+  assert.deepEqual([addPraise('100', '2026-11-14', 'night', -1).praise, addPraise('100', '2026-11-14', 'night', -1).changed], [0, false]);
+  // A wear keeps MAX_PRAISE at most.
+  for (let i = 0; i < MAX_PRAISE + 3; i++) addPraise('200', '2026-11-15', 'day');
+  assert.equal(loadHistory()[0].praise, MAX_PRAISE);
+  assert.equal(addPraise('200', '2026-11-15', 'day').changed, false);
+  // Another bottle's, another window's, or a wear since cleared: nothing to add to.
+  assert.equal(addPraise('999', '2026-11-14', 'night'), null);
+  assert.equal(addPraise('100', '2026-11-14', 'day'), null);
+  // The window logged again for another bottle starts without any; cleared and logged again, the same.
+  toggleWear('300', '2026-11-15', 'day');
+  assert.deepEqual(loadHistory()[0], { id: '300', date: '2026-11-15', slot: 'day' }, 'a compliment is the bottle’s, not the window’s');
+  assert.equal(addPraise('200', '2026-11-15', 'day'), null);
+  // Read back only as a whole number from 1: anything else is no compliment.
+  store.set('scentcast.history', JSON.stringify([{ id: 1, date: '2026-11-15', slot: 'day', praise: 'lots' }, { id: 2, date: '2026-11-14', slot: 'day', praise: 40 }, { id: 3, date: '2026-11-13', slot: 'day', praise: 0 }, { id: 4, date: '2026-11-12', slot: 'day', praise: 2.5 }]));
+  assert.deepEqual(loadHistory().map(h => h.praise), [undefined, MAX_PRAISE, undefined, undefined]);
+}));
+
+test('compliments count by bottle over a span, most first, and the journal’s other readers leave them out', () => {
+  const log = [
+    { id: 'a', date: '2026-11-15', slot: 'night', praise: 1 },
+    { id: 'b', date: '2026-11-14', slot: 'night', praise: 2 },
+    { id: 'a', date: '2026-11-10', slot: 'day' },
+    { id: 'c', date: '2026-11-09', slot: 'day', praise: 1 },
+    { id: 'a', date: '2026-11-01', slot: 'night', praise: 1 },
+    { id: 'b', date: '2026-09-01', slot: 'night', praise: 3 },
+    { id: 'd', date: '2026-11-16', slot: 'day', praise: 4 }, // tomorrow: not worn yet
+    { id: 'e', date: '2026-11-12', slot: 'day', praise: 5, planned: true }, // a plan's, not a wear
+    { id: 'f', date: '2026-11-11', slot: 'day' },
+  ];
+  assert.deepEqual(praiseStats(log, '2026-11-15', 30), [
+    { id: 'b', praise: 2, wears: 1, praised: 1 }, // as many as a's, on every wear
+    { id: 'a', praise: 2, wears: 3, praised: 2 },
+    { id: 'c', praise: 1, wears: 1, praised: 1 },
+  ]);
+  assert.deepEqual(praiseStats(log, '2026-11-15')[0], { id: 'b', praise: 5, wears: 2, praised: 2 }, 'the whole log without a span');
+  assert.deepEqual(praiseStats(log, '2026-11-15', 2).map(r => r.id), ['b', 'a']);
+  assert.deepEqual(praiseStats([], '2026-11-15'), []);
+  // Copy for Claude carries no compliments, and the export carries the wears as they are.
+  const token = journalFromToken(journalToken(log, [], {}, { todayISO: '2026-11-15' }));
+  assert.ok(token.history.length && token.history.every(h => !('praise' in h)));
+  assert.equal(parseJournal(journalExport(log, null, [])).history.find(h => h.id === 'b').praise, 2);
+  assert.deepEqual(occasionCounts(log), { untagged: 8 }, 'and they change no count of wears');
 });

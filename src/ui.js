@@ -68,6 +68,34 @@ export function relativeDay(iso, todayISO) {
   return shortDate(iso);
 }
 
+/** A window gone by in a sentence: "today", "tonight", "yesterday", "last night", "Sat, Oct 31", "Sat night, Oct 31". */
+export function loggedWhen(dateISO, slot, todayISO) {
+  const night = slot === 'night';
+  const ago = Math.round((Date.parse(todayISO) - Date.parse(dateISO)) / 86_400_000);
+  if (ago === 0) return night ? 'tonight' : 'today';
+  if (ago === 1) return night ? 'last night' : 'yesterday';
+  return `${weekdayShort(dateISO)}${night ? ' night' : ''}, ${shortDate(dateISO)}`;
+}
+
+// A wear gone by in a sentence about it: "today", "last night", "on Sat night, Oct 31".
+export const wearPhrase = (dateISO, slot, todayISO) => {
+  const when = loggedWhen(dateISO, slot, todayISO);
+  return /^(today|tonight|yesterday|last night)$/.test(when) ? when : `on ${when}`;
+};
+
+/**
+ * What noting a compliment did, for a status line: `done` is addPraise's
+ * answer (src/history.js; null when the wear changed since the page was
+ * drawn), `by` what was asked (1, or -1 to take one off), `wear` the wear in
+ * wearPhrase's words, `most` the most a wear keeps.
+ */
+export function praiseSaid(done, by, wear, most) {
+  if (!done) return 'That wear was changed since, so nothing was noted.';
+  if (!done.changed) return by > 0 ? `That wear has ${most} compliments, the most one keeps.` : `No compliments on your wear ${wear}.`;
+  if (by > 0) return done.praise === 1 ? `Compliment noted for your wear ${wear}.` : `Compliment noted: ${done.praise} on your wear ${wear}.`;
+  return done.praise ? `One taken off: ${plural(done.praise, 'compliment')} on your wear ${wear}.` : `Compliment taken off your wear ${wear}.`;
+}
+
 export const matchPct = entry => Math.max(1, Math.min(99, Math.round(entry.score * 100)));
 
 export const ordinal = n => {

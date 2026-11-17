@@ -12,7 +12,7 @@ import { packTrip } from '../pack.js';
 import { planTies, rankedTies, tieLine, contrast } from '../contrast.js';
 import { setSkin, loadSkin, loadAsked, markAsked, wasAsked } from '../skin.js';
 import { theme } from '../theme.js';
-import { toggleWear, wearStamp, wornIn, journalStats, journalFreshness, shiftISO, wearSettled, loadHistory } from '../history.js';
+import { toggleWear, wearStamp, wornIn, journalStats, journalFreshness, shiftISO, wearSettled, loadHistory, MAX_PRAISE } from '../history.js';
 import { parseEventText, loadEvents } from '../events.js';
 import { WINDOWS } from '../weather.js';
 import { routeHash, go } from '../app/router.js';
@@ -192,7 +192,7 @@ export function tiesHTML(ties, win, ctx, { when } = {}) {
 // window as well (`ties`, in `win`) and Now's question about the pick, when
 // it asks one (`ask`, markup); elsewhere (`full`) it shows the photo and name
 // too, and the ties as suiting `tieWhen` ("formal wear") just as well.
-export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicker = '', spray = null, event = null, ties = [], win = null, tieWhen, ask = '' } = {}) {
+export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicker = '', spray = null, event = null, ties = [], win = null, tieWhen, ask = '', praise = '' } = {}) {
   const f = entry.fragrance;
   const wash = `--accord:${accordColor(Object.keys(f.accords)[0])}`;
   const open = (cls, inner, label = '') => `<button class="${cls}" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(f.id)}"${label ? ` aria-label="${esc(label)}"` : ''}>${inner}</button>`;
@@ -206,6 +206,7 @@ export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicke
       ${tiesHTML(ties, win, ctx)}
       ${chips(f.accords)}
       ${canWear || hint ? `<div class="pick-actions">${hint}${canWear ? wearButton(entry, ctx, worn) : ''}</div>` : ''}
+      ${praise}
       ${ask}
     </div>`;
   }
@@ -222,6 +223,22 @@ export function pickHTML(entry, ctx, worn, { canWear = true, full = false, kicke
     </div>
     <div class="pick-actions">${canWear ? wearButton(entry, ctx, worn) : ''}${matchBadge(entry)}</div>
   </div>`;
+}
+
+/**
+ * Now's card once he's wearing its pick: a quiet way to note a compliment
+ * the wear got (the `praise` action, src/views/bottle-wears.js), with how
+ * many it has and Undo once it has one. `wear`: the journal's entry for the
+ * card's window, which its heading names.
+ */
+export function pickPraiseHTML(f, wear) {
+  const n = wear.praise ?? 0;
+  const data = `data-action="praise" data-id="${esc(f.id)}" data-date="${esc(wear.date)}" data-slot="${esc(wear.slot)}"`;
+  return `<p class="pick-praise">${icon.praise}
+      ${n ? `<span>${esc(plural(n, 'compliment'))}</span>` : ''}
+      <button class="link-btn" ${data} data-by="1"${n >= MAX_PRAISE ? ' disabled' : ''}>${n ? 'Add another' : 'Got a compliment?'}<span class="visually-hidden"> on ${esc(f.name)}</span></button>
+      ${n ? `<button class="link-btn" ${data} data-by="-1">Undo<span class="visually-hidden"> a compliment on ${esc(f.name)}</span></button>` : ''}
+    </p>`;
 }
 
 // The other window of today, beside the first on a wide column (the hero's
@@ -746,12 +763,15 @@ function nowPane(app) {
   // with it: none once he's wearing one.
   const ties = planTies(todayPlan(), { history: state.history })[slots.findIndex(p => p.win === win)] ?? [];
   const ask = nowQuestion(pick, worn);
+  // Wearing the pick, with no question in its place: a compliment can be noted on the wear.
+  const wear = worn === pick.fragrance.id && !ask.inPick ? wornIn(state.history, win.dateISO, win.slot) : null;
+  const praise = wear ? pickPraiseHTML(pick.fragrance, wear) : '';
   return `${banner()}${firstVisit() ? welcomeHTML() : ''}
     ${awayHTML}
     <section class="card slot" aria-labelledby="slot-title">
       ${slotHeadHTML(win, nowHour(), { id: 'slot-title' })}
       <div class="now-picks">
-        ${pickHTML(pick, win.slot, worn, { canWear: canWear(win), spray: sprayGuide(pick.fragrance, win, win.occasion ?? null), event: win, ties, win, ask: ask.inPick })}
+        ${pickHTML(pick, win.slot, worn, { canWear: canWear(win), spray: sprayGuide(pick.fragrance, win, win.occasion ?? null), event: win, ties, win, ask: ask.inPick, praise })}
         ${other ? nextWindowHTML(other, wornId(other.win), nowHour()) : ''}
       </div>
       ${away ? '' : allDayHTML(allDayPick(), win.slot)}

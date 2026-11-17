@@ -230,6 +230,28 @@
 .skin-change:empty { display: none; }
 .skin-change { padding: var(--s-2) var(--s-3); border-radius: var(--r-control); background: color-mix(in srgb, var(--ambient) 12%, transparent); color: var(--text-primary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
 .skin-help { color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
+/* Your note: your own words, marked with a pen as a want's are, then the
+   field it's written in, which takes its place. */
+.skin-note { display: flex; align-items: flex-start; gap: var(--s-2); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-style: italic; }
+.skin-note svg { flex: none; width: 14px; height: 14px; margin-top: 2px; color: var(--text-tertiary); }
+.skin-note > span { min-width: 0; overflow-wrap: anywhere; }
+.skin-note-btn { justify-self: start; margin-left: calc(-1 * var(--s-2)); }
+.skin-note-form { display: grid; gap: var(--s-2); }
+.skin-note-form .name-field { margin: 0; }
+.skin-note-form textarea {
+  width: 100%;
+  min-width: 0;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-control);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-size: var(--fs-headline);
+  line-height: var(--lh-body);
+  resize: vertical;
+  outline: none;
+}
+.skin-note-form textarea:focus { border-color: color-mix(in srgb, var(--accent) 60%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
 
 /* ---------- Your wears ---------- */
 
@@ -244,6 +266,10 @@
 @container bottle (max-width: 560px) { .bw-months small span { display: none; } }
 .bw-lines { display: grid; gap: var(--s-1); }
 .bw-line { color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+/* Got a compliment: the button, Take one off once the wear has one, and
+   which wear it counts for. */
+.bw-praise { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-top: var(--s-4); }
+.bw-praise-when { flex: 1 0 100%; color: var(--text-tertiary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
 .bw-line:first-child { color: var(--text-primary); }
 
 /* ---------- Styles ---------- */

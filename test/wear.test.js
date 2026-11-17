@@ -92,6 +92,18 @@ test('the trip, event and pick templates render clean: no undefined or NaN, name
   };
   for (const [what, html] of Object.entries(renders)) clean(html, what);
   assert.match(renders.pick, /<p class="nudge">.*Not worn in 34 days/s, 'a nudged pick says why in its own line');
+  // Wearing the pick: a compliment on the wear is one tap, with its count and Undo once it has one.
+  const worn = { id: evil.id, date: today, slot: 'day' };
+  const asking = clean(wear.pickPraiseHTML(evil, worn), 'a compliment to note');
+  assert.match(asking, new RegExp(`data-action="praise" data-id="[^"]+" data-date="${today}" data-slot="day" data-by="1">Got a compliment\\?<span class="visually-hidden"> on `));
+  assert.ok(!asking.includes('data-by="-1"') && !/\d compliment/.test(asking));
+  const noted = clean(wear.pickPraiseHTML(evil, { ...worn, praise: 2 }), 'compliments noted');
+  assert.match(noted, /<span>2 compliments<\/span>\s*<button class="link-btn"[^>]*data-by="1">Add another<span/);
+  assert.match(noted, /data-by="-1">Undo<span class="visually-hidden"> a compliment on /);
+  assert.match(wear.pickPraiseHTML(evil, { ...worn, praise: 9 }), /data-by="1" disabled>/);
+  const wearing = wear.pickHTML(entry, 'day', evil.id, { praise: asking, ask: '<p class="ask">?</p>' });
+  assert.ok(wearing.indexOf('class="pick-actions"') < wearing.indexOf('class="pick-praise"') && wearing.indexOf('class="pick-praise"') < wearing.indexOf('class="ask"'), 'under Wearing, over a question');
+  assert.ok(!renders.pick.includes('pick-praise'), 'nothing until he’s wearing it');
   assert.equal((renders.pick.match(/Not worn in 34 days/g) ?? []).length, 1, 'not again among the reasons');
   assert.match(renders.pick, /data-action="spray-open"[^>]*>.*\d spray/s, 'the spray line opens the spray section');
   assert.match(renders.week, /wk-nudge/, 'the week marks a nudged pick');
@@ -104,6 +116,15 @@ test('the trip, event and pick templates render clean: no undefined or NaN, name
   assert.ok(!/\bTap\b/.test(renders.plan + renders.week));
   assert.match(renders.pack, /data-action="trip-copy"/);
   assert.match(renders.pack, /data-action="trip-share"/);
+  // Each bottle worn says how much to decant for its windows, under what it's worn for.
+  for (const b of packed.bottles) {
+    const decant = trip.decantOf(b.record, packed.plan);
+    assert.ok(decant?.sprays >= packed.plan.filter(p => p.pick === b.record).length, b.record.name);
+    assert.ok(renders.pack.includes(`<span>${decant.text}</span></p>`), decant.text);
+  }
+  assert.equal((renders.pack.match(/<p class="trip-decant">/g) ?? []).length, packed.bottles.length, 'one line a bag, so the bags keep their rows');
+  assert.match(trip.tripPackHTML({ ...packed, plan: [] }, saved), /<p class="trip-decant"><\/p>/, 'empty for a spare');
+  assert.equal(trip.decantOf(packed.bottles[0].record, []), null);
   assert.ok(!trip.tripPackHTML(packed, saved).includes('data-action="trip-share"'), 'Share only where the browser can');
 });
 
@@ -192,6 +213,8 @@ test('the packing list says what to pack and what to wear each day', () => {
   const lines = text.split('\n');
   assert.equal(lines[0], `Packing for ${EVIL}, ${trip.datesText(saved.fromISO, saved.toISO)}`);
   for (const b of packed.bottles) assert.ok(text.includes(`${b.record.name} (${b.record.brand}): `), b.record.name);
+  // …and how much of each to decant: "…: every day; decant 5 ml, about 30 sprays".
+  for (const b of packed.bottles) assert.match(lines.find(l => l.startsWith(`${b.record.name} (`)), /; (decant \d+ ml, about \d+ sprays?|take the bottle: about \d+ sprays?)$/, b.record.name);
   assert.equal(lines.filter(l => /^\w{3}, \w{3} \d+: /.test(l)).length, new Set(tripWindows.map(w => w.dateISO)).size, 'a line a day');
   const formal = packed.plan.find(p => p.occasion);
   assert.ok(lines.includes(`${trip.windowName(third, 'day').split(',')[0]}, ${trip.datesText(third, third)}: ${packed.plan.find(p => p.window.dateISO === third && p.window.slot === 'day').pick.name} by day; formal at night: ${formal.pick.name}`), 'the event names itself, then its bottle');

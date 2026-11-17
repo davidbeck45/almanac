@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { sprayGuide, concentrationOf } from '../src/spray.js';
+import { sprayGuide, concentrationOf, decantFor, DECANT_SIZES, ML_PER_SPRAY } from '../src/spray.js';
 import { occasionById, OCCASIONS } from '../src/occasions.js';
 
 const fragrances = JSON.parse(readFileSync(new URL('../data/collection.json', import.meta.url))).fragrances
@@ -235,4 +235,34 @@ test('a body mist reads as one by its flag, and a perfume oil gets dabs', () => 
   }
   assert.equal(sprayGuide({ id: 'o', name: 'Oil Fiction', brand: 'Test', accords: { musky: 100 } }, MILD).unit, 'spray', 'a spray named for oil is a spray');
   assert.equal(sprayGuide(MIDDLE, MILD).unit, 'spray');
+});
+
+test('a trip’s decant: the sprays its wears take, in the smallest vial that holds them with some to spare', () => {
+  const guide = (lo, hi) => ({ sprays: [lo, hi], unit: 'spray' });
+  // The generous end of each wear's guide, summed.
+  assert.deepEqual(decantFor([guide(2, 3), guide(2, 3), guide(1, 1)]), { sprays: 7, ml: 1, text: 'Decant 1 ml, about 7 sprays' });
+  assert.equal(decantFor([guide(1, 1)]).text, 'Decant 1 ml, about 1 spray');
+  // Ten days of a cold-weather bottle at 3–4 sprays: 4 ml of spray, and with a priming and a top-up past what a 5 ml atomizer holds.
+  assert.deepEqual(decantFor(Array.from({ length: 10 }, () => guide(3, 4))), { sprays: 40, ml: 8, text: 'Decant 8 ml, about 40 sprays' });
+  assert.equal(decantFor(Array.from({ length: 8 }, () => guide(3, 4))).ml, 5);
+  // Every size is reachable, in order, and each holds what it's given with headroom.
+  let last = 0;
+  for (let n = 1; n <= 80; n++) {
+    const d = decantFor(Array.from({ length: n }, () => guide(1, 1)));
+    if (d.ml === null) { assert.ok(n * ML_PER_SPRAY * 1.3 > DECANT_SIZES.at(-1)); continue; }
+    assert.ok(DECANT_SIZES.includes(d.ml) && d.ml >= last && d.ml >= n * ML_PER_SPRAY * 1.3 - 1e-9, `${n} sprays: ${d.ml} ml`);
+    last = d.ml;
+  }
+  assert.equal(last, DECANT_SIZES.at(-1));
+  // A month of wearing it day and night is more than a travel atomizer holds.
+  assert.deepEqual(decantFor(Array.from({ length: 62 }, () => guide(2, 3))), { sprays: 186, ml: null, text: 'Take the bottle: about 186 sprays' });
+  // Nothing to decant: a spare, or an oil, which goes on by touch.
+  assert.equal(decantFor([]), null);
+  assert.equal(decantFor(undefined), null);
+  assert.equal(decantFor([{ sprays: [1, 2], unit: 'dab' }]), null);
+  // From real guides: a loud extrait for five cold nights against a light cologne for five hot days.
+  const few = decantFor(Array.from({ length: 5 }, () => sprayGuide(BEAST, { feelsF: 30, dewF: 20 }, occasionById('date'))));
+  const many = decantFor(Array.from({ length: 5 }, () => sprayGuide(BREEZE, { feelsF: 88, dewF: 60 })));
+  assert.ok(few.sprays < many.sprays && few.ml <= many.ml, `${few.text} | ${many.text}`);
+  assert.doesNotMatch(`${few.text}${many.text}`, /°|\d ?F\b/);
 });

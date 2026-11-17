@@ -242,6 +242,9 @@
 .pick-top .btn svg { width: 14px; height: 14px; }
 .pick-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); margin-top: var(--s-4); }
 .pick-actions .match { margin-left: auto; }
+/* Wearing the pick: a quiet line for a compliment it got, its count and Undo. */
+.pick-praise { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-3); margin-top: var(--s-3); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.pick-praise > svg { flex: none; width: 14px; height: 14px; color: var(--text-tertiary); }
 /* The match sits in the glow's corner: a light accord (white floral,
    vanilla) lifts it enough to take secondary text under 4.5:1. */
 .pick .match { color: var(--text-primary); }
@@ -783,12 +786,18 @@
 .trip-bag .brand { color: var(--text-secondary); font-size: var(--fs-caption); line-height: var(--lh-caption); }
 .trip-role { margin-top: var(--s-1); color: var(--text-primary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); font-weight: 600; }
 .trip-bag .reasons { margin: var(--s-0) 0 0; color: var(--text-secondary); }
+/* How much to decant for the windows it's worn: always there (empty for a
+   spare or an oil), so it keeps its row beside the other bags'. */
+.trip-decant { display: flex; align-items: center; gap: var(--s-1); margin-top: var(--s-0); color: var(--text-secondary); font-size: var(--fs-footnote); line-height: var(--lh-footnote); }
+.trip-decant:empty { margin-top: 0; }
+.trip-decant svg { flex: none; width: 14px; height: 14px; color: var(--text-tertiary); }
 @container page (min-width: 560px) {
-  /* The bags share rows (subgrid): photo, name, brand, role, reason, so a
-     name on two lines moves the lines under every bag alike. */
-  .trip-bags { grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); grid-template-rows: repeat(4, auto) 1fr; gap: 0 var(--s-4); }
-  .trip-bag { grid-row: span 5; grid-template-columns: 1fr; grid-template-rows: subgrid; align-items: start; gap: 0; text-align: center; }
-  .trip-bag-text { display: grid; grid-row: 2 / span 4; grid-template-rows: subgrid; }
+  /* The bags share rows (subgrid): photo, name, brand, role, decant, reason,
+     so a name on two lines moves the lines under every bag alike. */
+  .trip-bags { grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); grid-template-rows: repeat(5, auto) 1fr; gap: 0 var(--s-4); }
+  .trip-bag { grid-row: span 6; grid-template-columns: 1fr; grid-template-rows: subgrid; align-items: start; gap: 0; text-align: center; }
+  .trip-bag-text { display: grid; grid-row: 2 / span 5; grid-template-rows: subgrid; }
+  .trip-decant { justify-content: center; }
   .trip-bag-photo { height: 116px; margin-bottom: var(--s-3); padding-bottom: var(--s-2); border-bottom: 1px solid var(--border-strong); border-radius: 0; background: radial-gradient(closest-side at 50% 100%, var(--fill), transparent); }
   .trip-bag-photo img { height: 100px; }
   /* A shorter name sits on its brand. */

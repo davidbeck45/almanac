@@ -18,7 +18,8 @@ import { icon, segLinksHTML, messageHTML, FALLBACK_THUMB } from '../ui/component
 import { parseRoute, routeHash, sameRoute, legacyHash, go, HOME } from './router.js';
 import { locationFromURL } from './early.js';
 import { askPool } from './pool.js';
-import { loadWants, hasWant, setWant } from '../wishlist.js';
+import { loadWants, setWant } from '../wishlist.js';
+import { loadSkin, setSkin } from '../skin.js';
 import {
   state, computeToday, sourceRecords, knownBottles, library, setActive as chooseList, viewingDemo,
   addToMine as addRecord, markBottlesLoaded, loadBottles, keepBottles, loadFullRecord, retryClimate, reloadStored,
@@ -128,7 +129,10 @@ function own(record) {
   const label = state.shared ? (state.shared.name ? `${state.shared.name}’s` : 'the shared list') : 'David’s';
   const before = { active: state.active, shared: state.shared, search: location.search };
   addToMine(record);
-  if (hasWant(loadWants(), record.id)) setWant(record.id, false);
+  // A want's note is his own words about the bottle: bought, it goes on with it (unless the bottle has one).
+  const want = loadWants().find(w => w.id === String(record.id));
+  if (want?.note && !loadSkin()[String(record.id)]?.note) setSkin(record.id, { note: want.note });
+  if (want) setWant(record.id, false);
   render();
   if (!switching) return showToast(`<span>${esc(toastName(record.name))} added to Mine</span>`);
   listBefore = before;

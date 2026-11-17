@@ -44,6 +44,9 @@ export function addSection(section) {
   SECTIONS.sort((a, b) => a.order - b.order);
 }
 
+/** A form on the page not saved yet (a section's `unsaved`: a bottle's note being written), which an out-of-sight version reload waits for. */
+export const unsaved = () => SECTIONS.some(s => s.unsaved?.());
+
 /** The sections in the order a bottle's page shows them: owned, or shopping for it. */
 export function sectionsFor(model) {
   const mine = model.owned || model.inMine;

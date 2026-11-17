@@ -15,6 +15,7 @@
 // the trip's clock (src/weather.js placeClock), not home's.
 import { packTrip, withEvents } from '../../pack.js';
 import { rank, daysBetween, isDisliked } from '../../engine.js';
+import { sprayGuide, decantFor } from '../../spray.js';
 import { tripWindows, forecastError, placeClock, placeDate, windowOpen } from '../../weather.js';
 import { OCCASIONS, occasionById } from '../../occasions.js';
 import { shiftISO } from '../../history.js';
@@ -162,6 +163,14 @@ export function leadOf(record, plan) {
   return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 }
 
+/**
+ * How much of a packed bottle to decant for the windows it's worn
+ * (src/spray.js decantFor, over its spray guide in each: the window's
+ * weather, an event's occasion, his skin nudges on the record); null for a
+ * spare or a perfume oil.
+ */
+export const decantOf = (record, plan) => decantFor(plan.filter(p => p.pick === record).map(p => sprayGuide(record, p.window, p.occasion ?? null)));
+
 const ctxKey = win => `trip:${win.dateISO}:${win.slot}`;
 
 // The plan by date: [{ dateISO, day: plan entry | null, night }].
@@ -199,7 +208,10 @@ const eventWords = (occasion, slot) => {
  */
 export function packingText(result, trip, { today = '' } = {}) {
   const lines = [`Packing for ${trip.place.name}, ${datesText(trip.fromISO, trip.toISO)}`, ''];
-  for (const b of result.bottles) lines.push(`${b.record.name} (${b.record.brand}): ${uncap(roleOf(b.record, result.plan))}`);
+  for (const b of result.bottles) {
+    const decant = decantOf(b.record, result.plan);
+    lines.push(`${b.record.name} (${b.record.brand}): ${uncap(roleOf(b.record, result.plan))}${decant ? `; ${uncap(decant.text)}` : ''}`);
+  }
   lines.push('');
   for (const d of planDays(result.plan)) {
     const say = (p, slot) => p && (p.occasion ? `${eventWords(p.occasion, slot)}: ${p.pick.name}` : `${p.pick.name} ${slot === 'day' ? 'by day' : 'at night'}`);
@@ -334,6 +346,7 @@ export function tripPackHTML(result, trip, { canShare = false } = {}) {
     const win = first(f);
     const ctx = win ? ctxKey(win) : '';
     const lead = leadOf(f, result.plan);
+    const decant = decantOf(f, result.plan);
     const open = (cls, inner, label = '') => `<button class="${cls}" data-action="open" data-ctx="${esc(ctx)}" data-id="${esc(f.id)}"${label ? ` aria-label="${esc(label)}"` : ''}>${inner}</button>`;
     return `<li class="trip-bag">
       ${open('trip-bag-photo', img(f, { lazy: false }), `Details for ${f.name}`)}
@@ -341,6 +354,7 @@ export function tripPackHTML(result, trip, { canShare = false } = {}) {
         <h3 class="trip-bag-name">${open('pick-name-btn', `<span class="clamp">${esc(f.name)}</span>`)}</h3>
         <p class="brand">${esc(f.brand)}</p>
         <p class="trip-role">${esc(roleOf(f, result.plan))}</p>
+        <p class="trip-decant">${decant ? `${icon.spray}<span>${esc(decant.text)}</span>` : ''}</p>
         ${lead ? reasonsList([{ text: lead, tone: 'good' }], 'compact') : ''}
       </div>
     </li>`;

@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { journalExport, journalToken, parseJournal, readJournal, loadHistory, toggleWear } from '../src/history.js';
+import { journalExport, journalToken, parseJournal, readJournal, loadHistory, toggleWear, addPraise, MAX_PRAISE } from '../src/history.js';
 import { loadSkin, setSkin, loadAsked, markAsked } from '../src/skin.js';
 import { loadEvents, setEvent } from '../src/events.js';
 import { loadHidden, setHidden, hiddenFor } from '../src/hidden.js';
@@ -128,7 +128,7 @@ test('adding keeps this device’s wear, rating, plan, want and bottle wherever 
   saveMine({ name: '', records: [bottle('2', 'Two, as this device has it'), bottle('3', 'Three')] });
   localStorage.setItem('scentcast.prefs', JSON.stringify({ units: 'F', preferValue: null }));
   const { counts } = restoreBackup(readBackup(file), 'add', { fromISO: FROM });
-  assert.deepEqual(counts, { wears: 1, dropped: 0, kept: 1, ratings: 1, hidden: 1, plans: 1, wants: 1, droppedWants: 0, mine: 1 });
+  assert.deepEqual(counts, { wears: 1, dropped: 0, kept: 1, ratings: 1, notes: 0, hidden: 1, plans: 1, wants: 1, droppedWants: 0, mine: 1 });
   assert.equal(restoreText(counts), 'Added 1 wear, 1 rating, 1 plan, 1 want and 1 bottle to Mine. Switched off 1 bottle. 1 window kept this device’s wear.');
   assert.deepEqual(loadHistory().map(h => `${h.date} ${h.slot} ${h.id}`),
     ['2026-11-09 day 300', '2026-11-08 night 555', '2026-11-07 day 555', '2026-01-03 day 100'], 'newest first, the device’s wear for a window both have');
@@ -395,4 +395,55 @@ test('adding at the want list’s cap counts what stays, says what fell off, and
   const newer = restoreBackup(readBackup(file([{ id: 'new', added: '2026-12-01' }])), 'add', { fromISO: FROM });
   assert.deepEqual([newer.saved, newer.counts.wants, newer.counts.droppedWants, loadWants().length, loadWants()[0].id], [true, 1, 1, 200, 'new']);
   assert.match(restoreText(newer.counts), /^Added 1 want\. The want list keeps its newest 200, so this device’s oldest one dropped off\.$/);
+});
+
+test('a bottle’s note travels with its rating, and merges on its own', () => {
+  fresh();
+  // The file: stars and a note on 100, a note alone on 200, stars alone on 300.
+  setSkin('100', { rating: 5, note: 'Pear syrup for the first hour.' }, '2026-11-01');
+  setSkin('200', { note: '100 ml, from the airport.' }, '2026-11-02');
+  setSkin('300', { rating: 3 }, '2026-11-03');
+  const file = exported();
+  const backup = readBackup(file);
+  assert.equal(backupSummary(backup, { fromISO: FROM }), 'No wears, 2 ratings, 2 notes.');
+  assert.ok(!backupEmpty(backup, { fromISO: FROM }));
+  // This device: its own note on 100 and no stars, its own stars on 200 and no note, nothing on 300.
+  fresh();
+  setSkin('100', { note: 'Mine.' }, '2026-11-09');
+  setSkin('200', { rating: 2, sillage: 1 }, '2026-11-09');
+  const { counts } = restoreBackup(backup, 'add', { fromISO: FROM });
+  assert.deepEqual([counts.ratings, counts.notes], [2, 1], 'stars for 100 and 300, the note for 200');
+  assert.equal(restoreText(counts), 'Added 2 ratings and 1 note.');
+  const skin = loadSkin();
+  assert.deepEqual(skin['100'], { rating: 5, longevity: 0, sillage: 0, note: 'Mine.', updated: '2026-11-09' }, 'the file’s stars under this device’s note');
+  assert.deepEqual(skin['200'], { rating: 2, longevity: 0, sillage: 1, note: '100 ml, from the airport.', updated: '2026-11-09' }, 'the file’s note beside this device’s rating');
+  assert.equal(skin['300'].rating, 3);
+  // Replace takes the file's whole.
+  restoreBackup(backup, 'replace', { fromISO: FROM });
+  assert.deepEqual(loadSkin()['100'], { rating: 5, longevity: 0, sillage: 0, note: 'Pear syrup for the first hour.', updated: '2026-11-01' });
+  assert.deepEqual(loadSkin()['200'], { rating: null, longevity: 0, sillage: 0, note: '100 ml, from the airport.', updated: '2026-11-02' });
+});
+
+test('a wear’s compliments travel with it, and a restore keeps this device’s wear and its own', () => {
+  fresh();
+  toggleWear('100', '2026-11-08', 'night');
+  toggleWear('200', '2026-11-07', 'day');
+  addPraise('100', '2026-11-08', 'night');
+  addPraise('100', '2026-11-08', 'night');
+  addPraise('200', '2026-11-07', 'day');
+  const file = exported();
+  assert.deepEqual(JSON.parse(file).history.map(h => h.praise), [2, 1]);
+  // A hand-edited file's count is kept only in the shape a wear keeps.
+  const edited = JSON.parse(file);
+  edited.history[0].praise = 500;
+  edited.history[1].praise = 'many';
+  assert.deepEqual(readBackup(JSON.stringify(edited)).history.map(h => h.praise), [MAX_PRAISE, undefined]);
+  // This device logged Nov 8's night itself, with one compliment: its wear stays, and Nov 7's comes in with its own.
+  fresh();
+  toggleWear('100', '2026-11-08', 'night');
+  addPraise('100', '2026-11-08', 'night');
+  restoreBackup(readBackup(file), 'add', { fromISO: FROM });
+  assert.deepEqual(loadHistory().map(h => [h.date, h.praise]), [['2026-11-08', 1], ['2026-11-07', 1]]);
+  restoreBackup(readBackup(file), 'replace', { fromISO: FROM });
+  assert.deepEqual(loadHistory().map(h => [h.date, h.praise]), [['2026-11-08', 2], ['2026-11-07', 1]]);
 });

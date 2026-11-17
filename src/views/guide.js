@@ -17,7 +17,7 @@ export const GUIDE = [
     items: [
       { name: 'Set your place', text: 'Tap the place name by the pin (on Now, or in Settings) and search for your city, or use your device’s location. The forecast for it drives every pick.' },
       { name: 'Bring your bottles', href: '#/wardrobe/owned', text: 'You start on David’s wardrobe. In Wardrobe › Owned, switch to <b>Mine</b>, then tap <b>Add bottles</b> to search for yours or <b>Paste a list</b> of their names. Anything the library doesn’t have you can add yourself, with its accords. Anywhere else, <b>I own it</b> on a bottle adds it too.' },
-      { name: 'Wear something', href: '#/wear/now', text: 'Open Now and tap <b>Wear this</b> on the pick, or on any bottle’s page. Logging what you wear lets Almanac rotate your bottles so the same one doesn’t come up every day.' },
+      { name: 'Wear something', href: '#/wear/now', text: 'Open Now and tap <b>Wear this</b> on the pick, or on any bottle’s page. Logging what you wear lets Almanac rotate your bottles so the same one doesn’t come up every day. If someone compliments it, tap <b>Got a compliment?</b> under Wearing.' },
     ],
   },
   {
@@ -27,7 +27,7 @@ export const GUIDE = [
       { name: 'Now', href: '#/wear/now', text: 'The pick for the day or night ahead, why it suits, how much to spray and where, and the bottles that suit it just as well. Below it, the rest of your wardrobe ranked for the window. Switch between Day and Night at the top.' },
       { name: 'Week', href: '#/wear/week', text: 'A plan for every day and night of the next week, taking turns so your bottles share the wear. Tap <b>Plan</b> to mark a day or night for a date, the office, formal wear and so on: that window gets the best bottle for it, and the days before leave it be.' },
       { name: 'Occasion', href: '#/wear/occasion', text: 'Rank your wardrobe for one occasion (office, date night, night out, formal, casual, outdoors, a night in). <b>When and where?</b> ranks it for another date or city, and lets you plan it.' },
-      { name: 'Trip', href: '#/wear/trip', text: 'Give a place, dates and any events, and it packs the fewest bottles that cover the trip, with a plan for which to wear when and a packing list to share. While you’re away, Now shows the trip’s day.' },
+      { name: 'Trip', href: '#/wear/trip', text: 'Give a place, dates and any events, and it packs the fewest bottles that cover the trip, with a plan for which to wear when, how much of each to decant, and a packing list to share. While you’re away, Now shows the trip’s day.' },
     ],
   },
   {
@@ -36,7 +36,7 @@ export const GUIDE = [
     items: [
       { name: 'Owned', href: '#/wardrobe/owned', text: 'Every bottle you own. Switch one off to leave it out of the picks (it still counts as yours). Sort by brand, by how well each fits now, by when you last wore it, or by your stars.' },
       { name: 'Wishlist', href: '#/wardrobe/wishlist', text: 'Bottles you’ve hearted with <b>Want</b>, each checked against your wardrobe: Strong fit, Good, Covered, Risky or Redundant. Add a note to remember where you smelled it or the price you’re waiting for.' },
-      { name: 'Worn', href: '#/wardrobe/worn', text: 'Your wear journal: a calendar (tap a day to log a wear you forgot), your most worn bottles, and the ones gathering dust, with when this week each would suit. Export it to keep a backup.' },
+      { name: 'Worn', href: '#/wardrobe/worn', text: 'Your wear journal: a calendar (tap a day to log a wear you forgot, or to note a compliment one got), your most worn and most complimented bottles, and the ones gathering dust, with when this week each would suit. Export it to keep a backup.' },
       { name: 'Insights', href: '#/wardrobe/insights', text: 'What your wardrobe covers and where it’s thin, as a map of occasions against the weather, what each bottle is for, the styles you own, and bottles that would fill the gaps. Set <b>How you wear</b> so it weighs the occasions you actually dress for.' },
     ],
   },
@@ -54,7 +54,7 @@ export const GUIDE = [
     lead: 'Tap any bottle, anywhere, to open it.',
     items: [
       { name: 'Why it ranks here', text: 'How it scores for the window, part by part, and where it stands beside the pick.' },
-      { name: 'For your own bottles', text: 'Rate it with stars and say whether it lasts or projects more or less on your skin: picks and spray counts follow. Your wears show when you actually reach for it.' },
+      { name: 'For your own bottles', text: 'Rate it with stars and say whether it lasts or projects more or less on your skin: picks and spray counts follow. Add a note in your own words (where you got it, how it smells to you). Your wears show when you actually reach for it, and <b>Got a compliment</b> there counts one for its latest wear.' },
       { name: 'For one you don’t own', text: 'The buy check, what it smells like (and cheaper twins), what voters say, pros and cons, and how it would do in today’s weather.' },
       { name: 'Layer and compare', text: '<b>Layer it with</b> suggests partners from your wardrobe. <b>Compare</b> sets up to three bottles side by side.' },
     ],

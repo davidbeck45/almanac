@@ -57,7 +57,7 @@ import { STYLES, STYLE_STRONG, WEARS_CLOSE, styleById, styleScores, topOf, shown
 import { fragranticaLibrary, loadPool, fromPool, loadPoolStyles, loadAbout } from '../src/fragrantica.js';
 import { applySkin } from '../src/skin.js';
 import { packTrip, withEvents, picksFor, tripOccasion } from '../src/pack.js';
-import { sprayGuide } from '../src/spray.js';
+import { sprayGuide, decantFor } from '../src/spray.js';
 import { tiesFor, planTies, tieName, tiesNews, runnerUpOf } from '../src/contrast.js';
 import { doubles } from '../src/doubles.js';
 import { pickGapLine, whyParts, whyNotes } from '../src/contrast.js';
@@ -751,6 +751,8 @@ async function main() {
     const windows = withEvents(await windowsAt(place, args.from, args.to, 'from', slot ? { slots: [slot] } : {}), events);
     const trip = packTrip(fragrances, windows, { max, occasionOf: tripOccasion(occasion, slot), history });
     const weather = w => ({ source: w.typical ? 'typical' : 'forecast', feelsF: Math.round(w.feelsF), humidity: Math.round(w.humidity), dewF: Math.round(w.dewF), condition: w.condition, rainChance: w.pop });
+    // How much of each to decant for the windows it's worn (src/spray.js decantFor): null for a spare or an oil.
+    const decantOf = record => decantFor(trip.plan.filter(p => p.pick === record).map(p => sprayGuide(record, p.window, p.occasion)));
     if (args.json) {
       console.log(JSON.stringify({
         place,
@@ -758,7 +760,7 @@ async function main() {
         to: args.to,
         occasion: occasion?.id ?? null,
         text: trip.text,
-        bottles: trip.bottles.map(b => ({ name: b.record.name, brand: b.record.brand, inspiredBy: inspiredBy(b.record), covers: b.covers.length, wears: b.wears, why: b.why })),
+        bottles: trip.bottles.map(b => ({ name: b.record.name, brand: b.record.brand, inspiredBy: inspiredBy(b.record), covers: b.covers.length, wears: b.wears, why: b.why, decant: decantOf(b.record) })),
         plan: trip.plan.map(p => ({
           date: p.window.dateISO,
           slot: p.window.slot,
@@ -780,7 +782,10 @@ async function main() {
       const onSlot = occasion && `${occasion.label} ${(slot ?? occasion.slot) === 'day' ? 'days' : 'nights'}`;
       console.log(`${place.name} · ${shortDate(args.from)} to ${shortDate(args.to)} · ${windows.length} windows${windows.some(w => w.typical) ? ' (typical weather past the forecast)' : ''}${onSlot ? ` · ${onSlot}` : ''}`);
       console.log(`\n${trip.text}\n`);
-      for (const b of trip.bottles) console.log(`  ${b.record.name} (${b.record.brand}${b.record.original ? `, inspired by ${inspiredBy(b.record)}` : ''}): ${b.why}`);
+      for (const b of trip.bottles) {
+        const decant = decantOf(b.record);
+        console.log(`  ${b.record.name} (${b.record.brand}${b.record.original ? `, inspired by ${inspiredBy(b.record)}` : ''}): ${b.why}${decant ? `. ${decant.text}.` : ''}`);
+      }
       console.log('');
       for (const p of trip.plan) {
         const w = p.window;

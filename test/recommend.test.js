@@ -406,9 +406,16 @@ test('--pack plans a trip: few bottles, every window, events on their night', ()
   assert.ok(!('planLink' in out), 'a trip’s events stay with the trip: no link to plan them at home');
   assert.match(out.text, /^Pack /);
   assert.ok(out.plan.every(p => p.spray.sprays[0] >= 1 && p.spray.text));
+  // How much of each to decant: the sprays its windows take, at the generous end, in a vial that holds them.
+  for (const b of out.bottles) {
+    const sprays = out.plan.filter(p => p.pick === b.name).reduce((n, p) => n + p.spray.sprays[1], 0);
+    assert.equal(b.decant.sprays, sprays, b.name);
+    assert.ok([1, 2, 3, 5, 8, 10].includes(b.decant.ml) && b.decant.ml >= sprays * 0.1, `${b.name}: ${b.decant.text}`);
+  }
   const text = cli('--pack', '--loc', '40.7,-74', '--from', from, '--to', to);
   assert.equal(text.status, 0, text.stderr);
   assert.match(text.stdout, /Pack .+\./);
+  assert.equal((text.stdout.match(/\. Decant \d+ ml, about \d+ sprays?\.\n/g) ?? []).length, JSON.parse(cli('--pack', '--loc', '40.7,-74', '--from', from, '--to', to, '--json').stdout).bottles.length, 'a decant on each bottle’s line');
 });
 
 test('--pack takes a trip-wide occasion onto its slot, and --slot packs for days or nights only', () => {

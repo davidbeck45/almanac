@@ -223,3 +223,31 @@ export function sprayGuide(record, conditions, occasion = null, skin = null) {
 
   return { sprays: [lo, hi], unit: 'spray', where, text: text.join(' '), why: ranked.map(t => t.why), note };
 }
+
+// ---------- Decanting for a trip ----------
+
+// About what one spray takes from a bottle, in ml: bottle pumps and travel
+// atomizers give 0.05 to 0.15.
+export const ML_PER_SPRAY = 0.1;
+// Over the sprays counted: priming the atomizer, a top-up, what the transfer loses.
+const DECANT_HEADROOM = 1.3;
+/** What decants come in, in ml: sample vials (1 to 3) and travel atomizers (5 to 10). */
+export const DECANT_SIZES = [1, 2, 3, 5, 8, 10];
+
+/**
+ * How much of a bottle to decant for the wears a trip plans for it: `guides`
+ * is its spray guide for each of them (sprayGuide's). -> { sprays, ml,
+ * text }: the sprays at the generous end of each guide, the smallest of
+ * DECANT_SIZES that holds them with some to spare (null past the largest:
+ * take the bottle), and both in a phrase ("Decant 2 ml, about 12 sprays").
+ * Null with nothing to decant: no wears, or a perfume oil, which goes on by
+ * touch from its own vial.
+ */
+export function decantFor(guides) {
+  const sprayed = (guides ?? []).filter(g => g?.unit === 'spray');
+  if (!sprayed.length) return null;
+  const sprays = sprayed.reduce((n, g) => n + g.sprays[1], 0);
+  const ml = DECANT_SIZES.find(size => size >= sprays * ML_PER_SPRAY * DECANT_HEADROOM) ?? null;
+  const about = `about ${sprays} spray${sprays === 1 ? '' : 's'}`;
+  return { sprays, ml, text: ml ? `Decant ${ml} ml, ${about}` : `Take the bottle: ${about}` };
+}

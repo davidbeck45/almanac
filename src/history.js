@@ -2,17 +2,24 @@
 // (exported) shows how the engine's picks match what was actually worn, so
 // it keeps a year, where each wear happened, to about a kilometer, and for a
 // wear logged from a live window the weather it was logged in and the pick
-// shown (wearStamp).
+// shown (wearStamp). A wear can also keep the compliments it got (`praise`,
+// addPraise), which only the journal's own screens read: picks don't.
 import { describe } from './wmo.js';
 
 const KEY = 'scentcast.history';
 export const MAX_ENTRIES = 730;
+/** The most compliments one wear keeps. */
+export const MAX_PRAISE = 9;
 
 // A wear as the log keeps one: a bottle, a real date and day or night.
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const isWear = h => Boolean(h) && typeof h === 'object' && h.id != null && h.id !== ''
   && typeof h.date === 'string' && ISO_DATE.test(h.date) && !Number.isNaN(Date.parse(h.date)) && (h.slot === 'day' || h.slot === 'night');
-const wearsOf = list => (Array.isArray(list) ? list.filter(isWear).map(h => ({ ...h, id: String(h.id), ...(h.pick != null && { pick: String(h.pick) }) })) : []);
+// A wear's compliments as kept: a whole number from 1 to MAX_PRAISE, else none.
+const praiseOf = h => (Number.isInteger(h?.praise) && h.praise >= 1 ? Math.min(h.praise, MAX_PRAISE) : 0);
+const wearsOf = list => (Array.isArray(list) ? list.filter(isWear).map(({ praise, ...h }) => ({
+  ...h, id: String(h.id), ...(h.pick != null && { pick: String(h.pick) }), ...(praiseOf({ praise }) && { praise: praiseOf({ praise }) }),
+})) : []);
 // A planned event as src/events.js keeps one ({ dateISO, slot, occasion id });
 // whether the app has the occasion is for the reader to check.
 const isEvent = e => Boolean(e) && typeof e === 'object' && typeof e.dateISO === 'string' && ISO_DATE.test(e.dateISO)
@@ -110,6 +117,49 @@ export function toggleWear(id, dateISO, slot, where = null, occasion = null, sta
   const next = current?.id === id ? rest : at < 0 ? [...rest, entry] : [...rest.slice(0, at), entry, ...rest.slice(at)];
   save(next);
   return next;
+}
+
+/**
+ * Adds `by` compliments to the wear logged for a window (takes them off for
+ * a negative), when that wear is still `id`'s: another tab may have changed
+ * or cleared it since the page was drawn, and a compliment is the bottle's.
+ * Saves and returns { history, praise: the wear's count now, changed }, or
+ * null when the wear isn't there. A wear keeps up to MAX_PRAISE, and none
+ * at 0; one logged again for another bottle starts without any (toggleWear).
+ */
+export function addPraise(id, dateISO, slot, by = 1) {
+  const history = loadHistory();
+  const at = history.findIndex(h => h.date === dateISO && h.slot === slot && h.id === String(id));
+  if (at < 0) return null;
+  const { praise: had = 0, ...wear } = history[at];
+  const praise = Math.max(0, Math.min(MAX_PRAISE, had + by));
+  if (praise === had) return { history, praise, changed: false };
+  const next = history.map((h, i) => (i === at ? { ...wear, ...(praise && { praise }) } : h));
+  save(next);
+  return { history: next, praise, changed: true };
+}
+
+/**
+ * Compliments by bottle over the last `days` days up to today (the whole log
+ * without `days`): [{ id, praise, wears, praised }] for the bottles with one,
+ * most complimented first, then the better share of wears that got one, then
+ * the one worn more recently. `wears` are its wears in the span, `praised`
+ * those with a compliment.
+ */
+export function praiseStats(history, todayISO, days = null) {
+  const since = days ? shiftISO(todayISO, -(days - 1)) : '';
+  const by = new Map();
+  for (const h of history) {
+    if (h.planned || h.date > todayISO || h.date < since) continue;
+    const row = by.get(h.id) ?? { id: h.id, praise: 0, wears: 0, praised: 0, latest: '' };
+    row.wears++;
+    if (praiseOf(h)) { row.praise += praiseOf(h); row.praised++; }
+    if (h.date > row.latest) row.latest = h.date;
+    by.set(h.id, row);
+  }
+  return [...by.values()].filter(r => r.praise)
+    .sort((a, b) => b.praise - a.praise || b.praised / b.wears - a.praised / a.wears || b.latest.localeCompare(a.latest))
+    .map(({ latest, ...row }) => row);
 }
 
 /**
@@ -219,7 +269,8 @@ export function journalToken(history, hidden = [], skin = {}, { todayISO, events
     return [ref(h.id), daysBetweenISO(h.date, todayISO), h.slot === 'night' ? 1 : 0, ...(use === undefined ? [] : [use])];
   });
   const h = [...hidden].map(ref);
-  const s = Object.entries(skin ?? {}).map(([id, e]) => {
+  // Stars and nudges only: a bottle with just a note (src/skin.js) says nothing a plan reads.
+  const s = Object.entries(skin ?? {}).filter(([, e]) => e?.rating || e?.longevity || e?.sillage).map(([id, e]) => {
     const row = [ref(id), e.rating ?? 0, e.longevity ?? 0, e.sillage ?? 0];
     while (row.length > 2 && !row.at(-1)) row.pop();
     return row;

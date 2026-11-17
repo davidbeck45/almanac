@@ -456,6 +456,32 @@ test('the log sheet names the day, its wears with Clear, and the bottles most re
   assert.match(wardrobe.logSheetHTML({ dateISO: '2026-11-02', slot: 'day' }, { bottles: [], worn: { day: null, night: null }, lastWorn, todayISO: '2026-11-02' }), /Today, Nov 2[^]*Every bottle is switched off/);
 });
 
+test('a logged wear takes a compliment in the log sheet, and Worn lists the most complimented', () => {
+  const lastWorn = new Map();
+  const sheet = worn => wardrobe.logSheetHTML({ dateISO: '2026-10-31', slot: 'night' }, { bottles: [aventus, mango], worn, lastWorn, todayISO: '2026-11-02' });
+  const html = sheet({ day: { id: mango.id, f: mango, praise: 2 }, night: { id: aventus.id, f: aventus, praise: 0 } });
+  // The count beside the window, and the wear each button was drawn for (its bottle and slot; the sheet has the date).
+  assert.match(html, /<b>Mango Sticky Rice<\/b><small>Day · 2 compliments<\/small>/);
+  assert.match(html, /data-action="journal-log-praise" data-id="128201" data-slot="day" data-by="1">.*?<span>Another compliment<span class="visually-hidden">: Mango Sticky Rice by day<\/span>/);
+  assert.match(html, /data-action="journal-log-praise" data-id="128201" data-slot="day" data-by="-1">Take one off<span class="visually-hidden">: Mango Sticky Rice by day<\/span>/);
+  assert.match(html, /<b>Aventus<\/b><small>Night<\/small>/);
+  assert.match(html, /data-action="journal-log-praise" data-id="9828" data-slot="night" data-by="1">.*?<span>Got a compliment<span class="visually-hidden">: Aventus at night<\/span>/);
+  assert.equal((html.match(/data-by="-1"/g) ?? []).length, 1, 'nothing to take off a wear without one');
+  assert.match(sheet({ day: { id: mango.id, f: mango, praise: 9 }, night: null }), /data-slot="day" data-by="1" disabled>/, 'a wear keeps nine at most');
+  assert.ok(!sheet({ day: null, night: null }).includes('journal-log-praise'));
+  // Worn: the bottles with a compliment in the span, the count at the row's end over how many wears.
+  const stats = { wears: 6, bottles: 2, top: [[mango.id, 4], [aventus.id, 2]], lastWorn: new Map() };
+  const worn = praise => wardrobe.wornHTML({ stats, calendar: [], dusty: [], todayISO: '2026-11-02', praise }, id => [mango, aventus].find(f => f.id === id));
+  const praised = worn([{ id: aventus.id, praise: 3, wears: 2, praised: 2 }, { id: mango.id, praise: 1, wears: 4, praised: 1 }, { id: 'gone', praise: 9, wears: 9, praised: 9 }]);
+  assert.match(praised, /<h3 id="worn-praise-title">Most complimented<\/h3>/);
+  const rows = praised.slice(praised.indexOf('worn-praise-title'), praised.indexOf('Gathering dust'));
+  assert.deepEqual([...rows.matchAll(/<b>([^<]+)<\/b><small>([^<]+)<\/small>/g)].map(m => [m[1], m[2]]), [['Aventus', 'over 2 wears'], ['Mango Sticky Rice', 'over 4 wears']], 'a bottle no list has is left out');
+  assert.match(rows, /<span style="width:100%"><\/span><\/span><span class="rank-n">3<span class="visually-hidden"> compliments<\/span>/);
+  assert.match(rows, /<span style="width:33%"><\/span><\/span><span class="rank-n">1<span class="visually-hidden"> compliment<\/span>/);
+  assert.ok(praised.indexOf('Most worn') < praised.indexOf('Most complimented') && praised.indexOf('Most complimented') < praised.indexOf('Gathering dust'));
+  assert.ok(!worn([]).includes('Most complimented') && !worn(undefined).includes('Most complimented'), 'nothing until a wear gets one');
+});
+
 test('a wear logged after the fact is said by when it was', () => {
   const today = '2026-11-02';
   assert.deepEqual(['day', 'night'].map(k => wardrobe.loggedWhen(today, k, today)), ['today', 'tonight']);

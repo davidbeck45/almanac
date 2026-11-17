@@ -5,10 +5,15 @@
 // what it was logged for, the feels-like you've worn it in (from the wears
 // stamped with their window's weather) and how often it was the pick its
 // list showed. Nothing for a bottle never worn, and one wear is a sentence.
+// It's also where a compliment is noted: "Got a compliment" adds one to its
+// latest wear (src/history.js addPraise), and the lines count them. The same
+// `praise` action serves Now's card and Worn's log sheet.
 import { occasionById } from '../occasions.js';
-import { esc, temp, deg, plural, shortDate, relativeDay } from '../ui.js';
+import { MAX_PRAISE } from '../history.js';
+import { esc, temp, deg, plural, shortDate, relativeDay, wearPhrase, praiseSaid } from '../ui.js';
+import { icon } from '../ui/components.js';
 import { addSection } from './bottle.js';
-import { state } from '../app/state.js';
+import { state, notePraise } from '../app/state.js';
 import { wornToday } from './wear/trip.js';
 
 /** Stamped wears it takes before the feels-like range, or the pick's share, says anything. */
@@ -17,6 +22,7 @@ export const ENOUGH_WEARS = 3;
 /**
  * One bottle's wears, read from the journal up to `todayISO`: null when it
  * has none, else
+ *   id: the bottle's,
  *   count: wears in the twelve calendar months ending with today's (the
  *     ones `months`, `day`, `night`, `uses`, `felt` and `picked` read),
  *   first, latest: its earliest and newest wear in the whole log; since:
@@ -29,7 +35,11 @@ export const ENOUGH_WEARS = 3;
  *   felt: { lowF, highF, wears } over the wears stamped with their window's
  *     weather (wearStamp's `wx`), null without one,
  *   picked: { wears, of }: how often it was the pick its list showed, over
- *     the wears that recorded a pick, null without one.
+ *     the wears that recorded a pick, null without one,
+ *   praise: { count, wears }: the compliments those wears got and how many
+ *     of them got one, null without any,
+ *   last: { date, slot, praise }: its newest wear (a day's night after its
+ *     day), which a new compliment goes to.
  */
 export function bottleWears(history, id, todayISO) {
   const key = String(id);
@@ -57,7 +67,10 @@ export function bottleWears(history, id, todayISO) {
     if (h.pick != null) picked = { wears: (picked?.wears ?? 0) + (String(h.pick) === key ? 1 : 0), of: (picked?.of ?? 0) + 1 };
   }
   const dates = all.map(h => h.date).sort();
+  const praised = year.filter(h => h.praise > 0);
+  const newest = all.reduce((a, h) => (!a || h.date > a.date || (h.date === a.date && h.slot === 'night') ? h : a), null);
   return {
+    id: key,
     count: year.length,
     first: dates[0],
     latest: dates.at(-1),
@@ -68,6 +81,8 @@ export function bottleWears(history, id, todayISO) {
     uses: [...uses.values()].sort((a, b) => b.wears - a.wears || a.label.localeCompare(b.label)),
     felt,
     picked,
+    praise: praised.length ? { count: praised.reduce((n, h) => n + h.praise, 0), wears: praised.length } : null,
+    last: { date: newest.date, slot: newest.slot, praise: newest.praise ?? 0 },
   };
 }
 
@@ -102,7 +117,23 @@ export function wearLines(w, todayISO) {
     : p.wears === p.of ? `It was the pick on each of the ${p.of} wears that recorded one.`
     : p.wears === 0 ? `You chose it over the pick on each of the ${p.of} wears that recorded one.`
     : `It was the pick on ${p.wears} of the ${p.of} wears that recorded one.`;
-  return [slots, uses, feltLine(w.felt), pick].filter(Boolean);
+  const praise = w.praise ? `${plural(w.praise.count, 'compliment')} over ${plural(w.count, 'wear')}.` : '';
+  return [slots, uses, feltLine(w.felt), pick, praise].filter(Boolean);
+}
+
+/**
+ * Where a compliment is noted, under the lines: Got a compliment adds one to
+ * the bottle's latest wear and Take one off undoes it, with a line saying
+ * which wear and how many it has.
+ */
+export function praiseHTML(id, last, todayISO) {
+  const wear = wearPhrase(last.date, last.slot, todayISO);
+  const data = `data-action="praise" data-id="${esc(id)}" data-date="${esc(last.date)}" data-slot="${esc(last.slot)}"`;
+  return `<div class="bw-praise">
+      <button class="btn secondary compact" ${data} data-by="1"${last.praise >= MAX_PRAISE ? ' disabled' : ''}>${icon.praise}<span>Got a compliment</span></button>
+      ${last.praise ? `<button class="btn tertiary compact" ${data} data-by="-1">Take one off</button>` : ''}
+      <p class="bw-praise-when">${esc(last.praise ? `${plural(last.praise, 'compliment')} on your wear ${wear}.` : `Counts for your wear ${wear}.`)}</p>
+    </div>`;
 }
 
 // The strip: a bar a month over twelve months, its wears over it, each said
@@ -141,13 +172,33 @@ export function yourWearsHTML(m, w) {
     const when = day === 'today' ? (night ? 'tonight' : 'today') : day === 'yesterday' ? (night ? 'last night' : 'yesterday')
       : `${day === shortDate(w.latest) ? `on ${dated(w.latest, today)}` : day} ${night ? 'at night' : 'by day'}`;
     const use = w.uses[0] ? `, ${usePhrase(w.uses[0])}` : '';
-    return head(`<p class="bw-line">${esc(`Worn once${w.since ? '' : ` since ${from}`}, ${when}${use}.`)}</p>`);
+    const praise = w.praise ? ` It got ${w.praise.count === 1 ? 'a compliment' : `${w.praise.count} compliments`}.` : '';
+    return head(`<p class="bw-line">${esc(`Worn once${w.since ? '' : ` since ${from}`}, ${when}${use}.${praise}`)}</p>
+    ${praiseHTML(w.id, w.last, today)}`);
   }
   return head(`${monthsHTML(w, today)}
-    <ul class="bw-lines" role="list">${wearLines(w, today).map(line => `<li class="bw-line">${esc(line)}</li>`).join('')}</ul>`);
+    <ul class="bw-lines" role="list">${wearLines(w, today).map(line => `<li class="bw-line">${esc(line)}</li>`).join('')}</ul>
+    ${praiseHTML(w.id, w.last, today)}`);
 }
 
 // By the journal's today, as Worn counts: a wear logged on a trip a day
 // ahead of home is dated tomorrow here, and by home's date the section left
 // it out until midnight.
-addSection({ id: 'wears', order: 280, render: m => { const today = wornToday(); return yourWearsHTML({ ...m, todayISO: today }, bottleWears(state.history, m.f.id, today)); } });
+addSection({
+  id: 'wears',
+  order: 280,
+  render: m => { const today = wornToday(); return yourWearsHTML({ ...m, todayISO: today }, bottleWears(state.history, m.f.id, today)); },
+  actions: {
+    // Got a compliment, or Take one off (data-by), on this page and on Now's
+    // card (Worn's log sheet has its own, with its own status line). The wear
+    // is named by its window and bottle, so one another tab changed since
+    // isn't credited with another's.
+    praise(el, app) {
+      const { id, date, slot } = el.dataset;
+      const by = Number(el.dataset.by) < 0 ? -1 : 1;
+      const said = praiseSaid(notePraise(id, date, slot, by), by, wearPhrase(date, slot, wornToday()), MAX_PRAISE);
+      app.keepingFocus(el, el.closest('#bottle') ? '#bottle' : '#app', app.render);
+      app.announce(said);
+    },
+  },
+});

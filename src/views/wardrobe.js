@@ -12,10 +12,10 @@ import { rank } from '../engine.js';
 import { applySkin } from '../skin.js';
 import { saveMine, shareURL, localMatches, nameMatches, importLines, MAX_IMPORT_LINES } from '../collections.js';
 import { customRecord, MAX_CUSTOM_ACCORDS } from '../custom.js';
-import { clearHistory, journalExport, journalToken, journalStats, toggleWear, wornIn, shiftISO, loadHistory } from '../history.js';
+import { clearHistory, journalExport, journalToken, journalStats, praiseStats, toggleWear, wornIn, shiftISO, loadHistory, MAX_PRAISE } from '../history.js';
 import { backupExport, deviceStores } from '../backup.js';
 import { loadSkin } from '../skin.js';
-import { esc, plural, shortDate, weekdayShort, relativeDay, accordLabel, toastName } from '../ui.js';
+import { esc, plural, shortDate, weekdayShort, relativeDay, accordLabel, toastName, loggedWhen, wearPhrase, praiseSaid } from '../ui.js';
 import {
   icon, img, slotIcon, messageHTML, rowHTML, switchHTML, segHTML, sheetFrame, sharedBannerHTML, accordColor, sectionHead,
 } from '../ui/components.js';
@@ -25,7 +25,7 @@ import {
 } from '../app/state.js';
 import { warmPool } from '../app/pool.js';
 import { whenPhrase } from './wear/when.js';
-import { setWornSpan } from '../app/state.js';
+import { setWornSpan, notePraise } from '../app/state.js';
 import { loadTrip, wornToday } from './wear/trip.js';
 import { liveHTML, say, speak } from './wardrobe/parts.js';
 import * as insights from './wardrobe/insights.js';
@@ -409,9 +409,10 @@ export function dustWhenText(when, todayISO) {
  * `stats` over `span` days (SPANS; `months`, wearsByMonth's, for a longer
  * one's By month), Gathering dust stays the last 30 days', and the calendar
  * is page `page` of `pages` back (calendarPage), with Earlier and Later
- * once the journal reaches past today's.
+ * once the journal reaches past today's. `praise` (praiseStats' over the
+ * span) lists the bottles that got compliments, once any did.
  */
-export function wornHTML({ stats, calendar, dusty, todayISO, span = 30, page = 0, pages = 0, months = null }, resolve, { confirmClear = false, list = null } = {}) {
+export function wornHTML({ stats, calendar, dusty, todayISO, span = 30, page = 0, pages = 0, months = null, praise = [] }, resolve, { confirmClear = false, list = null } = {}) {
   if (!stats.wears && !stats.lastWorn.size) {
     return messageHTML({ glyph: icon.journal, title: 'Nothing logged yet', body: 'Choose Wear this on a pick and it shows up here, on a calendar with your most-worn bottles.',
       action: `<div class="message-actions">
@@ -473,6 +474,15 @@ export function wornHTML({ stats, calendar, dusty, todayISO, span = 30, page = 0
     ? `<ul class="rank-list">${top.map(([f, n]) => `<li>${img(f)}<span class="row-text"><b>${esc(f.name)}</b><small>${esc(f.brand)}</small></span>
         <span class="rank-bar"><span style="width:${((n / peak) * 100).toFixed(0)}%"></span></span><span class="rank-n">${n}×</span></li>`).join('')}</ul>`
     : `<p class="muted small">Nothing logged in the ${title.toLowerCase()}.</p>`;
+  // Compliments noted on wears in the span (Now's card, a bottle's page or
+  // the log sheet): the count at the row's end, over how many wears.
+  const praised = praise.map(p => ({ ...p, f: resolve(p.id) })).filter(p => p.f).slice(0, rows);
+  const mostPraise = praised[0]?.praise ?? 1;
+  const praiseList = praised.length
+    ? `<section aria-labelledby="worn-praise-title"><h3 id="worn-praise-title">Most complimented</h3>
+      <ul class="rank-list">${praised.map(p => `<li>${img(p.f)}<span class="row-text"><b>${esc(p.f.name)}</b><small>over ${esc(plural(p.wears, 'wear'))}</small></span>
+        <span class="rank-bar"><span style="width:${((p.praise / mostPraise) * 100).toFixed(0)}%"></span></span><span class="rank-n">${p.praise}<span class="visually-hidden"> ${p.praise === 1 ? 'compliment' : 'compliments'}</span></span></li>`).join('')}</ul></section>`
+    : '';
   const dustList = dusty.length
     ? `<ul class="dust-list">${dusty.map(({ f, last, when }) => `<li><button data-action="open" data-ctx="${esc(when?.ctx ?? '')}" data-id="${esc(f.id)}">${img(f)}<span><b>${esc(f.name)}</b><small>${last ? `Last worn ${esc(relativeDay(last, todayISO))}` : 'Not worn yet'}</small>${when ? `<small class="dust-when${when.kind === 'none' ? '' : ' on'}">${esc(dustWhenText(when, todayISO))}</small>` : ''}</span></button></li>`).join('')}</ul>`
     : '<p class="muted small">Every bottle in rotation got worn this month. Nice.</p>';
@@ -491,6 +501,7 @@ export function wornHTML({ stats, calendar, dusty, todayISO, span = 30, page = 0
       <p class="muted small cal-hint">Choose a day to log a wear you didn’t at the time.</p><div class="calendar">${weekdays}${cells}</div>
     </section>
     <section><h3>Most worn</h3>${mostList}</section>
+    ${praiseList}
     <section><h3>Gathering dust</h3>${list ? `<p class="muted small journal-scope">From ${esc(list)}: in rotation, not worn in 30 days.</p>` : ''}${dustList}</section>
     <div class="action-row end">
       <button class="btn secondary" data-action="journal-export">${icon.download}Export</button>
@@ -518,6 +529,7 @@ function wornData() {
     ...data, stats, span: days, pages, page: wornPage,
     calendar: wornPage ? calendarPage(state.history, today, wornPage) : data.calendar,
     months: days > 30 ? wearsByMonth(state.history, today, days) : null,
+    praise: praiseStats(state.history, today, days),
   };
 }
 
@@ -744,13 +756,8 @@ export function logDayTitle(dateISO, todayISO) {
   return `${day}, ${shortDate(dateISO)}`;
 }
 
-/** A window gone by in a sentence: "today", "tonight", "yesterday", "last night", "Sat, Oct 31", "Sat night, Oct 31". */
-export function loggedWhen(dateISO, slot, todayISO) {
-  const night = slot === 'night';
-  if (dateISO === todayISO) return night ? 'tonight' : 'today';
-  if (dateISO === shiftISO(todayISO, -1)) return night ? 'last night' : 'yesterday';
-  return `${weekdayShort(dateISO)}${night ? ' night' : ''}, ${shortDate(dateISO)}`;
-}
+// A window gone by in a sentence ("last night", "Sat night, Oct 31"): src/ui.js's, which a bottle's page says too.
+export { loggedWhen };
 
 // The bottles to log, most recently worn first (then by name), as the sheet
 // lists them. `lastWorn`: id -> the date of its latest wear.
@@ -764,15 +771,25 @@ export function logOrder(bottles, lastWorn) {
  * day's wears with Clear, and the switched-on bottles to choose from with a
  * filter. s = { dateISO, slot, filter, said: what the status line last
  * said }. `bottles` in logOrder; `worn`: { day, night }, each { id, f: its
- * record or null } or null; `lastWorn`: id -> date; `todayISO`.
+ * record or null, praise: its compliments } or null; `lastWorn`: id ->
+ * date; `todayISO`. Each wear logged can take a compliment, or give one
+ * back (`journal-log-praise`).
  */
 export function logSheetHTML({ dateISO, slot, filter = '', said = '' }, { bottles, worn, lastWorn, todayISO }) {
   const seg = segHTML(['day', 'night'].map(k => ({ value: k, label: k === 'day' ? 'Day' : 'Night', icon: slotIcon(k), on: k === slot })), { action: 'journal-log-slot', label: 'When you wore it', cls: 'wide' });
   const nameOf = w => w.f?.name ?? 'A bottle from another list';
-  const logged = ['day', 'night'].filter(k => worn[k]).map(k => `<li class="log-worn-item">
-      <span class="log-slot">${slotIcon(k)}</span><span class="row-text"><b>${esc(nameOf(worn[k]))}</b><small>${k === 'day' ? 'Day' : 'Night'}</small></span>
-      <button class="btn tertiary compact" data-action="journal-log-clear" data-slot="${k}" data-id="${esc(worn[k].id)}">Clear<span class="visually-hidden">: ${esc(nameOf(worn[k]))} ${SLOT_WORDS[k]}</span></button>
-    </li>`).join('');
+  const logged = ['day', 'night'].filter(k => worn[k]).map(k => {
+    const n = worn[k].praise ?? 0, whose = `: ${esc(nameOf(worn[k]))} ${SLOT_WORDS[k]}`;
+    const praise = `data-action="journal-log-praise" data-id="${esc(worn[k].id)}" data-slot="${k}"`;
+    return `<li class="log-worn-item">
+      <span class="log-slot">${slotIcon(k)}</span><span class="row-text"><b>${esc(nameOf(worn[k]))}</b><small>${k === 'day' ? 'Day' : 'Night'}${n ? ` · ${esc(plural(n, 'compliment'))}` : ''}</small></span>
+      <button class="btn tertiary compact" data-action="journal-log-clear" data-slot="${k}" data-id="${esc(worn[k].id)}">Clear<span class="visually-hidden">${whose}</span></button>
+      <span class="log-praise">
+        <button class="btn tertiary compact" ${praise} data-by="1"${n >= MAX_PRAISE ? ' disabled' : ''}>${icon.praise}<span>${n ? 'Another compliment' : 'Got a compliment'}<span class="visually-hidden">${whose}</span></span></button>
+        ${n ? `<button class="btn tertiary compact" ${praise} data-by="-1">Take one off<span class="visually-hidden">${whose}</span></button>` : ''}
+      </span>
+    </li>`;
+  }).join('');
   const q = filter.trim().toLowerCase();
   let shown = 0;
   const rows = bottles.map(f => {
@@ -811,7 +828,7 @@ function logSheet(s) {
   const { lastWorn } = journalStats(state.history, today);
   const wearOn = k => {
     const h = wornIn(state.history, s.dateISO, k);
-    return h ? { id: h.id, f: findRecord(h.id) } : null;
+    return h ? { id: h.id, f: findRecord(h.id), praise: h.praise ?? 0 } : null;
   };
   return logSheetHTML(s, { bottles: logOrder(activeFragrances(), lastWorn), worn: { day: wearOn('day'), night: wearOn('night') }, lastWorn, todayISO: today });
 }
@@ -1367,6 +1384,18 @@ export const actions = {
     app.render();
     focusInSheet({ force: other || document.activeElement?.matches('#sheet .sheet-close') },
       other && `[data-action="journal-log-clear"][data-slot="${slot}"]`, '[data-action="journal-log-slot"][aria-pressed="true"]');
+    speak(document.getElementById('sheet'));
+  },
+  // A compliment on a wear the sheet lists, or one taken back (data-by), as
+  // a bottle's page and Now's card note them (notePraise). The sheet stays,
+  // its status line saying what happened, and Worn behind it counts it.
+  'journal-log-praise'(el, app) {
+    const s = state.sheet;
+    if (s?.kind !== 'journal-log') return;
+    const { id, slot } = el.dataset, by = Number(el.dataset.by) < 0 ? -1 : 1;
+    s.said = praiseSaid(notePraise(id, s.dateISO, slot, by), by, wearPhrase(s.dateISO, slot, todayISO()), MAX_PRAISE);
+    app.render();
+    focusInSheet({}, `[data-action="journal-log-praise"][data-slot="${slot}"]`, '[data-action="journal-log-slot"][aria-pressed="true"]');
     speak(document.getElementById('sheet'));
   },
   // 30 days, 90 days or a year for Worn's tiles, By month and Most worn,

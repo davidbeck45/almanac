@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { loadSkin, setSkin, withSkin, applySkin } from '../src/skin.js';
+import { loadSkin, setSkin, withSkin, applySkin, mergeSkin, hasRating, noteText, MAX_BOTTLE_NOTE } from '../src/skin.js';
+import { journalToken, readJournal } from '../src/history.js';
 import { rank, planWindows, quality, performanceLevel, isDisliked, PLAN_MARGIN } from '../src/engine.js';
 import { occasionById, OCCASIONS } from '../src/occasions.js';
 
@@ -32,6 +33,29 @@ test('entries clean up: stars 1–5 or none, nudges -1, 0 or 1, blank ones drop'
   // No localStorage in Node: loading is empty and saving is a no-op.
   assert.deepEqual(loadSkin(), {});
   assert.deepEqual(setSkin('1', { rating: 3 }, '2026-10-03'), { 1: { rating: 3, longevity: 0, sillage: 0, updated: '2026-10-03' } });
+});
+
+test('a bottle’s note is kept with its entry, one paragraph at most 280 characters, and picks never read it', () => {
+  let skin = withSkin({}, 31861, { note: '  Bought at the airport,\n100 ml.  ' }, '2026-11-16');
+  assert.deepEqual(skin, { 31861: { rating: null, longevity: 0, sillage: 0, note: 'Bought at the airport, 100 ml.', updated: '2026-11-16' } }, 'a note alone keeps its entry');
+  skin = withSkin(skin, '31861', { rating: 4 }, '2026-11-17');
+  assert.deepEqual(skin['31861'], { rating: 4, longevity: 0, sillage: 0, note: 'Bought at the airport, 100 ml.', updated: '2026-11-17' }, 'stars leave the note be');
+  assert.equal(withSkin(skin, '31861', { rating: null })['31861'].note, 'Bought at the airport, 100 ml.', 'and the note keeps an unrated entry');
+  assert.deepEqual(withSkin(withSkin(skin, '31861', { rating: null }), '31861', { note: '   ' }), {}, 'emptied, with nothing else, it drops');
+  assert.equal(noteText('x'.repeat(400)).length, MAX_BOTTLE_NOTE);
+  assert.equal(noteText(42), '');
+  assert.ok(hasRating({ rating: null, longevity: 0, sillage: -1 }) && !hasRating({ rating: null, longevity: 0, sillage: 0, note: 'hi' }) && !hasRating(undefined));
+  // A bottle with only a note ranks as it did: the same record, no `personal`.
+  const noted = { 31861: { rating: null, longevity: 0, sillage: 0, note: 'Mine.' } };
+  assert.equal(applySkin(fragrances, noted).find(f => f.id === '31861'), byName('Sauvage'));
+  assert.deepEqual(applySkin(fragrances, skin).find(f => f.id === '31861').personal, { rating: 4, longevity: 0, sillage: 0 }, 'no note on the record');
+  // Copy for Claude carries stars and nudges, never a note or a bottle that has only one.
+  const token = journalToken([], [], { ...skin, 9: { rating: null, longevity: 0, sillage: 0, note: 'Only a note.' } }, { todayISO: '2026-11-17' });
+  assert.deepEqual(readJournal(token).skin, { 31861: { rating: 4, longevity: 0, sillage: 0 } });
+  // A file's entry under a device's: the device's rating and note each win where it has one.
+  assert.deepEqual(mergeSkin({ 1: { rating: 5, longevity: 1, sillage: 0, note: 'Theirs.', updated: 'a' }, 2: { rating: 3, longevity: 0, sillage: 0 } },
+    { 1: { rating: null, longevity: 0, sillage: 0, note: 'Mine.', updated: 'b' }, 3: { rating: 2, longevity: 0, sillage: 0 } }),
+  { 1: { rating: 5, longevity: 1, sillage: 0, note: 'Mine.', updated: 'b' }, 2: { rating: 3, longevity: 0, sillage: 0 }, 3: { rating: 2, longevity: 0, sillage: 0 } });
 });
 
 test('applySkin attaches `personal` to rated bottles only', () => {

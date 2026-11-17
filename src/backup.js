@@ -26,8 +26,8 @@
 // device's for the file's, store by store, for the stores the file carries.
 // mergeBackup is pure; restoreBackup reads each store as it's stored now,
 // merges and saves, so another open tab's changes are never saved over.
-import { parseJournal, isJournalToken, loadHistory, saveHistory, MAX_ENTRIES } from './history.js';
-import { loadSkin, saveSkin, tidySkin, loadAsked, saveAsked, tidyAsked } from './skin.js';
+import { parseJournal, isJournalToken, loadHistory, saveHistory, MAX_ENTRIES, MAX_PRAISE } from './history.js';
+import { loadSkin, saveSkin, tidySkin, mergeSkin, hasRating, loadAsked, saveAsked, tidyAsked } from './skin.js';
 import { loadEvents, saveEvents, tidyEvents } from './events.js';
 import { loadHidden, saveHidden, DEFAULT_HIDDEN } from './hidden.js';
 import { loadWants, saveWants, tidyWants, MAX_WANTS } from './wishlist.js';
@@ -104,16 +104,18 @@ function tidyRecord(r) {
   return out;
 }
 
-// A file's wear, kept to what a wear holds (src/history.js toggleWear): a
-// hand-edited file's other keys stay out (`planned`, which rotation and Copy
-// for Claude read as a plan, not a wear).
-function tidyWear({ id, date, slot, lat, lon, occasion, wx, pick }) {
+// A file's wear, kept to what a wear holds (src/history.js toggleWear, and
+// the compliments addPraise gave it): a hand-edited file's other keys stay
+// out (`planned`, which rotation and Copy for Claude read as a plan, not a
+// wear).
+function tidyWear({ id, date, slot, lat, lon, occasion, wx, pick, praise }) {
   return {
     id, date, slot,
     ...(Number.isFinite(lat) && Number.isFinite(lon) && { lat, lon }),
     ...(typeof occasion === 'string' && occasion && { occasion }),
     ...(isMap(wx) && { wx: Object.fromEntries(Object.entries(wx).filter(([, v]) => Number.isFinite(v))) }),
     ...(pick != null && { pick: String(pick) }),
+    ...(Number.isInteger(praise) && praise >= 1 && { praise: Math.min(praise, MAX_PRAISE) }),
   };
 }
 
@@ -230,11 +232,13 @@ export function readBackup(text) {
 const dayText = (iso, withYear) => `${shortDate(iso)}${withYear ? `, ${iso.slice(0, 4)}` : ''}`;
 
 // What a backup holds, as counts: plans still ahead of `fromISO`, the
-// file's own hides (not the demo's defaults).
+// file's own hides (not the demo's defaults). A bottle's stars and how it
+// wears on him are its rating; its note counts apart (src/skin.js).
 function holds(backup, fromISO) {
   return {
     wears: backup.history.length,
-    ratings: Object.keys(backup.skin).length,
+    ratings: Object.values(backup.skin).filter(hasRating).length,
+    notes: Object.values(backup.skin).filter(e => e.note).length,
     hidden: backup.hiding.hidden.length,
     plans: tidyEvents(backup.events, fromISO).length,
     wants: backup.wants.length,
@@ -242,8 +246,9 @@ function holds(backup, fromISO) {
   };
 }
 
-const partsOf = ({ ratings, hidden, plans, wants, mine }) => [
+const partsOf = ({ ratings, notes, hidden, plans, wants, mine }) => [
   ratings && plural(ratings, 'rating'),
+  notes && plural(notes, 'note'),
   hidden && `${plural(hidden, 'bottle')} switched off`,
   plans && plural(plans, 'plan'),
   wants && plural(wants, 'want'),
@@ -318,7 +323,7 @@ export function mergeBackup(device, backup, { mode = 'add', fromISO = deviceDay(
   const fresh = backup.history.filter(h => !logged.has(windowOf(h)));
   const history = [...device.history, ...fresh].sort(byNewest).slice(0, MAX_ENTRIES);
   const stays = new Set(history);
-  const skin = { ...backup.skin, ...device.skin };
+  const skin = mergeSkin(backup.skin, device.skin);
   const planned = new Set(device.events.map(e => `${e.dateISO}:${e.slot}`));
   const plans = tidyEvents(backup.events, fromISO).filter(e => !planned.has(`${e.dateISO}:${e.slot}`));
   const off = backup.hiding.hidden.filter(id => !device.hiding.hidden.includes(id));
@@ -351,7 +356,8 @@ export function mergeBackup(device, backup, { mode = 'add', fromISO = deviceDay(
       // The journal keeps its newest MAX_ENTRIES: the device's own that newer ones from the file pushed out.
       dropped: device.history.filter(h => !stays.has(h)).length,
       kept: backup.history.filter(h => logged.has(windowOf(h)) && logged.get(windowOf(h)).id !== h.id).length,
-      ratings: Object.keys(backup.skin).filter(id => !(id in device.skin)).length,
+      ratings: Object.entries(backup.skin).filter(([id, e]) => hasRating(e) && !hasRating(device.skin[id])).length,
+      notes: Object.entries(backup.skin).filter(([id, e]) => e.note && !device.skin[id]?.note).length,
       hidden: off.length,
       plans: plans.length,
       wants: wanted,
@@ -373,6 +379,7 @@ export function restoreText(counts, mode = 'add') {
   const added = [
     counts.wears && plural(counts.wears, 'wear'),
     counts.ratings && plural(counts.ratings, 'rating'),
+    counts.notes && plural(counts.notes, 'note'),
     counts.plans && plural(counts.plans, 'plan'),
     counts.wants && plural(counts.wants, 'want'),
     counts.mine && `${plural(counts.mine, 'bottle')} to Mine`,

@@ -6,7 +6,7 @@ import { rank, rankEvent, planWindows } from '../engine.js';
 import { planTies, TIE_POINTS } from '../contrast.js';
 import { week, wxAt, standIn, cachedForecast, forecastError, clock, placeClock, windowOpen } from '../weather.js';
 import { loadLocation } from '../location.js';
-import { loadHistory, wornIn, journalStats, journalCalendar, occasionCounts } from '../history.js';
+import { loadHistory, wornIn, journalStats, journalCalendar, occasionCounts, addPraise } from '../history.js';
 import { loadHidden, hiddenFor } from '../hidden.js';
 import { applySkin, loadSkin, skinStamp } from '../skin.js';
 import { loadEvents, setEvent as storeEvent, eventOn, withStoredEvents } from '../events.js';
@@ -277,6 +277,19 @@ export function rankContext(key, win, occasion, { nudge = true, event = false, p
     : rank(rankedFragrances(), win, win.slot, { occasion, history: state.history, todayISO: win.dateISO, nudge });
   storeContext(key, win, occasion, ranked, { event, pick: ranked[0] ?? null, place });
   return ranked;
+}
+
+// ---------- Compliments ----------
+
+/**
+ * Notes a compliment on the wear logged for a window (or takes one off, `by`
+ * -1), in the journal and this tab's copy of it: addPraise's answer, null
+ * when that wear isn't the bottle's any more (another tab changed it).
+ */
+export function notePraise(id, dateISO, slot, by = 1) {
+  const done = addPraise(id, dateISO, slot, by);
+  state.history = done?.history ?? loadHistory();
+  return done;
 }
 
 // ---------- Events ----------
