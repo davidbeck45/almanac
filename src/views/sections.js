@@ -10,3 +10,4 @@ import './bottle-styles.js';
 import './bottle-dupes.js';
 import './bottle-crowd.js';
 import './bottle-reviews.js';
+import './bottle-notes.js';

@@ -13,8 +13,8 @@
 /* Tap targets: a control drawn smaller than 44px gets an invisible ::before
    that grows its hit area to 44px around its center (the inset is negative
    only on an axis under 44px). The look doesn't change. */
-.btn, .icon-btn, .loc-btn, .switch, .check, .seg button, .seg a, .link-btn, .pick-chip, .pick-name-btn, .set-link { position: relative; }
-:is(.btn, .icon-btn, .loc-btn, .switch, .check, .seg button, .seg a, .link-btn, .pick-chip, .pick-name-btn, .set-link)::before {
+.btn, .icon-btn, .loc-btn, .switch, .check, .seg button, .seg a, .link-btn, .pick-chip, .pick-name-btn, .set-link, .note-chip { position: relative; }
+:is(.btn, .icon-btn, .loc-btn, .switch, .check, .seg button, .seg a, .link-btn, .pick-chip, .pick-name-btn, .set-link, .note-chip)::before {
   content: '';
   position: absolute;
   inset: min(0px, calc(50% - var(--hit) / 2));

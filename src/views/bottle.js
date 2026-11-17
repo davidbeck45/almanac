@@ -557,17 +557,6 @@ function seasonsSection({ f }) {
   </section>`;
 }
 
-// The pyramid by layer; a bottle listed flat (only `all`) shows its notes
-// under the heading alone, not a "Notes" label under "Notes".
-function notesSection({ f }) {
-  const chips = list => `<div class="notes">${list.map(n => `<span class="note-chip">${esc(n)}</span>`).join('')}</div>`;
-  const layers = [['top', 'Top'], ['mid', 'Heart'], ['base', 'Base'], ['all', 'Notes']].filter(([k]) => f.notes?.[k]?.length);
-  if (!layers.length) return '';
-  const body = layers.length === 1 && layers[0][0] === 'all' ? chips(f.notes.all)
-    : `<div class="pyramid">${layers.map(([k, label]) => `<div class="layer"><span class="layer-label">${label}</span>${chips(f.notes[k])}</div>`).join('')}</div>`;
-  return `<section class="bp-section"><h3>Notes</h3>${body}</section>`;
-}
-
 // Orders leave room between them for the sections in their own modules
 // (src/views/bottle-*.js; CLAUDE.md, "The bottle page", lists every slot).
 // Shopping for a bottle, what it smells like (accords and notes, its styles
@@ -581,7 +570,6 @@ addSection({ id: 'alts', order: 300, render: altsSection });
 addSection({ id: 'layering', order: 400, shopOrder: 850, render: layeringSection, after: layeringAfter });
 addSection({ id: 'accords', order: 500, shopOrder: 360, render: accordsSection });
 addSection({ id: 'seasons', order: 600, render: seasonsSection });
-addSection({ id: 'notes', order: 700, shopOrder: 370, render: notesSection });
 
 // ---------- Actions ----------
 

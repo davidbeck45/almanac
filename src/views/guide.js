@@ -55,6 +55,7 @@ export const GUIDE = [
     items: [
       { name: 'Why it ranks here', text: 'How it scores for the window, part by part, and where it stands beside the pick.' },
       { name: 'For your own bottles', text: 'Rate it with stars and say whether it lasts or projects more or less on your skin: picks and spray counts follow. Add a note in your own words (where you got it, how it smells to you). Your wears show when you actually reach for it, and <b>Got a compliment</b> there counts one for its latest wear.' },
+      { name: 'Notes', text: 'Its top, heart and base notes. Tap one to see what it is, how it smells, how much voters smell it in this bottle and which of your other bottles have it.' },
       { name: 'For one you don’t own', text: 'The buy check, what it smells like (and cheaper twins), what voters say, pros and cons, and how it would do in today’s weather.' },
       { name: 'Layer and compare', text: '<b>Layer it with</b> suggests partners from your wardrobe. <b>Compare</b> sets up to three bottles side by side.' },
     ],

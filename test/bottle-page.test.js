@@ -222,7 +222,7 @@ test('day and night read as whole percents that add up to 100, as Compare shows 
 test('notes listed flat show under their heading alone, and estimated seasons say so in words', () => {
   const section = (html, id) => html.slice(html.indexOf(`data-section="${id}"`), html.indexOf('</section>', html.indexOf(`data-section="${id}"`)));
   const flat = section(bottlePageHTML(modelOf({ ...byName('Liquid Brun'), notes: { all: ['Vanilla', 'Musk'] } })), 'notes');
-  assert.match(flat, /<h3>Notes<\/h3><div class="notes">/);
+  assert.match(flat, /<h3 id="bp-notes-title">Notes<\/h3><div class="notes">/);
   assert.ok(!flat.includes('layer-label'), 'no "Notes" under "Notes"');
   assert.match(section(bottlePageHTML(modelOf(byName('Liquid Brun'))), 'notes'), /layer-label">Top</);
   const byHand = customRecord({ name: 'Rose', accords: ['rose', 'musky'] });
