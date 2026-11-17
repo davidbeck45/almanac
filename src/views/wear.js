@@ -23,7 +23,7 @@ import {
 } from '../ui/components.js';
 import {
   state, savePrefs, activeFragrances, sourceRecords, rankedFragrances, nowSlot, todaySlots, todayPlan, computeToday, computeWeek,
-  rankContext, canWear, wornId, nowHour, readClock, findRecord, eventAt, setEvent, todayISO,
+  rankContext, canWear, wornId, nowHour, readClock, findRecord, eventAt, setEvent, todayISO, firstVisit, setWelcomed,
 } from '../app/state.js';
 import * as trip from './wear/trip.js';
 import * as when from './wear/when.js';
@@ -644,6 +644,20 @@ function journalTeaser() {
 
 const banner = () => (state.shared ? sharedBannerHTML(state.shared, state.mine.records.length, { slim: true, confirm: state.armed === 'shared-save' }) : '');
 
+// Now's welcome to a first visit (state.js firstVisit): whose bottles the
+// picks come from, the way to one's own and to the guide. Add yours switches
+// to Mine, whose empty state has the ways to fill it; answered or waved
+// off, it doesn't come back on this device.
+export const welcomeHTML = () => `<aside class="banner welcome" aria-labelledby="welcome-title">
+    <span class="banner-icon">${icon.sparkle}</span>
+    <span class="banner-text"><b id="welcome-title">These picks are from David’s wardrobe</b><small>Add the bottles you own and Almanac picks from yours.</small></span>
+    <button class="icon-btn" data-action="welcome-close" aria-label="Dismiss the welcome">${icon.close}</button>
+    <span class="welcome-actions">
+      <button class="btn primary compact" data-action="welcome-add">${icon.plus}Add yours</button>
+      <a class="btn tertiary compact" href="#/guide">How Almanac works</a>
+    </span>
+  </aside>`;
+
 function emptyState() {
   if (state.shared) {
     // Closing the link ranks the list under it again: name that one.
@@ -732,7 +746,7 @@ function nowPane(app) {
   // with it: none once he's wearing one.
   const ties = planTies(todayPlan(), { history: state.history })[slots.findIndex(p => p.win === win)] ?? [];
   const ask = nowQuestion(pick, worn);
-  return `${banner()}
+  return `${banner()}${firstVisit() ? welcomeHTML() : ''}
     ${awayHTML}
     <section class="card slot" aria-labelledby="slot-title">
       ${slotHeadHTML(win, nowHour(), { id: 'slot-title' })}
@@ -926,6 +940,17 @@ export const actions = {
   ...trip.actions,
   ...when.actions,
   ...pickers.actions,
+  // Now's welcome: Add yours ranks from Mine (empty, so its ways to add
+  // bottles show), the close button only puts it away. Either is an answer.
+  'welcome-add'(el, app) {
+    setWelcomed();
+    app.setActive('mine');
+    app.render();
+  },
+  'welcome-close'(el, app) {
+    setWelcomed();
+    app.render();
+  },
   // Logs (or clears) a wear for the window of the list it's in, where that
   // window is (a trip's place or the Occasion pane's other city, else home),
   // with the use it was for (the Occasion pane's occasion, an event's on a

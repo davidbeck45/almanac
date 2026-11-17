@@ -58,7 +58,7 @@ Variants:
 
 Personas, as another `--init` or in the query:
 
-- **David's demo**: the default.
+- **David's demo**: the default. With nothing logged it's a first visit, so Now shows its welcome (`.welcome`) over the pick's card; the sample journal below is past it.
 - **A shared list** (Brooke's): `&c=69541,122015,128201,115992,64338,137101,77284,97237,88207&n=Brooke`. Its `.banner` shows on the Wear panes and Owned only; on other screens wait on the screen's selector from the table.
 - **An empty Mine**: `--init "localStorage.setItem('scentcast.active', 'mine')"`, wait for `.message`.
 - **A wear journal**: `INIT="$(node dev/offline/init.mjs --journal)"` logs 66 wears of 10 bottles over six weeks, the newest three days ago, for Worn's calendar and the rotation lines on picks and bottle pages.

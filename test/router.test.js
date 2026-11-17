@@ -8,11 +8,12 @@ import * as discover from '../src/views/discover.js';
 import * as bottle from '../src/views/bottle.js';
 import * as settings from '../src/views/settings.js';
 import * as compare from '../src/views/compare.js';
+import * as guide from '../src/views/guide.js';
 import '../src/views/sections.js';
 
 // As src/app/shell.js merges them: the views' handlers and the bottle-page
 // sections' own.
-const VIEWS = [wear, wardrobe, discover, bottle, settings, compare, ...bottle.SECTIONS];
+const VIEWS = [wear, wardrobe, discover, bottle, settings, compare, guide, ...bottle.SECTIONS];
 // As src/app/shell.js builds it from the destinations.
 const PANES = Object.fromEntries([wear.wear, wardrobe.wardrobe, discover.discover].map(d => [d.id, (d.panes ?? []).map(p => p.id)]));
 const parse = hash => parseRoute(hash, PANES);
@@ -32,6 +33,7 @@ test('routes parse into a destination, a pane and an argument', () => {
   assert.deepEqual(parse('#/discover?q=iris%20leather'), { dest: 'discover', pane: null, arg: null, query: { q: 'iris leather' } });
   assert.deepEqual(parse('#/bottle/98689?ctx=w:2026-10-14:night'), { dest: 'bottle', pane: null, arg: '98689', query: { ctx: 'w:2026-10-14:night' } });
   assert.deepEqual(parse('#/settings'), { dest: 'settings', pane: null, arg: null, query: {} });
+  assert.deepEqual(parse('#/guide'), { dest: 'guide', pane: null, arg: null, query: {} });
 });
 
 test('anything else lands somewhere sensible', () => {

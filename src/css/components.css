@@ -779,6 +779,16 @@
   .banner.confirm .btn { grid-area: 2 / 1 / 3 / 3; justify-self: start; }
 }
 
+/* Now's welcome to a first visit (wear.js welcomeHTML): the banner with its
+   two answers on a row of their own, the close button beside the words. */
+.banner.welcome { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--s-2) var(--s-3); padding: var(--s-3) var(--s-2) var(--s-3) var(--s-4); }
+.banner.welcome .icon-btn { align-self: start; }
+.welcome-actions { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: var(--s-2); }
+@container page (max-width: 420px) {
+  .banner.welcome { grid-template-columns: minmax(0, 1fr) auto; }
+  .welcome-actions { grid-column: 1 / -1; }
+}
+
 /* ---------- Weather glyphs ---------- */
 
 .wx { display: inline-grid; flex: none; color: var(--wx); }

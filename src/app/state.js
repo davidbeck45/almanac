@@ -37,6 +37,7 @@ const prefsHeld = () => ({
   occasion: state.occasion, units: state.units, theme: savedTheme ?? undefined, preferValue: state.preferValue, likedStyles: state.likedStyles,
   stillSky: state.stillSky || undefined,
   wornSpan: state.wornSpan === 30 ? undefined : state.wornSpan,
+  welcomed: state.welcomed || undefined,
 });
 // The prefs this tab last read or saved. Another open tab saves its own, so
 // a save writes only what changed here since over what's stored: a style
@@ -64,6 +65,7 @@ function fromPrefs(prefs) {
     likedStyles: Array.isArray(prefs.likedStyles) ? prefs.likedStyles.filter(s => typeof s === 'string') : null,
     stillSky: prefs.stillSky === true,
     wornSpan: prefs.wornSpan === 90 || prefs.wornSpan === 365 ? prefs.wornSpan : 30,
+    welcomed: prefs.welcomed === true,
   };
 }
 
@@ -133,6 +135,8 @@ export const state = {
   stillSky: stored.stillSky,
   // How far back Worn's tiles and Most worn read: 30, 90 or 365 days (setWornSpan).
   wornSpan: stored.wornSpan,
+  // Now's welcome to a first visit was answered or waved off (setWelcomed).
+  welcomed: stored.welcomed,
   // Discover's search: `draft` is the field as typed, `query` what was last
   // searched; `offline` the library's error when only local matches came back.
   discover: { draft: null, query: '', results: null, busy: false, error: '', offline: '' },
@@ -589,6 +593,19 @@ export function setStillSky(on) {
   globalThis.document?.documentElement.classList.toggle('still-sky', state.stillSky);
   savePrefs();
 }
+
+/** Now's welcome (src/views/wear.js welcomeHTML) answered or waved off: it doesn't come back on this device. */
+export function setWelcomed() {
+  state.welcomed = true;
+  savePrefs();
+}
+
+/**
+ * Whether Now greets a first visit: David's wardrobe on screen with nothing
+ * of the visitor's own yet (no wear logged, no bottle in Mine), and the
+ * welcome not answered. Anyone who has logged a wear knows whose shelf it is.
+ */
+export const firstVisit = (s = state) => !s.welcomed && !s.shared && s.active === 'demo' && !s.history.length && !s.mine.records.length;
 
 // The styles someone likes, saved in prefs: an empty list means none, null
 // goes back to the default (state.likedStyles).

@@ -219,6 +219,7 @@ function renderNav() {
     <ul class="nav-items">${items}</ul>
     <div class="nav-foot">
       <button class="nav-loc" data-action="location" aria-label="Change location: ${esc(state.loc?.name ?? 'not set')}">${icon.pin}<span><b>${esc(state.loc?.name ?? 'Set location')}</b>${now ? `<small>${deg(now.tempF)} · ${esc(now.label)}</small>` : ''}</span></button>
+      <a class="nav-item nav-settings" href="#/guide" data-dest="guide"${here === 'guide' ? ' aria-current="page"' : ''}>${icon.help}<span>Guide</span></a>
       <a class="nav-item nav-settings" href="#/settings" data-dest="settings"${here === 'settings' ? ' aria-current="page"' : ''}>${icon.gear}<span>Settings</span></a>
     </div>`;
 }

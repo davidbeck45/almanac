@@ -1,19 +1,22 @@
-// The guide (#/guide, from the footer's "How Almanac works"): what each
-// screen does and how to get the most from it, in plain words, with a link
-// to each screen it names. Pure: no state, no handlers. Styles:
-// src/css/shell.css (.guide-*).
+// The guide (#/guide, from the footer's "How Almanac works", Settings ›
+// About and Now's welcome to a first visit): what each screen does and how
+// to get the most from it, in plain words, with a link to each screen it
+// names, then the questions people ask. No state; its one handler jumps to
+// a section (the hash is the route, so there are no anchors to link to).
+// Styles: src/css/shell.css (.guide-*).
 import { icon } from '../ui/components.js';
 
-// A section: its icon, heading, one-line summary and the screens it covers,
-// each { name, href, text }. Text is trusted (written here), so it may hold
-// <b> and <i>.
+// A section: its icon, heading, a short name for the contents row, one-line
+// summary and the screens it covers (or the questions it answers), each
+// { name, href, text }. Text is trusted (written here), so it may hold <b>
+// and <i>.
 export const GUIDE = [
   {
-    id: 'start', glyph: 'sparkle', title: 'Getting started',
+    id: 'start', glyph: 'sparkle', title: 'Getting started', short: 'Start',
     lead: 'Almanac picks a fragrance from your own bottles for the weather, the time of day and what you’re doing.',
     items: [
       { name: 'Set your place', text: 'Tap the place name by the pin (on Now, or in Settings) and search for your city, or use your device’s location. The forecast for it drives every pick.' },
-      { name: 'Bring your bottles', href: '#/wardrobe/owned', text: 'You start on David’s wardrobe. In Wardrobe › Owned, search for your bottles and tap <b>I own it</b>, or paste a list of names. Anything the library doesn’t have you can add yourself, with its accords.' },
+      { name: 'Bring your bottles', href: '#/wardrobe/owned', text: 'You start on David’s wardrobe. In Wardrobe › Owned, switch to <b>Mine</b>, then tap <b>Add bottles</b> to search for yours or <b>Paste a list</b> of their names. Anything the library doesn’t have you can add yourself, with its accords. Anywhere else, <b>I own it</b> on a bottle adds it too.' },
       { name: 'Wear something', href: '#/wear/now', text: 'Open Now and tap <b>Wear this</b> on the pick, or on any bottle’s page. Logging what you wear lets Almanac rotate your bottles so the same one doesn’t come up every day.' },
     ],
   },
@@ -47,7 +50,7 @@ export const GUIDE = [
     ],
   },
   {
-    id: 'bottle', glyph: 'bottle', title: 'A bottle’s page',
+    id: 'bottle', glyph: 'bottle', title: 'A bottle’s page', short: 'Bottle pages',
     lead: 'Tap any bottle, anywhere, to open it.',
     items: [
       { name: 'Why it ranks here', text: 'How it scores for the window, part by part, and where it stands beside the pick.' },
@@ -57,7 +60,7 @@ export const GUIDE = [
     ],
   },
   {
-    id: 'share', glyph: 'share', title: 'Lists and sharing',
+    id: 'share', glyph: 'share', title: 'Lists and sharing', short: 'Sharing',
     lead: 'Almanac ranks one list at a time.',
     items: [
       { name: 'Your own list', href: '#/settings', text: '<b>Mine</b> holds the bottles you add. Switch between it and David’s wardrobe in Settings (<b>Ranking from</b>).' },
@@ -72,6 +75,20 @@ export const GUIDE = [
       { name: 'Ask Claude', href: '#/wardrobe/worn', text: '<b>Copy for Claude</b> (on Worn and in Settings) copies a short code with your recent wears and stars, for picks from Claude that know what you’ve worn.' },
     ],
   },
+  {
+    id: 'faq', glyph: 'help', title: 'Common questions', short: 'Questions',
+    lead: 'What the app is doing when it does something you didn’t expect.',
+    items: [
+      { name: 'Why did the pick change?', text: 'Each day and each night has its own pick (days run 10 to 5, nights 7 to 11), and picks follow the forecast as it updates. Logging a wear also moves that bottle down for about ten days, so the others get a turn.' },
+      { name: 'Why does it suggest a bottle I don’t like?', text: 'It only knows what you tell it. Rate the bottle on its page: one you give 1★ or 2★ is passed over unless nothing else fits. To leave a bottle out altogether, switch it off in Wardrobe › Owned.' },
+      { name: 'What does “+2 as good” mean?', text: 'Those bottles suit the window just as well as the pick, so choose whichever you feel like. A word beside each says how it differs: fresher, richer, quieter or louder.' },
+      { name: 'Why does a bottle say “Saved for…”?', text: 'You planned an occasion later in the week and it’s the best bottle for it, so the days before leave it alone.' },
+      { name: 'What is “Not worn in 34 days”?', text: 'A bottle that hasn’t had a turn in a month, and suits the weather nearly as well as the pick, gets one. Nothing gathers dust.' },
+      { name: 'Does it work offline?', text: 'Yes. It opens on the last forecast it saved, for up to five days, and everything you’ve logged is on the device already.' },
+      { name: 'Can I put it on my home screen?', text: 'Yes, and it then opens full screen like an app. On an iPhone, open it in Safari, tap <b>Share</b>, then <b>Add to Home Screen</b>. On Android, open the browser’s menu and tap <b>Install app</b> or <b>Add to Home screen</b>.' },
+      { name: 'Where do the numbers come from?', text: 'Seasons, day and night, accords, notes and ratings are Fragrantica members’ votes. How long a bottle lasts and projects, what it’s worn for and what it layers with also draw on Parfumo’s. The forecast is Open-Meteo’s.' },
+    ],
+  },
 ];
 
 const itemHTML = ({ name, href, text }) => `<li class="guide-item">
@@ -79,15 +96,32 @@ const itemHTML = ({ name, href, text }) => `<li class="guide-item">
       <p>${text}</p>
     </li>`;
 
+// Each heading takes focus when the contents row jumps to it.
 const sectionHTML = s => `<section class="guide-section" aria-labelledby="guide-${s.id}">
-    <header class="guide-head">${icon[s.glyph] ?? ''}<div><h2 id="guide-${s.id}">${s.title}</h2><p>${s.lead}</p></div></header>
+    <header class="guide-head">${icon[s.glyph] ?? ''}<div><h2 id="guide-${s.id}" tabindex="-1">${s.title}</h2><p>${s.lead}</p></div></header>
     <ul class="guide-items">${s.items.map(itemHTML).join('')}</ul>
   </section>`;
 
+const tocHTML = sections => `<nav class="guide-toc" aria-label="In this guide">
+    ${sections.map(s => `<button class="btn tertiary compact" data-action="guide-jump" data-value="${s.id}">${s.short ?? s.title}</button>`).join('')}
+  </nav>`;
+
 export const guideHTML = (sections = GUIDE) => `<div class="guide">
-    <p class="guide-intro">A quick tour of Almanac: what each screen does and how to get the most from it. Tap a heading to go there.</p>
+    <p class="guide-intro">A quick tour of Almanac: what each screen does and how to get the most from it. Tap a screen’s name to go there.</p>
+    ${tocHTML(sections)}
     ${sections.map(sectionHTML).join('')}
   </div>`;
+
+export const actions = {
+  // To a section's heading, which takes focus so a screen reader reads on from there.
+  'guide-jump'(el) {
+    const heading = document.getElementById(`guide-${el.dataset.value}`);
+    if (!heading) return;
+    const still = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    heading.closest('.guide-section').scrollIntoView({ block: 'start', behavior: still ? 'auto' : 'smooth' });
+    heading.focus({ preventScroll: true });
+  },
+};
 
 export const guide = {
   id: 'guide',
