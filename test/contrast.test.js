@@ -247,10 +247,10 @@ test('a bottle he rates 2★ or lower never suits the window as well as the pick
   assert.equal(pickGapLine(held[1], held[0], win), '1 point under Atlantis Extrait tonight, mostly your rating.');
   assert.deepEqual(tiesFor(held[0], held).map(t => t.entry.fragrance.name), ['Essence de Blanc'], 'the next a toss-up, not the 1★');
   // At the pick's own match: just under it.
-  const close = ranks('Détour Noir', 'Sauvage', 'Aristo');
-  assert.deepEqual(close.slice(0, 2).map(r => r.fragrance.name), ['Sauvage', 'Détour Noir']);
+  const close = ranks('Amber Empire', 'Supremacy', 'Aristo');
+  assert.deepEqual(close.slice(0, 2).map(r => r.fragrance.name.split(' ')[0]), ['Supremacy', 'Amber']);
   assert.equal(matchPct(close[0]), matchPct(close[1]));
-  assert.equal(pickGapLine(close[1], close[0], win), 'Just under Sauvage tonight, mostly your rating.');
+  assert.equal(pickGapLine(close[1], close[0], win), 'Just under Supremacy Collector\'s Edition Pour Homme tonight, mostly your rating.');
   // Above a plan's pick by a point or less, it's his rating that passed it over.
   const today = { ...wx.day, label: 'Today' };
   assert.equal(pickGapLine(entry('Aristo', 0.866, { stars: 2 }), entry('Legacy', 0.86), today), '1 point over Legacy today, but you rate it 2★.');

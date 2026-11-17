@@ -15,7 +15,7 @@ const mildDay = (dateISO = TODAY, slot = 'day') => ({
 });
 const reasons = entry => entry.reasons.map(r => r.text);
 // The bottle left unworn: S on the mild day, a close second to its pick.
-const IDLE = 'Meant To Be Seen';
+const IDLE = 'Cedrus Blanc';
 
 // A journal begun `start`, every bottle last worn `recent` (past the rotation
 // tail, not yet neglected) except those in `last` ({ name: date | null }).
@@ -129,7 +129,7 @@ test('a bottle saved for an event is never the one nudged before it', () => {
   const formal = occasionById('formal');
   const dates = Array.from({ length: 7 }, (_, i) => shiftISO(TODAY, i));
   const windows = dates.flatMap(d => [mildDay(d, 'day'), mildDay(d, 'night')]);
-  const at = 11; // the sixth night
+  const at = 13; // the seventh night: left alone, the plan's nights reach the event's best on the sixth
   const event = { ...windows[at], occasion: formal };
   const best = rank(fragrances, event, 'night', { occasion: formal })[0].fragrance;
   // Everything worn lately but the event's best, which has sat since August.

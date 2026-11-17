@@ -46,7 +46,7 @@ export const ACCORDS = {
   sand:           { prior: -0.10, weight: -0.10, color: '#d9c39a' },
   patchouli:      { prior:  0.5, weight:  0.55, color: '#6b5a3a' },
   rose:           { prior:  0.2, weight:  0.10, color: '#e0607e' },
-  powdery:        { prior:  0.2, weight:  0.00, color: '#e8d6e3' },
+  powdery:        { prior:  0.2, weight:  0.10, color: '#e8d6e3' },
   coconut:        { prior:  0.2, weight: -0.60, color: '#f4efe4' },
   musky:          { prior:  0.1, weight: -0.30, color: '#cbbfd6' },
   iris:           { prior:  0.1, weight:  0.05, color: '#a99bd6' },

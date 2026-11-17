@@ -546,6 +546,7 @@ export const CONSENSUS = {
   'Cedrus Blanc': { range: [45, 85], kind: 'fresh' }, // aldehydic cedar-citrus, spring to fall
   'Terra': { range: [25, 58], kind: 'warm' }, // amber-spice, fall and winter
   'Jean Lowe Summer Vibes': { range: [65, 100], kind: 'fresh' }, // Sun Song clone: citrus-neroli, summer
+  'Guidance 46': { range: [25, 65], kind: 'warm' }, // the extrait: rose, pear and hazelnut over amber woods, loud; fall to spring evenings
 };
 
 /** How far (°F) feelsF sits outside the bottle's consensus range: 0 inside, null without one. */

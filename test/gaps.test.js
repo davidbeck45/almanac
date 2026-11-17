@@ -131,11 +131,13 @@ test('flat season votes read as unvoted, so they don’t make an all-rounder', (
   assert.ok(records.every(r => !r.timeVotes || votedShares(r).time || !votedShares(r).season), 'Sauvage EDP’s even day and night stand');
   const picks = [ctx, gapContext({ owned: wardrobe, records, byId, preferValue: false })].flatMap(c => suggest(c, { k: 5 }));
   assert.ok(!picks.some(p => [elyon.id, au.id].includes(p.record.id)));
-  // Read as their accords predict, they fill only what those say: Elyon's isn't a strong fit, and
-  // Au Hasard, a woody spice, is one only for his mild and warm date nights, not an all-rounder.
+  // Read as their accords predict, they fill only what those say: neither is a strong fit, and Au Hasard,
+  // a woody spice that filled only his mild and warm date nights, fills nothing since Guidance 46 took
+  // those: never an all-rounder.
   assert.notEqual(buyCheck(elyon, ctx).verdict, 'Strong fit', elyon.name);
-  const hasard = buyCheck(au, ctx).fills.map(f => f.cell.id);
-  assert.ok(hasard.length && hasard.every(id => id.startsWith('date:night:')), hasard.join());
+  const hasard = buyCheck(au, ctx);
+  assert.equal(hasard.verdict, 'Covered');
+  assert.ok(hasard.fills.every(f => f.cell.id.startsWith('date:night:')), hasard.fills.map(f => f.cell.id).join());
 });
 
 test('your stars move your own coverage, not the pool reference, and a bottle you dislike covers nothing', () => {
@@ -210,10 +212,10 @@ test('David’s gaps name real situations, gaps before room to grow, and his str
     assert.doesNotMatch(g.text, /°|\d+ ?F\b/, 'no temperatures');
     assert.ok(order.includes(g.status));
   }
-  // His date nights in the warm fall just short of the best bottles out there: room to grow (second to Office
-  // in the cold since Date Night counts night votes, which his date bottles have).
+  // His date nights in the warm fall just short of the best bottles out there: room to grow, behind Office
+  // in the cold and Cozy on mild nights. The mild ones were short too until Guidance 46 took them.
   assert.ok(gaps.every(g => g.status === 'room'), gaps.map(g => `${g.title} ${g.status}`).join('; '));
-  assert.ok(gaps.slice(0, 2).some(g => g.use === 'date' && g.bands.includes('warm')), gaps.map(g => g.title).join('; '));
+  assert.ok(gaps.slice(0, 3).some(g => g.use === 'date' && g.bands.join() === 'warm'), gaps.map(g => g.title).join('; '));
   // Office wants a bottle that lasts the day, and his fresh clones do: a strength from cool days to hot ones.
   // In the cold, on Fragrantica's votes as the pool's are read, nothing of his both keeps close and lasts
   // (Sandalwood & Musk's 11 Parfumo votes had it lasting): room to grow there, not a gap.
@@ -221,20 +223,22 @@ test('David’s gaps name real situations, gaps before room to grow, and his str
   assert.ok(office.every(g => g.slot === 'day' && g.bands.join() === 'cold' && g.status === 'room'), office.map(g => g.title).join('; '));
   assert.ok(report.strengths.some(s => s.use === 'office' && s.bands.includes('cool') && s.bands.includes('hot')), 'the office is a strength');
   assert.match(report.overview.text, /^Your wardrobe covers every situation well; here’s where it could go further\./);
-  // Cold days: Cream Velvet leads, CH Men Prive and Rifaaqat close behind (the cold forgives their night lean), so it isn't thin.
+  // Cold days: Cream Velvet leads, CH Men Prive and Rifaaqat close behind (the cold forgives their night lean),
+  // and with Guidance 46 a fifth strong bottle it's plenty, not thin.
   const cold = ctx.cov.find(c => c.cell.id === 'daily:day:cold');
-  assert.equal(cold.status, 'covered');
+  assert.equal(cold.status, 'plenty');
   assert.deepEqual(cold.top.map(t => t.bottle.name), ['Cream Velvet', 'CH Men Prive', 'Rifaaqat']);
   // A runner-up just under the strong line is depth too: thin needs the next best under the 85th percentile.
   const q = ctx.ref[ctx.cc.cells.indexOf(cold.cell)];
   const statusWith = second => coverage([{ name: 'a' }, { name: 'b' }], Float32Array.of(q[99], second), [cold.cell], [q])[0].status;
   assert.notEqual(statusWith(q[88]), 'thin');
   assert.equal(statusWith(q[60]), 'thin');
-  // The report names four strengths, most strong bottles first; Formal on mild nights (6) now edges out Date
-  // Night in the cold (5 or more), which is still a strength.
+  // The report names four strengths, most strong bottles first: Date Night's run reaches mild nights with
+  // Guidance 46 (6 or more through it), and Night Out's (5 or more) takes the fourth place from Formal's.
   const date = strengths(ctx.cov, { limit: 8 }).find(s => s.use === 'date');
   assert.ok(date?.bands.includes('cold'), 'date nights in the cold are a strength');
-  assert.match(date.text, /^Date Night on cold and cool nights: \d+ or more strong bottles, led by /);
+  assert.match(date.text, /^Date Night on cold to mild nights: \d+ or more strong bottles, led by Amber Empire on cold nights and Guidance 46 on mild ones\.$/);
+  assert.deepEqual(report.strengths.map(s => s.use), ['office', 'daily', 'date', 'nightout']);
   // A run whose leader changes names both ends.
   const nights = report.strengths.find(s => s.use === 'daily' && s.slot === 'night');
   assert.match(nights.text, /led by CH Men Prive on cold nights and .+ on warm ones\.$/);
@@ -257,14 +261,12 @@ test('the buy-advice skill’s sample reply and CLAUDE.md’s strengths quote th
   assert.ok(quoted.length >= 3);
   for (const q of quoted) assert.ok(fills.includes(q), `${q} isn't in the run: ${fills.join('; ')}`);
   assert.match(sample.split('\n').find(l => l.startsWith('> Nothing')).toLowerCase(), new RegExp(report.gaps[0].title.toLowerCase()));
-  // CLAUDE.md: the strengths in order, the first two with 7 or more strong bottles each.
+  // CLAUDE.md: the strengths in order, each with the strong bottles it says.
   const claude = readFileSync(new URL('../CLAUDE.md', import.meta.url), 'utf8');
   const said = claude.slice(claude.indexOf('His strengths read'), claude.indexOf('(the report names four'));
   const at = report.strengths.map(s => said.indexOf(s.title));
   assert.ok(at.every((i, n) => i > 0 && (n === 0 || i > at[n - 1])), `${report.strengths.map(s => s.title).join(', ')} in: ${said}`);
-  assert.match(said, /\(7 or more strong bottles each, Date Night's since night votes count for a date\)/);
-  assert.ok(report.strengths.slice(0, 2).every(s => s.strong >= 7), report.strengths.map(s => `${s.title} ${s.strong}`).join('; '));
-  assert.equal(report.strengths[1].use, 'date');
+  for (const s of report.strengths) assert.ok(said.includes(`${s.title} (${s.strong} or more strong bottles`), `${s.title} ${s.strong} in: ${said}`);
 });
 
 test('a gap’s text describes a cell in the state its status names, the one Insights opens on', () => {
@@ -284,8 +286,8 @@ test('a gap’s text describes a cell in the state its status names, the one Ins
     }
   }
   assert.ok(runs >= 3);
-  // David's date nights: both cells are room to grow, and the mild one costs more, so it's the one described.
-  assert.match(report.gaps.find(g => g.use === 'date').text, /^Worst when mild: your best is Infini Rose/);
+  // David's date nights fall short only when warm since Guidance 46 took the mild ones: one cell, so no "Worst when".
+  assert.match(report.gaps.find(g => g.use === 'date').text, /^Your best is Supremacy Collector's Edition Pour Homme at \d+% match/);
 });
 
 test('gap fillers keep near the wardrobe’s own leans', () => {
@@ -302,8 +304,9 @@ test('gap fillers keep near the wardrobe’s own leans', () => {
   assert.ok(picks.every(p => genderLean(p.record, byId) < hi + 0.15), picks.map(p => `${p.record.name} ${genderLean(p.record, byId)}`).join(', '));
   // David's picks hold.
   // Kayaan Classic, an iris that lasts and keeps close, fills Office on cold days as well as Formal on cool
-  // nights, so Encre Noire (Good on its own, below) isn't needed after it.
-  assert.deepEqual(report.picks.map(p => p.name), ['Zenith', 'Kayaan Classic', 'Infinity For Men']);
+  // nights, so Encre Noire (Good on its own, below) isn't needed after it. It leads since Guidance 46 took
+  // the mild date nights Zenith filled: Zenith's Cozy and warm date nights come second.
+  assert.deepEqual(report.picks.map(p => p.name), ['Kayaan Classic', 'Zenith', 'Infinity For Men']);
 });
 
 test('without its fresh bottles, the wardrobe’s top gaps are warm and hot days', () => {
@@ -459,15 +462,21 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   assert.equal(kouros.verdict, 'Risky');
   assert.ok(kouros.reasons.includes('It divides people: more voters hate it than most.'));
 
-  const zenith = verdict('124649'); // Riiffs Zenith
-  assert.equal(zenith.verdict, 'Strong fit');
+  const kayaan = verdict('82472'); // Al Wataniah Kayaan Classic
+  assert.equal(kayaan.verdict, 'Strong fit');
+  assert.equal(kayaan.reasons[0], 'It would be your best for Office on cold days and Formal on cool nights.');
+  assert.ok(kayaan.fills.every(f => f.matters && f.real));
+  // Riiffs Zenith was one until Guidance 46 took his mild date nights off the list: it still betters them,
+  // but only its Cozy and warm date nights cut a listed gap, so it's Good.
+  const zenith = verdict('124649');
+  assert.equal(zenith.verdict, 'Good');
   assert.match(zenith.reasons[0], /^It would be your best for Date Night on /);
-  assert.ok(zenith.fills.every(f => f.matters) && zenith.fills.some(f => f.real));
-  // Shalimar Millésime Tonka's flat votes read as none: a gourmand for mild date nights, not warm ones. Since
-  // Date Night counts night votes (nightLean), his night-voted gourmands cover those nights, so it only comes close.
+  assert.ok(zenith.fills.every(f => f.matters) && zenith.fills.some(f => f.real) && zenith.fills.some(f => !f.real));
+  // Shalimar Millésime Tonka's flat votes read as none: a gourmand for mild nights, not warm ones. His
+  // night-voted gourmands and Guidance 46 cover his date nights, so it comes closest for a night in.
   const tonka = verdict('76063');
   assert.equal(tonka.verdict, 'Covered');
-  assert.match(tonka.reasons[0], /^It would barely beat your .+ for Date Night on mild nights, and nowhere by more\.$/);
+  assert.match(tonka.reasons[0], /^It would barely beat your Cream Velvet for Cozy on mild nights, and nowhere by more\.$/);
   for (const c of [ctx, gapContext({ owned: [], records, byId })]) {
     const fills = buyCheck(byId.get('76063'), c).fills.filter(f => f.matters).map(f => f.cell.id);
     assert.ok(!fills.includes('date:night:warm') || fills.indexOf('date:night:warm') > fills.indexOf('date:night:cool'), fills.join());
@@ -478,12 +487,13 @@ test('the buy check calls twins redundant, gap fillers good and divisive bottles
   assert.equal(red.risk.level, 'high');
   assert.equal(red.reasons[0], red.risk.reasons[0]);
 
-  for (const c of [althair, sibling, zenith, tonka, red, dior, encre, kouros]) {
+  for (const c of [althair, sibling, kayaan, zenith, tonka, red, dior, encre, kouros]) {
     assert.ok(c.reasons.length >= 2 && c.reasons.length <= 3);
     for (const r of c.reasons) assert.doesNotMatch(r, /°|\d+ ?F\b|undefined|null|NaN/);
   }
+  assert.equal(JSON.parse(JSON.stringify(checkJSON(byId.get('82472'), kayaan))).verdict, 'Strong fit');
   const json = checkJSON(byId.get('124649'), zenith);
-  assert.equal(JSON.parse(JSON.stringify(json)).verdict, 'Strong fit');
+  assert.equal(JSON.parse(JSON.stringify(json)).verdict, 'Good');
   // Its own value for money, and null for a bottle nobody valued (quality's reads the pool's median then).
   assert.equal(json.value, byId.get('124649').extras.value);
   const unvalued = { ...byId.get('124649'), id: 'my:unvalued', name: 'Unvalued', brand: 'Nobody', extras: { ...byId.get('124649').extras, value: null } };
@@ -524,7 +534,7 @@ test('the buy check knows what he likes: more of a style he’s thin on is good,
   assert.match(check('210').reasons[0], /^Your .+ outdoes it even for .+, where it comes closest\.$/);
   // Risky and strong fit stand whatever he likes.
   assert.equal(check(records.find(r => r.name === 'Kouros')).verdict, 'Risky');
-  assert.equal(check('124649').verdict, 'Strong fit', 'Riiffs Zenith');
+  assert.equal(check('82472').verdict, 'Strong fit', 'Al Wataniah Kayaan Classic');
   // A low-rated skin scent is risky, at its real rating.
   const nap = check(named('Not A Perfume', 'Juliette Has A Gun'));
   assert.equal(nap.verdict, 'Risky');

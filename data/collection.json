@@ -1,6 +1,6 @@
 {
   "source": "fragrantica.com/@doeszen wardrobe (Have)",
-  "fetched": "2026-10-30",
+  "fetched": "2026-11-16",
   "fragrances": [
     {
       "id": 98689,
@@ -670,6 +670,246 @@
           113924,
           119178
         ]
+      }
+    },
+    {
+      "id": 94033,
+      "name": "Guidance 46",
+      "brand": "Amouage",
+      "year": 2024,
+      "gender": "women and men",
+      "url": "https://www.fragrantica.com/perfume/Amouage/Guidance-46-94033.html",
+      "thumb": "https://fimgs.net/mdimg/perfume-thumbs/dark-m.94033.2x.webp",
+      "rating": 4.1601,
+      "ratingVotes": 3011,
+      "accords": {
+        "woody": 100,
+        "fruity": 69,
+        "nutty": 65,
+        "warm spicy": 63,
+        "floral": 62,
+        "amber": 62,
+        "sweet": 62,
+        "rose": 62
+      },
+      "seasonVotes": {
+        "winter": 1147,
+        "spring": 912,
+        "summer": 596,
+        "fall": 1117
+      },
+      "timeVotes": {
+        "day": 867,
+        "night": 1067
+      },
+      "season": {
+        "winter": 0.304,
+        "spring": 0.242,
+        "summer": 0.158,
+        "fall": 0.296
+      },
+      "dayNight": {
+        "day": 0.448,
+        "night": 0.552
+      },
+      "notes": {
+        "top": [
+          "Rose Water",
+          "Pear",
+          "Hazelnut",
+          "Bitter Almond",
+          "Frankincense",
+          "Pink Pepper"
+        ],
+        "mid": [
+          "Rose",
+          "Osmanthus",
+          "Saffron",
+          "Jasmine Sambac"
+        ],
+        "base": [
+          "Sandalwood",
+          "Akigalawood",
+          "Vanilla",
+          "Ambrette",
+          "Ambergris",
+          "Labdanum",
+          "Georgywood",
+          "Cypriol"
+        ]
+      },
+      "noteVotes": {
+        "Rose Water": 1000,
+        "Pear": 911,
+        "Hazelnut": 787,
+        "Bitter Almond": 530,
+        "Frankincense": 459,
+        "Pink Pepper": 247,
+        "Rose": 1000,
+        "Osmanthus": 326,
+        "Saffron": 264,
+        "Jasmine Sambac": 202,
+        "Sandalwood": 947,
+        "Akigalawood": 619,
+        "Vanilla": 521,
+        "Ambrette": 353,
+        "Ambergris": 211,
+        "Labdanum": 193,
+        "Georgywood": 167,
+        "Cypriol": 114
+      },
+      "parfumo": {
+        "url": "https://www.parfumo.com/Perfumes/Amouage/guidance-46",
+        "longevity": 9.1,
+        "sillage": 8.7,
+        "votes": 632,
+        "occasion": {
+          "Evening": 0.26,
+          "Night Out": 0.26,
+          "Leisure": 0.21,
+          "Daily": 0.15,
+          "Business": 0.12
+        },
+        "occasionVotes": 555
+      },
+      "like": {
+        "season": {
+          "winter": 0.274,
+          "spring": 0.26,
+          "summer": 0.162,
+          "fall": 0.304
+        },
+        "night": 0.497
+      },
+      "performance": {
+        "longevity": 4.3672,
+        "sillage": 3.0535,
+        "votes": 1588
+      },
+      "sentiment": {
+        "hate": 171,
+        "dislike": 232,
+        "ok": 286,
+        "like": 577,
+        "love": 1745
+      },
+      "about": {
+        "value": {
+          "avg": 1.9,
+          "votes": 1457
+        },
+        "owners": {
+          "have": 5157,
+          "had": 627,
+          "want": 7172
+        },
+        "crowdGender": {
+          "lean": -0.53,
+          "votes": 1629
+        },
+        "popularity": {
+          "all": 19344,
+          "recent": 12939
+        },
+        "perfumers": [
+          "Quentin Bisch"
+        ],
+        "line": "The Exceptional Extraits",
+        "pros": [
+          {
+            "text": "High-quality blending and ingredient depth",
+            "up": 126,
+            "down": 2
+          },
+          {
+            "text": "Addictive, creamy nut and rose dry down",
+            "up": 116,
+            "down": 5
+          },
+          {
+            "text": "Elegant, sophisticated feminine-leaning profile",
+            "up": 102,
+            "down": 8
+          }
+        ],
+        "cons": [
+          {
+            "text": "Prohibitively high retail price",
+            "up": 112,
+            "down": 4
+          },
+          {
+            "text": "Risky and expensive blind purchase",
+            "up": 70,
+            "down": 19
+          }
+        ],
+        "smellsLike": [
+          {
+            "id": 78656,
+            "up": 751,
+            "down": 93
+          },
+          {
+            "id": 104764,
+            "up": 388,
+            "down": 239
+          },
+          {
+            "id": 123166,
+            "up": 76,
+            "down": 13
+          },
+          {
+            "id": 107935,
+            "up": 53,
+            "down": 29
+          },
+          {
+            "id": 115822,
+            "up": 30,
+            "down": 12
+          }
+        ],
+        "alsoLiked": [
+          78656,
+          10464,
+          46066,
+          50370,
+          62615,
+          33519,
+          54785,
+          1018,
+          43871,
+          64338
+        ],
+        "flags": [
+          "polarizing"
+        ]
+      },
+      "extras": {
+        "value": 1.91,
+        "safe": 15,
+        "keep": 0.047,
+        "lean": -0.53,
+        "now": 98,
+        "like": [
+          78656,
+          123166,
+          115822
+        ],
+        "family": [
+          78656,
+          123166,
+          115822
+        ],
+        "alt": [],
+        "flags": [
+          "polarizing"
+        ],
+        "owners": 5157,
+        "reach": 0.83,
+        "clones": []
       }
     },
     {

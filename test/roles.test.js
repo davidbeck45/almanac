@@ -92,7 +92,7 @@ test('David’s wardrobe: workhorses lead a large share, and the bottles daily p
   // A leader with a near equal behind it reads as replaceable.
   const terra = roles.bottles.find(b => b.bottle.name === 'Terra');
   assert.equal(terra.role, 'backup');
-  assert.match(terra.text, /^Leads 4% of what you wear: Night Out on cold and cool nights\. Hawas Elixir is right behind/);
+  assert.match(terra.text, /^Leads 2% of what you wear: Night Out on cold nights\. Hawas Elixir is right behind/);
   // The bench says where it comes closest and who leads there, as the buy check's Covered does.
   const bench = roles.bottles.filter(b => b.role === 'bench');
   for (const b of bench) {
@@ -110,7 +110,12 @@ test('David’s wardrobe: workhorses lead a large share, and the bottles daily p
   }
   const backups = roles.bottles.filter(b => b.role === 'backup');
   assert.equal(backups[0].bottle.name, 'Glorious Oud Royal Blanc', 'the backup least in the mix leads the list of what could go');
-  assert.deepEqual(backups.slice(-3).map(b => b.bottle.name), ['Terra', 'Atlantis Extrait', 'Jake'], 'the ones that lead something by a hair come last, most led last');
+  assert.deepEqual(backups.slice(-4).map(b => b.bottle.name), ['Terra', 'Atlantis Extrait', 'Jake', 'Guidance 46'], 'the ones that lead something by a hair come last, most led last');
+  // Guidance 46 leads his date nights from cool to mild, but Amber Empire sits a point behind: under a tenth of
+  // what he wears, a lead that slim is a backup's.
+  const guidance = backups.at(-1);
+  assert.ok(guidance.leadShare >= WORKHORSE_SHARE && guidance.leadShare < SURE_SHARE && guidance.loss / guidance.leadShare < CLEAR_LEAD);
+  assert.match(guidance.text, /^Leads 7% of what you wear: Date Night on cool and mild nights and Night Out on cool nights\. Amber Empire is 1 point behind there\./);
   // A lead that seldom comes up, a point ahead, isn't a specialist's: Sauvage's one is about four nights a year.
   const sauvage = roles.bottles.find(b => b.bottle.name === 'Sauvage');
   assert.equal(sauvage.role, 'backup');
@@ -220,11 +225,11 @@ test('the pool’s report carries the roles, switched-off bottles apart, as plai
 test('Insights’ card groups the bottles by role, a few to a group, each row opening its page', () => {
   const plain = rolesJSON(roles);
   const html = rolesHTML(plain);
-  // Four groups in role order, three rows each where a role holds more than four.
+  // Four groups in role order, three rows each where a role holds more than four (the four specialists show whole).
   assert.deepEqual([...html.matchAll(/data-role="(\w+)"/g)].map(m => m[1]), ['workhorse', 'specialist', 'backup', 'bench']);
   const rows = h => (h.match(/class="row wrap role-row/g) ?? []).length;
-  assert.equal(rows(html), 3 + 3 + 3 + 1);
-  assert.match(html, /<p class="muted small role-sum">7 of your 26 bottles lead 71% of what you wear\./);
+  assert.equal(rows(html), 3 + 4 + 3 + 1);
+  assert.match(html, /<p class="muted small role-sum">7 of your 27 bottles lead 68% of what you wear\./);
   assert.match(html, /data-action="ins-roles-all" data-value="workhorse" aria-controls="ins-roles-workhorse" aria-expanded="false">[^]*?Show 4 more<span class="visually-hidden"> workhorses<\/span>/);
   assert.ok(!/data-value="bench"/.test(html), 'a short group has no toggle');
   // Every row is one button that opens the bottle, with its share as words beside the bar.
@@ -237,7 +242,7 @@ test('Insights’ card groups the bottles by role, a few to a group, each row op
   for (const m of html.matchAll(/--lead:([\d.]+);--mix:([\d.]+)/g)) assert.ok(+m[1] <= +m[2] + 1e-9 && +m[2] <= 1, m[0]);
   // A role shown whole lists every bottle and offers the way back.
   const open = rolesHTML(plain, { open: new Set(['backup']) });
-  assert.equal(rows(open), 3 + 3 + 13 + 1);
+  assert.equal(rows(open), 3 + 4 + 15 + 1);
   assert.match(open, /data-value="backup"[^>]*aria-expanded="true">[^]*?Show fewer/);
   assert.ok(!/°|\d\s*F\b|undefined|NaN/.test(open), 'no temperature, nothing unfilled');
   // Bottles that cover nothing close the card; with no roles there is no card.

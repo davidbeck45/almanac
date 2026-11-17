@@ -161,11 +161,11 @@ test('the headline reads plainly, and the thin spots name what fills them', () =
   const zenith = report.picks.find(p => p.name === 'Zenith');
   if (zenith) assert.ok(html.includes(`data-id="${zenith.id}">Zenith</button>`), 'Zenith fills a thin spot');
   assert.ok(!/match;\s*$|NaN%/.test(html));
-  // Each strength shows as a row, led by its best bottle (Formal on mild nights edges Date Night in the cold off the four).
+  // Each strength shows as a row, led by its best bottle (Date Night's run reaches mild nights with Guidance 46).
   const strong = insights.strongHTML(report);
   assert.equal((strong.match(/class="strong-row"/g) ?? []).length, report.strengths.length);
   for (const s of report.strengths) assert.ok(strong.includes(`Plenty for ${esc(s.title)}`), s.title);
-  assert.match(strong, /Plenty for Formal on mild nights<\/b><span>Meant To Be Seen and \d+ more/);
+  assert.match(strong, /Plenty for Date Night on cold to mild nights<\/b><span>Amber Empire and \d+ more/);
 });
 
 test('a suggestion card shows its fills against your best, its facts and its actions', () => {
@@ -327,13 +327,14 @@ test('David starts on the styles he says he loves; liking some replaces them, an
 });
 
 test('the wishlist puts the best fits first and says what each would add', async () => {
-  const { checks } = await ask('check', { owned, records: ['124649', '98242', '9828', 'nope'], liked: discover.DEMO_LIKED });
+  // Kayaan Classic, the strong fit among his gap finder's picks; an Althaïr clone and Althaïr itself, twins of his Liquid Brun.
+  const { checks } = await ask('check', { owned, records: ['82472', '98242', '9828', 'nope'], liked: discover.DEMO_LIKED });
   const wants = checks.map((c, i) => ({ id: String(c.id), added: `2026-10-0${i + 1}` }));
   const items = wishlist.sortWants([
     { want: { id: 'loading', added: '2026-10-09' }, record: null, check: undefined },
     ...checks.map((check, i) => ({ want: wants[i], record: check.record ?? null, check })),
   ]);
-  assert.equal(items[0].check.name, 'Zenith', 'the strong fit leads');
+  assert.equal(items[0].check.name, 'Kayaan Classic', 'the strong fit leads');
   const ranks = items.filter(i => i.check && !i.check.missing).map(i => verdictRank(i.check.verdict));
   assert.deepEqual(ranks, [...ranks].sort((a, b) => a - b));
   assert.deepEqual(items.slice(-2).map(i => i.want.id), ['loading', 'nope'], 'unchecked and unknown ones wait at the end, as added');

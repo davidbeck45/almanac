@@ -213,8 +213,14 @@ test('a set that only breaks a run of nights once isn’t variety: the plan stan
 });
 
 test('when no three rest a bottle worn every day, the plan names the fourth that would, and packs it when there’s room', () => {
-  // London in December: three bottles for twenty windows wear one every day, whichever three.
-  assert.ok(bestSets(LONDON, 3).filter(x => x.reached === LONDON.length).every(x => x.everyDay > 0));
+  // London in December: the three that plan best for twenty windows wear one every day. Three that wear none
+  // every day cover them too (Guidance 46 suits the days and the nights), but they spare the most-worn bottle
+  // a single window, which isn't variety (VARIETY_RELIEF), or plan too far under.
+  const sets = bestSets(LONDON, 3), [best] = sets;
+  assert.ok(best.reached === LONDON.length && best.everyDay > 0);
+  const rested = sets.filter(x => x.reached === LONDON.length && !x.everyDay);
+  assert.ok(rested.every(x => x.total < best.total - 0.015 * LONDON.length || x.most > best.most - 2),
+    rested.slice(0, 3).map(x => `${x.set.map(f => f.name).join(', ')} ${(best.total - x.total).toFixed(3)} under, most ${x.most} to ${best.most}`).join('; '));
   const three = packTrip(fragrances, LONDON, { max: 3 });
   assert.equal(three.bottles.length, 3);
   const [daily] = wornEveryDay(three), add = three.variety?.add;
